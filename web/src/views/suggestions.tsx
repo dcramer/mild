@@ -7,7 +7,7 @@ import { MatchWords, SenderCell } from '@/components/sender.tsx';
 import { messageKey, proposalKey, useParam } from '@/lib/params.ts';
 import { type SuggestionItem, type Suggestions, api, useLoaded } from '@/lib/api.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
-import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
+import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, duration, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
 import {
   Ago,
   Heads,
@@ -207,6 +207,8 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
   const { data, error, loading } = useLoaded(`suggestions-${withKept}${fact ? `-${fact}` : ''}`, (signal) => api.suggestions(withKept, fact, signal));
   // The server draws the page with this, so whether Sift is off is said before the list arrives.
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  // The masthead's, drawn on the server too.
+  const saved = useLoaded('usage', (signal) => api.usage(signal), 60_000).data?.saved;
   const [search, setSearch] = useParam('q');
   const [does, setDoes] = useParam('does', DOES);
 
@@ -236,13 +238,19 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
       intro={
         <>
           {/* Most people start off, so the room is held for it. */}
-          <Reserve id="home-off" ready={manage.data !== null} room="min-h-[386px] lg:min-h-[206px]">
+          <Reserve id="home-off" ready={manage.data !== null} room="min-h-[449px] lg:min-h-[243px]">
             {manage.data && !manage.data.active && !nothing ? (
               <Callout title="Sift is off" action={<Button href="?settings=1">Turn Sift on…</Button>}>
                 <p>
                   Nothing here has been done in Gmail. Each row is what Sift would do with that message. Correct the ones it gets wrong, and turn it on once it
                   stops making mistakes.
                 </p>
+                {saved && saved.wouldHave.messages > 0 ? (
+                  <p>
+                    On, it would have kept <span className="text-foreground">{plural(saved.wouldHave.messages, 'email')}</span> out of your inbox in the last 30
+                    days: about <span className="text-foreground">{duration(saved.wouldHave.seconds)}</span>.
+                  </p>
+                ) : null}
                 <CalloutKey mark={<Meter level={3} />}>Sure. Once Sift is on, it does this by itself.</CalloutKey>
                 <CalloutKey mark={<Meter level={2} />}>Less sure, or no label. Sift leaves the message where it is and asks you.</CalloutKey>
               </Callout>
@@ -301,6 +309,10 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
                   <p>Sift is off. Nothing it suggests is done in Gmail until you turn it on.</p>
                   <Button href="?settings=1">Turn Sift on…</Button>
                 </>
+              ) : saved && saved.week.messages > 0 ? (
+                <p>
+                  Sift kept {count(saved.week.messages)} out of your inbox this week: about {duration(saved.week.seconds)} you didn’t spend on them.
+                </p>
               ) : null
             }
           >

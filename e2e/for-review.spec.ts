@@ -35,6 +35,11 @@ test.describe('For review', () => {
     await expect(row(page, 'Notes from the review')).toHaveCount(0);
   });
 
+  test('while Sift is off, says what it would have kept out of the inbox', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText(/^On, it would have kept \d+ emails out of your inbox in the last 30 days: about \d+ (s|min)\.$/)).toBeVisible();
+  });
+
   test('closing the add-label dialog leaves the page as it was', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Notes from the review'), 'Add a label…');
@@ -114,6 +119,7 @@ test.describe('For review, with Sift on', () => {
     // Whether Sift is on comes with the page, so it is known before the list arrives.
     await page.goto('/');
     await expect(page.getByText('Nothing is waiting on you.')).toBeVisible();
+    await expect(page.getByText('Sift kept 1 out of your inbox this week: about 4 s you didn’t spend on them.')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Turn Sift on…' })).toHaveCount(0);
   });
 

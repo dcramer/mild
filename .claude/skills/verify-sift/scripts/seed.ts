@@ -9,8 +9,9 @@
  * `Mailbox` ports. Writes the fake Gmail's filters to <gmail.json>, for serve.ts to carry on from, and prints one
  * line: the `sift_session` cookie value for the connected account.
  *
- * `--on` then turns sift on and runs one more pass over two new messages: Lin's, which it cannot place, so it is left
- * for the user with sift's Gmail label; and the Store's last-day sale, archived as Marketing and then undone.
+ * `--on` then turns sift on and runs one more pass over three new messages: Lin's, which it cannot place, so it is left
+ * for the user with sift's Gmail label; the Store's last-day sale, archived as Marketing and then undone; and a third
+ * widgets newsletter, archived as Newsletters by its rule, which stands.
  * `--chatgpt` has the model reached through a ChatGPT plan instead of an API key.
  */
 import { createHmac, randomBytes } from 'node:crypto';
@@ -222,6 +223,7 @@ if (variant === '--on') {
   const later = [
     mail('Lin <lin@example.com>', 'Quick question', 'Do you have a minute today?'),
     mail('Store <sale@store.example.com>', 'Last day of the sale', 'It ends tonight.', list('store.example.com'), ['CATEGORY_PROMOTIONS']),
+    mail('Weekly Digest <digest@news.example.com>', 'Widgets, part three', 'Still more stories about widgets.', list('news.example.com')),
   ];
   inbox.push(...later);
   for (const { raw } of later) mailbox.labels.set(raw.id, [...raw.labelIds]);
@@ -229,11 +231,12 @@ if (variant === '--on') {
   // As Check now begins it: the timed tick, moments after the last pass, would wait out the gap between looks.
   for (const result of await workDue(store, { ephemeral, model: standIn, connect: () => ({ api, mailbox }), log: () => {} }, Infinity, [user]))
     if (result.error) throw new Error(`seed pass failed: ${result.error}`);
-  const [lin, sale] = later.map((m) => m.raw.id);
+  const [lin, sale, news] = later.map((m) => m.raw.id);
   if (!mailbox.labels.get(lin ?? '')?.some((l) => l.endsWith('sift/review'))) throw new Error('the pass with sift on did not leave Lin for the user');
   const archived = await lastStandingChange(db, ACCOUNT, sale ?? '');
   if (archived?.type !== 'archive') throw new Error('the pass with sift on did not archive the sale');
   await undo({ db, mailbox }, archived.id);
+  if ((await lastStandingChange(db, ACCOUNT, news ?? ''))?.type !== 'archive') throw new Error('the pass with sift on did not archive the newsletter');
 }
 // Three rules written to the fake Gmail as filters, as the dashboard asks: the CI one lands; the Shop one
 // lands and is then deleted in Gmail, which a check notices; Gmail does not answer for the news one.

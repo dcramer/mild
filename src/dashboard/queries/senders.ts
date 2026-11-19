@@ -8,6 +8,7 @@ import { type Scope, narrow } from '../scope.ts';
 import type { SenderPage, SenderProfile } from '../types.ts';
 import { listDecisions } from './decisions.ts';
 import { listRuleSummaries } from './rules.ts';
+import { keptOut, saved } from './saved.ts';
 import { plain, seal } from '../../plain.ts';
 
 const later = alias(decisions, 'later');
@@ -114,6 +115,16 @@ async function profileOf(db: Sql, scope: Scope, accountId: string, who: { addres
     firstSeenAt: known.firstSeenAt,
     lastSeenAt: known.lastSeenAt,
     recent: known.recent,
+    saved: saved(
+      (
+        await keptOut(db, here, 0, {
+          where: and(
+            eq(messages.accountId, accountId),
+            eq('address' in who ? messages.senderHash : messages.domainHash, hashOf(db, 'address' in who ? who.address : who.domain)),
+          ),
+        })
+      ).length,
+    ),
     senders: known.senders,
     answers: known.answers,
     userHasWritten: known.userHasWritten,

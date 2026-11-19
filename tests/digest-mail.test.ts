@@ -58,6 +58,12 @@ describe('writeDigest', () => {
     expect(mail.text).toMatch(/WORTH A LOOK\n\nBuilds: Run failed\n {2}The only failure\./);
   });
 
+  it('says at its foot how many stayed out of the inbox', () => {
+    expect(writeDigest(digest()).text).toContain('These 3 stayed out of your inbox.');
+    expect(writeDigest(digest()).html).toContain('These 3 stayed out of your inbox.');
+    expect(writeDigest(digest({ entries: [entry('a1', 5, 'Run passed')] })).text).toContain('This one stayed out of your inbox.');
+  });
+
   it('names the day it is for, or every day when it waited longer', () => {
     // 15:00 UTC is 7:00 in Los Angeles; the day after a clock change is 25 hours long.
     const fallBack = Date.UTC(2026, 10, 2, 15);

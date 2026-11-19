@@ -12,6 +12,7 @@ import {
   factWords,
   longDay,
   madeBy,
+  duration,
   money,
   moneyTick,
   outcomeName,
@@ -299,6 +300,7 @@ function Use({ rule }: { rule: RuleSummary }) {
               note={`${plural(rule.checks, 'message')} checked${plan ? `, ${AT_API_PRICES}` : ''}`}
             />
           ) : null}
+          {usage.data && usage.data.saved.messages > 0 ? <Figure label="Saved, 30 days" value={duration(usage.data.saved.seconds)} /> : null}
           <Figure label="All time" value={count(rule.hits)} note={`since ${shortDate(rule.createdAt)}`} />
         </Figures>
         {matched > 0 ? (

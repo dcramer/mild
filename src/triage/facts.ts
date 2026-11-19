@@ -13,6 +13,8 @@ type AuthResult = 'pass' | 'fail' | 'none';
 export interface ContentFacts extends Partial<HtmlFacts> {
   /** A file came with it. Images shown inline in the text do not count. */
   hasAttachments: boolean;
+  /** Words in all of its readable text, before the model's cut: how long it takes to read. Recorded for a later estimate of time saved; absent for mail recorded before. */
+  words?: number;
 }
 
 /** What the rest of the thread shows. Looked up only for a reply, when a model is about to judge it. */

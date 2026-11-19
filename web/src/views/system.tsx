@@ -92,7 +92,21 @@ const DAILY_COST = [
   0.11, 0.14, 0.09, 0.21, 0.12, 0.08, 0.04, 0.13, 0.16, 0.1, 0.12, 0.31, 0.15, 0.09, 0.05, 0.12, 0.14, 0.11, 0.18, 0.13, 0.07, 0.06, 0.15, 0.17, 0.12, 0.19,
   0.14, 0.11, 0.16, 0.14,
 ];
-const USAGE = { day: 0.14, week: 0.96, month: DAILY_COST.reduce((a, b) => a + b), daily: DAILY_COST };
+const SAVED_DAILY = [52, 61, 70, 22, 18, 64, 58, 49, 73, 60, 24, 15, 57, 71, 63, 66, 51, 20, 19, 62, 68, 75, 55, 59, 27, 18, 64, 72, 60, 52];
+const SAVED = (messages: number) => ({ messages, seconds: messages * 4 });
+const USAGE = {
+  day: 0.14,
+  week: 0.96,
+  month: DAILY_COST.reduce((a, b) => a + b),
+  daily: DAILY_COST,
+  saved: {
+    day: SAVED(52),
+    week: SAVED(401),
+    month: SAVED(SAVED_DAILY.reduce((a, b) => a + b)),
+    daily: SAVED_DAILY.map((n) => n * 4),
+    wouldHave: SAVED(0),
+  },
+};
 const SYNCED = Date.now() - 20_000;
 const SERIES = TIERS.map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
 const DAYS = [

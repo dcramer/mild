@@ -40,18 +40,24 @@ function htmlToText(html: string): string {
 
 /** The readable text of a message: the plain part if there is one, otherwise the HTML with markup removed. Truncated. */
 export function extractText(payload: BodyPart | null | undefined): string {
+  return shortened(readable(payload));
+}
+
+/** All of a message's readable text: its plain part, or else its HTML's text. */
+function readable(payload: BodyPart | null | undefined): string {
   if (!payload) return '';
   const plain = find(payload, 'text/plain');
   const html = plain === null ? find(payload, 'text/html') : null;
   const text = plain ?? (html === null ? '' : htmlToText(html));
-  const tidy = text
+  return text
     .replace(/\r/g, '')
     .replace(/[ \t ​-‍﻿]+/g, ' ')
     .replace(/ ?\n ?/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-  return tidy.length > MAX_BODY_CHARS ? `${tidy.slice(0, MAX_BODY_CHARS)}\n[truncated]` : tidy;
 }
+
+const shortened = (text: string) => (text.length > MAX_BODY_CHARS ? `${text.slice(0, MAX_BODY_CHARS)}\n[truncated]` : text);
 
 const header = (part: BodyPart, name: string) => part.headers?.find((h) => h.name?.toLowerCase() === name)?.value ?? '';
 
@@ -71,9 +77,14 @@ export interface MessageContent {
 export function readContent(payload: BodyPart | null | undefined): MessageContent {
   const html = payload ? find(payload, 'text/html') : null;
   const sender = payload ? parseAddress(header(payload, 'from')) : null;
+  const whole = readable(payload);
   return {
-    text: extractText(payload),
+    text: shortened(whole),
     html,
-    facts: { hasAttachments: payload ? hasAttachment(payload) : false, ...(html !== null && sender ? htmlFacts(html, sender.domain) : {}) },
+    facts: {
+      hasAttachments: payload ? hasAttachment(payload) : false,
+      words: whole === '' ? 0 : whole.split(/\s+/).length,
+      ...(html !== null && sender ? htmlFacts(html, sender.domain) : {}),
+    },
   };
 }

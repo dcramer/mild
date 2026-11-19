@@ -1,4 +1,5 @@
 import { alias, and, asc, count, decisions, desc, eq, gte, inboxRuns, isNull, labels, max, messages, modelRuns, rules, sql } from '../../store/query.ts';
+import { keptOut, saved } from './saved.ts';
 import type { Sql } from '../../store/sql.ts';
 import type { RuleMatch } from '../../triage/stages/rules.ts';
 import { openEnvelope, openJson, ruleName } from '../../store/content.ts';
@@ -155,5 +156,8 @@ export async function ruleUsage(db: Sql, scope: Scope, ruleId: string, now: numb
     const day = byDay.get(localDay(run.startedAt));
     if (day) day.costUsd += run.costUsd;
   }
-  return { daily: [...byDay].map(([day, rest]) => ({ day, ...rest })) };
+  return {
+    daily: [...byDay].map(([day, rest]) => ({ day, ...rest })),
+    saved: saved((await keptOut(db, scope, since, { where: eq(decisions.ruleId, ruleId) })).length),
+  };
 }

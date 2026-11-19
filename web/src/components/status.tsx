@@ -3,7 +3,7 @@ import { RefreshCwIcon } from 'lucide-react';
 import { useCallback, useSyncExternalStore } from 'react';
 import type { ManageState, Usage } from '@/lib/api.ts';
 import { approx, atApiPrices } from '@/lib/prices.ts';
-import { dateTime, money } from '@/lib/format.ts';
+import { dateTime, duration, money } from '@/lib/format.ts';
 import { Ago, Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';
 
 type Accounts = ManageState['accounts'];
@@ -26,18 +26,37 @@ export function useNow(ms: number): number | null {
 }
 const onServer = () => null;
 
-/** What the model cost over each window, and its shape over the 30 days: the hover card, and on a phone the menu. */
+/**
+ * What Sift saved the reader over each window, with its shape over the 30 days, then what the model cost: the hover
+ * card, and on a phone the menu. Until Sift has taken anything out of the inbox, only the cost, with its shape.
+ */
 export function UsageDetail({ usage, plan }: { usage: Usage; plan: Plan }) {
   const now = useNow(60_000);
   const first = now === null ? '' : new Date(now - (usage.daily.length - 1) * 86_400_000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const { saved } = usage;
+  const savedAny = saved.month.messages > 0;
   return (
-    <div className="flex flex-col gap-4">
-      <Figures compact>
-        <Figure compact label="24H" value={money(usage.day)} />
-        <Figure compact label="7D" value={money(usage.week)} />
-        <Figure compact label="30D" value={money(usage.month)} />
-      </Figures>
-      <Spark values={usage.daily} from={first} to="Today" />
+    <div className="flex flex-col gap-5">
+      {savedAny ? (
+        <div className="flex flex-col gap-2">
+          <p className="slug text-muted-foreground">Saved</p>
+          <Figures compact>
+            <Figure compact label="24H" value={duration(saved.day.seconds)} />
+            <Figure compact label="7D" value={duration(saved.week.seconds)} />
+            <Figure compact label="30D" value={duration(saved.month.seconds)} />
+          </Figures>
+          <Spark values={saved.daily} from={first} to="Today" />
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-2">
+        {savedAny ? <p className="slug text-muted-foreground">Model</p> : null}
+        <Figures compact>
+          <Figure compact label="24H" value={money(usage.day)} />
+          <Figure compact label="7D" value={money(usage.week)} />
+          <Figure compact label="30D" value={money(usage.month)} />
+        </Figures>
+        {savedAny ? null : <Spark values={usage.daily} from={first} to="Today" />}
+      </div>
       {plan ? <p className="text-sm text-muted-foreground">{atApiPrices(plan)}</p> : null}
     </div>
   );

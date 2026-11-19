@@ -4,11 +4,15 @@ import { type Scope, within } from '../scope.ts';
 import type { Usage } from '../types.ts';
 import { DAY_MS } from './decisions.ts';
 import { localDay } from './summary.ts';
+import { keptOutLessDigests, net, saved, wouldKeepOut } from './saved.ts';
 
 /** Days the masthead's cost and each rule's cover. */
 export const MONTH = 30;
 
-/** What the viewer's model calls cost, failed ones included: over the last day, week and 30 days, and per day for those 30. */
+/**
+ * What the viewer's model calls cost, failed ones included, and what Sift took out of their inbox: over the last day,
+ * week and 30 days, and per day for those 30.
+ */
 export async function usage(db: Sql, scope: Scope, now: number): Promise<Usage> {
   const runs = await db
     .select({ startedAt: modelRuns.startedAt, costUsd: modelRuns.costUsd })
@@ -22,5 +26,20 @@ export async function usage(db: Sql, scope: Scope, now: number): Promise<Usage> 
     const sum = daily.get(day);
     if (sum !== undefined) daily.set(day, sum + run.costUsd);
   }
-  return { day: since(1), week: since(7), month: since(MONTH), daily: [...daily.values()] };
+  const kept = await keptOutLessDigests(db, scope, now - MONTH * DAY_MS);
+  const keptSince = (days: number) => saved(net(kept.filter((k) => k.at >= now - days * DAY_MS)));
+  const keptDaily = Map.groupBy(kept, (k) => localDay(k.at));
+  return {
+    day: since(1),
+    week: since(7),
+    month: since(MONTH),
+    daily: [...daily.values()],
+    saved: {
+      day: keptSince(1),
+      week: keptSince(7),
+      month: keptSince(MONTH),
+      daily: [...daily.keys()].map((day) => saved(net(keptDaily.get(day) ?? [])).seconds),
+      wouldHave: saved(await wouldKeepOut(db, scope, now - MONTH * DAY_MS)),
+    },
+  };
 }
