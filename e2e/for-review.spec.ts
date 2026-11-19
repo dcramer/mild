@@ -119,7 +119,7 @@ test.describe('For review, with Sift on', () => {
     // Whether Sift is on comes with the page, so it is known before the list arrives.
     await page.goto('/');
     await expect(page.getByText('Nothing is waiting on you.')).toBeVisible();
-    await expect(page.getByText('Sift kept 1 out of your inbox this week: about 4 s you didn’t spend on them.')).toBeVisible();
+    await expect(page.getByText('Sift kept 1 out of your inbox this week: about 10 s you didn’t spend on them.')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Turn Sift on…' })).toHaveCount(0);
   });
 

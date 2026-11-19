@@ -24,12 +24,12 @@ import type { Saved } from '../types.ts';
 import { DAY_MS } from './decisions.ts';
 
 /**
- * What one message Sift took out of the inbox saved: seeing it there, reading who sent it and what about, and
- * dismissing it. Reading it is left out: most of this mail is never opened, and counting it as read would make
- * the figure one nobody believes. The words in each message the model reads are recorded (`Facts.words`) for when
- * reading is estimated too.
+ * What one message Sift took out of the inbox saved: about the time people spend on an email they open (Litmus's
+ * measure, 9 to 13 seconds since 2011). Not its reading time: most of this mail is never read through, and counting
+ * it as read would make the figure one nobody believes. The words in each message the model reads are recorded
+ * (`Facts.words`) for when reading is estimated too.
  */
-const GLANCE_SECONDS = 4;
+const GLANCE_SECONDS = 10;
 
 export const saved = (messages: number): Saved => ({ messages, seconds: messages * GLANCE_SECONDS });
 

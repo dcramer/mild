@@ -93,7 +93,7 @@ const DAILY_COST = [
   0.14, 0.11, 0.16, 0.14,
 ];
 const SAVED_DAILY = [52, 61, 70, 22, 18, 64, 58, 49, 73, 60, 24, 15, 57, 71, 63, 66, 51, 20, 19, 62, 68, 75, 55, 59, 27, 18, 64, 72, 60, 52];
-const SAVED = (messages: number) => ({ messages, seconds: messages * 4 });
+const SAVED = (messages: number) => ({ messages, seconds: messages * 10 });
 const USAGE = {
   day: 0.14,
   week: 0.96,
@@ -103,7 +103,7 @@ const USAGE = {
     day: SAVED(52),
     week: SAVED(401),
     month: SAVED(SAVED_DAILY.reduce((a, b) => a + b)),
-    daily: SAVED_DAILY.map((n) => n * 4),
+    daily: SAVED_DAILY.map((n) => n * 10),
     wouldHave: SAVED(0),
   },
 };
