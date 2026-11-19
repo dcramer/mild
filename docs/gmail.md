@@ -28,7 +28,7 @@ Quotas (projects created since 2026-05-01; older ones keep their old quotas):
 
 ## Available, not used yet
 
-- **Push** (`users.watch`). Needs a Google Cloud Pub/Sub topic, renewed at least every 7 days, and only says "something changed": the changes still come from `history.list`. Google recommends polling for a client like Sift, which is what it does.
+- **Push** (`users.watch`). Gmail publishes to a Google Cloud Pub/Sub topic, usually within seconds, and says only the address and its new history id: the changes still come from `history.list`. The watch is renewed at least every 7 days (Google suggests daily). A mailbox gets at most one notification a second, the rest are dropped, and any may be late or lost, so a slow poll stays as the fallback. Google recommends polling only for apps on the person's own device (installed, mobile, a browser); a server can take push, which would read history as mail arrives instead of on the look gap ([runtime.md](runtime.md#the-core)). Pub/Sub pushes only to a public HTTPS address, so `sift run` on localhost or Tailscale would pull from a subscription instead.
 - **Threads** (`users.threads.modify`). Applies a change to every message in a thread; later messages do not inherit it.
 
 ## Not checked against real Gmail
