@@ -5,60 +5,26 @@ import { type ReactNode, useContext, useState } from 'react';
 import { Anchor } from './anchor.tsx';
 import { Button } from './button.tsx';
 import { Cloud, FinePrint } from './fine-print.tsx';
-import { Avatar, Menu, type MenuItem } from './menu.tsx';
+import { Avatar, type MenuItem } from './menu.tsx';
+import type { NavItem } from './rail.tsx';
 import { Wordmark } from './type.tsx';
-
-interface NavItem {
-  /** The path, without the leading `/`. */
-  to: string;
-  label: string;
-  /** Something waiting there, shown beside the label. */
-  count?: number;
-}
 
 const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center justify-center hover:bg-(--fill)';
 
-/** The sections of the app, in a line. The current one is highlighted, like the name. */
-function Sections({ items, current }: { items: readonly NavItem[]; current: string }) {
-  return (
-    <nav aria-label="Sections">
-      <ul className="flex flex-wrap gap-x-6 gap-y-1">
-        {items.map((item) => (
-          <li key={item.to}>
-            <Anchor
-              href={`/${item.to}`}
-              aria-current={item.to === current ? 'page' : undefined}
-              className="relative flex items-baseline gap-1.5 py-1 text-base leading-normal font-semibold text-muted-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:after:bg-highlight"
-            >
-              {item.label}
-              {item.count ? <span className="text-sm tabular-nums opacity-70">{item.count}</span> : null}
-            </Anchor>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
-
 /**
- * The top of every screen: the name, the sections, `status` (a `Notice`: what is wrong with sift itself),
- * `aside` (a short line about sift that is always worth a glance: when it last synced, what it costs) and
- * `account` (who is signed in and what they can do about it, behind their `Avatar`). No bar; it sits straight
- * on the page. On a narrow screen the bar keeps the name, `aside` and a menu button; the sections and the
- * account move into a panel that covers the screen, the sections followed by `FinePrint` as a list, with `detail` (what `aside`'s hover card says, which a
- * touch screen never shows) framed above the account. `status` gets a line of its own under the bar.
+ * The top of every screen on a phone, where `Rail` is not shown: the name, `aside` (Sift's line) and a menu button.
+ * The sections and `account` move into a panel that covers the screen, the sections followed by `FinePrint` as a list,
+ * with `detail` (what `aside`'s hover card says, which a touch screen never shows) framed above the account.
  */
 export function Masthead({
   items,
   current,
-  status,
   aside,
   detail,
   account,
 }: {
   items: readonly NavItem[];
   current: string;
-  status?: ReactNode;
   aside?: ReactNode;
   detail?: ReactNode;
   account?: { name: string; items: readonly MenuItem[] } | undefined;
@@ -77,44 +43,22 @@ export function Masthead({
   // No sections: the page before it knows who is signed in, which may yet be the sign-in page, so the name alone.
   if (items.length === 0)
     return (
-      <header className="flex flex-wrap items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
-        {/* As tall as the row the menu button (a phone) or the avatar makes, so the name stays put as they arrive. */}
-        <Anchor href="/" aria-label="Sift" className="flex min-h-11 items-center md:min-h-(--control)">
+      <header className="flex items-center pt-4 pb-6 md:hidden">
+        {/* As tall as the row the menu button makes, so the name stays put as it arrives. */}
+        <Anchor href="/" aria-label="Sift" className="flex min-h-11 items-center">
           <Wordmark />
         </Anchor>
       </header>
     );
 
   return (
-    <header className="flex flex-wrap items-center gap-x-5 pt-4 pb-6 md:pt-5 md:pb-7">
+    <header className="flex items-center gap-x-5 pt-4 pb-6 md:hidden">
       <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Sift">
         <Wordmark />
       </Anchor>
-      <div className="hidden min-w-0 flex-1 items-center gap-x-5 md:flex">
-        <Sections items={items} current={current} />
-        <div className="ml-auto flex items-center gap-4 text-sm text-muted-foreground">
-          {status}
-          {aside}
-          {account ? (
-            <Menu
-              label={`Account, ${account.name}`}
-              align="end"
-              trigger={<Avatar name={account.name} />}
-              heading={
-                <>
-                  <p className="slug text-muted-foreground">Signed in</p>
-                  <p className="mt-1 font-medium break-all">{account.name}</p>
-                </>
-              }
-              items={account.items}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      <div className="flex min-w-0 flex-1 justify-end text-sm text-muted-foreground md:hidden">{aside}</div>
+      <div className="flex min-w-0 flex-1 justify-end text-sm text-muted-foreground">{aside}</div>
       <Dialog.Root open={open} onOpenChange={setOpen}>
-        <Dialog.Trigger aria-label="Menu" className={`${ICON_PRESS} relative -mr-2 md:hidden`}>
+        <Dialog.Trigger aria-label="Menu" className={`${ICON_PRESS} relative -mr-2`}>
           <MenuIcon className="size-5" />
           {waiting > 0 && here?.count === undefined ? <span aria-hidden className="absolute top-2 right-2 size-2 rounded-full bg-highlight" /> : null}
         </Dialog.Trigger>
@@ -177,7 +121,6 @@ export function Masthead({
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
-      {status ? <div className="flex basis-full flex-wrap gap-x-4 gap-y-1 pt-2 md:hidden">{status}</div> : null}
     </header>
   );
 }

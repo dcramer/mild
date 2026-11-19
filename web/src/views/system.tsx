@@ -1,5 +1,5 @@
 'use client';
-import { ArrowRightIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, Trash2Icon } from 'lucide-react';
+import { ActivityIcon, ArrowRightIcon, ListChecksIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, TagIcon, Trash2Icon, WorkflowIcon } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint } from '@/components/sender.tsx';
@@ -63,6 +63,7 @@ import {
   PageFoot,
   PageHeader,
   Panel,
+  Rail,
   Reserve,
   Rope,
   RowActions,
@@ -111,6 +112,13 @@ const USAGE = {
   },
 };
 const SYNCED = Date.now() - 20_000;
+const SPECIMEN_ACCOUNTS = [{ id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true }];
+const NAV = [
+  { to: 'system', label: 'For review', icon: ListChecksIcon, count: 12 },
+  { to: 'system/activity', label: 'Activity', icon: ActivityIcon },
+  { to: 'system/labels', label: 'Labels', icon: TagIcon },
+  { to: 'system/rules', label: 'Rules', icon: WorkflowIcon },
+];
 const SERIES = TIERS.map((t, index) => ({ key: String(index), name: t.name, color: t.color }));
 const DAYS = [
   [12, 5, 3, 1],
@@ -179,6 +187,13 @@ export function SystemView() {
       undo: () => toast('Back in the inbox'),
       action: { label: 'Same for 2 more', onPress: () => toast('Archive as Marketing: 2 more') },
     });
+  const account = {
+    name: 'ada@example.org',
+    items: [
+      { label: 'Settings', onSelect: () => toast('Settings') },
+      { label: 'Sign out', onSelect: () => toast('Signed out') },
+    ],
+  };
   return (
     // Its parts are shown as a service shows them, with the terms, privacy and security in the fine print.
     <Cloud value>
@@ -898,32 +913,29 @@ export function SystemView() {
           </Table>
         </Section>
 
-        <Section title="Navigation">
-          <Sheet className="px-4">
-            <Masthead
-              current="system"
-              items={[
-                { to: 'system', label: 'For review', count: 12 },
-                { to: 'system/activity', label: 'Activity' },
-                { to: 'system/rules', label: 'Rules' },
-              ]}
-              status={<Notice>Sift cannot be reached</Notice>}
-              aside={
-                <SiftStatus accounts={[{ id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true }]} usage={USAGE} plan={null} />
-              }
-              detail={<UsageDetail usage={USAGE} plan={null} />}
-              account={{
-                name: 'ada@example.org',
-                items: [
-                  { label: 'Settings', onSelect: () => toast('Settings') },
-                  { label: 'Sign out', onSelect: () => toast('Signed out') },
-                ],
-              }}
-            />
-          </Sheet>
-          <Sheet className="px-4">
-            <Masthead current="" items={[]} />
-          </Sheet>
+        <Section title="Navigation" meta="the rail on a desktop, the masthead on a phone">
+          <div className="hidden gap-6 md:flex">
+            <Sheet className="flex h-[34rem]">
+              <Rail current="system" items={NAV} aside={<SiftStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} stacked />} account={account} />
+            </Sheet>
+            <Sheet className="flex h-[34rem]">
+              <Rail current="" items={[]} />
+            </Sheet>
+          </div>
+          <div className="flex flex-col gap-6 md:hidden">
+            <Sheet className="px-4">
+              <Masthead
+                current="system"
+                items={NAV}
+                aside={<SiftStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} />}
+                detail={<UsageDetail usage={USAGE} plan={null} />}
+                account={account}
+              />
+            </Sheet>
+            <Sheet className="px-4">
+              <Masthead current="" items={[]} />
+            </Sheet>
+          </div>
         </Section>
 
         <Section title="Document" meta="a page read from top to bottom: /terms, /privacy, /security">

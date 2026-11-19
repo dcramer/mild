@@ -234,7 +234,7 @@ export const reviewRows = (page: Page) => page.getByRole('row').filter({ has: pa
 
 export const reviewSearch = (page: Page) => page.getByRole('searchbox', { name: 'Search senders and subjects' });
 
-/** The masthead's link to For review, whose name ends in how many messages wait. */
+/** The link to For review among the sections, whose name ends in how many messages wait. */
 export const forReviewLink = (page: Page) => page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: /^For review/ });
 
 /**

@@ -63,19 +63,23 @@ export function UsageDetail({ usage, plan }: { usage: Usage; plan: Plan }) {
 }
 
 /**
- * The masthead's line: how long since the mailbox that synced longest ago last did (each one's time when pointed at), then
- * what the model cost over 30 days, which previews the rest and links to Activity.
+ * Sift's line: how long since the mailbox that synced longest ago last did (each one's time when pointed at), then
+ * what the model cost over 30 days, which previews the rest and links to Activity. `stacked` for the rail, too narrow
+ * for a line.
  */
-export function SiftStatus({ accounts, usage, plan }: { accounts: Accounts; usage: Usage | null; plan: Plan }) {
+export function SiftStatus({ accounts, usage, plan, stacked = false }: { accounts: Accounts; usage: Usage | null; plan: Plan; stacked?: boolean }) {
   // `ago` reads the clock itself.
   useNow(30_000);
   const synced = accounts.flatMap((a) => (a.lastSyncedAt === null ? [] : [{ email: a.email, at: a.lastSyncedAt }]));
   return (
-    <span className="flex items-center gap-2 whitespace-nowrap tabular-nums">
+    <span className={stacked ? 'flex flex-col items-center gap-3 text-center tabular-nums' : 'flex items-center gap-2 whitespace-nowrap tabular-nums'}>
       {accounts.length === 0 ? (
         'No account connected'
       ) : (
-        <Tooltip says={synced.map((a) => `${a.email}: ${dateTime(a.at)}`).join('\n')} className="flex items-center gap-1.5">
+        <Tooltip
+          says={synced.map((a) => `${a.email}: ${dateTime(a.at)}`).join('\n')}
+          className={stacked ? 'flex flex-col items-center gap-1' : 'flex items-center gap-1.5'}
+        >
           <RefreshCwIcon aria-hidden className="size-3.5" />
           <span className="sr-only">Synced</span>
           {synced.length > 0 ? <Ago at={Math.min(...synced.map((a) => a.at))} /> : 'Not synced yet'}
@@ -83,10 +87,10 @@ export function SiftStatus({ accounts, usage, plan }: { accounts: Accounts; usag
       )}
       {usage ? (
         <>
-          <span aria-hidden>·</span>
-          <HoverCard href="/activity" card={<UsageDetail usage={usage} plan={plan} />}>
+          {stacked ? null : <span aria-hidden>·</span>}
+          <HoverCard href="/activity" card={<UsageDetail usage={usage} plan={plan} />} className={stacked ? 'flex flex-col items-center' : undefined}>
             {/* Through a plan, only about what the API would have charged: the card says so. */}
-            <span className="text-foreground">{approx(usage.month, plan)}</span> <span className="text-label">30D</span>
+            <span className={stacked ? 'text-sm text-foreground' : 'text-foreground'}>{approx(usage.month, plan)}</span> <span className="text-label">30D</span>
           </HoverCard>
         </>
       ) : null}

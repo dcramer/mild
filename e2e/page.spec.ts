@@ -26,7 +26,7 @@ test('every screen calls it Sift, and only its wordmark sift', async ({ page }) 
     await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
     // A word of its own: a command, a path or a Gmail label (`sift/digest`) keeps its spelling.
     await expect(page.locator('main'), path).not.toContainText(/(?<![\w/.@~$-])sift(?![\w/.@-])/);
-    await expect(page.locator('.wordmark'), path).toHaveText('sift');
+    await expect(page.locator('.wordmark').filter({ visible: true }), path).toHaveText('sift');
     await expect(page.locator('[aria-label="sift"]'), path).toHaveCount(0);
   }
 });
@@ -130,7 +130,7 @@ test("a screen's HTML is drawn for whoever asked, with what Sift does not encryp
     expect(html, path).toContain('aria-label="Sections"');
     expect(html, path).toContain('<footer');
     expect(html, path).toMatch(new RegExp(`<h1[^>]*>${heading}</h1>`));
-    // Whose it is, and what For review holds, in the masthead.
+    // Whose it is, and what For review holds, beside the sections.
     expect(html, path).toContain(session.email!);
     expect(html, path).toMatch(new RegExp(`>${manage.waiting}<`));
     if (path === '/labels') for (const label of manage.labels) expect(html, `the labels' HTML names ${label.name}`).toContain(label.name);

@@ -8,7 +8,7 @@
  * reads first and largest contentful paint, layout shift, the JavaScript fetched until the screen is ready (bytes on
  * the wire and unpacked), and when the screen's heading and then its rows showed, as the page saw them (`performance.now()`
  * in the page, polled each frame). The navigation sample loads `/`, waits for the network to rest, then presses Rules
- * in the masthead and times the press to the Rules heading and its rows. Three profiles: a desktop, the same with the
+ * among the sections and times the press to the Rules heading and its rows. Three profiles: a desktop, the same with the
  * CPU slowed four times, and a phone's width.
  * `--root` measures another checkout (its seed, its server and its build),
  * so two can be run side by side. `--shots` also saves `/` and `/rules` once their rows show, at each profile's width.

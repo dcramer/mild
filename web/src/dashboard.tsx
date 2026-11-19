@@ -1,5 +1,6 @@
 'use client';
 import { type DehydratedState, HydrationBoundary, useIsFetching } from '@tanstack/react-query';
+import { ActivityIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -11,7 +12,7 @@ import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/pa
 import { useHidden } from '@/lib/action.ts';
 import { subscription } from '@/lib/prices.ts';
 import { startTelemetry } from '@/lib/telemetry.ts';
-import { Cloud, LoadingBar, Masthead, Notice, PageFoot, useGoing } from '@/system';
+import { Cloud, LoadingBar, Masthead, Notice, PageFoot, Rail, useGoing } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import type { MessageRef } from '@/views/message-panel.tsx';
@@ -40,10 +41,10 @@ function usePanelsAhead() {
 }
 
 const SECTIONS = [
-  { to: '', label: 'For review' },
-  { to: 'activity', label: 'Activity' },
-  { to: 'labels', label: 'Labels' },
-  { to: 'rules', label: 'Rules' },
+  { to: '', label: 'For review', icon: ListChecksIcon },
+  { to: 'activity', label: 'Activity', icon: ActivityIcon },
+  { to: 'labels', label: 'Labels', icon: TagIcon },
+  { to: 'rules', label: 'Rules', icon: WorkflowIcon },
 ] as const;
 
 /** Settings opens over whatever is showing, setting up included, so nothing has to be finished to reach it. */
@@ -54,7 +55,7 @@ const closeSettings = () => (panelEntry() ? window.history.back() : setParams({ 
 /**
  * The dashboard around `children`, the screen the address names, for whoever the server read the session as (`drawn`,
  * `src/sift/page-data.ts`, with what else it holds that is not encrypted): the sign-in screen for nobody, the
- * setting-up steps until there is something to show, and otherwise the masthead, the screen and its foot.
+ * setting-up steps until there is something to show, and otherwise the sections, the screen and its foot.
  */
 export function Dashboard({ drawn, children }: { drawn: DehydratedState | null; children: ReactNode }) {
   if (!drawn) return <Signed>{children}</Signed>;
@@ -94,14 +95,17 @@ function Signed({ children }: { children: ReactNode }) {
 }
 
 /**
- * The page while the server draws its frame, or the browser asks who is signed in: the name where the masthead and the
- * sign-in page both have it, and the loading bar. Built once for everyone, so nothing that only someone signed in sees.
+ * The page while the server draws its frame, or the browser asks who is signed in: the name where the rail, the
+ * masthead and the sign-in page have it, and the loading bar. Built once for everyone, so nothing that only someone signed in sees.
  */
 export function Opening() {
   return (
-    <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
-      <LoadingBar on />
-      <Masthead current="" items={[]} />
+    <div className="md:flex">
+      <Rail current="" items={[]} />
+      <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6">
+        <LoadingBar on />
+        <Masthead current="" items={[]} />
+      </div>
     </div>
   );
 }
@@ -147,45 +151,47 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
 
   const going = useGoing();
   const fetching = useIsFetching(firstLoad);
+  const items = SECTIONS.map((s) => ({ ...s, ...(s.to === '' && waiting ? { count: waiting } : {}) }));
+  const notice = !online ? (
+    <Notice>Sift cannot be reached</Notice>
+  ) : expired.length > 0 ? (
+    // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
+    <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
+      Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}
+    </Notice>
+  ) : null;
+  const status = (stacked: boolean) => (manage.data ? <SiftStatus accounts={accounts} usage={usage.data} plan={plan} stacked={stacked} /> : null);
+  const account = name
+    ? {
+        name,
+        items: [
+          { label: 'Settings', onSelect: openSettings },
+          {
+            label: 'Sign out',
+            onSelect: () => void api.signOut().then(() => window.location.assign('/')),
+            ...(online ? {} : { disabled: true, note: 'Not while Sift is unreachable.' }),
+          },
+        ],
+      }
+    : undefined;
 
   return (
     <OpenMessagesContext value={openMessages}>
-      <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 md:px-6">
-        <LoadingBar on={going || fetching > 0} />
-        <Masthead
-          current={section ?? ''}
-          items={SECTIONS.map((s) => ({ ...s, ...(s.to === '' && waiting ? { count: waiting } : {}) }))}
-          status={
-            !online ? (
-              <Notice>Sift cannot be reached</Notice>
-            ) : expired.length > 0 ? (
-              // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
-              <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
-                Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}
-              </Notice>
-            ) : null
-          }
-          aside={manage.data ? <SiftStatus accounts={accounts} usage={usage.data} plan={plan} /> : null}
-          detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
-          account={
-            name
-              ? {
-                  name,
-                  items: [
-                    { label: 'Settings', onSelect: openSettings },
-                    {
-                      label: 'Sign out',
-                      onSelect: () => void api.signOut().then(() => window.location.assign('/')),
-                      ...(online ? {} : { disabled: true, note: 'Not while Sift is unreachable.' }),
-                    },
-                  ],
-                }
-              : undefined
-          }
-        />
-
-        <main className="pb-16">{children}</main>
-        <PageFoot />
+      <div className="md:flex">
+        <Rail current={section ?? ''} items={items} aside={status(true)} account={account} />
+        <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6 md:pt-6">
+          <LoadingBar on={going || fetching > 0} />
+          <Masthead
+            current={section ?? ''}
+            items={items}
+            aside={status(false)}
+            detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
+            account={account}
+          />
+          {notice ? <div className="flex flex-wrap gap-x-4 gap-y-1 pb-5">{notice}</div> : null}
+          <main className="pb-16">{children}</main>
+          <PageFoot />
+        </div>
         {open ? (
           <MessagePanel
             key={opened}
