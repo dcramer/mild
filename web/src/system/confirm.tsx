@@ -1,11 +1,11 @@
 'use client';
-import { type KeyboardEvent, type ReactNode, useState } from 'react';
+import { type KeyboardEvent, useState } from 'react';
 import { Button } from './button.tsx';
 
 /**
- * A press that cannot be taken back. The first press asks, in place, with the question and the same
- * words on the button that does it; Cancel or Escape puts it back. The answer has the focus, so a
- * keyboard user confirms with Enter.
+ * A press that is hard to take back but deletes nothing (turning Sift on); deleting is `DeleteButton`. The first
+ * press asks, in place, with the question and the same words on the button that does it; Cancel or Escape puts it
+ * back. The answer has the focus, so a keyboard user confirms with Enter.
  */
 export function ConfirmButton({
   question,
@@ -13,31 +13,22 @@ export function ConfirmButton({
   variant = 'quiet',
   busy,
   disabled,
-  icon,
   children,
 }: {
-  /** Says what will be lost: "Remove this rule?" */
+  /** Says what will happen: "Turn Sift on?" */
   question: string;
   onConfirm: () => void;
   /** How the first press looks: `quiet` down a list, `plain` on its own. */
   variant?: 'quiet' | 'plain';
   busy?: boolean;
   disabled?: boolean;
-  /** Down a list, the first press is this icon alone (a trash can to remove); `children` names it and is said on the button that does it. */
-  icon?: ReactNode;
   children: string;
 }) {
   const [asking, setAsking] = useState(false);
   if (!asking)
     return (
-      <Button
-        variant={variant}
-        busy={busy ?? false}
-        disabled={disabled ?? false}
-        onClick={() => setAsking(true)}
-        {...(icon ? { size: 'icon' as const, 'aria-label': children, title: children } : {})}
-      >
-        {icon ?? children}
+      <Button variant={variant} busy={busy ?? false} disabled={disabled ?? false} onClick={() => setAsking(true)}>
+        {children}
       </Button>
     );
   const escape = (event: KeyboardEvent<HTMLElement>) => {
@@ -46,17 +37,8 @@ export function ConfirmButton({
     event.stopPropagation();
     setAsking(false);
   };
-  const ask = (
-    <span
-      role="group"
-      aria-label={question}
-      className={
-        icon
-          ? // It covers the row it is in, so it takes the row's ground: the layer's surface, with the row's own fill while the row is pointed at or holds the focus.
-            'absolute top-1/2 right-0 z-10 inline-flex -translate-y-1/2 items-center gap-1.5 bg-(--surface) pl-3 group-hover/row:[background-image:linear-gradient(var(--fill),var(--fill))] group-focus-within/row:[background-image:linear-gradient(var(--fill),var(--fill))]'
-          : 'inline-flex items-center gap-1.5'
-      }
-    >
+  return (
+    <span role="group" aria-label={question} className="inline-flex items-center gap-1.5">
       <span className="mr-1 text-sm whitespace-nowrap">{question}</span>
       <Button
         variant="ink"
@@ -74,6 +56,4 @@ export function ConfirmButton({
       </Button>
     </span>
   );
-  // Given an icon, the question covers the row from the right rather than widening its column and moving every row.
-  return icon ? <span className="relative inline-flex size-(--control)">{ask}</span> : ask;
 }

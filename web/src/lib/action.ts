@@ -23,6 +23,8 @@ export function useAction(): {
   busy: boolean;
   error: string | null;
   run: (work: () => Promise<unknown>, then?: () => void) => void;
+  /** The same, for a part that shows its own failure (`DeleteButton`): it settles as the work does. */
+  settle: (work: () => Promise<unknown>) => Promise<void>;
   hide: (keys: readonly string[], failed: string, work: () => Promise<unknown>) => void;
 } {
   const client = useQueryClient();
@@ -53,6 +55,9 @@ export function useAction(): {
         () => then?.(),
         (failure: unknown) => setError(said(failure)),
       );
+    },
+    settle: async (work) => {
+      await change.mutateAsync({ work, hides: [] });
     },
     hide: (keys, failed, work) => {
       change.mutateAsync({ work, hides: keys }).catch((failure: unknown) => toast(failed, { tone: 'failure', description: said(failure) }));

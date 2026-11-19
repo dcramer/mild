@@ -195,6 +195,26 @@ test.describe('Settings', () => {
     await expect(settings(page)).toBeVisible();
   });
 
+  test('a model signed in but not in use is removed after asking, and the key with it', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() =>
+      fetch('/api/model/key', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-sift': '1' },
+        body: JSON.stringify({ provider: 'openai', key: 'sk-made-up' }),
+      }),
+    );
+    await page.goto('/?settings=1');
+    const remove = settings(page).getByRole('button', { name: 'Remove…' });
+    await remove.click();
+    const ask = page.getByRole('dialog', { name: 'Remove OpenAI?' });
+    await expect(ask).toContainText('The key you saved goes with it.');
+    await ask.getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(ask).toHaveCount(0);
+    await expect(remove).toHaveCount(0);
+    await expect(settings(page)).toBeVisible();
+  });
+
   test('Settings over an open message closes back onto the message', async ({ page }) => {
     await page.goto('/');
     const open = await openMessage(page, 'Lunch on Thursday?');

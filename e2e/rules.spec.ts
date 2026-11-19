@@ -288,11 +288,13 @@ test.describe('Rules', () => {
     });
   });
 
-  test('removing a rule from its panel asks in place, and Cancel keeps it', async ({ page }) => {
+  test('removing a rule from its panel asks what goes, and Cancel keeps it', async ({ page }) => {
     const opened = await openRule(page, 'anyone at promo.example.com');
-    const ask = removeQuestion(opened);
+    const ask = removeQuestion(page);
 
-    await opened.getByRole('button', { name: 'Remove', exact: true }).click();
+    await opened.getByRole('button', { name: 'Remove…' }).click();
+    await expect(ask).toContainText('anyone at promo.example.com');
+    await expect(ask.getByRole('button', { name: 'Remove', exact: true })).toBeFocused();
     await ask.getByRole('button', { name: 'Cancel' }).click();
     await expect(ask).toHaveCount(0);
     await expect(opened).toBeVisible();
@@ -305,17 +307,18 @@ test.describe('Rules', () => {
     await expect(row(page, 'anyone at promo.example.com')).toHaveCount(0);
   });
 
-  test('removing a rule from its row asks in the row, and opens no panel', async ({ page }) => {
+  test('removing a rule from its row asks the same, and opens no panel', async ({ page }) => {
     await page.goto('/rules');
     const promo = row(page, 'anyone at promo.example.com');
-    await promo.getByRole('button', { name: 'Remove' }).click();
-    const ask = removeQuestion(promo);
-    await expect(ask).toBeVisible();
+    await promo.getByRole('button', { name: 'Remove this rule' }).click();
+    const ask = removeQuestion(page);
+    await expect(ask).toContainText('anyone at promo.example.com');
     await expect(rulePanel(page, 'anyone at promo.example.com')).toHaveCount(0);
 
     await ask.getByRole('button', { name: 'Cancel' }).click();
     await expect(ask).toHaveCount(0);
-    await promo.getByRole('button', { name: 'Remove' }).click();
+    await promo.getByRole('button', { name: 'Remove this rule' }).click();
+    await expect(ask).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(ask).toHaveCount(0);
 
@@ -328,10 +331,11 @@ test.describe('Rules', () => {
 
   test('Escape on Remove this rule? in a panel takes back the question and leaves the panel open', async ({ page }) => {
     const opened = await openRule(page, 'anyone at promo.example.com');
-    await opened.getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(removeQuestion(opened)).toBeVisible();
+    await opened.getByRole('button', { name: 'Remove…' }).click();
+    await expect(removeQuestion(page)).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(removeQuestion(opened)).toHaveCount(0);
+    await expect(removeQuestion(page)).toHaveCount(0);
+    await expect(opened).toBeVisible();
     await opened.getByRole('button', { name: 'Previous' }).click({ timeout: 2000 });
     await expect(rulePanel(page, 'anyone at ci.example.org')).toBeVisible();
   });

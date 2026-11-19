@@ -256,20 +256,20 @@ test.describe('Labels', () => {
     await query(page).toBe('');
   });
 
-  test('removing a label asks in place, then closes its panel with a toast', async ({ page }) => {
+  test('removing a label asks what goes, then closes its panel with a toast', async ({ page }) => {
     await page.goto('/labels');
     await expect(labelCount(page)).toHaveText(/^10 of /);
     const opened = await openLabel(page, 'Newsletters');
 
-    await opened.getByRole('button', { name: 'Remove', exact: true }).click();
-    const ask = opened.getByRole('group', { name: 'Remove Newsletters and its 1 rule?' });
-    await expect(ask).toBeVisible();
+    await opened.getByRole('button', { name: 'Remove…' }).click();
+    const ask = page.getByRole('dialog', { name: 'Remove Newsletters and its 1 rule?' });
+    await expect(ask).toContainText('stops being shown to the model as examples');
     await ask.getByRole('button', { name: 'Cancel' }).click();
     await expect(ask).toHaveCount(0);
     await settled(page);
     await expect(opened).toBeVisible();
 
-    await opened.getByRole('button', { name: 'Remove', exact: true }).click();
+    await opened.getByRole('button', { name: 'Remove…' }).click();
     await ask.getByRole('button', { name: 'Remove', exact: true }).click();
 
     await expect(opened).toHaveCount(0);
@@ -286,13 +286,13 @@ test.describe('Labels', () => {
   test('Escape puts back the question to remove, and leaves the panel open', async ({ page }) => {
     await page.goto('/labels?label=newsletter');
     const opened = labelPanel(page, 'Newsletters');
-    await opened.getByRole('button', { name: 'Remove', exact: true }).click();
-    const ask = opened.getByRole('group', { name: 'Remove Newsletters and its 1 rule?' });
+    await opened.getByRole('button', { name: 'Remove…' }).click();
+    const ask = page.getByRole('dialog', { name: 'Remove Newsletters and its 1 rule?' });
     await expect(ask.getByRole('button', { name: 'Remove', exact: true })).toBeFocused();
     await page.keyboard.press('Escape');
     await settled(page);
     await expect(ask).toHaveCount(0);
-    await expect(opened.getByRole('button', { name: 'Remove', exact: true })).toBeVisible();
+    await expect(opened.getByRole('button', { name: 'Remove…' })).toBeVisible();
     await param(page, 'label').toBe('newsletter');
   });
 
@@ -323,7 +323,7 @@ test.describe('Labels', () => {
     await expect(opened.getByText('Mail none of your labels fit stays in your inbox.')).toBeVisible();
     await expect(opened.getByRole('textbox')).toHaveCount(0);
     await expect(opened.getByRole('combobox')).toHaveCount(0);
-    await expect(opened.getByRole('button', { name: 'Remove' })).toHaveCount(0);
+    await expect(opened.getByRole('button', { name: /^Remove/ })).toHaveCount(0);
   });
 
   test('Previous and Next step through the labels in the order they are listed', async ({ page }) => {
@@ -422,9 +422,11 @@ refused.describe('A mailbox with one label', () => {
     await page.goto('/labels');
     await page.getByText('Sales pitches', { exact: true }).click();
     const opened = page.getByRole('dialog', { name: 'Sales pitches', exact: true });
-    await opened.getByRole('button', { name: 'Remove', exact: true }).click();
-    await opened.getByRole('group', { name: 'Remove Sales pitches?' }).getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(opened.getByText('Sales pitches is the last of your labels, and Sift reads no mail without one. Add another first.')).toBeVisible();
+    await opened.getByRole('button', { name: 'Remove…' }).click();
+    // The refusal stays in the question, which is still open over the panel.
+    const ask = page.getByRole('dialog', { name: 'Remove Sales pitches?' });
+    await ask.getByRole('button', { name: 'Remove', exact: true }).click();
+    await expect(ask.getByText('Sales pitches is the last of your labels, and Sift reads no mail without one. Add another first.')).toBeVisible();
     await expect(page.getByText('Label removed')).toHaveCount(0);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 import { Trash2Icon } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { GoThroughInbox, InboxRow } from '@/components/inbox.tsx';
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
@@ -12,11 +12,9 @@ import {
   Ago,
   Button,
   ConfirmButton,
+  DeleteButton,
   Dialog,
   Failure,
-  Field,
-  Form,
-  Input,
   Kbd,
   Loading,
   Note,
@@ -223,7 +221,7 @@ function Switch({
 
 /** The reader's own way to a model and which one classifies their mail: each person signs in for themselves. */
 function Model({ state, reload, onConnect }: { state: ManageState; reload: () => void; onConnect: () => void }) {
-  const { busy, error, run } = useAction();
+  const { busy, error, run, settle } = useAction();
   const { chosen, choices, signedIn } = state.model;
   const [changing, setChanging] = useState(false);
   const models = useLoaded(`models ${signedIn.join(' ')}`, (signal) => api.models(signal), 300_000);
@@ -275,9 +273,19 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
             )}
             note="Signed in, but not in use."
           >
-            <Button variant="quiet" busy={busy} onClick={() => run(() => api.signOutModel(p), reload)}>
+            <DeleteButton
+              question={`Remove ${providerName(
+                choices.find((c) => c.provider === p),
+                p,
+              )}?`}
+              {...(choices.find((c) => c.provider === p)?.how === 'key' ? { says: 'The key you saved goes with it.' } : {})}
+              onDelete={async () => {
+                await settle(() => api.signOutModel(p));
+                reload();
+              }}
+            >
               Remove
-            </Button>
+            </DeleteButton>
           </SettingRow>
         ))}
       </Sheet>
@@ -302,34 +310,27 @@ function RemoveMailbox({
   last: boolean;
   onRemoved: (notRevoked: string | null) => void;
 }) {
-  const [removing, setRemoving] = useState(false);
+  const { settle } = useAction();
   return (
-    <>
-      <Button
-        variant="quiet"
-        size="icon"
-        aria-label={`Remove ${email}`}
-        disabled={last}
-        {...(last ? { why: 'You cannot delete your only remaining mailbox.' } : { title: 'Remove' })}
-        onClick={() => setRemoving(true)}
-      >
-        <Trash2Icon />
-      </Button>
-      {removing ? (
-        <ConfirmRemoval
-          title={`Remove ${email}`}
-          confirm={email}
-          action="Remove mailbox"
-          send={() => api.removeMailbox(email)}
-          onDone={onRemoved}
-          onClose={() => setRemoving(false)}
-        >
+    <DeleteButton
+      question={`Remove ${email}?`}
+      action="Remove mailbox"
+      typed={email}
+      icon={<Trash2Icon aria-hidden />}
+      disabled={last}
+      {...(last ? { why: 'You cannot delete your only remaining mailbox.' } : {})}
+      says={
+        <>
           Sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions and answers. Your labels and rules
           stay, for your other mailboxes.
           {signedIn ? ' You are signed in as it, so you will be signed out.' : ''}
-        </ConfirmRemoval>
-      ) : null}
-    </>
+          {FILTERS_STAY}
+        </>
+      }
+      onDelete={() => settle(() => removed(api.removeMailbox(email), onRemoved))}
+    >
+      Remove
+    </DeleteButton>
   );
 }
 
@@ -411,77 +412,21 @@ const notRevoked = (reply: Removed) =>
     ? null
     : `Google could not be reached, so ${reply.notRevoked.join(' and ')} still lists Sift as having access. Remove it under Third-party connections in your Google Account.`;
 
-/** Typing the address is the confirmation, since nothing brings it back. */
-function ConfirmRemoval({
-  title,
-  confirm,
-  action,
-  send,
-  onDone,
-  onClose,
-  children,
-}: {
-  title: string;
-  confirm: string;
-  action: string;
-  send: () => Promise<Removed>;
-  onDone?: (notRevoked: string | null) => void;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const [typed, setTyped] = useState('');
-  const { busy, error, run } = useAction();
-  const submit = () =>
-    run(async () => {
-      const reply = await send();
-      const note = notRevoked(reply);
-      // Never settles, so nothing is fetched again with the session just ended while the page leaves.
-      if (reply.signedOut) return new Promise<never>(() => window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/'));
-      onClose();
-      onDone?.(note);
-    });
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={title}
-      footer={
-        <>
-          <Button variant="ink" busy={busy} disabled={typed.trim() !== confirm} onClick={submit}>
-            {action}
-          </Button>
-          <Button variant="quiet" onClick={onClose}>
-            Cancel
-          </Button>
-          <Failure>{error}</Failure>
-        </>
-      }
-    >
-      <Form onSubmit={() => typed.trim() === confirm && submit()}>
-        <p className="text-base">
-          {children} The filters Sift made in Gmail stay there, as do its labels on your mail; delete the filters in Gmail’s settings if you no longer want
-          them. This cannot be undone.
-        </p>
-        <Field label={`Type ${confirm} to confirm`}>
-          <Input aria-label="The address" autoComplete="off" value={typed} onChange={(event) => setTyped(event.target.value)} />
-        </Field>
-      </Form>
-    </Dialog>
-  );
-}
+/** Said under what a removal deletes: Sift does not take its Gmail filters or labels with it. */
+const FILTERS_STAY =
+  ' The filters Sift made in Gmail stay there, as do its labels on your mail; delete the filters in Gmail’s settings if you no longer want them.';
 
-/** Everything sift holds for this person goes, and they are signed out. */
-function DeleteAccount({ email, onClose }: { email: string; onClose: () => void }) {
-  return (
-    <ConfirmRemoval title="Delete your account" confirm={email} action="Delete everything" send={() => api.deleteAccount(email)} onClose={onClose}>
-      Sift stops reading every mailbox, revokes its access at Google, and deletes everything it recorded: decisions, answers, rules, labels and your model
-      sign-in.
-    </ConfirmRemoval>
-  );
+/** A mailbox or the account gone: off to the start when that ended the session, else what Google could not be told. */
+async function removed(sent: Promise<Removed>, onDone?: (notRevoked: string | null) => void): Promise<void> {
+  const reply = await sent;
+  const note = notRevoked(reply);
+  // Never settles, so nothing is fetched again with the session just ended while the page leaves.
+  if (reply.signedOut) return new Promise<never>(() => window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/'));
+  onDone?.(note);
 }
 
 function Account({ state, signedInAs }: { state: ManageState; signedInAs: string | null }) {
-  const [deleting, setDeleting] = useState(false);
+  const { settle } = useAction();
   const email = state.accounts.find((a) => a.primary)?.email ?? signedInAs ?? state.accounts[0]?.email ?? '';
   return (
     <SettingsGroup title="Your account">
@@ -490,10 +435,22 @@ function Account({ state, signedInAs }: { state: ManageState; signedInAs: string
           title="Delete your account"
           note={`Sift stops reading every mailbox, and everything it recorded is deleted.${state.owner ? ' Others signed in to this Sift keep theirs.' : ''}`}
         >
-          <Button onClick={() => setDeleting(true)}>Delete account…</Button>
+          <DeleteButton
+            question="Delete your account?"
+            action="Delete everything"
+            typed={email}
+            says={
+              <>
+                Sift stops reading every mailbox, revokes its access at Google, and deletes everything it recorded: decisions, answers, rules, labels and your
+                model sign-in.{FILTERS_STAY}
+              </>
+            }
+            onDelete={() => settle(() => removed(api.deleteAccount(email)))}
+          >
+            Delete account
+          </DeleteButton>
         </SettingRow>
       </Sheet>
-      {deleting ? <DeleteAccount email={email} onClose={() => setDeleting(false)} /> : null}
     </SettingsGroup>
   );
 }

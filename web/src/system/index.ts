@@ -5,6 +5,7 @@ export { StackedBars, Swatch } from './chart.tsx';
 export { ChoiceGroup } from './choice.tsx';
 export { ConfirmButton } from './confirm.tsx';
 export { Copyable } from './copyable.tsx';
+export { DeleteButton } from './delete.tsx';
 export { Dialog } from './dialog.tsx';
 export { Disclosure } from './disclosure.tsx';
 export { Rope } from './doodle.tsx';
