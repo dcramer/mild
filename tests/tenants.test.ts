@@ -10,7 +10,9 @@ import { freshStore, googleSignIn, raw, rowsBy, startDashboard } from './fixture
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { codeSignIn, facts, withSampleLabels } from './helpers.ts';
-import { conditionsHash } from '../src/store/content.ts';
+import { conditionsHash, sealPart } from '../src/store/content.ts';
+import { mailBodies } from '../src/store/query.ts';
+import { searchIndex } from '../src/store/search.ts';
 import { startEval } from '../src/learn/evals.ts';
 import { startInboxRuns } from '../src/store/inbox.ts';
 import * as api from '../src/dashboard/api/index.ts';
@@ -69,6 +71,15 @@ async function seed(account: string): Promise<void> {
     `Body ${mark}`,
     `<p>Html ${mark}</p>`,
   );
+  // Inbox's text, indexed, so a search for the mark finds it in its own mailbox.
+  await db.insert(mailBodies).values({
+    accountId: account,
+    messageId: `m-${mark}`,
+    bodyText: sealPart(db, account, `m-${mark}`, 'text', `Text ${mark}`)!,
+    bodyHtml: sealPart(db, account, `m-${mark}`, 'html', `<p>Html ${mark}</p>`),
+    search: searchIndex(db, { text: `Text ${mark}`, fromName: null, fromAddress: sender.address, subject: `Subject ${mark}` }),
+    fetchedAt: 1000,
+  });
   const run = await startEval({ db, model: `model/${mark}` }, { accountId: account, fewShot: false });
   // Finished, so the next mailbox in the same database can start one.
   await raw(db).run(`UPDATE eval_runs SET status = 'done', finished_at = 1000 WHERE id = ?`, run);
@@ -182,7 +193,7 @@ const READS = (account: string, mark: string) => [
   '/api/inbox?reach=inbox',
   '/api/mail/threads',
   `/api/mail/threads?q=${mark}&view=needs&unread=1`,
-  `/api/mail/threads?from=sender@${mark}.example.com&domain=${mark}.example.com&subject=${mark}&since=0`,
+  `/api/mail/threads?from=sender@${mark}.example.com&domain=${mark}.example.com&since=0`,
   `/api/mail/thread?thread=t1&mailbox=${encodeURIComponent(account)}`,
 ];
 

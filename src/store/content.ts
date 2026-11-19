@@ -30,6 +30,7 @@ import {
   suggestionBodies,
 } from './query.ts';
 import { type RuleMatch, tidyMatch } from '../triage/stages/rules.ts';
+import { searchIndex } from './search.ts';
 import type { Sql } from './sql.ts';
 
 /** What Sift holds of a message that came from the message: its body, and the headers its record keeps. */
@@ -428,11 +429,20 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
           .where(and(eq(table.accountId, row.accountId), eq(table.messageId, row.messageId)));
     });
 
-  // Inbox keeps the text of a whole inbox, so it is read in batches, as mail records are.
+  // Inbox keeps the text of a whole inbox, so it is read in batches, as mail records are. Its search index is made again
+  // with the text, under the new key's search key; one there was none of yet is left to the pass.
   for (let after: { accountId: string; messageId: string } | null = null; ;) {
     const rows = await db
-      .select({ accountId: mailBodies.accountId, messageId: mailBodies.messageId, text: mailBodies.bodyText, html: mailBodies.bodyHtml })
+      .select({
+        accountId: mailBodies.accountId,
+        messageId: mailBodies.messageId,
+        text: mailBodies.bodyText,
+        html: mailBodies.bodyHtml,
+        indexed: sql<boolean>`${mailBodies.search} IS NOT NULL`,
+        headers: messages.headers,
+      })
       .from(mailBodies)
+      .innerJoin(messages, and(eq(messages.accountId, mailBodies.accountId), eq(messages.id, mailBodies.messageId)))
       .where(
         and(
           or(notLike(mailBodies.bodyText, `${prefix}%`), notLike(mailBodies.bodyHtml, `${prefix}%`)),
@@ -446,18 +456,23 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
     if (rows.length === 0) break;
     const resealed = rows
       .filter((r) => stale(db, r.text) || stale(db, r.html))
-      .map((r) => ({
-        ...r,
-        text: sealPart(db, r.accountId, r.messageId, 'text', forRekey(db, r.accountId, r.messageId, 'text', r.text))!,
-        html: sealPart(db, r.accountId, r.messageId, 'html', forRekey(db, r.accountId, r.messageId, 'html', r.html)),
-      }));
+      .map((r) => {
+        const text = forRekey(db, r.accountId, r.messageId, 'text', r.text)!;
+        const envelope = envelopeFrom(forRekey(db, r.accountId, r.messageId, 'headers', r.headers)) as Envelope;
+        return {
+          ...r,
+          text: sealPart(db, r.accountId, r.messageId, 'text', text)!,
+          html: sealPart(db, r.accountId, r.messageId, 'html', forRekey(db, r.accountId, r.messageId, 'html', r.html)),
+          search: r.indexed ? searchIndex(db, { text, fromName: envelope.fromName, fromAddress: envelope.fromAddress, subject: envelope.subject }) : null,
+        };
+      });
     for (const r of resealed) touched.add(`${r.accountId}\n${r.messageId}`);
     if (write)
       await db.transaction(async (tx) => {
         for (const r of resealed)
           await tx
             .update(mailBodies)
-            .set({ bodyText: r.text, bodyHtml: r.html })
+            .set({ bodyText: r.text, bodyHtml: r.html, search: r.search })
             .where(and(eq(mailBodies.accountId, r.accountId), eq(mailBodies.messageId, r.messageId)));
       });
     const last: { accountId: string; messageId: string } = rows.at(-1)!;

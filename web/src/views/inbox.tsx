@@ -43,6 +43,12 @@ const VIEWS = [
 /** The newest message, which the reader opens on. */
 const newest = (t: MailThread) => ({ accountId: t.accountId, messageId: t.messageIds.at(-1)! });
 
+/** Where a conversation a search found is, when that is not the inbox, in front of its subject as Gmail puts a label. */
+function Place({ thread }: { thread: MailThread }) {
+  if (thread.place === 'inbox') return null;
+  return <span className="mr-2 font-normal text-muted-foreground">{thread.place === 'sent' ? 'Sent' : 'Archived'}</span>;
+}
+
 /**
  * One conversation: who wrote, how many messages, the subject and the start of the newest, what Sift thinks the newest
  * is, and when. Unread is in bold. On a phone it reads as For review's rows do: who and when, the subject, then a line of
@@ -67,7 +73,10 @@ function ThreadRow({ thread, selected, onSelect, onOpen }: { thread: MailThread;
           </span>
         </span>
         <OnPhone>
-          <span className={`w-full truncate text-base ${strong || 'text-foreground'}`}>{subject}</span>
+          <span className={`w-full truncate text-base ${strong || 'text-foreground'}`}>
+            <Place thread={thread} />
+            {subject}
+          </span>
           <span className="flex w-full items-baseline gap-3">
             <span className="min-w-0 flex-1 truncate">{thread.preview ? reveal(thread.preview) : null}</span>
             <span className="shrink-0">
@@ -77,7 +86,10 @@ function ThreadRow({ thread, selected, onSelect, onOpen }: { thread: MailThread;
         </OnPhone>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-full">
-        <span className={`block truncate ${strong}`}>{subject}</span>
+        <span className={`block truncate ${strong}`}>
+          <Place thread={thread} />
+          {subject}
+        </span>
         {thread.preview ? <Sub>{reveal(thread.preview)}</Sub> : null}
       </Td>
       <Td phone="hide" quiet className="whitespace-nowrap">
@@ -100,7 +112,7 @@ export function PhoneCompose() {
   ) : null;
 }
 
-/** Inbox: the conversations in the inbox, as a mail app lists them, with what Sift thinks of each. */
+/** Inbox: the conversations in the inbox, as a mail app lists them, with what Sift thinks of each; a search looks through all the mail Sift keeps. */
 export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
@@ -147,7 +159,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const narrowed = q !== '' || label !== '' || unread === '1' || view !== 'all' || ask.narrowed;
   return (
     <ListView
-      search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects', ask: { onAsk: () => ask.ask(search.trim()), busy: ask.busy } }}
+      search={{ value: search, onChange: setSearch, placeholder: 'Search mail', ask: { onAsk: () => ask.ask(search.trim()), busy: ask.busy } }}
       view={{ label: 'Show', value: view, options: VIEWS, onChange: (next) => setView(next === 'all' ? '' : (next as MailView)) }}
       filters={{
         active: [
@@ -185,7 +197,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
       {pages.loading || !manage.data ? (
         loadingRows
       ) : threads.length === 0 ? (
-        <Empty>{narrowed ? 'Nothing in your inbox matches.' : 'Nothing is in your inbox.'}</Empty>
+        <Empty>{q !== '' || ask.narrowed ? 'No mail matches.' : narrowed ? 'Nothing in your inbox matches.' : 'Nothing is in your inbox.'}</Empty>
       ) : (
         <>
           <Table keys>

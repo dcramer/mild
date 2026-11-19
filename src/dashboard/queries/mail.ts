@@ -16,6 +16,7 @@ import {
   mailBodies,
   max,
   messages,
+  not,
   or,
   sql,
   suggestionBodies,
@@ -24,6 +25,8 @@ import type { Sql } from '../../store/sql.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { listLabels } from '../../store/labels.ts';
 import { hashOf, openEnvelope, openPart } from '../../store/content.ts';
+import { mayMatch, searchedWords } from '../../store/search.ts';
+import { type Search, matches, searchOf } from '../../search.ts';
 import { type Scope, within } from '../scope.ts';
 import { Refusal } from '../../refusal.ts';
 import type { MailConversation, MailThread, MailThreads, MailView } from '../types.ts';
@@ -33,10 +36,10 @@ import type { Confidential } from '../../confidential.ts';
 /** About a screen's worth of conversations, so a page arrives in one read and scrolling loads the next. */
 const PAGE = 50;
 /**
- * How many conversations one search reads through, newest first: what it matches is in encrypted headers, so each is
- * opened here. A search that matched fewer than a page by then answers what it has, with `next` to go on from.
+ * How many conversations whose index says they may match one search reads through, newest first, opening their text to
+ * drop those that do not. Fewer than a page matched by then answers what it has, with `next` to go on from.
  */
-const SEARCH_REACH = 500;
+const SEARCH_REACH = 200;
 const PREVIEW_CHARS = 400;
 
 const has = (labelIds: SQL | AnyColumn, label: string) => sql<boolean>`${labelIds} @> ${JSON.stringify([label])}::jsonb`;
@@ -55,13 +58,21 @@ export interface ThreadQuery {
   domain?: readonly string[];
   /** The newest message came on or after it. */
   since?: number | undefined;
-  /** Words, any of which a subject of the conversation has. */
-  subject?: readonly string[];
 }
 
-/** The conversations that have mail in the inbox now, newest first, a page at a time. */
+/** Spam and Trash are not looked through, as Gmail's search does not. */
+const junk = (labelIds: AnyColumn) => or(has(labelIds, 'SPAM'), has(labelIds, 'TRASH'))!;
+
+/**
+ * Conversations, newest first, a page at a time: those with mail in the inbox now, or, for a search or what Ask made of
+ * one, all the mail Sift keeps. A search (`q`) is words one message has in its text, its sender or its subject, all of
+ * them, the last as the start of one.
+ */
 export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Promise<MailThreads> {
+  const search = searchOf(query.q ?? '');
+  const everywhere = search !== null || (query.from ?? []).length > 0 || (query.domain ?? []).length > 0 || query.since !== undefined;
   const inInbox = alias(messages, 'in_inbox');
+  const hit = alias(messages, 'hit');
   const threads = db
     .select({
       accountId: messages.accountId,
@@ -69,17 +80,37 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
       newestAt: sql<number>`max(${messages.receivedAt})`.mapWith(Number).as('newest_at'),
       newestId: sql<string>`(array_agg(${messages.id} ORDER BY ${messages.receivedAt} DESC, ${messages.id} DESC))[1]`.as('newest_id'),
       unread: sql<boolean>`bool_or(${has(messages.labelIds, 'UNREAD')})`.as('unread'),
+      inInbox: sql<boolean>`bool_or(${has(messages.labelIds, 'INBOX')})`.as('in_inbox'),
+      sent: sql<boolean>`bool_and(${has(messages.labelIds, 'SENT')})`.as('sent'),
     })
     .from(messages)
     .where(
       and(
         within(scope, messages.accountId),
-        exists(
-          db
-            .select({ one: sql`1` })
-            .from(inInbox)
-            .where(and(eq(inInbox.accountId, messages.accountId), eq(inInbox.threadId, messages.threadId), has(inInbox.labelIds, 'INBOX'))),
-        ),
+        everywhere
+          ? not(junk(messages.labelIds))
+          : exists(
+              db
+                .select({ one: sql`1` })
+                .from(inInbox)
+                .where(and(eq(inInbox.accountId, messages.accountId), eq(inInbox.threadId, messages.threadId), has(inInbox.labelIds, 'INBOX'))),
+            ),
+        search
+          ? exists(
+              db
+                .select({ one: sql`1` })
+                .from(hit)
+                .innerJoin(mailBodies, and(eq(mailBodies.accountId, hit.accountId), eq(mailBodies.messageId, hit.id)))
+                .where(
+                  and(
+                    eq(hit.accountId, messages.accountId),
+                    eq(hit.threadId, messages.threadId),
+                    not(junk(hit.labelIds)),
+                    mayMatch(db, mailBodies.search, search),
+                  ),
+                ),
+            )
+          : undefined,
       ),
     )
     .groupBy(messages.accountId, messages.threadId)
@@ -90,10 +121,6 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
   const labelId = sql<string | null>`CASE WHEN ${answered} THEN ${feedback.labelId} ELSE ${decisions.labelId} END`;
   const disposition = sql<string | null>`CASE WHEN ${answered} THEN ${feedback.disposition} ELSE ${decisions.disposition} END`;
   const cursor = query.before === undefined ? null : CURSOR.exec(query.before);
-  const needle = query.q?.trim().toLowerCase() ?? '';
-  const words = (query.subject ?? []).map((w) => w.toLowerCase());
-  // What matches is in encrypted headers, opened here: a search reads through the newest conversations.
-  const scanning = needle !== '' || words.length > 0;
   const senders = [
     ...(query.from ?? []).map((a) => [hashOf(db, a), 'sender'] as const),
     ...(query.domain ?? []).map((d) => [hashOf(db, d), 'domain'] as const),
@@ -106,6 +133,8 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
       newestAt: threads.newestAt,
       newestId: threads.newestId,
       unread: threads.unread,
+      inInbox: threads.inInbox,
+      sent: threads.sent,
       decisionId: decisions.id,
       answered: sql<boolean>`${answered}`,
       disposition,
@@ -156,25 +185,17 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
       ),
     )
     .orderBy(desc(threads.newestAt), desc(threads.threadId))
-    .limit((scanning ? SEARCH_REACH : PAGE) + 1);
+    .limit((search ? SEARCH_REACH : PAGE) + 1);
 
-  const scanned = rows.slice(0, scanning ? SEARCH_REACH : PAGE);
+  const scanned = rows.slice(0, search ? SEARCH_REACH : PAGE);
+  const matches = search ? await confirmed(db, scope, scanned, search) : scanned;
+  const shown = matches.slice(0, PAGE);
+  const last = matches.length > PAGE ? shown.at(-1) : rows.length > scanned.length ? scanned.at(-1) : undefined;
   const inThreads = await threadMessages(
     db,
     scope,
-    scanned.map((r) => [r.accountId, r.threadId] as const),
+    shown.map((r) => [r.accountId, r.threadId] as const),
   );
-  const matches = scanning
-    ? scanned.filter((r) => {
-        const all = inThreads.get(`${r.accountId}\n${r.threadId}`) ?? [];
-        return (
-          (needle === '' || all.some((m) => [m.fromAddress, m.fromName ?? '', m.subject].some((text) => plain(text).toLowerCase().includes(needle)))) &&
-          (words.length === 0 || all.some((m) => words.some((w) => plain(m.subject).toLowerCase().includes(w))))
-        );
-      })
-    : scanned;
-  const shown = matches.slice(0, PAGE);
-  const last = matches.length > PAGE ? shown.at(-1) : rows.length > scanned.length ? scanned.at(-1) : undefined;
 
   const names = new Map((await listLabels(db)).map((l) => [l.id, l.name] as const));
   const mine = new Set((await listAccounts(db)).map((a) => a.id));
@@ -195,6 +216,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
         messageIds: all.map((m) => m.messageId),
         unread: r.unread,
         newestAt: r.newestAt,
+        place: r.inInbox ? 'inbox' : r.sent ? 'sent' : 'archived',
         preview: previews.get(`${r.accountId}\n${r.newestId}`) ?? null,
         thinks:
           r.decisionId === null
@@ -211,6 +233,45 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
     }),
     next: last ? `${last.newestAt}.${last.threadId}` : null,
   };
+}
+
+/**
+ * The conversations of `rows`, in order, one of whose messages has every word of `search`: the messages the index lets
+ * through are opened and their words read, a page and one at a time, until more than a page match.
+ */
+async function confirmed<R extends { accountId: string; threadId: string }>(db: Sql, scope: Scope, rows: readonly R[], search: Search): Promise<R[]> {
+  const found: R[] = [];
+  for (let start = 0; start < rows.length && found.length <= PAGE; start += PAGE + 1) {
+    const batch = rows.slice(start, start + PAGE + 1);
+    const wanted = new Set(batch.map((r) => `${r.accountId}\n${r.threadId}`));
+    const candidates = await db
+      .select({ accountId: messages.accountId, threadId: messages.threadId, id: messages.id, headers: messages.headers, text: mailBodies.bodyText })
+      .from(messages)
+      .innerJoin(mailBodies, and(eq(mailBodies.accountId, messages.accountId), eq(mailBodies.messageId, messages.id)))
+      .where(
+        and(
+          within(scope, messages.accountId),
+          inArray(messages.threadId, [...new Set(batch.map((r) => r.threadId))]),
+          not(junk(messages.labelIds)),
+          mayMatch(db, mailBodies.search, search),
+        ),
+      );
+    const matched = new Set<string>();
+    for (const c of candidates) {
+      const key = `${c.accountId}\n${c.threadId}`;
+      if (!wanted.has(key) || matched.has(key)) continue;
+      const envelope = openEnvelope(db, c.accountId, c.id, { headers: c.headers });
+      const words = searchedWords({
+        text: plain(openPart(db, c.accountId, c.id, 'text', c.text)) ?? '',
+        fromName: plain(envelope.fromName),
+        fromAddress: plain(envelope.fromAddress),
+        subject: plain(envelope.subject),
+      });
+      if (matches(words, search)) matched.add(key);
+    }
+    found.push(...batch.filter((r) => matched.has(`${r.accountId}\n${r.threadId}`)));
+  }
+  return found;
 }
 
 /** The recorded messages of these conversations, oldest first, by `account\nthread`. */

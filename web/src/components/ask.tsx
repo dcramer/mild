@@ -19,13 +19,13 @@ const values = (list: string) => (list === '' ? [] : list.split(','));
 
 /**
  * Inbox's Ask: the words in the search put to the model, which answers with a filter. The filter goes into the address
- * as the list's own (who sent it, label, view, unread, since, subject words), each shown as a chip that clears it, so
- * the reader sees what the model made and changes it as any filter. What the model says it could not narrow by is `said`.
+ * as the list's own (who sent it, label, view, unread, since), each shown as a chip that clears it, and the words to
+ * search for into the search, so the reader sees what the model made and changes it as any filter. What the model says
+ * it could not narrow by is `said`.
  */
 export function useAsk() {
   const [from, setFrom] = useParam('from');
   const [domain, setDomain] = useParam('domain');
-  const [subject, setSubject] = useParam('subject');
   const [since, setSince] = useParam('since');
   const [said, setSaid] = useState<string | null>(null);
   const asking = useAction();
@@ -35,12 +35,11 @@ export function useAsk() {
       .join(',');
   const sinceAt = startOf(since);
   return {
-    query: { from, domain, subject, since: sinceAt },
-    narrowed: from !== '' || domain !== '' || subject !== '' || sinceAt !== null,
+    query: { from, domain, since: sinceAt },
+    narrowed: from !== '' || domain !== '' || sinceAt !== null,
     active: [
       ...values(from).map((v) => ({ label: `From: ${v}`, clear: () => setFrom(without(from, v)) })),
       ...values(domain).map((v) => ({ label: `From: anyone at ${v}`, clear: () => setDomain(without(domain, v)) })),
-      ...values(subject).map((v) => ({ label: `Subject: ${v}`, clear: () => setSubject(without(subject, v)) })),
       ...(sinceAt === null
         ? []
         : [{ label: `Since ${new Date(sinceAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`, clear: () => setSince('') }]),
@@ -58,10 +57,9 @@ export function useAsk() {
         }
         const filter = reveal(answer.filter);
         setParams({
-          q: '',
+          q: (filter.words ?? []).join(' '),
           from: (filter.from ?? []).join(','),
           domain: (filter.domain ?? []).join(','),
-          subject: (filter.subject ?? []).join(','),
           since: filter.since ?? '',
           label: filter.label ?? '',
           view: filter.view ?? '',

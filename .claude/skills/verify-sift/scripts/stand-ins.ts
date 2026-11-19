@@ -11,8 +11,8 @@
  * - The model that suggests labels, drafts rules and asks Inbox, a stand-in. Drafting looks up the second
  *   line of its prompt (the words the person typed), then fills in a rule archiving and marking read mail from the
  *   first sender found, with a note naming the second; nothing found fills in `nobody@example.com`. Asking looks up
- *   the words the same way and narrows Inbox to the first sender found, or with none found says Sift cannot tell
- *   which mail you have answered. Suggesting gives Sales pitches when
+ *   the words before any "about" the same way and narrows Inbox to the first sender found, searching for the words after it,
+ *   or with neither says Sift cannot tell which mail you have answered. Suggesting gives Sales pitches when
  *   the words name pitches, Build results (Digest) when they name builds, and notes that Receipts and transactions
  *   covers receipts already when they name receipts; words naming none of these are an unusable answer. A pass is given no model.
  * - What Gmail would count: for Inbox's copy, 8,240 messages in the last year, 21,500 in three and 46,800 in all; an inbox
@@ -116,6 +116,8 @@ const models = createModels();
 models.setProvider(faux.provider);
 /** The words the person typed: the second line of the prompt. */
 const typed = (context: Context) => String(context.messages.find((m) => m.role === 'user')?.content).split('\n')[1] ?? '';
+/** What an Ask is about: the words after "about", which it searches the mail for. */
+const about = (context: Context) => (typed(context).split(' about ')[1] ?? '').split(/\s+/).filter((w) => w !== '');
 // The rest of what `fill_rule` requires (src/model/draft-rule.ts), unused.
 const blank = { reading: '', facts: [], name: '', label: '', onlyOnceLabelled: false, when: '', markRead: true, unsubscribe: false };
 const PITCHES = {
@@ -149,8 +151,9 @@ const answer = (context: Context) => {
   const found = () => [...JSON.stringify(context.messages.at(-1)?.content).matchAll(/<([^>\s]+@[^>\s]+)>|- ([^\s,<]+@[^\s,]+)/g)].map((m) => m[1] ?? m[2]);
   if (tools.has(ASK_TOOL) && context.messages.at(-1)?.role === 'toolResult') {
     const sender = found()[0];
-    const narrow = { reading: '', from: sender ? [sender] : [], domains: [], label: '', view: '', unread: false, since: '', subject: [] };
-    const note = sender ? '' : 'Sift cannot tell which mail you have answered.';
+    const words = about(context);
+    const narrow = { reading: '', from: sender ? [sender] : [], domains: [], label: '', view: '', unread: false, since: '', words };
+    const note = sender || words.length > 0 ? '' : 'Sift cannot tell which mail you have answered.';
     return fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...narrow, note })], { stopReason: 'toolUse' });
   }
   if (tools.has(FILL_TOOL) && context.messages.at(-1)?.role === 'toolResult') {
@@ -161,7 +164,10 @@ const answer = (context: Context) => {
       { stopReason: 'toolUse' },
     );
   }
-  if (tools.has(FIND_TOOL)) return fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: typed(context) })], { stopReason: 'toolUse' });
+  if (tools.has(FIND_TOOL))
+    return fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: tools.has(ASK_TOOL) ? typed(context).split(' about ')[0]! : typed(context) })], {
+      stopReason: 'toolUse',
+    });
   return fauxAssistantMessage('The stand-in model answers only for labels, rules and Ask.', { stopReason: 'error', errorMessage: 'stand-in' });
 };
 faux.setResponses([answer, answer]);

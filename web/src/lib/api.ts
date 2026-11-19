@@ -315,9 +315,9 @@ export const api = {
   dismissProposal: (id: number) => post('/api/proposals', { id }),
   /** `message`: what the page will not show by itself, if anything. */
   undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
-  /** Inbox's conversations, a page from `before`; empty `label`, `q`, `from`, `domain` and `subject` (each comma-separated) narrow nothing. */
+  /** Inbox's conversations, a page from `before`; empty `label`, `q`, `from` and `domain` (the last two comma-separated) narrow nothing. */
   mailThreads: (
-    query: { view: MailView; label: string; q: string; unread: boolean; from: string; domain: string; subject: string; since: number | null },
+    query: { view: MailView; label: string; q: string; unread: boolean; from: string; domain: string; since: number | null },
     before: string,
     signal: AbortSignal,
   ) =>
@@ -330,7 +330,6 @@ export const api = {
         ...(query.unread ? { unread: 1 } : {}),
         from: query.from,
         domain: query.domain,
-        subject: query.subject,
         ...(query.since === null ? {} : { since: query.since }),
         before,
       },

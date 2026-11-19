@@ -470,6 +470,20 @@
       "when": 1795115261366,
       "tag": "0066_drop_mail_summaries",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1795116115099,
+      "tag": "0067_search_mail_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1795116119684,
+      "tag": "0068_search_stays_in_the_row",
+      "breakpoints": true
     }
   ]
 }

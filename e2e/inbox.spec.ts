@@ -1,4 +1,20 @@
-import { PHONE, back, expect, inboxLink, inboxRow, inboxRows, mailWindow, param, path, reader, settings, settingsInbox, test, toast } from './sift.ts';
+import {
+  PHONE,
+  back,
+  expect,
+  inboxLink,
+  inboxRow,
+  inboxRows,
+  inboxSearch,
+  mailWindow,
+  param,
+  path,
+  reader,
+  settings,
+  settingsInbox,
+  test,
+  toast,
+} from './sift.ts';
 
 test.describe('Inbox, off', () => {
   test('is turned on in Settings, after saying what it keeps, and then is a section listing the inbox', async ({ page }) => {
@@ -36,7 +52,7 @@ test.describe('Inbox', () => {
     await page.getByRole('radio', { name: 'Needs you' }).click();
     await expect(inboxRows(page)).toHaveCount(9);
     await expect(inboxRow(page, 'This week in widgets')).toHaveCount(0);
-    await page.getByRole('searchbox', { name: 'Search senders and subjects' }).fill('utility');
+    await inboxSearch(page).fill('utility');
     await expect(inboxRows(page)).toHaveCount(1);
   });
 
@@ -117,6 +133,34 @@ test.describe('Inbox', () => {
     await page.keyboard.press('z');
     await expect(inboxRows(page)).toHaveCount(19);
     await expect(inboxRow(page, 'This week in widgets')).toBeVisible();
+  });
+
+  test('the search finds words in a message’s text, as they are typed, and an archived conversation says it is out of the inbox', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(19);
+    // Only in the text of the order's message.
+    await inboxSearch(page).fill('104');
+    await expect(inboxRows(page)).toHaveCount(1);
+    await expect(inboxRow(page, 'Your order has shipped')).toBeVisible();
+    await inboxSearch(page).fill('order 1042 way');
+    await param(page, 'q').toBe('order 1042 way');
+    await expect(inboxRows(page)).toHaveCount(1);
+    await inboxSearch(page).fill('order 1043');
+    await expect(page.getByText('No mail matches.')).toBeVisible();
+
+    await inboxSearch(page).fill('');
+    await expect(inboxRows(page)).toHaveCount(19);
+    await inboxRow(page, 'Your order has shipped').getByRole('cell').nth(2).click();
+    await reader(page)
+      .getByRole('button', { name: /^Archive/ })
+      .click();
+    await expect(toast(page, 'Your order has shipped')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(inboxRows(page)).toHaveCount(18);
+
+    await inboxSearch(page).fill('1042');
+    await expect(inboxRows(page)).toHaveCount(1);
+    await expect(inboxRow(page, 'Your order has shipped')).toContainText('Archived');
   });
 
   test.describe('on a phone', () => {

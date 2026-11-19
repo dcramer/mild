@@ -24,7 +24,7 @@ const find: Tool = {
 };
 
 function narrow(labels: readonly string[]): Tool {
-  const words = { type: 'array', items: { type: 'string' } } as const;
+  const strings = { type: 'array', items: { type: 'string' } } as const;
   return {
     name: ASK_TOOL,
     description: 'Narrow the list of conversations.',
@@ -33,16 +33,16 @@ function narrow(labels: readonly string[]): Tool {
       // Written first, as the rule drafter's reading is, so the rest follows from it.
       properties: {
         reading: { type: 'string', description: 'A sentence: which conversations they mean.' },
-        from: { ...words, description: 'Addresses a look-up returned.' },
-        domains: { ...words, description: 'Domains of senders a look-up returned, for everyone there.' },
+        from: { ...strings, description: 'Addresses a look-up returned.' },
+        domains: { ...strings, description: 'Domains of senders a look-up returned, for everyone there.' },
         label: { type: 'string', enum: ['', ...labels] },
         view: { type: 'string', enum: VIEW_WORDS },
         unread: { type: 'boolean' },
         since: { type: 'string', description: 'YYYY-MM-DD, or empty.' },
-        subject: { ...words, description: 'Words any of which the subject has.' },
+        words: { ...strings, description: 'Words one message must have, every one, in its text, sender or subject.' },
         note: { type: 'string', description: 'What of what they asked the list cannot narrow by; empty if nothing.' },
       },
-      required: ['reading', 'from', 'domains', 'label', 'view', 'unread', 'since', 'subject', 'note'],
+      required: ['reading', 'from', 'domains', 'label', 'view', 'unread', 'since', 'words', 'note'],
       additionalProperties: false,
     },
     constrainedSampling: { type: 'json_schema', strict: 'prefer' },

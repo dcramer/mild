@@ -3,7 +3,7 @@ import { reconcile, reconcileDue } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { type MessageContent, heldContent } from '../gmail/body.ts';
-import { heldText } from '../store/kept.ts';
+import { heldText, indexKept, searchDue } from '../store/kept.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
@@ -58,6 +58,8 @@ export interface PassResult {
   triage?: TriageReport;
   /** Marked messages whose full content was stored this pass. */
   captured?: number;
+  /** Messages whose text was kept before there was a search index, indexed this pass. */
+  indexed?: number;
   /** What a look at the account's Gmail filters found, on the passes that looked. */
   filters?: FilterCheck;
   error?: string;
@@ -66,6 +68,12 @@ export interface PassResult {
   /** Stopped at its time limit with work left. */
   unfinished?: true;
 }
+
+/**
+ * Text kept before there was a search index, indexed by each pass: about 3 seconds of a pass, so 100,000 messages take
+ * 100 passes, which the look begins one a minute while any is left (`searchDue`).
+ */
+const INDEX_PER_PASS = 1_000;
 
 /** Whether a person is still there: one deleted while a pass ran is skipped, not reported. */
 const stillThere = async (store: Store, id: number) => (await listUsers(store.central)).some((u) => u.id === id);
@@ -346,6 +354,7 @@ async function recordWants(db: Sql, account: Account, options: RunOptions, now: 
   if ((await listUnsettledDecisions(db, account.id, active ? {} : { byUserOnly: true })).length > 0) return true;
   if (await bodiesDue(db, account.id, now)) return true;
   if (await mailBodiesDue(db, account.id)) return true;
+  if (await searchDue(db, account.id)) return true;
   if (await examplesDue(db, account.id)) return true;
   if (await filtersDue(db, account.id, active, now)) return true;
   // With no model, what no rule covers waits for one and a pass leaves it be. A rule added since decides it at the next
@@ -390,6 +399,8 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     // After triage, unlike waiting mail's: Inbox shows mail as it is, so classifying comes first.
     await keepMailBodies(db, api, account.id, options.now, { held, fetch: !out });
     if (out) return finish(result, active, options, true);
+    result.indexed = await indexKept(db, account.id, INDEX_PER_PASS, over);
+    if (over()) return finish(result, active, options, true);
     result.captured = await captureExamples(db, api, account.id);
     try {
       const filters = await checkFiltersWhenDue(deps, account.id, active);
@@ -442,6 +453,7 @@ function describe(result: PassResult, active: boolean): string | null {
     if (triage.retrying > 0) parts.push(`${triage.retrying} change${triage.retrying === 1 ? '' : 's'} to try again`);
     if (triage.troubled > 0) parts.push(`${triage.troubled} change${triage.troubled === 1 ? '' : 's'} not made after ${CHANGE_TRIES} tries`);
   }
+  if (result.indexed) parts.push(`indexed ${result.indexed} kept message${result.indexed === 1 ? '' : 's'} for search`);
   if (result.captured) parts.push(`stored ${result.captured} marked message${result.captured === 1 ? '' : 's'} as examples`);
   if (result.unfinished) parts.push('out of time, carrying on');
   const { filters } = result;

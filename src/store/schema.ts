@@ -19,6 +19,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   doublePrecision,
   foreignKey,
   index,
@@ -70,6 +71,7 @@ const oneOf = (name: string, column: AnyPgColumn, values: readonly string[]): Re
 
 /** Milliseconds since the epoch. */
 const time = (name: string) => bigint(name, { mode: 'number' });
+const bytes = customType<{ data: Uint8Array; driverData: Uint8Array }>({ dataType: () => 'bytea' });
 const id = () => integer('id').primaryKey().generatedByDefaultAsIdentity();
 const userId = () =>
   integer('user_id')
@@ -597,8 +599,19 @@ export const mailBodies = pgTable(
     bodyText: text('body_text').notNull(), // all of its readable text, up to `MAX_MAIL_CHARS` (src/gmail/body.ts)
     bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
     fetchedAt: time('fetched_at').notNull(),
+    // What search finds it by: a keyed Bloom filter of its words, its sender's and its subject's (src/store/search.ts).
+    // Null until the pass indexes text kept before there was one. Kept in the row (STORAGE MAIN), where a search scans it.
+    search: bytes('search'),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.messageId] }), mailbox(t), message(t), own()],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.accountId, t.messageId] }),
+    mailbox(t),
+    message(t),
+    index('mail_bodies_unindexed')
+      .on(t.userId, t.accountId)
+      .where(sql`${t.search} IS NULL`),
+    own(),
+  ],
 ).enableRLS();
 
 /**

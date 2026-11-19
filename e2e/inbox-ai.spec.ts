@@ -1,4 +1,4 @@
-import { expect, inboxRow, inboxRows, param, test } from './sift.ts';
+import { expect, inboxRow, inboxRows, inboxSearch, param, test } from './sift.ts';
 
 test.describe('Inbox, with the model', () => {
   test.use({ variant: 'inbox' });
@@ -6,7 +6,7 @@ test.describe('Inbox, with the model', () => {
   test('Ask turns words into filters the reader can see and clear, and says what it cannot narrow by', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
-    const search = page.getByRole('searchbox', { name: 'Search senders and subjects' });
+    const search = inboxSearch(page);
 
     await search.fill('unanswered');
     await page.getByRole('button', { name: 'Ask', exact: true }).click();
@@ -26,5 +26,21 @@ test.describe('Inbox, with the model', () => {
     await chip.click();
     await param(page, 'from').toBe(null);
     await expect(inboxRows(page)).toHaveCount(19);
+  });
+
+  test('Ask turns what mail says into words for the search, beside the sender it found', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(19);
+    const search = inboxSearch(page);
+    await search.fill('utility about ready');
+    await search.press('Enter');
+    await param(page, 'from').toBe('billing@utility.example.net');
+    await expect(search).toHaveValue('ready');
+    await param(page, 'q').toBe('ready');
+    await expect(inboxRows(page)).toHaveCount(1);
+    await expect(inboxRow(page, 'Your March bill')).toBeVisible();
+
+    await search.fill('ready nowhere');
+    await expect(page.getByText('No mail matches.')).toBeVisible();
   });
 });

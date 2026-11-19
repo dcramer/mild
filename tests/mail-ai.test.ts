@@ -16,7 +16,7 @@ const ACCOUNT = 'me@example.com';
 const KEYS = loadKeyring({ SIFT_KEY: 'mail-ai-key' });
 const LABELS = SAMPLE_LABELS.filter((l) => l.id === 'newsletter' || l.id === 'marketing');
 const TODAY = '2026-11-19';
-const BLANK = { reading: '', from: [], domains: [], label: '', view: '', unread: false, since: '', subject: [], note: '' };
+const BLANK = { reading: '', from: [], domains: [], label: '', view: '', unread: false, since: '', words: [], note: '' };
 const FOUND = [{ address: 'billing@vendor.example.org', name: 'Vendor', listId: null, messages: 3, label: null, subject: 'Your invoice' }];
 const usage = { model: 'p/m', inputTokens: 10, outputTokens: 20, costUsd: 0.01 };
 
@@ -42,7 +42,7 @@ describe('the filter the model makes', () => {
         view: 'needs me',
         unread: true,
         since: '2026-11-01',
-        subject: [' invoice ', 'invoice', ''],
+        words: [' invoice ', 'invoice', ''],
         note: 'Sift does not know what you answered.',
       }),
     ).toEqual({
@@ -53,7 +53,7 @@ describe('the filter the model makes', () => {
         view: 'needs',
         unread: true,
         since: '2026-11-01',
-        subject: ['invoice'],
+        words: ['invoice'],
       },
       note: 'Sift does not know what you answered.',
     });
@@ -111,9 +111,9 @@ describe('the model turning words into a filter', () => {
     const { provider, models, model } = faux();
     provider.setResponses([
       fauxAssistantMessage([fauxText('You want invoices.')]),
-      fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...BLANK, subject: ['invoice'] })], { stopReason: 'toolUse' }),
+      fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...BLANK, words: ['invoice'] })], { stopReason: 'toolUse' }),
     ]);
-    expect(await createMailAsker(models, model, 'low')(input, async () => [])).toMatchObject({ filter: { subject: ['invoice'] }, lookups: 0 });
+    expect(await createMailAsker(models, model, 'low')(input, async () => [])).toMatchObject({ filter: { words: ['invoice'] }, lookups: 0 });
   });
 });
 

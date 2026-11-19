@@ -20,7 +20,6 @@ export default read({
     before: z.string().max(200).optional(),
     from: several,
     domain: several,
-    subject: several,
     since: z.coerce.number().int().nonnegative().optional(),
   }),
   reply: MailThreads,

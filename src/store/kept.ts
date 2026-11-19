@@ -1,6 +1,7 @@
-import { and, count, eq, mailBodies, messages, preferences, sql, suggestionBodies } from './query.ts';
+import { and, count, eq, isNull, mailBodies, messages, preferences, sql, suggestionBodies } from './query.ts';
 import type { Sql } from './sql.ts';
-import { openPart, sealFacts, sealMessage, sealPart } from './content.ts';
+import { openEnvelope, openPart, sealFacts, sealMessage, sealPart } from './content.ts';
+import { type Searched, searchIndex } from './search.ts';
 import { plain } from '../plain.ts';
 import { mailboxAliases } from './accounts.ts';
 import { type ContentFacts, deriveFacts } from '../triage/facts.ts';
@@ -24,13 +25,26 @@ export interface Text {
   read: ContentFacts;
 }
 
-const bodyOf = (db: Sql, accountId: string, messageId: string, text: Text, now: number) => ({
+/** `from` and `subject` are the message's, for its search index with the text. */
+const bodyOf = (db: Sql, accountId: string, messageId: string, text: Text, envelope: Omit<Searched, 'text'>, now: number) => ({
   accountId,
   messageId,
   bodyText: sealPart(db, accountId, messageId, 'text', text.text)!,
   bodyHtml: sealPart(db, accountId, messageId, 'html', text.html),
+  search: searchIndex(db, { ...envelope, text: text.text }),
   fetchedAt: now,
 });
+
+/** What a recorded message's index is made from besides its text: its sender and subject, from its encrypted headers. */
+async function envelopeOf(db: Sql, accountId: string, messageId: string): Promise<Omit<Searched, 'text'>> {
+  const [row] = await db
+    .select({ headers: messages.headers })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+  // Text is kept only of a recorded message (`mail_bodies` references it).
+  const opened = openEnvelope(db, accountId, messageId, row!);
+  return { fromName: plain(opened.fromName), fromAddress: plain(opened.fromAddress), subject: plain(opened.subject) };
+}
 
 /**
  * Record mail Inbox copies and Sift does not triage, with its text: mail from before Sift was connected, mail that never
@@ -57,7 +71,7 @@ export async function recordKept(db: Sql, accountId: string, mail: { facts: Mess
       .onConflictDoNothing();
     await tx
       .insert(mailBodies)
-      .values(bodyOf(tx, accountId, m.messageId, mail.text, now))
+      .values(bodyOf(tx, accountId, m.messageId, mail.text, { fromName: m.from.name ?? null, fromAddress: m.from.address, subject: m.subject }, now))
       .onConflictDoNothing();
     return true;
   });
@@ -67,9 +81,10 @@ export async function recordKept(db: Sql, accountId: string, mail: { facts: Mess
 /** Keep the text of a message Sift has recorded, and add what reading it whole showed to its facts. Only while Inbox is on. Returns false when Inbox was off. */
 export async function keepText(db: Sql, accountId: string, messageId: string, text: Text, now: number): Promise<boolean> {
   const kept = await whileInboxOn(db, async (tx) => {
+    const envelope = await envelopeOf(tx, accountId, messageId);
     await tx
       .insert(mailBodies)
-      .values(bodyOf(tx, accountId, messageId, text, now))
+      .values(bodyOf(tx, accountId, messageId, text, envelope, now))
       .onConflictDoNothing();
     await tx
       .update(messages)
@@ -120,4 +135,51 @@ export async function heldText(db: Sql, accountId: string, messageId: string): P
     html: plain(openPart(db, accountId, messageId, 'html', row.html)),
     read: read as unknown as ContentFacts,
   };
+}
+
+/** Read at once, a pass at a time: each is its text decrypted and a few thousand keyed hashes, about 3 ms. */
+const INDEX_BATCH = 100;
+
+/** Whether text kept before there was a search index waits for one. */
+export async function searchDue(db: Sql, accountId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ one: sql`1` })
+    .from(mailBodies)
+    .where(and(eq(mailBodies.accountId, accountId), isNull(mailBodies.search)))
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * Index up to `most` messages whose text was kept before there was a search index, stopping once `over`. Safe to repeat:
+ * a row is written only while it has none. Returns how many it indexed.
+ */
+export async function indexKept(db: Sql, accountId: string, most: number, over: () => boolean): Promise<number> {
+  let done = 0;
+  while (done < most && !over()) {
+    const rows = await db
+      .select({ messageId: mailBodies.messageId, text: mailBodies.bodyText, headers: messages.headers })
+      .from(mailBodies)
+      .innerJoin(messages, and(eq(messages.accountId, mailBodies.accountId), eq(messages.id, mailBodies.messageId)))
+      .where(and(eq(mailBodies.accountId, accountId), isNull(mailBodies.search)))
+      .limit(Math.min(INDEX_BATCH, most - done));
+    if (rows.length === 0) break;
+    await db.transaction(async (tx) => {
+      for (const r of rows) {
+        const opened = openEnvelope(tx, accountId, r.messageId, { headers: r.headers });
+        const search = searchIndex(tx, {
+          text: plain(openPart(tx, accountId, r.messageId, 'text', r.text)) ?? '',
+          fromName: plain(opened.fromName),
+          fromAddress: plain(opened.fromAddress),
+          subject: plain(opened.subject),
+        });
+        await tx
+          .update(mailBodies)
+          .set({ search })
+          .where(and(eq(mailBodies.accountId, accountId), eq(mailBodies.messageId, r.messageId), isNull(mailBodies.search)));
+      }
+    });
+    done += rows.length;
+  }
+  return done;
 }

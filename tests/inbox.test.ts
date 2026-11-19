@@ -66,25 +66,21 @@ describe('Inbox’s list', () => {
     expect(next).toBeNull();
   });
 
-  it('narrows by what Sift would do, by label, by unread and by sender or subject', async () => {
+  it('narrows by what Sift would do, by label and by unread', async () => {
     const ids = async (query: Parameters<typeof listThreads>[2]) => (await list(query)).threads.map((t) => t.threadId);
     expect(await ids({ view: 'needs' })).toEqual(['lunch']);
     expect(await ids({ view: 'sorted' })).toEqual(['news']);
     expect(await ids({ view: 'all', label: 'newsletter' })).toEqual(['news']);
-    expect(await ids({ view: 'all', q: 'LOVELACE' })).toEqual(['lunch']);
-    expect(await ids({ view: 'all', q: 'widg' })).toEqual(['news']);
     await recordLabels(db, ACCOUNT, 'news', ['INBOX']);
     expect(await ids({ view: 'all', unread: true })).toEqual(['lunch']);
   });
 
-  it('narrows by what an Ask makes: senders and domains in any message of it, when its newest came, and subject words', async () => {
+  it('narrows by what an Ask makes: senders and domains in any message of it, and when its newest came, past the inbox', async () => {
     const ids = async (query: Partial<Parameters<typeof listThreads>[2]>) => (await list({ view: 'all', ...query })).threads.map((t) => t.threadId);
     expect(await ids({ from: ['ADA@example.org'] })).toEqual(['lunch']);
-    expect(await ids({ from: ['nobody@example.org'], domain: ['example.com'] })).toEqual(['news']);
+    expect(await ids({ from: ['nobody@example.org'], domain: ['example.com'] })).toEqual(['gone', 'news']);
     expect(await ids({ domain: ['example.org'] })).toEqual(['lunch']);
-    expect(await ids({ since: 260 })).toEqual(['lunch']);
-    expect(await ids({ subject: ['nothing', 'lunch'] })).toEqual(['lunch']);
-    expect(await ids({ subject: ['widgets'], from: [ada.address] })).toEqual([]);
+    expect(await ids({ since: 260 })).toEqual(['gone', 'lunch']);
   });
 
   it('goes on from where a page ended', async () => {

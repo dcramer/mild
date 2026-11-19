@@ -19,7 +19,7 @@ import { ACCOUNT, FakeMailbox, codeSignIn, tempDir, testModel, workDue } from '.
  */
 const CACHES: Record<string, string[]> = {
   // Keys derived from SIFT_KEY.
-  'src/secrets.ts': ['derived', 'hashKeys'],
+  'src/secrets.ts': ['derived', 'hashKeys', 'searchKeys'],
   // Sift put together over the process's host, again by each copy of the module `next dev` loads.
   'src/sift/instance.ts': ['opened'],
 };

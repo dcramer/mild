@@ -725,6 +725,8 @@ export const MailThread = z.object({
   messageIds: z.array(z.string()),
   unread: z.boolean(),
   newestAt: z.number(),
+  /** Where it is, for a search that looks past the inbox: in it, out of it, or only what the person sent. */
+  place: z.enum(['inbox', 'archived', 'sent']),
   /** The start of its newest message's text, on one line, where Sift holds it. */
   preview: held.nullable(),
   /** About its newest message; null when Sift has not decided it. */
@@ -776,7 +778,8 @@ export const MailAsk = z.union([
       unread: z.literal(true).optional(),
       /** `YYYY-MM-DD`, in the reader's days. */
       since: held.optional(),
-      subject: heldValues,
+      /** Words for Inbox's search, which the page puts in it. */
+      words: heldValues,
     }),
     /** What of their words it leaves out. */
     note: held.optional(),
