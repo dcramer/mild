@@ -35,14 +35,14 @@ const SET_UP = {
   VERCEL_URL: 'sift-abc123.vercel.app',
   VERCEL_BRANCH_URL: 'sift-git-main.vercel.app',
   VERCEL_PROJECT_PRODUCTION_URL: 'sift.example.com',
-  SIFT_DASHBOARD_HOST: 'mail.example.org',
+  SIFT_URL: 'https://mail.example.org',
 };
 
 beforeEach(() => vi.stubEnv('VERCEL', '1'));
 
 /** A new Vercel instance of a project that is set up: Sift's modules loaded afresh, and nothing of the last kept in the process. */
-async function instance() {
-  for (const [name, value] of Object.entries({ ...SET_UP, SIFT_HOME: tempDir() })) vi.stubEnv(name, value);
+async function instance(over: Record<string, string> = {}) {
+  for (const [name, value] of Object.entries({ ...SET_UP, SIFT_HOME: tempDir(), ...over })) vi.stubEnv(name, value);
   deploy.begun = [];
   vi.resetModules();
   delete (globalThis as Record<symbol, unknown>)[Symbol.for('sift.host')];
@@ -111,9 +111,16 @@ describe('a Vercel instance of a project that is set up', () => {
     for (const host of ['sift-abc123.vercel.app', 'sift-git-main.vercel.app', 'sift.example.com', 'mail.example.org']) {
       const reply = await at(host);
       expect(reply.status, host).toBe(200);
-      expect(await reply.json(), host).toMatchObject({ canSignIn: true, addresses: ['https://sift.example.com'] });
+      expect(await reply.json(), host).toMatchObject({ canSignIn: true, addresses: ['https://mail.example.org'] });
     }
     expect((await at('sift.example.net')).status).toBe(403);
+  });
+
+  it('is opened at the production domain when SIFT_URL does not say', async () => {
+    deploy.store = (await onePerson(ACCOUNT)).store;
+    const { respond } = await instance({ SIFT_URL: '' });
+    const reply = await respond(new Request('https://sift.example.com/api/session', { headers: { host: 'sift.example.com' } }));
+    expect(await reply.json()).toMatchObject({ addresses: ['https://sift.example.com'] });
   });
 
   it('fails a request while its database cannot be reached, and opens it again for the next', async () => {

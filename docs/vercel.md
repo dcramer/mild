@@ -48,7 +48,7 @@ In the project's Environment Variables, for Production:
 | `SIFT_KEY` | Encrypts the credentials and mail Sift stores ([secrets.md](secrets.md)). `openssl rand -base64 32` |
 | `SIFT_SESSION_SECRET` | Signs sessions; changing it signs everyone out. `openssl rand -base64 32` |
 | `CRON_SECRET` | Vercel sends it with each cron call; nothing without it can start a tick. `openssl rand -hex 32` |
-| `SIFT_DASHBOARD_HOST` | Only with a domain of your own: that domain. |
+| `SIFT_URL` | Only when the dashboard is opened somewhere other than the project's production domain: that address, `https://sift.example.com`. Digests link to it. |
 | `SIFT_CHATGPT_SIGN_IN` | Only to change how people sign in to ChatGPT ([cli.md](cli.md#models)). |
 | `SIFT_CLOUD` | `true` only when this Sift is a service for other people. It gives the site its terms, privacy policy and security page; Google asks for the first two before it publishes the app. They speak for you, so read them first (`web/src/views/legal.tsx`). |
 | `SENTRY_DSN` | Optional: a Sentry project's DSN, to send errors and traces there ([architecture.md](architecture.md#errors-and-traces)). Each deployment is tagged with its `VERCEL_ENV`. |

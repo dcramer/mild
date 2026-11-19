@@ -10,13 +10,14 @@ import { fromHere, machineNames, signInAddresses } from './network.ts';
 /** How long a piece of work in `sift run` may start work: as a host's function would cut it off, so the same path runs. */
 const LIMIT_MS = 5 * 60_000;
 
-/**
- * What the dashboard answers to on this machine: any name or address that is this machine, and the one
- * given as SIFT_DASHBOARD_HOST; and where Google can sign someone in.
- */
+/** What the dashboard answers to on this machine: any name or address that is this machine, and SIFT_URL's. */
 function dashboardAddresses(config: Config, port: number) {
-  const host = config.settings.dashboardHost;
-  return { allowedHosts: [...machineNames(), ...(host && host !== 'all' ? [host] : [])], signInAddresses: signInAddresses(port) };
+  const { url } = config.settings;
+  return {
+    url: url ?? `http://localhost:${port}`,
+    allowedHosts: [...machineNames(), ...(url ? [new URL(url).hostname] : [])],
+    signInAddresses: signInAddresses(port, url),
+  };
 }
 
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);

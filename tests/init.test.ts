@@ -155,7 +155,7 @@ describe('sift init', () => {
     expect(w.text()).toContain('Audience: External');
     expect(w.text()).toContain('Application type: Web application');
     expect(w.text()).toContain('Authorised redirect URIs: http://localhost:8787/auth/callback');
-    expect(w.text()).toContain('https://box.example.ts.net/auth/callback');
+    expect(w.text()).not.toContain('https://box.example.ts.net/auth/callback');
     expect(w.text()).toContain('Open "Data Access" in the left menu');
     expect(w.text()).toContain('Scopes: https://www.googleapis.com/auth/gmail.modify');
     expect(w.text()).toContain('Under "Test users"');
@@ -277,9 +277,13 @@ describe('sift init', () => {
     expect(server.asked.slice(0, 2)).toEqual(['Where will you open the dashboard?', expect.stringContaining('tailscale serve --bg 8787')]);
     expect(server.calls).toEqual(['save key', 'serve 8787']);
     expect(server.world.setup.location).toBe('remote');
-    expect(server.config.settings.dashboardHost).toBeUndefined();
+    expect(server.config.settings.url).toBe('https://box.example.ts.net');
     expect(server.text()).toContain('ok: Dashboard at');
     expect(server.text()).toContain('https://box.example.ts.net');
+
+    const google = wizard([1, 0, ...GOOGLE], { location: 'ask' });
+    await runInit(google.deps);
+    expect(google.text()).toContain('https://box.example.ts.net/auth/callback');
 
     // When serve cannot be started, the command is shown to run by hand.
     const denied = wizard([1, 0, 'skip'], { location: 'ask', serveFails: true });
@@ -315,17 +319,20 @@ describe('settings', () => {
     const config = loadConfig({ SIFT_HOME: tempDir() });
     writeFileSync(config.envPath, 'SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_PORT=9000\n');
     saveSetting(config, 'SIFT_DASHBOARD_PORT', '9100');
-    saveSetting(config, 'SIFT_DASHBOARD_HOST', 'box.example.ts.net');
-    expect(saved(config)).toEqual({ ...DEFAULT_SETTINGS, dashboardPort: 9100, dashboardHost: 'box.example.ts.net' });
+    saveSetting(config, 'SIFT_URL', 'https://box.example.ts.net');
+    expect(saved(config)).toEqual({ ...DEFAULT_SETTINGS, dashboardPort: 9100, url: 'https://box.example.ts.net' });
     expect(config.settings).toEqual(saved(config));
-    saveSetting(config, 'SIFT_DASHBOARD_HOST', undefined);
+    saveSetting(config, 'SIFT_URL', undefined);
     expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_PORT=9100\n');
   });
 
   it('refuses a wrong value by the variable that gave it', () => {
     expect(() => readSettings({ SIFT_DASHBOARD_PORT: '0' })).toThrow('SIFT_DASHBOARD_PORT must be a port number.');
     expect(() => readSettings({ SIFT_DASHBOARD_PORT: 'soon' })).toThrow('SIFT_DASHBOARD_PORT must be a port number.');
-    expect(() => readSettings({ SIFT_DASHBOARD_HOST: 'http://x/' })).toThrow('SIFT_DASHBOARD_HOST must be a hostname or IP address.');
+    for (const url of ['box.example.ts.net', 'ftp://box.example.ts.net', 'https://box.example.ts.net/sift', 'https://me@box.example.ts.net']) {
+      expect(() => readSettings({ SIFT_URL: url })).toThrow('SIFT_URL must be an address starting https:// or http://, with no path.');
+    }
+    expect(readSettings({ SIFT_URL: 'https://Box.example.ts.net/' }).url).toBe('https://box.example.ts.net');
     expect(() => readSettings({ DATABASE_URL: 'mysql://x' })).toThrow('DATABASE_URL must be an address starting postgres://');
     expect(() => readSettings({ REDIS_URL: 'http://x' })).toThrow('REDIS_URL must be an address starting redis:// or rediss://');
     expect(() => readSettings({ SIFT_CHATGPT_SIGN_IN: 'on' })).toThrow('SIFT_CHATGPT_SIGN_IN must be "device-code" or "redirect".');
@@ -373,8 +380,8 @@ describe('settings from the environment', () => {
 
   it("never copies one into the home's .env when another is saved", () => {
     const config = loadConfig({ SIFT_HOME: tempDir(), ...DATABASE });
-    saveSetting(config, 'SIFT_DASHBOARD_HOST', 'box.example.ts.net');
-    expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_DASHBOARD_HOST=box.example.ts.net\n');
+    saveSetting(config, 'SIFT_URL', 'https://box.example.ts.net');
+    expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_URL=https://box.example.ts.net\n');
     expect(config.settings.databaseUrl).toBe(DATABASE.DATABASE_URL);
   });
 });

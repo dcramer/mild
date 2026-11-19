@@ -8,7 +8,7 @@ import { openStore } from '../../store/store.ts';
 import { paint, ui } from '../ui.ts';
 import { checkSecrets } from '../secrets-check.ts';
 import { cronSecret, sessionSecret } from '../session.ts';
-import { listenAddress, signInAddresses } from '../network.ts';
+import { signInAddresses, tailscaleName } from '../network.ts';
 import { buildPage, startNext } from '../next.ts';
 import { flushTelemetry, startTelemetry } from '../../telemetry.ts';
 
@@ -46,8 +46,9 @@ export async function run(args: string[], dev = false): Promise<void> {
   try {
     await preflight(config);
     const port = portOption(values.port) ?? config.settings.dashboardPort;
-    // --host replaces the setting: a container listens on every interface and its port mapping decides who can reach it.
-    const hostname = values.host ?? (await listenAddress(config.settings));
+    // Loopback, where a proxy on this machine (`tailscale serve`) reaches it, unless --host says otherwise: a container
+    // listens on every interface and its port mapping decides who can reach it.
+    const hostname = values.host ?? '127.0.0.1';
     if (!dev) await buildPage();
     const time = () => paint.dim(new Date().toLocaleTimeString(undefined, { hour12: false }));
     const server = await startNext({
@@ -58,9 +59,11 @@ export async function run(args: string[], dev = false): Promise<void> {
       inUse: `Port ${port} is already in use. Is Sift already running? If not, set SIFT_DASHBOARD_PORT in ${config.envPath}.`,
       print: (line) => ui.plain(`${time()}  ${line}`),
     });
-    const [first, ...others] = signInAddresses(port);
+    const { url } = config.settings;
+    const [first, ...others] = signInAddresses(port, url);
     ui.fields([['Dashboard', paint.bold(first ?? '')], ...others.map((url) => ['', paint.bold(url)] as const)]);
-    if (others.length > 0) ui.info(`The second needs ${paint.cmd(`tailscale serve --bg ${port}`)} once. Sign in there with Google.`);
+    if (url && new URL(url).hostname === tailscaleName())
+      ui.info(`The second needs ${paint.cmd(`tailscale serve --bg ${port}`)} once. Sign in there with Google.`);
     ui.blank();
 
     const stop = new AbortController();

@@ -44,14 +44,15 @@ export async function vercelHost(): Promise<Host> {
   const store = await openStore(config);
   const ephemeral = await openEphemeral(required('REDIS_URL'));
   const production = process.env['VERCEL_PROJECT_PRODUCTION_URL'];
+  const url = config.settings.url ?? (production && `https://${production}`);
   return {
     config,
     store,
     ephemeral,
     sessionSecret: required('SIFT_SESSION_SECRET'),
-    // The deployment's own names, and a domain of the project's own given as SIFT_DASHBOARD_HOST.
-    allowedHosts: [process.env['VERCEL_URL'], process.env['VERCEL_BRANCH_URL'], production, config.settings.dashboardHost].filter((name) => name !== undefined),
-    signInAddresses: production ? [`https://${production}`] : [],
+    ...(url ? { url } : {}),
+    allowedHosts: [process.env['VERCEL_URL'], process.env['VERCEL_BRANCH_URL'], production, url && new URL(url).hostname].filter((name) => name !== undefined),
+    signInAddresses: url ? [url] : [],
     forwarded: true,
     log: (line) => process.stdout.write(`${line}\n`),
     begin,
