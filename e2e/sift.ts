@@ -380,6 +380,9 @@ export const inboxLink = (page: Page) => page.getByRole('navigation', { name: 'S
 /** Settings' Inbox section. */
 export const settingsInbox = (page: Page) => section(settings(page), 'Inbox');
 
+/** The dialog that asks how far back Inbox keeps the mail: turning it on, or Change… while it is. */
+export const mailWindow = (page: Page) => page.getByRole('dialog', { name: /^Keep how much/ });
+
 /** Inbox's rows, each a conversation with a check to select it. Not on a phone, which has no checks. */
 export const inboxRows = (page: Page) => page.getByRole('row').filter({ has: page.getByRole('checkbox', { name: /^Select / }) });
 

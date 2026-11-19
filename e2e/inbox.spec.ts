@@ -1,4 +1,4 @@
-import { PHONE, back, expect, inboxLink, inboxRow, inboxRows, param, path, reader, settings, settingsInbox, test, toast } from './sift.ts';
+import { PHONE, back, expect, inboxLink, inboxRow, inboxRows, mailWindow, param, path, reader, settings, settingsInbox, test, toast } from './sift.ts';
 
 test.describe('Inbox, off', () => {
   test('is turned on in Settings, after saying what it keeps, and then is a section listing the inbox', async ({ page }) => {
@@ -8,10 +8,7 @@ test.describe('Inbox, off', () => {
 
     await page.goto('/?settings=1');
     await settingsInbox(page).getByRole('button', { name: 'Turn on', exact: true }).click();
-    await settingsInbox(page)
-      .getByRole('group', { name: 'Keep a copy of all your inbox mail in Sift?' })
-      .getByRole('button', { name: 'Turn on', exact: true })
-      .click();
+    await mailWindow(page).getByRole('button', { name: 'Turn on', exact: true }).click();
     await expect(settingsInbox(page).getByRole('button', { name: 'Turn off', exact: true })).toBeVisible();
     await settings(page).getByRole('button', { name: 'Close' }).click();
     await expect(settings(page)).toHaveCount(0);

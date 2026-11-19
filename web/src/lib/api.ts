@@ -17,6 +17,7 @@ export type {
   ListedDecision,
   MailAsk,
   MailConversation,
+  MailReach,
   MailSummary,
   MailThread,
   MailView,
@@ -43,6 +44,7 @@ import type {
   ContactPage,
   DecisionPage,
   InboxEstimate,
+  MailReach,
   FactFilter,
   FeedbackReply,
   FeedbackRequest,
@@ -345,8 +347,10 @@ export const api = {
     get<MailConversation>('/api/mail/thread', mailbox ? { thread, mailbox } : { thread }, signal),
   /** The reader's own press on mail in their inbox. `actions`: what landed, for Undo. */
   changeMail: (change: MailChange) => post<{ actions: number[] }>('/api/mail/change', change),
-  /** Whether Sift keeps the text of all inbox mail, for Inbox. */
-  setMail: (on: boolean) => post('/api/mail/on', { on }),
+  /** Whether Sift keeps a copy of the person's mail, for Inbox, and how far back. */
+  setMail: (on: boolean, window?: ManageState['mailWindow']) => post('/api/mail/on', window ? { on, window } : { on }),
+  /** What copying the mail for each window would take, from Gmail's counts. */
+  mailReach: (signal: AbortSignal) => get<MailReach>('/api/mail/reach', {}, signal),
   inboxEstimate: (reach: 'inbox' | 'recent', signal: AbortSignal) => get<InboxEstimate>('/api/inbox', { reach }, signal),
   startInbox: (reach: 'inbox' | 'recent') => post('/api/inbox/start', { reach }),
   /** Stop going through the inbox, or with `rule`, stop applying it. */
