@@ -13,7 +13,9 @@ interface ActiveFilter {
 
 /**
  * The standard way to show many of one thing, inside a `ListPage`: `intro` (anything the page shows before its
- * list), then one outlined bar holding the search and the filter button, then the rows.
+ * list), then one outlined bar holding the search and the filter button, then the rows. While rows are selected
+ * (`RowCheck`), the bar holds what to do with them in place of the search (`selected`): how many, the presses, and a
+ * way to select none, so the rows do not move.
  *
  * The filter button opens a panel on the right that pushes the list left; closing it puts the list
  * back. While closed, the button shows how many filters are on and each is listed under the search
@@ -24,6 +26,7 @@ export function ListView({
   search,
   view,
   filters,
+  selected,
   children,
 }: {
   /** What the page shows between its header and its list. */
@@ -32,11 +35,13 @@ export function ListView({
   /** Which of a few ways to see the list, as segments at the end of the search bar: "Changed" or "Everything". */
   view?: { label: string; value: string; options: readonly (readonly [string, string])[]; onChange: (value: string) => void };
   filters?: { panel: ReactNode; active: ActiveFilter[] };
+  /** Rows selected, and what can be done to all of them, each with its key. */
+  selected?: { count: number; clear: () => void; actions: readonly { label: string; key: string; onPress: () => void }[] };
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const searchBox = useRef<HTMLInputElement>(null);
-  const slash = useShortcut('/', 'Search', () => searchBox.current?.focus(), { enabled: search !== undefined });
+  const slash = useShortcut('/', 'Search', () => searchBox.current?.focus(), { enabled: search !== undefined && !(selected && selected.count > 0) });
   const on = filters?.active.length ?? 0;
   return (
     <>
@@ -47,7 +52,19 @@ export function ListView({
           <div className="flex flex-col gap-2">
             {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. On a phone the view takes a row of its own under the search. */}
             <div className="flex flex-wrap items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 md:flex-nowrap">
-              {search ? (
+              {selected && selected.count > 0 ? (
+                <div role="toolbar" aria-label="Selected rows" className="flex h-9 min-w-0 flex-1 items-center gap-1 pr-1 pl-3">
+                  <span className="mr-2 text-sm font-semibold tabular-nums">{selected.count} selected</span>
+                  {selected.actions.map((action) => (
+                    <Button key={action.label} variant="quiet" shortcut={action.key} onClick={action.onPress}>
+                      {action.label}
+                    </Button>
+                  ))}
+                  <Button variant="quiet" size="icon" className="ml-auto" aria-label="Select none" onClick={selected.clear}>
+                    <XIcon aria-hidden />
+                  </Button>
+                </div>
+              ) : search ? (
                 <label className="flex h-9 min-w-0 flex-1 items-center gap-2.5 px-3">
                   <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
                   <input

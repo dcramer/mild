@@ -67,8 +67,13 @@ export const useHintsShown = () => {
 };
 
 const NAMES: Record<string, string> = { Enter: '↵', Escape: 'esc', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ' ': 'space' };
-/** A key as it is drawn: letters in capitals, the named keys by their sign. */
-export const keyName = (key: string) => NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+const SHIFT = 'Shift+';
+/** A key as it is drawn: letters in capitals, the named keys by their sign, a shifted letter (`Shift+i`) after ⇧. */
+export const keyName = (key: string): string =>
+  key.startsWith(SHIFT) ? `⇧${keyName(key.slice(SHIFT.length))}` : (NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key));
+/** A press as bindings name it. Shift makes a letter a key of its own (Gmail's Shift+I); on anything else it only picks the sign (`?`). */
+const keyOf = (event: KeyboardEvent) =>
+  /^[a-z]$/i.test(event.key) ? `${event.shiftKey ? SHIFT : ''}${event.key.toLowerCase()}` : event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -79,7 +84,7 @@ if (typeof window !== 'undefined') {
     if (!on || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
     // Enter on something focused already presses it; a shortcut on Enter must not press a second thing.
     if (event.key === 'Enter' && event.target instanceof Element && event.target.closest('button, a, [tabindex="0"]')) return;
-    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    const key = keyOf(event);
     const live = [...bindings.values()].filter((b) => (b.layer === top() || b.layer === EVERYWHERE) && b.keys.includes(key));
     const match = live.find((b) => b.within?.()?.contains(document.activeElement)) ?? live[0];
     if (!match) return;

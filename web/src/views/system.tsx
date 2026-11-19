@@ -69,6 +69,8 @@ import {
   Reserve,
   Rope,
   RowActions,
+  RowCheck,
+  More,
   Section,
   Select,
   SomeOf,
@@ -181,6 +183,7 @@ export function SystemView() {
   const [panel, setPanel] = useState(false);
   const [search, setSearch] = useState('');
   const [shown, setShown] = useState('');
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [made, setMade] = useState('');
   const [labelled, setLabelled] = useState('');
   const [mailbox, setMailbox] = useState('');
@@ -670,6 +673,53 @@ export function SystemView() {
                     </tbody>
                   ))}
                 </Table>
+              </ListView>
+            </ListPage>
+          </Sheet>
+        </Section>
+
+        <Section
+          title="Rows to select"
+          meta="a check on each row, X on the one the keys are on; what to do with them takes the search's place; more rows load as the end is reached"
+        >
+          <Sheet className="p-5">
+            <ListPage title="Inbox">
+              <ListView
+                search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
+                selected={{
+                  count: picked.size,
+                  clear: () => setPicked(new Set()),
+                  actions: [
+                    { label: 'Archive', key: 'e', onPress: () => toast(`Archived ${picked.size}`) },
+                    { label: 'Mark read', key: 'Shift+i', onPress: () => toast(`Marked ${picked.size} read`) },
+                  ],
+                }}
+              >
+                <Table keys>
+                  <Heads>
+                    <Th phone="hide">Select</Th>
+                    <Th>From</Th>
+                    <Th phone="hide">Subject</Th>
+                  </Heads>
+                  <tbody>
+                    {ROWS.map((row) => (
+                      <Tr key={row.address} onOpen={() => setPanel(true)}>
+                        <RowCheck
+                          label={`Select ${row.subject}`}
+                          checked={picked.has(row.address)}
+                          onChange={(on) => setPicked((was) => new Set(on ? [...was, row.address] : [...was].filter((a) => a !== row.address)))}
+                        />
+                        <Td className="max-w-0 md:w-1/3">
+                          <span className="name block truncate">{row.sender}</span>
+                        </Td>
+                        <Td phone="hide" className="max-w-0 md:w-full">
+                          <span className="block truncate">{row.subject}</span>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Table>
+                <More onReach={() => {}} />
               </ListView>
             </ListPage>
           </Sheet>

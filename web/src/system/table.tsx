@@ -213,3 +213,30 @@ export function RowActions({ phone, children }: { phone?: 'keep'; children: Reac
     </td>
   );
 }
+
+/**
+ * The first cell of a row that can be selected with others, for what the list's bar does to all of them at once (Inbox's
+ * Archive). Pressing it, or X on the row the reader is on, selects the row without opening it. Dropped on a phone,
+ * where the row opens to the same presses.
+ */
+export function RowCheck({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
+  const key = useShortcut('x', 'Select', () => onChange(!checked));
+  return (
+    <td
+      className={cn('w-px py-1.5 pr-1 align-middle', PHONE.hide, EDGES)}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <label className="flex h-(--control) cursor-pointer items-center gap-1.5">
+        <input
+          type="checkbox"
+          aria-label={label}
+          className="size-3.5 cursor-pointer accent-foreground"
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span className="w-4">{key}</span>
+      </label>
+    </td>
+  );
+}
