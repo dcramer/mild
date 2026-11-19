@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { syncAccount } from '../src/work/sync.ts';
+import { syncAccount, syncWants } from '../src/work/sync.ts';
 import { type GmailApi, HistoryExpiredError, type HistoryPage, type RawMessage } from '../src/gmail/api.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
 import { addMailbox, setMailboxAliases } from '../src/store/accounts.ts';
@@ -67,7 +67,7 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
 describe('pullChanges', () => {
   it('only records the current position on first run', async () => {
     const api = fakeApi({ historyId: '500' });
-    expect(await pullChanges(api, null)).toEqual({ messageIds: [], labelChanges: [], historyId: '500', mode: 'start' });
+    expect(await pullChanges(api, null)).toEqual({ messageIds: [], labelChanges: [], strays: [], historyId: '500', mode: 'start' });
     expect(api.calls).toEqual(['profile']);
   });
 
@@ -91,13 +91,23 @@ describe('pullChanges', () => {
         },
       },
     });
-    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b'], labelChanges: [], historyId: '520', mode: 'incremental' });
+    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b'], labelChanges: [], strays: [], historyId: '520', mode: 'incremental' });
     expect(api.calls).toEqual(['history:500:', 'history:500:p2']);
+  });
+
+  it('keeps as strays what a record names without saying it arrived, and what was put in the inbox', async () => {
+    const labelChanges = [
+      { messageId: 'back', added: ['INBOX'], removed: [] },
+      { messageId: 'opened', added: [], removed: ['UNREAD'] },
+      { messageId: 'a', added: ['INBOX'], removed: [] },
+    ];
+    const api = fakeApi({ pages: { '': { additions: [{ id: 'a', labelIds: ['INBOX'] }], labelChanges, unexplained: ['quiet', 'quiet'], historyId: '510' } } });
+    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a'], labelChanges, strays: ['quiet', 'back'], historyId: '510', mode: 'incremental' });
   });
 
   it('falls back to a bounded search when the cursor has expired, reading the new cursor first', async () => {
     const api = fakeApi({ expired: true, historyId: '900', search: ['new', 'old'] });
-    expect(await pullChanges(api, '1')).toEqual({ messageIds: ['old', 'new'], labelChanges: [], historyId: '900', mode: 'recovery' });
+    expect(await pullChanges(api, '1')).toEqual({ messageIds: ['old', 'new'], labelChanges: [], strays: [], historyId: '900', mode: 'recovery' });
     expect(api.calls).toEqual(['history:1:', 'profile', 'search:newer_than:7d']);
   });
 
@@ -127,7 +137,7 @@ describe('pullChanges', () => {
       searchPages: { '': { ids: ['d', 'c'], nextPageToken: 's2' }, s2: { ids: ['c', 'b', 'a'] } },
     });
     // What the first history page said is dropped: the search covers it, and the cursor is the profile's.
-    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b', 'c', 'd'], labelChanges: [], historyId: '900', mode: 'recovery' });
+    expect(await pullChanges(api, '500')).toEqual({ messageIds: ['a', 'b', 'c', 'd'], labelChanges: [], strays: [], historyId: '900', mode: 'recovery' });
     expect(api.calls).toEqual(['history:500:', 'history:500:p2', 'profile', 'search:newer_than:7d', 'search:newer_than:7d:s2']);
   });
 
@@ -179,6 +189,8 @@ const page = (ids: string[], historyId: string): Record<string, HistoryPage> => 
   '': { additions: ids.map((id) => ({ id, labelIds: ['INBOX'] })), historyId },
 });
 
+const HOUR = 3_600_000;
+
 /** The person's database, its mailbox's cursor at 500. */
 async function synced() {
   const db = await openUserDb(ACCOUNT);
@@ -199,6 +211,32 @@ describe('syncAccount', () => {
     expect(report.skipped).toBe(3);
     expect((await firstAccount(db)).historyId).toBe('520');
     expect(await raw(db).all('SELECT id, domain_hash FROM messages')).toEqual([{ id: 'a', domain_hash: 'example.com' }]);
+  });
+
+  // Gmail has been seen to name a new message in a history record without listing it as added.
+  it('records a stray that is in the inbox and came since the last sync, but not one that left it or older mail put back', async () => {
+    const db = await synced();
+    await syncAccount(db, fakeApi({ pages: page([], '510') }), await firstAccount(db), () => 10 * HOUR);
+    const pages = {
+      '': { additions: [], labelChanges: [{ messageId: 'old', added: ['INBOX'], removed: [] }], unexplained: ['group', 'sent'], historyId: '520' },
+    };
+    const messages = {
+      group: rawMessage('group', { internalDate: 10 * HOUR + 1000 }),
+      sent: rawMessage('sent', { labelIds: ['SENT'], internalDate: 10 * HOUR + 2000 }),
+      old: rawMessage('old', { internalDate: 2 * HOUR }),
+    };
+    expect(await syncWants(db, fakeApi({ pages, messages }), await firstAccount(db))).toBe(true);
+
+    const report = await syncAccount(db, fakeApi({ pages, messages }), await firstAccount(db), () => 11 * HOUR);
+    expect(report.added.map((m) => m.messageId)).toEqual(['group']);
+    expect(report.skipped).toBe(0);
+  });
+
+  it('looks no further for a stray it has recorded', async () => {
+    const db = await synced();
+    await syncAccount(db, fakeApi({ pages: page(['a'], '510'), messages: { a: rawMessage('a') } }), await firstAccount(db));
+    const pages = { '': { additions: [], unexplained: ['a'], historyId: '520' } };
+    expect(await syncWants(db, fakeApi({ pages }), await firstAccount(db))).toBe(false);
   });
 
   it('does not report a redelivered message as new', async () => {
