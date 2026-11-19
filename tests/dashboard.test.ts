@@ -439,9 +439,7 @@ describe('dashboard server', () => {
     await recordDecision(db, ACCOUNT, 'n4', { ...said, disposition: 'archive', stage: 'rules' }, { now: NOW });
     const base = await start({}, store);
     const page = (name?: string) =>
-      get<SenderPage>(
-        `${base}/api/sender?account=${ACCOUNT}&address=notifications@example.org${name === undefined ? '' : `&name=${encodeURIComponent(name)}`}`,
-      );
+      get<SenderPage>(`${base}/api/sender?address=notifications@example.org${name === undefined ? '' : `&name=${encodeURIComponent(name)}`}`);
 
     expect((await page()).names).toEqual([
       { name: 'Dependabot', messages: 2, lastSeenAt: NOW - 1000, labels: [{ id: 'notification', name: 'Notifications', messages: 1 }], actions: [] },
@@ -455,13 +453,44 @@ describe('dashboard server', () => {
     ]);
     expect((await page('DEPENDABOT')).decisions.map((d) => d.messageId).toSorted()).toEqual(['n1', 'n2']);
     // One name, on some of their mail, is not several.
-    expect((await get<SenderPage>(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).names).toEqual([]);
+    expect((await get<SenderPage>(`${base}/api/sender?address=news@example.com`)).names).toEqual([]);
+  });
+
+  it("shows a sender's and a domain's mail from every one of the person's mailboxes", async () => {
+    const work = 'me@example.net';
+    const { store, db } = await onePerson(ACCOUNT, work);
+    const from = { address: 'media@example.org', domain: 'example.org', name: 'Group' };
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'home', from, receivedAt: NOW - 2000 })], '1', NOW);
+    await recordSync(db, work, [facts({ accountId: work, messageId: 'work', from, receivedAt: NOW - 1000 })], '1', NOW);
+    for (const [account, id] of [
+      [ACCOUNT, 'home'],
+      [work, 'work'],
+    ] as const)
+      await recordDecision(db, account, id, { disposition: 'archive', subscription: 'preserve', stage: 'rules', reason: 'test' }, { now: NOW });
+    const base = await start({}, store);
+
+    const sender = await get<SenderPage>(`${base}/api/sender?address=media@example.org`);
+    expect(sender.profile).toMatchObject({ messages: 2, contact: null });
+    expect(sender.decisions.map((d) => [d.accountId, d.messageId])).toEqual([
+      [work, 'work'],
+      [ACCOUNT, 'home'],
+    ]);
+    const domain = await get<SenderPage>(`${base}/api/domain?domain=example.org`);
+    expect(domain.senders).toMatchObject([{ address: 'media@example.org', messages: 2 }]);
+
+    // Nothing from them and no rule about them: nothing to show but what was asked.
+    expect((await fetch(`${base}/api/sender?address=nobody@example.org`)).status).toBe(404);
+    await addRule(db, { match: { from: ['nobody@example.org'] }, disposition: 'archive' }, 'user', NOW);
+    expect((await get<SenderPage>(`${base}/api/sender?address=nobody@example.org`)).profile).toMatchObject({
+      messages: 0,
+      rules: [{ disposition: 'archive' }],
+    });
   });
 
   it('serves a sender and a domain, whose given standing is a rule made in the dialog and taken back in one press', async () => {
     const { store, db } = await seededStore();
     const base = await start({}, store);
-    const sender = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
+    const sender = (await (await fetch(`${base}/api/sender?address=news@example.com`)).json()) as SenderPage;
     expect(sender).toMatchObject({ kind: 'sender', name: 'Example News', profile: { address: 'news@example.com', messages: 4, contact: null, given: null } });
     expect(sender.profile.domain).toMatchObject({ name: 'example.com', contact: null });
     expect(sender.decisions.every((d) => plain(d.fromAddress) === 'news@example.com')).toBe(true);
@@ -482,13 +511,13 @@ describe('dashboard server', () => {
     expect(replacing.status).toBe(200);
     expect(await replacing.json()).toMatchObject({ replaced: true });
     expect(await theirs()).toMatchObject([{ kind: 'label', labelId: 'everything_else', source: 'user' }]);
-    const trusted = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
+    const trusted = (await (await fetch(`${base}/api/sender?address=news@example.com`)).json()) as SenderPage;
     expect(trusted.profile).toMatchObject({ given: 'trusted' });
 
     const fresh = await write('/api/rules', { match: { fromDomain: ['example.net'] }, disposition: 'spam' });
     expect(fresh.status).toBe(200);
     expect(await fresh.json()).toMatchObject({ replaced: false });
-    const domain = (await (await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=example.net`)).json()) as SenderPage;
+    const domain = (await (await fetch(`${base}/api/domain?domain=example.net`)).json()) as SenderPage;
     expect(domain).toMatchObject({ kind: 'domain', profile: { given: 'blocked' }, senders: [{ address: 'cold@example.net', contact: 'new' }] });
 
     // Taking it back is one press.
@@ -497,14 +526,14 @@ describe('dashboard server', () => {
 
     // A rule naming them among others is on their page but is not their standing, and taking a standing back leaves it.
     await addRule(db, { match: { from: ['news@example.com', 'other@example.org'] }, disposition: 'archive' }, 'user');
-    const among = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
+    const among = (await (await fetch(`${base}/api/sender?address=news@example.com`)).json()) as SenderPage;
     expect(among.profile).toMatchObject({ given: null, rules: [{ match: { from: ['news@example.com', 'other@example.org'] } }] });
     expect((await write('/api/standing/clear', { address: 'news@example.com' })).status).toBe(200);
     expect(await theirs()).toHaveLength(1);
 
     expect((await write('/api/standing/clear', { address: 'news@example.com', domain: 'example.com' })).status).toBe(400);
     expect((await write('/api/standing/clear', { address: 'not an address' })).status).toBe(400);
-    expect((await fetch(`${base}/api/domain?account=${ACCOUNT}&domain=gmail.com`)).status).toBe(404);
+    expect((await fetch(`${base}/api/domain?domain=gmail.com`)).status).toBe(404);
   });
 
   it('gives a standing in one press, replacing only another standing, and says which so Undo can give it back', async () => {
@@ -527,7 +556,7 @@ describe('dashboard server', () => {
     expect(await theirs()).toMatchObject([{ id, kind: 'label', labelId: 'everything_else', source: 'user' }]);
     expect((await give({ address: 'news@example.com', standing: 'blocked' })).body).toEqual({ id, was: 'trusted' });
     expect(await theirs()).toMatchObject([{ id, disposition: 'spam' }]);
-    const page = (await (await fetch(`${base}/api/sender?account=${ACCOUNT}&address=news@example.com`)).json()) as SenderPage;
+    const page = (await (await fetch(`${base}/api/sender?address=news@example.com`)).json()) as SenderPage;
     expect(page.profile).toMatchObject({ given: 'blocked' });
     // Undo gives back the standing it replaced.
     expect((await give({ address: 'news@example.com', standing: 'trusted' })).body).toEqual({ id, was: 'blocked' });

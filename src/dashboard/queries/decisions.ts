@@ -166,7 +166,8 @@ export async function listDecisions(
   }
   const known = await contacts(
     db,
-    rows.map((r) => ({ accountId: r.accountId, address: plain(r.fromAddress) })),
+    scope.accounts,
+    rows.map((r) => plain(r.fromAddress)),
   );
-  return { total, rows: rows.map((r) => ({ ...r, contact: known.get(`${r.accountId}\n${plain(r.fromAddress)}`) ?? null })) };
+  return { total, rows: rows.map((r) => ({ ...r, contact: known.get(plain(r.fromAddress)) ?? null })) };
 }

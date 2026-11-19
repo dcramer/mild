@@ -289,8 +289,8 @@ function Body({
           ) : null}
         </div>
         <div className="flex min-w-0 flex-col gap-8 max-lg:order-3">
-          <Section title="Sender" action={<TextLink href={senderHref(detail.accountId, reveal(detail.fromAddress))}>All their mail</TextLink>}>
-            <SenderFacts accountId={detail.accountId} profile={detail.sender} />
+          <Section title="Sender" action={<TextLink href={senderHref(reveal(detail.fromAddress))}>All their mail</TextLink>}>
+            <SenderFacts profile={detail.sender} />
           </Section>
           <SeenFacts detail={detail} onRule={setRuling} />
           {others.length > 0 ? (
@@ -380,11 +380,11 @@ export function MessagePanel({
         data ? (
           <>
             <span className="flex flex-wrap items-center gap-x-2">
-              <SenderLink accountId={data.accountId} address={reveal(data.fromAddress)} name={reveal(data.fromName)} className="text-foreground">
+              <SenderLink address={reveal(data.fromAddress)} name={reveal(data.fromName)} className="text-foreground">
                 {reveal(data.fromName) ?? reveal(data.fromAddress)}
               </SenderLink>
               <ContactHint contact={data.sender.contact} />
-              {data.fromName ? <SenderLink accountId={data.accountId} address={reveal(data.fromAddress)} className="min-w-0 break-all" /> : null}
+              {data.fromName ? <SenderLink address={reveal(data.fromAddress)} className="min-w-0 break-all" /> : null}
               <span aria-hidden className="max-sm:hidden">
                 ·
               </span>

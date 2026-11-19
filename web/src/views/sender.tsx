@@ -10,6 +10,7 @@ import { type RuleStart, addedWords, messageStart, nameStart, standingStart } fr
 import { nextMail } from '@/lib/next-mail.ts';
 import { messageKey, setParams, useParam } from '@/lib/params.ts';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { homeOf } from '@/views/rule-panel.tsx';
 import {
   Ago,
   Heads,
@@ -200,7 +201,7 @@ function Names({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =>
       <tbody>
         {data.names.map((n) => (
           <Tr key={reveal(n.name) ?? ''}>
-            <NameCell accountId={data.accountId} address={reveal(data.profile.address)} name={reveal(n.name)}>
+            <NameCell address={reveal(data.profile.address)} name={reveal(n.name)}>
               <OnPhone>
                 <NameIs name={n} />
                 <span>{count(n.messages)}</span>
@@ -272,11 +273,11 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
               ) : (
                 <>
                   {from === 'sender' ? (
-                    <SenderCell accountId={row.accountId} address={reveal(row.fromAddress)} name={reveal(row.fromName)} contact={row.contact}>
+                    <SenderCell address={reveal(row.fromAddress)} name={reveal(row.fromName)} contact={row.contact}>
                       {onPhone}
                     </SenderCell>
                   ) : (
-                    <NameCell accountId={row.accountId} address={reveal(row.fromAddress)} name={reveal(row.fromName)}>
+                    <NameCell address={reveal(row.fromAddress)} name={reveal(row.fromName)}>
                       {onPhone}
                     </NameCell>
                   )}
@@ -307,24 +308,23 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
  * place to change that, how much they send and what it is, and their mail.
  */
 /**
- * A sender's or a domain's page, `/sender/<account>/<address>` or `/domain/<account>/<domain>`. The server draws the
- * same page for every one of them, so no address is in its HTML: the page reads it from the address bar.
+ * A sender's or a domain's page, `/sender/<address>` or `/domain/<domain>`, from all of the person's mailboxes. The
+ * server draws the same page for every one of them, so no address is in its HTML: the page reads it from the address bar.
  */
 export function WhoView({ kind, shell }: { kind: 'sender' | 'domain'; shell: ReactNode }) {
   // The server drew this page once for every address, so the address is read only once the page has started.
   const path = usePathname();
-  const [, , account, key] = (useStarted() ? path : '').split('/');
-  if (!account || !key) return shell;
-  const accountId = decodeURIComponent(account);
+  const [, , key] = (useStarted() ? path : '').split('/');
+  if (!key) return shell;
   const value = decodeURIComponent(key);
-  return <SenderView key={`${kind}/${accountId}/${value}`} accountId={accountId} who={kind === 'sender' ? { address: value } : { domain: value }} />;
+  return <SenderView key={`${kind}/${value}`} who={kind === 'sender' ? { address: value } : { domain: value }} />;
 }
 
-function SenderView({ accountId, who }: { accountId: string; who: Who }) {
+function SenderView({ who }: { who: Who }) {
   const onOpen = useOpenMessages();
   const key = 'address' in who ? who.address : who.domain;
-  const { data, error, loading, reload } = useLoaded(`${'address' in who ? 'sender' : 'domain'}-page-${accountId}-${key}`, (signal) =>
-    'address' in who ? api.sender(accountId, who.address, signal) : api.domain(accountId, who.domain, signal),
+  const { data, error, loading, reload } = useLoaded(`${'address' in who ? 'sender' : 'domain'}-page-${key}`, (signal) =>
+    'address' in who ? api.sender(who.address, signal) : api.domain(who.domain, signal),
   );
   const give = useAction();
   // Undo is pressed after the standing is given, so what it reports goes to a toast.
@@ -333,6 +333,8 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
   // Every other rule this page starts opens the rule dialog on it, to see and change before adding.
   const [starting, setStarting] = useState<RuleStart | null>(null);
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  // The rule drafter looks up senders in one mailbox; a sender's page is all of them, so it starts from the primary.
+  const home = homeOf(manage.data);
   // A standing is a rule for exactly them that says only what happens to their mail, so it is given in one press, with Undo.
   const giveStanding = (standing: Given) =>
     give.run(async () => {
@@ -360,11 +362,10 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
   // pressed on, which only narrows the mail where there is a From to show it.
   const [named, setUnder] = useParam('name');
   const under = data && data.names.length > 1 ? named : '';
-  const narrowed = useLoaded(`sender-page-${accountId}-${key}-under-${under}`, (signal) =>
-    'address' in who && under !== '' ? api.sender(accountId, who.address, signal, under) : Promise.resolve(null),
+  const narrowed = useLoaded(`sender-page-${key}-under-${under}`, (signal) =>
+    'address' in who && under !== '' ? api.sender(who.address, signal, under) : Promise.resolve(null),
   );
-  if (error && !data)
-    return 'domain' in who ? <Empty>Anyone can get an address at {who.domain}, so it has no standing of its own.</Empty> : <ErrorNote message={error} />;
+  if (error && !data) return 'domain' in who ? <Empty>{error}</Empty> : <ErrorNote message={error} />;
   if (loading || !data)
     return (
       <div className="flex flex-col gap-10">
@@ -413,7 +414,7 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
                   {title ? <span aria-hidden>·</span> : null}
                   {/* The hint belongs to the domain: on a phone it wraps with it, never onto a line of its own. */}
                   <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                    <DomainLink accountId={accountId} domain={reveal(profile.domain.name)} />
+                    <DomainLink domain={reveal(profile.domain.name)} />
                     <ContactHint contact={profile.domain.contact} />
                   </span>
                 </>
@@ -479,7 +480,7 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
             <tbody>
               {data.senders.map((sender) => (
                 <Tr key={reveal(sender.address)}>
-                  <SenderCell accountId={accountId} address={reveal(sender.address)} name={reveal(sender.name)} contact={sender.contact} />
+                  <SenderCell address={reveal(sender.address)} name={reveal(sender.name)} contact={sender.contact} />
                   <Td num>{count(sender.messages)}</Td>
                   <Td phone="hide" num quiet>
                     <Ago at={sender.lastSeenAt} />
@@ -512,8 +513,8 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
         )}
       </Section>
 
-      {starting ? (
-        <RuleDialog accountId={accountId} labels={manage.data?.labels ?? []} start={starting} onClose={() => setStarting(null)} onAdded={reload} />
+      {starting && home ? (
+        <RuleDialog accountId={home} labels={manage.data?.labels ?? []} start={starting} onClose={() => setStarting(null)} onAdded={reload} />
       ) : null}
     </div>
   );

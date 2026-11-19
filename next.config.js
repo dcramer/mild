@@ -23,8 +23,8 @@ export default withWorkflow({
   rewrites: async () => ({
     beforeFiles: [
       { source: '/.well-known/workflow/v1/webhook/:path*', destination: '/.well-known/workflow/v1/no-webhook' },
-      { source: '/sender/:account/:address', destination: '/sender' },
-      { source: '/domain/:account/:domain', destination: '/domain' },
+      { source: '/sender/:address', destination: '/sender' },
+      { source: '/domain/:domain', destination: '/domain' },
     ],
     afterFiles: [],
     fallback: [],

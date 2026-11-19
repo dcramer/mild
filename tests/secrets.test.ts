@@ -253,8 +253,8 @@ describe('mail', () => {
     expect(JSON.stringify([m1, m2, b1])).not.toContain('example.com');
     expect(m1!.sender_hash).toBe(m2!.sender_hash);
     expect(b1!.sender_hash).not.toBe(m1!.sender_hash);
-    expect(await senderFacts(db, 'alpha@example.org', 'NEWS@example.com')).toMatchObject({ messages: 2 });
-    expect(await domainFacts(db, 'alpha@example.org', 'example.com')).toMatchObject({ messages: 2, senders: 1 });
+    expect(await senderFacts(db, ['alpha@example.org'], 'NEWS@example.com')).toMatchObject({ messages: 2 });
+    expect(await domainFacts(db, ['alpha@example.org'], 'example.com')).toMatchObject({ messages: 2, senders: 1 });
     expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
   });
 
@@ -311,7 +311,7 @@ describe('mail', () => {
     const db = await as(A);
     expect(JSON.stringify(await raw(db).all('SELECT headers, sender_hash FROM messages'))).not.toContain('example.com');
     expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
-    expect(await senderFacts(db, 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
+    expect(await senderFacts(db, ['alpha@example.org'], 'news@example.com')).toMatchObject({ messages: 2 });
   });
 
   it('keeps who the owner has written to only as hashes, and forgets it under a new key', async () => {
@@ -324,7 +324,7 @@ describe('mail', () => {
     expect(await cachedCorrespondent(db, 'alpha@example.org', 'friend@example.net', 0)).toBe(true);
     expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
     expect(await cachedCorrespondent(await as(B), 'alpha@example.org', 'friend@example.net', 0)).toBeUndefined();
-    expect(await senderFacts(await as(B), 'alpha@example.org', 'news@example.com')).toMatchObject({ messages: 2 });
+    expect(await senderFacts(await as(B), ['alpha@example.org'], 'news@example.com')).toMatchObject({ messages: 2 });
   });
 
   it('keeps rules, changes and reasons encrypted, and finds a rule by its hashed conditions under each key', async () => {

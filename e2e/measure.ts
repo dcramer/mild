@@ -28,11 +28,10 @@ const RUNS = Number(values.runs);
 const ROOT = resolve(values.root ?? join(import.meta.dirname, '..'));
 const SCRIPTS = join(ROOT, '.claude/skills/verify-sift/scripts');
 
-const ME = encodeURIComponent('me@example.org');
 const PAGES = [
   { name: '/', path: '/', heading: 'For review' },
   { name: '/rules', path: '/rules', heading: 'Rules' },
-  { name: 'sender', path: `/sender/${ME}/${encodeURIComponent('notifications@code.example.com')}`, heading: null },
+  { name: 'sender', path: `/sender/${encodeURIComponent('notifications@code.example.com')}`, heading: null },
 ] as const;
 const PROFILES = [
   { name: 'desktop', viewport: { width: 1440, height: 900 }, cpu: 1 },

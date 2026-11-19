@@ -69,7 +69,7 @@ export async function messageDetail(db: Sql, scope: Scope, accountId: string, me
     hasHtml: body?.html != null,
     facts: { ...facts, listId: seal(facts.listId) },
     unsubscribe: await canUnsubscribe(db, accountId, plain(m.fromAddress), plain(m.headers)),
-    sender: (await senderProfile(db, scope, accountId, plain(m.fromAddress)))!,
+    sender: (await senderProfile(db, scope, plain(m.fromAddress)))!,
     decisions: shown.map((r) => ({ ...toDecisionRow(db, r), ...costs.get(r.id)! })),
     actions: changes.map(({ payload: stored, ...a }) => {
       const payload = openPayload(db, accountId, stored);

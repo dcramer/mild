@@ -41,15 +41,15 @@ test('each screen is an address of its own, and anything else is missing', async
     '/rules?q=digest&message=a',
     '/system',
     '/privacy',
-    '/sender/me%40example.org/news%40example.com',
-    '/domain/me%40example.org/example.com',
+    '/sender/news%40example.com',
+    '/domain/example.com',
   ]) {
     const page = await request.get(path);
     expect(page.status(), path).toBe(200);
     expect(page.headers()['content-type']).toContain('text/html');
     expect(page.headers()['content-security-policy']).toBe(PAGE_HEADERS['content-security-policy']);
   }
-  for (const path of ['/settings/accounts', '/decisions', '/rules.json', '/.well-known/workflow/v1/nothing', '/sender/me%40example.org'])
+  for (const path of ['/settings/accounts', '/decisions', '/rules.json', '/.well-known/workflow/v1/nothing', '/sender/news%40example.com/more'])
     expect((await request.get(path)).status(), path).toBe(404);
   expect((await request.get('/api/rules/nope')).status()).toBe(404);
   expect((await request.get('/_next/static/missing.js')).status()).toBe(404);

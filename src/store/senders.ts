@@ -80,32 +80,32 @@ export function contactOf(messages: number, userHasWritten: boolean | null): Con
   return messages >= ONE_WAY_AFTER && userHasWritten === false ? 'one-way' : null;
 }
 
-/** `contactOf` for many senders at once, keyed by account and address (`account\naddress`). */
-export async function contacts(db: Sql, senders: { accountId: string; address: string }[]): Promise<Map<string, Contact | null>> {
-  if (senders.length === 0) return new Map();
-  const accounts = [...new Set(senders.map((s) => s.accountId))];
-  const hashes = [...new Set(senders.map((s) => hashOf(db, s.address)))];
+/** `contactOf` for many senders at once, over all of `accounts`, keyed by address. */
+export async function contacts(db: Sql, accounts: readonly string[], addresses: readonly string[]): Promise<Map<string, Contact | null>> {
+  if (addresses.length === 0 || accounts.length === 0) return new Map();
+  const hashes = [...new Set(addresses.map((a) => hashOf(db, a)))];
   const seen = new Map<string, number>(
     (
       await db
-        .select({ accountId: messages.accountId, hash: messages.senderHash, n: count() })
+        .select({ hash: messages.senderHash, n: count() })
         .from(messages)
-        .where(and(inArray(messages.accountId, accounts), inArray(messages.senderHash, hashes)))
-        .groupBy(messages.accountId, messages.senderHash)
-    ).map((r) => [`${r.accountId}\n${r.hash}`, r.n] as const),
+        .where(and(inArray(messages.accountId, [...accounts]), inArray(messages.senderHash, hashes)))
+        .groupBy(messages.senderHash)
+    ).map((r) => [r.hash, r.n] as const),
   );
-  const written = new Map<string, boolean>(
+  const written = new Map<string, boolean | null>(
     (
       await db
-        .select({ accountId: correspondents.accountId, hash: correspondents.addressHash, yes: correspondents.userHasWritten })
+        .select({ hash: correspondents.addressHash, yes: sql<boolean | null>`bool_or(${correspondents.userHasWritten})` })
         .from(correspondents)
-        .where(and(inArray(correspondents.accountId, accounts), inArray(correspondents.addressHash, hashes)))
-    ).map((r) => [`${r.accountId}\n${r.hash}`, r.yes] as const),
+        .where(and(inArray(correspondents.accountId, [...accounts]), inArray(correspondents.addressHash, hashes)))
+        .groupBy(correspondents.addressHash)
+    ).map((r) => [r.hash, r.yes] as const),
   );
   return new Map(
-    senders.map(({ accountId, address }) => {
-      const hashed = `${accountId}\n${hashOf(db, address)}`;
-      return [`${accountId}\n${address}`, contactOf(seen.get(hashed) ?? 0, written.get(hashed) ?? null)] as const;
+    addresses.map((address) => {
+      const hash = hashOf(db, address);
+      return [address, contactOf(seen.get(hash) ?? 0, written.get(hash) ?? null)] as const;
     }),
   );
 }
@@ -139,7 +139,7 @@ export interface SenderFacts {
 
 const MONTH_MS = 30 * 86_400_000;
 
-async function facts(db: Sql, accountId: string, who: { address: string } | { domain: string }, now: number): Promise<SenderFacts> {
+async function facts(db: Sql, accounts: readonly string[], who: { address: string } | { domain: string }, now: number): Promise<SenderFacts> {
   const column = 'address' in who ? messages.senderHash : messages.domainHash;
   const value = 'address' in who ? who.address : who.domain;
   const hash = hashOf(db, value);
@@ -152,7 +152,7 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
       senders: countDistinct(messages.senderHash),
     })
     .from(messages)
-    .where(and(eq(messages.accountId, accountId), eq(column, hash)))) as [
+    .where(and(inArray(messages.accountId, [...accounts]), eq(column, hash)))) as [
     { n: number; first: number | null; last: number | null; recent: number; senders: number },
   ];
   const tally = async (also?: SQL) =>
@@ -160,7 +160,7 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
       .select({ id: decisions.labelId, messages: count() })
       .from(decisions)
       .innerJoin(messages, ofMessage(decisions))
-      .where(and(eq(decisions.accountId, accountId), eq(column, hash), isNotNull(decisions.labelId), current(db), also))
+      .where(and(inArray(decisions.accountId, [...accounts]), eq(column, hash), isNotNull(decisions.labelId), current(db), also))
       .groupBy(decisions.labelId)
       .orderBy(desc(count()), asc(decisions.labelId))) as SenderFacts['labels'];
   const labels = await tally();
@@ -184,17 +184,11 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
     .from(feedback)
     .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
     .innerJoin(messages, ofMessage(decisions))
-    .where(and(eq(feedback.accountId, accountId), eq(column, hash)))) as [{ right: number; wrong: number }];
-  const [written] =
-    'address' in who
-      ? await db
-          .select({ yes: correspondents.userHasWritten })
-          .from(correspondents)
-          .where(and(eq(correspondents.accountId, accountId), eq(correspondents.addressHash, hash)))
-      : await db
-          .select({ yes: sql<boolean | null>`bool_or(${correspondents.userHasWritten})` })
-          .from(correspondents)
-          .where(and(eq(correspondents.accountId, accountId), eq(correspondents.domainHash, hash)));
+    .where(and(inArray(feedback.accountId, [...accounts]), eq(column, hash)))) as [{ right: number; wrong: number }];
+  const [written] = await db
+    .select({ yes: sql<boolean | null>`bool_or(${correspondents.userHasWritten})` })
+    .from(correspondents)
+    .where(and(inArray(correspondents.accountId, [...accounts]), eq('address' in who ? correspondents.addressHash : correspondents.domainHash, hash)));
   const userHasWritten = written?.yes ?? null;
 
   // Only a rule for exactly this sender or domain that decides by itself says how the owner regards them.
@@ -229,13 +223,14 @@ async function facts(db: Sql, accountId: string, who: { address: string } | { do
   };
 }
 
-export async function senderFacts(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<SenderFacts> {
-  return await facts(db, accountId, { address }, now);
+/** What `accounts` hold of a sender's mail, together. */
+export async function senderFacts(db: Sql, accounts: readonly string[], address: string, now: number = Date.now()): Promise<SenderFacts> {
+  return await facts(db, accounts, { address }, now);
 }
 
 /** Null for a domain anyone can get an address at, which says nothing about its senders. */
-export async function domainFacts(db: Sql, accountId: string, domain: string, now: number = Date.now()): Promise<SenderFacts | null> {
-  return isSharedDomain(domain) ? null : await facts(db, accountId, { domain }, now);
+export async function domainFacts(db: Sql, accounts: readonly string[], domain: string, now: number = Date.now()): Promise<SenderFacts | null> {
+  return isSharedDomain(domain) ? null : await facts(db, accounts, { domain }, now);
 }
 
 const sent = alias(messages, 'sent');

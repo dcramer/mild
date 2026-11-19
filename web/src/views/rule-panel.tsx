@@ -73,7 +73,7 @@ const QUIET: Record<string, string> = {
 export const checked = (rule: RuleSummary) => rule.when !== null || rule.checks > 0;
 
 /** What a rule matches: an address alone, or a quiet word and the value; then what the mail must be, in words. */
-export function Who({ accountId, match }: { accountId: string; match: RuleMatch }) {
+export function Who({ match }: { match: RuleMatch }) {
   const named = saidOf(match);
   const asked = factAnswers(match.facts).map(factWords);
   return (
@@ -82,7 +82,7 @@ export function Who({ accountId, match }: { accountId: string; match: RuleMatch 
         <span key={`${said.key} ${said.value}`}>
           {said.joint ? <span className="font-normal text-muted-foreground">{said.joint}</span> : null}
           {said.first && QUIET[said.key] ? <span className="font-normal text-muted-foreground">{QUIET[said.key]} </span> : null}
-          <MatchValue accountId={accountId} match={match} said={said} />
+          <MatchValue match={match} said={said} />
         </span>
       ))}
       {asked.length > 0 ? (
@@ -397,7 +397,7 @@ export function RulePanel({
         <Facts>
           {rule.name ? (
             <Fact term="Mail">
-              <Who accountId={home} match={reveal(rule.match)} />
+              <Who match={reveal(rule.match)} />
             </Fact>
           ) : null}
           {rule.kind === 'when-label' ? <Fact term="When it is">{rule.labelName}</Fact> : null}
@@ -406,7 +406,7 @@ export function RulePanel({
             <Fact term="Unless">
               {rule.except.map((except, index) => (
                 <span key={index} className="block">
-                  <Who accountId={home} match={reveal(except)} />
+                  <Who match={reveal(except)} />
                 </span>
               ))}
             </Fact>

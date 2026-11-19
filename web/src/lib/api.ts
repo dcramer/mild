@@ -214,9 +214,8 @@ export const api = {
   /** Where a frame loads a message as the HTML Sift holds for it. */
   messageHtml: (account: string, id: string) => `/api/message/html?${new URLSearchParams({ account, id })}`,
   /** `name` lists only their mail under that name. */
-  sender: (account: string, address: string, signal: AbortSignal, name?: string) =>
-    get<SenderPage>('/api/sender', name === undefined ? { account, address } : { account, address, name }, signal),
-  domain: (account: string, domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { account, domain }, signal),
+  sender: (address: string, signal: AbortSignal, name?: string) => get<SenderPage>('/api/sender', name === undefined ? { address } : { address, name }, signal),
+  domain: (domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { domain }, signal),
   /** `theirs`: their own rule says more than a standing, so nothing was written and the rule dialog is for this. */
   giveStanding: (who: { address: string } | { domain: string }, standing: Given) =>
     post<{ id: string; was: Given | null } | { theirs: string }>('/api/standing', { ...who, standing }),

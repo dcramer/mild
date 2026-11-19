@@ -328,7 +328,6 @@ export type MessageDetail = z.infer<typeof MessageDetail>;
 
 /** GET /api/sender and /api/domain. */
 export const SenderPage = z.object({
-  accountId: z.string(),
   kind: z.enum(['sender', 'domain']),
   /** The name the sender last used. */
   name: held.nullable(),

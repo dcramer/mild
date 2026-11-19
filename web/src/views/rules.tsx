@@ -150,7 +150,7 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
                     {rule.name ? (
                       <span className="name">{reveal(rule.name)}</span>
                     ) : home ? (
-                      <Who accountId={home} match={reveal(rule.match)} />
+                      <Who match={reveal(rule.match)} />
                     ) : (
                       <span className="name">{whoText(reveal(rule.match))}</span>
                     )}
