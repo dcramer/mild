@@ -172,6 +172,14 @@ export async function followLabels(db: Sql, accountId: string, history: readonly
   }
 }
 
+/** A recorded message's labels as Gmail just gave them, so what lists the inbox is right before the next sync reads the change back. */
+export async function recordLabels(db: Sql, accountId: string, messageId: string, labelIds: readonly string[]): Promise<void> {
+  await db
+    .update(messages)
+    .set({ labelIds: [...labelIds] })
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+}
+
 /** Delete the text of waiting mail fetched before `cutoff`, every mailbox's. Returns how many went. */
 export async function purgeSuggestionBodies(db: Sql, cutoff: number): Promise<number> {
   return (await db.delete(suggestionBodies).where(lt(suggestionBodies.fetchedAt, cutoff)).returning({ id: suggestionBodies.messageId })).length;

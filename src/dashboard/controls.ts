@@ -1,6 +1,6 @@
 import type { Sql } from '../store/sql.ts';
 import type { Reach } from '../store/inbox.ts';
-import type { InboxEstimate, LabelProposal, RuleDraft, RuleInbox } from './types.ts';
+import type { InboxEstimate, LabelProposal, MailChange, RuleDraft, RuleInbox } from './types.ts';
 
 /**
  * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
@@ -28,6 +28,12 @@ export interface Controls {
    * as undone), or null when there is nothing more to say.
    */
   undo(db: Sql, actionId: number): Promise<string | null>;
+  /**
+   * The person's own press on messages of theirs in the inbox, through the executor, Sift on or off. Messages no longer in
+   * the inbox are left as they are. Resolves with the changes that landed, which `undo` takes back; rejects with a sentence
+   * for them when Gmail did not take some.
+   */
+  changeMail(db: Sql, accountId: string, messageIds: readonly string[], change: MailChange['change']): Promise<number[]>;
   /**
    * What going through the newest `reach` of these of the person's inboxes would take, read from Gmail: how
    * many messages, how many of those likely need the model, and about what that costs.

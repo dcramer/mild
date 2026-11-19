@@ -21,7 +21,10 @@ import labelsWrite from './routes/labels/post.ts';
 import labelsProposalRead from './routes/labels/proposal/get.ts';
 import labelsProposeWrite from './routes/labels/propose/post.ts';
 import labelsRemoveWrite from './routes/labels/remove/post.ts';
+import mailChangeWrite from './routes/mail/change/post.ts';
 import mailOnWrite from './routes/mail/on/post.ts';
+import mailThreadRead from './routes/mail/thread/get.ts';
+import mailThreadsRead from './routes/mail/threads/get.ts';
 import mailboxPrimaryWrite from './routes/mailbox/primary/post.ts';
 import mailboxRemoveWrite from './routes/mailbox/remove/post.ts';
 import manageRead from './routes/manage/get.ts';
@@ -66,6 +69,8 @@ export const READS: readonly Read[] = [
   examplesRead,
   inboxRead,
   labelsProposalRead,
+  mailThreadRead,
+  mailThreadsRead,
   manageRead,
   messageRead,
   modelsRead,
@@ -95,6 +100,7 @@ export const WRITES: readonly Write[] = [
   labelsAcceptWrite,
   labelsProposeWrite,
   labelsRemoveWrite,
+  mailChangeWrite,
   mailOnWrite,
   mailboxPrimaryWrite,
   mailboxRemoveWrite,

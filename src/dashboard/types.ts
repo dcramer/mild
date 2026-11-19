@@ -474,16 +474,9 @@ export const RuleInbox = z.object({
 });
 export type RuleInbox = z.infer<typeof RuleInbox>;
 
-/** One waiting suggestion: what sift proposes for one message, which the user has not answered. */
-export const SuggestionItem = z.object({
-  accountId: z.string(),
-  messageId: z.string(),
+/** What Sift thinks of a message: its current decision, as For review's rows and Inbox's show it. */
+const Thinks = z.object({
   decisionId: z.number(),
-  sender: held,
-  senderName: held.nullable(),
-  contact: Contact,
-  subject: held,
-  receivedAt: z.number(),
   /** What sift would do. `review` without a label means it could not place the mail. */
   disposition: z.string(),
   /** What sift says the mail is, or null if it could not place it. */
@@ -492,6 +485,18 @@ export const SuggestionItem = z.object({
   /** Which tier decided, and how sure a model was (0 to 1); null when no model was asked. */
   stage,
   confidence: z.number().nullable(),
+});
+
+/** One waiting suggestion: what sift proposes for one message, which the user has not answered. */
+export const SuggestionItem = z.object({
+  accountId: z.string(),
+  messageId: z.string(),
+  sender: held,
+  senderName: held.nullable(),
+  contact: Contact,
+  subject: held,
+  receivedAt: z.number(),
+  ...Thinks.shape,
   /**
    * What else it might be, most likely first: the labels the sender's other mail has had, with the share
    * of it each had. Until the model ranks its own guesses, this is the best second opinion sift holds.
@@ -637,6 +642,62 @@ export const InboxEstimate = z.object({
   cost: z.number().nullable(),
 });
 export type InboxEstimate = z.infer<typeof InboxEstimate>;
+
+/** Which conversations Inbox lists: all, those Sift would leave in the inbox or could not place, or those it would move out. */
+export const MAIL_VIEWS = ['all', 'needs', 'sorted'] as const;
+export type MailView = (typeof MAIL_VIEWS)[number];
+
+/** GET /api/mail/threads: one conversation with mail in the inbox now. */
+export const MailThread = z.object({
+  accountId: z.string(),
+  threadId: z.string(),
+  /** Its newest message's. */
+  subject: held,
+  /** Who wrote the messages Sift has of it, oldest first, each once: a name, or the address of a sender without one; the reader's own mailboxes as "me". */
+  who: z.array(held),
+  /** The messages Sift has recorded of it, oldest first; the newest is the one the reader opens. Sync records mail that arrives, not what the person sent. */
+  messageIds: z.array(z.string()),
+  unread: z.boolean(),
+  newestAt: z.number(),
+  /** The start of its newest message's text, on one line, where Sift holds it. */
+  preview: held.nullable(),
+  /** About its newest message; null when Sift has not decided it. */
+  thinks: Thinks.nullable(),
+});
+export type MailThread = z.infer<typeof MailThread>;
+
+export const MailThreads = z.object({
+  /** Newest first. */
+  threads: z.array(MailThread),
+  /** Where the next page starts, for `before`; null at the end. A search may give fewer than a page and still have more. */
+  next: z.string().nullable(),
+});
+export type MailThreads = z.infer<typeof MailThreads>;
+
+/** GET /api/mail/thread: the messages Sift has of one conversation, oldest first, each as its folded row shows it. A message's text is `/api/message`'s. */
+export const MailConversation = z.object({
+  accountId: z.string(),
+  threadId: z.string(),
+  messages: z.array(
+    z.object({
+      messageId: z.string(),
+      fromAddress: held,
+      fromName: held.nullable(),
+      receivedAt: z.number(),
+      unread: z.boolean(),
+      preview: held.nullable(),
+    }),
+  ),
+});
+export type MailConversation = z.infer<typeof MailConversation>;
+
+/** The body of POST /api/mail/change: the person's own press on messages in their inbox. */
+export const MailChange = z.strictObject({
+  accountId: z.string(),
+  messageIds: z.array(z.string().min(1).max(200)).min(1).max(200),
+  change: z.enum(['archive', 'read', 'unread']),
+});
+export type MailChange = z.infer<typeof MailChange>;
 
 /** Which of the newest messages a press goes through: the whole inbox, or enough to teach with. */
 export const InboxReach = z.enum(['inbox', 'recent']);

@@ -1,4 +1,4 @@
-import { undo } from '../actions/executor.ts';
+import { press, undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
@@ -25,6 +25,7 @@ import { type ChosenModel, modelChoices, offerModel, openModels, priceOf, resolv
 import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { credentials } from '../store/credentials.ts';
+import { recordLabels } from '../store/messages.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
@@ -158,9 +159,25 @@ export async function buildControls(
       const action = await getAction(db, actionId);
       if (!action) throw new Refusal(`There is no change #${actionId}.`);
       const outcome = await undo({ db, mailbox: (await gmail(db, action.accountId)).mailbox }, actionId);
-      if (outcome.status === 'done') return null;
+      if (outcome.status === 'done') {
+        await recordLabels(db, action.accountId, action.messageId, outcome.finalLabels);
+        return null;
+      }
       if (outcome.status === 'skipped') return 'Already put back by hand';
       throw new Refusal(outcome.reason);
+    },
+    changeMail: async (db, accountId, messageIds, change) => {
+      const deps = { db, mailbox: (await gmail(db, accountId)).mailbox };
+      const landed: number[] = [];
+      let missed = 0;
+      for (const messageId of messageIds) {
+        const { outcome, labels } = await press(deps, accountId, messageId, change);
+        if (labels) await recordLabels(db, accountId, messageId, labels);
+        if (outcome.status === 'done') landed.push(outcome.actionId);
+        else if (outcome.status !== 'skipped') missed++;
+      }
+      if (missed > 0) throw new Refusal(`Gmail did not take ${missed === messageIds.length ? 'it' : `${missed} of ${messageIds.length}`}. Try again.`);
+      return landed;
     },
     inboxEstimate: async (db, mailboxes, reach) => {
       let messages = 0;

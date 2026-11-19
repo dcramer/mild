@@ -100,6 +100,7 @@ beforeEach(async () => {
     saveModelKey: async (db, provider) => void calls.push(`key ${provider} ${await personOf(db)}`),
     signOutModel: async (db, provider) => void calls.push(`signout ${provider} ${await personOf(db)}`),
     undo: async (_db, id) => (calls.push(`undo ${id}`), 'undone'),
+    changeMail: async (_db, accountId, messageIds, change) => (calls.push(`${change} ${accountId} ${messageIds.join(',')}`), [1]),
     putBack: async () => {},
     ruleFilter: async (_db, id) => void calls.push(`filter ${id}`),
     // Answers with the mail of whoever has the rule: only the route's own check keeps it from someone else.
@@ -160,6 +161,9 @@ const READS = (account: string, mark: string) => [
   `/api/rules/usage?id=${ids[account]!.rule}`,
   `/api/rules/inbox?id=${ids[account]!.rule}`,
   '/api/inbox?reach=inbox',
+  '/api/mail/threads',
+  `/api/mail/threads?q=${mark}&view=needs&unread=1`,
+  `/api/mail/thread?thread=t1&mailbox=${encodeURIComponent(account)}`,
 ];
 
 describe('users and their mailboxes', () => {
@@ -300,6 +304,11 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/mailbox/remove', { address: ALPHA }, { address: NOBODY }],
       ['/api/mailbox/primary', { address: ALPHA }, { address: NOBODY }],
+      [
+        '/api/mail/change',
+        { accountId: ALPHA, messageIds: [`m-${MARK[ALPHA]}`], change: 'archive' },
+        { accountId: NOBODY, messageIds: [`m-${MARK[ALPHA]}`], change: 'archive' },
+      ],
     ];
     for (const [path, body, nobody] of writes) {
       const answer = await call('POST', path, BRAVO, body);
@@ -322,6 +331,8 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/rules', ALPHA, fromProposal)).status).toBe(200);
     expect(await raw(db).get('SELECT status FROM proposals WHERE id = ?', theirs.proposal)).toEqual({ status: 'accepted' });
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
+    expect((await call('POST', '/api/mail/change', ALPHA_WORK, { accountId: ALPHA, messageIds: [`m-${MARK[ALPHA]}`], change: 'read' })).status).toBe(200);
+    expect(calls.at(-1)).toBe(`read ${ALPHA} m-${MARK[ALPHA]}`);
   });
 
   it('lets each person change their own mode, model and sign-ins, and only their own', async () => {

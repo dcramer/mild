@@ -428,6 +428,13 @@
       "when": 1795079087010,
       "tag": "0060_mail_is_sent_through_the_log",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1795080442070,
+      "tag": "0061_inbox_marks_read",
+      "breakpoints": true
     }
   ]
 }

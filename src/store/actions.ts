@@ -114,13 +114,19 @@ export async function getAction(db: Sql, id: number): Promise<ActionRecord | nul
   return row ? fromRow(db)(row) : null;
 }
 
-/** The last thing sift did to a message's labels that still stands, or null. */
+/** The last thing sift did to a message's labels that still stands, or null. What the person pressed in Inbox is theirs, carrying out no decision. */
 export async function lastStandingChange(db: Sql, accountId: string, messageId: string): Promise<ActionRecord | null> {
   const [row] = await db
     .select(COLUMNS)
     .from(actions)
     .where(
-      and(eq(actions.accountId, accountId), eq(actions.messageId, messageId), notInArray(actions.type, ['undo', 'unsubscribe']), eq(actions.status, 'done')),
+      and(
+        eq(actions.accountId, accountId),
+        eq(actions.messageId, messageId),
+        notInArray(actions.type, ['undo', 'unsubscribe']),
+        eq(actions.status, 'done'),
+        isNotNull(actions.decisionId),
+      ),
     )
     .orderBy(desc(actions.id))
     .limit(1);

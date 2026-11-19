@@ -40,6 +40,7 @@ const controls: Controls = {
     return null;
   },
   inboxEstimate: async (_db, _mailboxes, reach) => (calls.push(`estimate ${reach}`), { messages: 40, model: 30, cost: 0.03 }),
+  changeMail: async () => [],
   putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');
