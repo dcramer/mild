@@ -13,6 +13,7 @@ import { mailBodies } from '../src/store/query.ts';
 import { openUserDb } from './fixtures.ts';
 import { ACCOUNT, FakeMailbox, facts } from './helpers.ts';
 import { plain } from '../src/plain.ts';
+import { applyFeedback } from '../src/learn/feedback.ts';
 
 let db: Sql;
 let mailbox: FakeMailbox;
@@ -143,5 +144,14 @@ describe('the reader’s own press', () => {
 describe('a message opened from Inbox', () => {
   it('shows the whole text Inbox keeps', async () => {
     expect(plain((await messageDetail(db, scope, 'reply'))?.body)).toBe('Thursday   works.\nSee you');
+  });
+});
+
+describe('what Inbox says Sift thinks', () => {
+  it('is the reader’s own answer where they gave one', async () => {
+    await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'newsletter', disposition: 'keep', messageId: 'reply', via: 'gmail' }, 400);
+    const [lunch] = (await list({ view: 'all', label: 'newsletter' })).threads;
+    expect(lunch?.thinks).toMatchObject({ labelId: 'newsletter', labelName: 'Newsletters', disposition: 'keep', confidence: null });
+    expect((await list({ view: 'needs' })).threads.map((t) => t.threadId)).toEqual(['lunch']);
   });
 });

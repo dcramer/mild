@@ -10,7 +10,12 @@ const PROPOSAL = 'proposal/';
 /** A proposal as For review's list names it, for hiding it while its dismissal is on its way. */
 export const proposalKey = (p: { id: number }) => `${PROPOSAL}${p.id}`;
 
-export const isMessageKey = (key: string) => !key.startsWith(PROPOSAL);
+const THREAD = 'thread/';
+
+/** A conversation as Inbox's list names it, for hiding it while its archive is on its way. */
+export const threadKey = (t: { accountId: string; threadId: string }) => `${THREAD}${t.accountId}/${t.threadId}`;
+
+export const isMessageKey = (key: string) => !key.startsWith(PROPOSAL) && !key.startsWith(THREAD);
 
 /** The marks this page puts on a history entry: a panel opened over a list, which Back closes. */
 interface Marks {

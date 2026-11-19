@@ -1,6 +1,6 @@
 'use client';
 import { type DehydratedState, HydrationBoundary, useIsFetching } from '@tanstack/react-query';
-import { ActivityIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { ActivityIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -44,6 +44,7 @@ function usePanelsAhead() {
 
 const SECTIONS = [
   { to: '', label: 'For review', icon: ListChecksIcon },
+  { to: 'inbox', label: 'Inbox', icon: InboxIcon },
   { to: 'activity', label: 'Activity', icon: ActivityIcon },
   { to: 'labels', label: 'Labels', icon: TagIcon },
   { to: 'rules', label: 'Rules', icon: WorkflowIcon },
@@ -123,9 +124,17 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const [list, setList] = useState<MessageRef[]>([]);
   // The address names the message alone: the server finds which mailbox holds it.
   const [messageId] = useParam('message');
+  // A conversation, opened on its newest message; the server finds which mailbox holds it, as it does a message.
+  const [threadId] = useParam('thread');
   const listed = list.findIndex((item) => item.messageId === messageId);
-  const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId: '', messageId, subject: null }], index: 0 } : { items: list, index: listed };
-  const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) => setParams({ message: item?.messageId ?? '' }, push);
+  const open =
+    messageId === ''
+      ? null
+      : listed === -1
+        ? { items: [{ accountId: '', messageId, subject: null, ...(threadId ? { threadId } : {}) }], index: 0 }
+        : { items: list, index: listed };
+  const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) =>
+    setParams({ message: item?.messageId ?? '', thread: item?.threadId ?? '' }, push);
   const online = useOnline();
   // Drawn above the `Mailbox` it provides, so for all of them: whose mailboxes these are, and whose sign-in expired.
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
@@ -157,7 +166,8 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
 
   const going = useGoing();
   const fetching = useIsFetching(firstLoad);
-  const items = SECTIONS.map((s) => ({ ...s, ...(s.to === '' && waiting ? { count: waiting } : {}) }));
+  // Inbox is a section only while it is on.
+  const items = SECTIONS.filter((s) => s.to !== 'inbox' || manage.data?.mail).map((s) => ({ ...s, ...(s.to === '' && waiting ? { count: waiting } : {}) }));
   const notice = !online ? (
     <Notice>Sift cannot be reached</Notice>
   ) : expired.length > 0 ? (

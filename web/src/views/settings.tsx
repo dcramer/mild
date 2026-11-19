@@ -3,6 +3,7 @@ import { Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { GoThroughInbox, InboxRow } from '@/components/inbox.tsx';
+import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { costLine, spentLine, subscription } from '@/lib/prices.ts';
 import { type ManageState, type Removed, api, useLoaded } from '@/lib/api.ts';
@@ -100,6 +101,34 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
       </Sheet>
       <Failure>{error}</Failure>
       {goingThrough ? <GoThroughInbox model={state.model} onClose={() => setGoingThrough(false)} onStarted={reload} /> : null}
+    </SettingsGroup>
+  );
+}
+
+/** Inbox: reading and handling mail in Sift, with what Sift thinks of each message beside it. */
+function Mail({ state }: { state: ManageState }) {
+  const { busy, error, run } = useAction();
+  return (
+    <SettingsGroup title="Inbox" note="Read and handle your mail in Sift.">
+      <Sheet>
+        <SettingRow
+          title={state.mail ? 'On' : 'Off'}
+          note={
+            state.mail
+              ? 'Sift keeps a copy of the mail in your inbox to show it here. Turning Inbox off deletes that copy.'
+              : 'Sift keeps the text only of mail waiting on you, and of the mail you answered for.'
+          }
+        >
+          {state.mail ? (
+            <Button busy={busy} onClick={() => run(() => api.setMail(false))}>
+              Turn off
+            </Button>
+          ) : (
+            <TurnInboxOn label="Turn on" />
+          )}
+        </SettingRow>
+      </Sheet>
+      <Failure>{error}</Failure>
     </SettingsGroup>
   );
 }
@@ -508,6 +537,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <>
             {/* Whether sift is on, the model and its sign-in are each person's own. */}
             <Active state={data} reload={reload} />
+            <Mail state={data} />
             <Model state={data} reload={reload} onConnect={onClose} />
             <Mailboxes state={data} signedInAs={signedInAs} reload={reload} />
             <Keys />

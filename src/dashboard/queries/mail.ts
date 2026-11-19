@@ -8,6 +8,7 @@ import {
   desc,
   eq,
   exists,
+  feedback,
   inArray,
   isNull,
   lt,
@@ -76,6 +77,10 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
     .groupBy(messages.accountId, messages.threadId)
     .as('threads');
   const later = alias(decisions, 'later');
+  // The reader's answer about it, where they gave one, beats what Sift decided.
+  const answered = sql`${feedback.id} IS NOT NULL`;
+  const labelId = sql<string | null>`CASE WHEN ${answered} THEN ${feedback.labelId} ELSE ${decisions.labelId} END`;
+  const disposition = sql<string | null>`CASE WHEN ${answered} THEN ${feedback.disposition} ELSE ${decisions.disposition} END`;
   const cursor = query.before === undefined ? null : CURSOR.exec(query.before);
   const needle = query.q?.trim().toLowerCase() ?? '';
   const rows = await db
@@ -86,10 +91,11 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
       newestId: threads.newestId,
       unread: threads.unread,
       decisionId: decisions.id,
-      disposition: decisions.disposition,
+      answered: sql<boolean>`${answered}`,
+      disposition,
       block: decisions.block,
       digest: decisions.digest,
-      labelId: decisions.labelId,
+      labelId,
       stage: decisions.stage,
       confidence: decisions.confidence,
     })
@@ -108,12 +114,13 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
         ),
       ),
     )
+    .leftJoin(feedback, eq(feedback.decisionId, decisions.id))
     .where(
       and(
         cursor ? or(lt(threads.newestAt, Number(cursor[1])), and(eq(threads.newestAt, Number(cursor[1])), lt(threads.threadId, cursor[2]!))) : undefined,
-        query.label ? eq(decisions.labelId, query.label) : undefined,
-        query.view === 'needs' ? or(isNull(decisions.id), inArray(decisions.disposition, ['keep', 'review'])) : undefined,
-        query.view === 'sorted' ? inArray(decisions.disposition, ['archive', 'spam']) : undefined,
+        query.label ? sql`${labelId} = ${query.label}` : undefined,
+        query.view === 'needs' ? or(isNull(decisions.id), sql`${disposition} IN ('keep', 'review')`) : undefined,
+        query.view === 'sorted' ? sql`${disposition} IN ('archive', 'spam')` : undefined,
         query.unread ? eq(threads.unread, true) : undefined,
       ),
     )
@@ -161,11 +168,11 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
             ? null
             : {
                 decisionId: r.decisionId,
-                disposition: r.block ? 'block' : r.digest ? 'digest' : r.disposition!,
+                disposition: r.answered ? r.disposition! : r.block ? 'block' : r.digest ? 'digest' : r.disposition!,
                 labelId: r.labelId,
                 labelName: (r.labelId && names.get(r.labelId)) ?? null,
                 stage: r.stage!,
-                confidence: r.confidence,
+                confidence: r.answered ? null : r.confidence,
               },
       };
     }),

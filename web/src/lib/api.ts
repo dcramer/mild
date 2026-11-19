@@ -1,4 +1,4 @@
-import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useQuery } from '@tanstack/react-query';
+import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useContext, useSyncExternalStore } from 'react';
 import { Mailbox } from './narrowed.ts';
 import { traceHeaders } from './trace.ts';
@@ -14,6 +14,9 @@ export type {
   LabelProposal,
   LabelSummary,
   ListedDecision,
+  MailConversation,
+  MailThread,
+  MailView,
   ManageState,
   MessageDetail,
   Removed,
@@ -41,6 +44,10 @@ import type {
   FeedbackRequest,
   Given,
   LabelProposal,
+  MailChange,
+  MailConversation,
+  MailThreads,
+  MailView,
   ManageState,
   MessageDetail,
   Models,
@@ -287,6 +294,16 @@ export const api = {
   dismissProposal: (id: number) => post('/api/proposals', { id }),
   /** `message`: what the page will not show by itself, if anything. */
   undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
+  /** Inbox's conversations, a page from `before`; empty `label` and `q` narrow nothing. */
+  mailThreads: (query: { view: MailView; label: string; q: string; unread: boolean }, before: string, signal: AbortSignal) =>
+    get<MailThreads>('/api/mail/threads', { view: query.view, label: query.label, q: query.q, ...(query.unread ? { unread: 1 } : {}), before }, signal),
+  /** A conversation by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
+  mailThread: (thread: string, signal: AbortSignal, mailbox = '') =>
+    get<MailConversation>('/api/mail/thread', mailbox ? { thread, mailbox } : { thread }, signal),
+  /** The reader's own press on mail in their inbox. `actions`: what landed, for Undo. */
+  changeMail: (change: MailChange) => post<{ actions: number[] }>('/api/mail/change', change),
+  /** Whether Sift keeps the text of all inbox mail, for Inbox. */
+  setMail: (on: boolean) => post('/api/mail/on', { on }),
   inboxEstimate: (reach: 'inbox' | 'recent', signal: AbortSignal) => get<InboxEstimate>('/api/inbox', { reach }, signal),
   startInbox: (reach: 'inbox' | 'recent') => post('/api/inbox/start', { reach }),
   /** Stop going through the inbox, or with `rule`, stop applying it. */
@@ -376,5 +393,47 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
     loading: query.isPending,
     at: query.dataUpdatedAt,
     reload: () => void query.refetch({ cancelRefetch: false }),
+  };
+}
+
+export interface Pages<T> {
+  pages: T[];
+  error: string | null;
+  loading: boolean;
+  /** There is more after the last page. */
+  more: boolean;
+  /** Load the page after the last, unless one is already on its way. */
+  next: () => void;
+}
+
+/**
+ * A list read a page at a time, as `useLoaded` reads one: each page from where the last ended (`next` in its reply, null
+ * at the end). Read again, every page loaded so far is.
+ */
+export function usePages<T extends { next: string | null }>(
+  key: string,
+  fetcher: (before: string, signal: AbortSignal) => Promise<T>,
+  refreshMs = 60_000,
+): Pages<T> {
+  const narrowed = useContext(Mailbox);
+  const query = useInfiniteQuery({
+    queryKey: narrowed ? [key, narrowed] : [key],
+    queryFn: ({ pageParam, signal }) => {
+      if (narrowed) narrowedBy.set(signal, narrowed);
+      return fetcher(pageParam, signal);
+    },
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next ?? undefined,
+    refetchInterval: refreshMs,
+    placeholderData: keepPreviousData,
+  });
+  return {
+    pages: query.data?.pages ?? [],
+    error: query.error?.message ?? null,
+    loading: query.isPending,
+    more: query.hasNextPage,
+    next: () => {
+      if (!query.isFetchingNextPage) void query.fetchNextPage();
+    },
   };
 }
