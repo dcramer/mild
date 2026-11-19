@@ -93,7 +93,8 @@ test('the service worker keeps only the built files a page it keeps names', asyn
 
   await page.reload();
   await expect.poll(kept).not.toContain('/_next/static/chunks/older-build.js');
-  expect(await kept()).toEqual(expect.arrayContaining(current));
+  // The page itself is put back as it loads, after the older build's files are gone.
+  await expect.poll(kept).toEqual(expect.arrayContaining(current));
 });
 
 test('built files are kept by the browser for good, read only as what they say they are, and come without their source', async ({ page }) => {

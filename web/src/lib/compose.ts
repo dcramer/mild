@@ -27,8 +27,8 @@ export function closeComposer() {
 }
 
 /** What the address says the composer is writing, or null when it is closed. */
-export function writing(compose: string, messageId: string, to: string): Writing | null {
-  if (compose === 'new') return to ? { kind: 'new', to } : { kind: 'new' };
+export function writing(compose: string, messageId: string): Writing | null {
+  if (compose === 'new') return { kind: 'new' };
   if (!messageId) return null;
   if (compose === 'reply' || compose === 'all') return { kind: 'reply', messageId, all: compose === 'all' };
   if (compose === 'forward') return { kind: 'forward', messageId };
