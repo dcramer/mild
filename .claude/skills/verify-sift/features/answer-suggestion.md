@@ -1,12 +1,12 @@
 # Answer a suggestion
 
-A message sift could not place, or placed wrongly, waits in For review. The user opens it, chooses what it is, and presses the check. sift records the label, carries out that label's action on the message on the next pass (even while sift is off), keeps the message as an example, makes no rule, and moves on to the next one.
+A message Sift could not place, or placed wrongly, waits in For review. The user opens it, chooses what it is, and presses the check. Sift records the label, carries out that label's action on the message on the next pass (even while Sift is off), keeps the message as an example, makes no rule, and moves on to the next one.
 
 ## Sub-features
 
 - `answer-open` opens a waiting message in the side panel from its row.
-- `answer-pick` chooses a label in the panel's dropdown (`What this message is`): `Leave in inbox` first and set apart, then the label sift gave and its likely others, each with a meter, then the rest. An `Unlabelled` message has no likely group.
-- `answer-save` is the check: `Agree:` the label while it is sift's, `Save:` once changed. The panel moves to the next waiting message and the count drops. Only that message is answered; on For review, a folded row's check answers every message in it.
+- `answer-pick` chooses a label in the panel's dropdown (`What this message is`): `Leave in inbox` first and set apart, then the label Sift gave and its likely others, each with a meter, then the rest. An `Unlabelled` message has no likely group.
+- `answer-save` is the check: `Agree:` the label while it is Sift's, `Save:` once changed. The panel moves to the next waiting message and the count drops. Only that message is answered; on For review, a folded row's check answers every message in it.
 - `answer-more` is the toast's `Same for N more`: the only way one answer reaches the sender's other waiting mail, offered when that mail has the same label (or, like the two Ops alerts, none).
 - `answer-rule` is `Make a rule…`, which opens the rule dialog over the panel, started on this sender and the message's label (see rule-shortcuts.md).
 

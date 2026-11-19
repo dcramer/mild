@@ -120,7 +120,7 @@ test.describe('While the reader waits', () => {
   test("a sender's page is drawn with the name and the loading bar before the browser knows who is signed in", async ({ page }) => {
     const release = await hold(page, '**/api/session?*');
     await page.goto(senderPage('ada@example.org'));
-    await expect(page.getByRole('link', { name: 'sift' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sift' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(0);
     await expect(page.locator('.loading-bar')).toHaveCount(1);
     release();

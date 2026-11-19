@@ -1,6 +1,6 @@
-# What sift saw in a message
+# What Sift saw in a message
 
-An opened message lists what sift saw in it that the reader can use (a mailing list, a one-click unsubscribe, a reply, attachments, a tracking pixel), each in the words of the rule condition it makes. A rule can carry those conditions, and For review and Activity can be narrowed by a few of them.
+An opened message lists what Sift saw in it that the reader can use (a mailing list, a one-click unsubscribe, a reply, attachments, a tracking pixel), each in the words of the rule condition it makes. A rule can carry those conditions, and For review and Activity can be narrowed by a few of them.
 
 ## Sub-features
 
