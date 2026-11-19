@@ -10,6 +10,10 @@ import { Meter, useToast } from '@/system';
 export type Pressed = Pick<MailThread, 'accountId' | 'threadId' | 'messageIds' | 'subject'>;
 type Press = 'archive' | 'read' | 'unread';
 
+// Changes go to Gmail one after another, in the order pressed: opening a conversation marks it read, and Mark unread
+// pressed straight after must not land first and be undone by it.
+let pressing: Promise<unknown> = Promise.resolve();
+
 /**
  * The reader's own presses on conversations in their inbox, Sift on or off. Archive takes them off the list at once and
  * offers Undo; read and unread are on every message of each, but unread only on its newest, as Gmail marks it.
@@ -18,14 +22,19 @@ export function useMailPress(): { press: (threads: readonly Pressed[], what: Pre
   const { hide, run, error } = useAction();
   const undo = useAction();
   const toast = useToast();
-  const send = async (threads: readonly Pressed[], what: Press) =>
-    (
-      await Promise.all(
-        [...Map.groupBy(threads, (t) => t.accountId)].map(([accountId, mine]) =>
-          api.changeMail({ accountId, messageIds: mine.flatMap((t) => (what === 'unread' ? t.messageIds.slice(-1) : t.messageIds)), change: what }),
-        ),
-      )
-    ).flatMap((reply) => reply.actions);
+  const send = (threads: readonly Pressed[], what: Press) => {
+    const sent = pressing.then(async () =>
+      (
+        await Promise.all(
+          [...Map.groupBy(threads, (t) => t.accountId)].map(([accountId, mine]) =>
+            api.changeMail({ accountId, messageIds: mine.flatMap((t) => (what === 'unread' ? t.messageIds.slice(-1) : t.messageIds)), change: what }),
+          ),
+        )
+      ).flatMap((reply) => reply.actions),
+    );
+    pressing = sent.catch(() => undefined);
+    return sent;
+  };
   return {
     error,
     press: (threads, what, then) => {
@@ -57,11 +66,10 @@ export function whoWrote(who: readonly Confidential[]): string {
 /** What Sift thinks a message is: how sure, then the label; mail it could not place says so; mail it never decided, nothing. */
 export function Thinks({ thinks }: { thinks: MailThread['thinks'] }) {
   if (!thinks) return null;
-  if (thinks.labelId === null) return <span>{outcomeName('review')}</span>;
   return (
     <span className="inline-flex items-baseline gap-2">
-      <Meter level={sureness(thinks)} />
-      {thinks.labelName ?? outcomeName(thinks.disposition)}
+      <Meter level={thinks.labelId === null ? null : sureness(thinks)} />
+      {thinks.labelId === null ? outcomeName('review') : (thinks.labelName ?? outcomeName(thinks.disposition))}
     </span>
   );
 }
