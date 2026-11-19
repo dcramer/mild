@@ -1238,19 +1238,32 @@ export function SystemView() {
 }
 
 const THREAD = [
-  { id: 'a', from: 'Ada Lovelace', preview: 'Are you free for lunch on Thursday?', at: 'Nov 12' },
-  { id: 'b', from: 'Me', preview: 'Thursday works. Noon at the usual place?', at: 'Nov 12' },
-  { id: 'c', from: 'Ada Lovelace', preview: 'Noon it is. I will bring the plans.', at: '9:41 AM' },
+  { id: 'a', from: 'Ada Lovelace', address: 'ada@example.org', preview: 'Are you free for lunch on Thursday?', at: 'Nov 10' },
+  { id: 'b', from: 'Me', address: 'me@example.org', preview: 'Thursday works. Noon at the usual place?', at: 'Nov 10' },
+  { id: 'c', from: 'Ada Lovelace', address: 'ada@example.org', preview: 'Can Grace come too?', at: 'Nov 11' },
+  { id: 'd', from: 'Me', address: 'me@example.org', preview: 'Of course.', at: 'Nov 11' },
+  { id: 'e', from: 'Grace Hopper', address: 'grace@example.net', preview: 'Count me in. I will bring the notes from the review.', at: 'Nov 11' },
+  { id: 'f', from: 'Me', address: 'me@example.org', preview: 'See you both there.', at: 'Nov 12' },
+  { id: 'g', from: 'Ada Lovelace', address: 'ada@example.org', preview: 'Noon it is. I will bring the plans.', at: '9:41 AM' },
 ];
+const NEWEST = THREAD[THREAD.length - 1];
 
-/** The reader as Inbox opens a conversation, or (For review) one message with what Sift said beside it. */
+/**
+ * The reader as Inbox opens a conversation, its middle folded, or (For review) one message with what Sift said beside
+ * it. Answering an earlier message opens the reply box at the foot, saying which it answers.
+ */
 function SpecimenReader({ onBack }: { onBack: () => void }) {
   const toast = useToast();
   const [from, setFrom] = useState<'inbox' | 'review'>('inbox');
-  const [open, setOpen] = useState('c');
-  const [replying, setReplying] = useState(false);
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([NEWEST.id]));
+  const [replying, setReplying] = useState<{ title: string; to: (typeof THREAD)[number] } | null>(null);
   const inbox = from === 'inbox';
-  const shown = THREAD.find((m) => m.id === open) ?? THREAD[2];
+  const toggle = (id: string) => {
+    const next = new Set(open);
+    if (!next.delete(id)) next.add(id);
+    setOpen(next);
+  };
+  const answer = (title: string, to: (typeof THREAD)[number] = NEWEST) => setReplying({ title, to });
   return (
     <div className="flex flex-col gap-6">
       <ChoiceGroup
@@ -1313,42 +1326,61 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
           )
         }
       >
-        <MessageStack messages={inbox ? THREAD : []} open={inbox ? open : 'c'} onOpen={setOpen}>
-          <MessageHead
-            from={<TextLink href="/system">{shown.from}</TextLink>}
-            address="ada@example.org"
-            at={`Nov 12, 2026, ${shown.at}`}
-            to={
+        <MessageStack messages={inbox ? THREAD : [NEWEST]} open={open} onToggle={toggle}>
+          {(id) => {
+            const m = THREAD.find((one) => one.id === id) ?? NEWEST;
+            return (
               <>
-                To <SomeOf items={['me@example.org', 'grace@example.net']} />
+                <MessageHead
+                  from={<TextLink href="/system">{m.from}</TextLink>}
+                  address={m.address}
+                  at={m.at.includes(':') ? `Nov 12, 2026, ${m.at}` : `${m.at}, 2026`}
+                  to={
+                    <>
+                      To <SomeOf items={['me@example.org', 'grace@example.net']} />
+                    </>
+                  }
+                  {...(inbox
+                    ? { answers: { reply: () => answer('Reply', m), all: () => answer('Reply to all', m), forward: () => answer('Forward', m) } }
+                    : {})}
+                />
+                <p className="text-reading leading-relaxed">{m.preview}</p>
               </>
-            }
-          />
-          <p className="text-reading leading-relaxed">{shown.preview}</p>
+            );
+          }}
         </MessageStack>
         {!inbox ? null : replying ? (
           <ReplyBox
-            label="Reply"
+            key={`${replying.title}/${replying.to.id}`}
+            label={replying.title}
+            {...(replying.to === NEWEST
+              ? {}
+              : {
+                  about:
+                    replying.title === 'Forward'
+                      ? `Forwarding ${replying.to.from}’s message, ${replying.to.at}`
+                      : `Replying to ${replying.to.from}, ${replying.to.at}`,
+                })}
             actions={
               <>
-                <Finish onClick={() => setReplying(false)}>Send</Finish>
-                <Button variant="quiet" onClick={() => setReplying(false)}>
+                <Finish onClick={() => setReplying(null)}>Send</Finish>
+                <Button variant="quiet" onClick={() => setReplying(null)}>
                   Discard
                 </Button>
               </>
             }
           >
             <Field inline label="To">
-              <Input aria-label="To" className="flex-1" defaultValue="Ada Lovelace <ada@example.org>" />
+              <Input aria-label="To" className="flex-1" defaultValue={replying.title === 'Forward' ? '' : `${replying.to.from} <${replying.to.address}>`} />
             </Field>
             <TextArea aria-label="Message" className="min-h-44" />
           </ReplyBox>
         ) : (
           <Presses
             presses={[
-              { label: 'Reply', key: 'r', onPress: () => setReplying(true) },
-              { label: 'Reply all', key: 'a', onPress: () => setReplying(true) },
-              { label: 'Forward', key: 'f', onPress: () => toast('Opens the reply box as a forward') },
+              { label: 'Reply', key: 'r', onPress: () => answer('Reply') },
+              { label: 'Reply all', key: 'a', onPress: () => answer('Reply to all') },
+              { label: 'Forward', key: 'f', onPress: () => answer('Forward') },
             ]}
           />
         )}

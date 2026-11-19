@@ -9,8 +9,8 @@ import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { Summary, SummaryEvent } from '@/components/summary.tsx';
 import { useAction } from '@/lib/action.ts';
-import { type MailConversation, type MessageDetail, type RuleMatch, api, useLoaded } from '@/lib/api.ts';
-import { closeReply, useCompose, writing } from '@/lib/compose.ts';
+import { type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, useLoaded } from '@/lib/api.ts';
+import { type Writing, closeReply, useCompose, writing } from '@/lib/compose.ts';
 import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import type { MessageRef } from '@/lib/open-messages.ts';
 import { messageKey, useParam } from '@/lib/params.ts';
@@ -206,10 +206,13 @@ function AddressedTo({ detail }: { detail: MessageDetail }) {
   );
 }
 
-/** One message of the conversation, open: who wrote it, to whom and when, over its text. */
-function Opened({ detail }: { detail: MessageDetail }) {
+type Answer = Exclude<Writing, { kind: 'new' }>;
+
+/** One message of the conversation, open: who wrote it, to whom and when, with `onAnswer` its own presses for answering it, over its text. */
+function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what: Answer) => void) | undefined }) {
   const address = reveal(detail.fromAddress);
   const name = reveal(detail.fromName);
+  const id = detail.messageId;
   return (
     <>
       <MessageHead
@@ -224,36 +227,76 @@ function Opened({ detail }: { detail: MessageDetail }) {
         {...(name ? { address: <SenderLink address={address} /> } : {})}
         at={dateTime(detail.receivedAt)}
         to={<AddressedTo detail={detail} />}
+        {...(onAnswer
+          ? {
+              answers: {
+                reply: () => onAnswer({ kind: 'reply', messageId: id, all: false }),
+                all: () => onAnswer({ kind: 'reply', messageId: id, all: true }),
+                forward: () => onAnswer({ kind: 'forward', messageId: id }),
+              },
+            }
+          : {})}
       />
-      <MessageBody key={detail.messageId} detail={detail} />
+      <MessageBody key={id} detail={detail} />
     </>
   );
 }
 
-/**
- * The messages of what is open: a conversation (Inbox), oldest first, opening on its newest, the reader's own reply
- * included; or one message. Opening a conversation with unread mail marks it read. `newest` is the newest in the inbox,
- * which Sift's row is about.
- */
-function Messages({ conversation, newest }: { conversation: MailConversation | null; newest: MessageDetail }) {
-  const [openId, setOpenId] = useState(conversation?.messages.at(-1)?.messageId ?? newest.messageId);
-  const other = openId === newest.messageId ? null : openId;
-  const opened = useLoaded(
+/** A message of the conversation: the reader's own as it was loaded, any other read as it is first wanted and kept. */
+function useMessage(id: string, newest: MessageDetail): { detail: MessageDetail | null; error: string | null } {
+  const other = id === newest.messageId ? null : id;
+  const loaded = useLoaded(
     `message/${newest.accountId}/${other ?? ''}`,
     (signal) => (other ? api.message(other, signal, newest.accountId) : Promise.resolve(null)),
     30_000,
     '',
   );
-  const { press } = useMailPress();
+  return other ? { detail: loaded.data, error: loaded.error } : { detail: newest, error: null };
+}
+
+function OpenOne({ id, newest, onAnswer }: { id: string; newest: MessageDetail; onAnswer?: ((what: Answer) => void) | undefined }) {
+  const { detail, error } = useMessage(id, newest);
+  if (detail) return <Opened detail={detail} onAnswer={onAnswer} />;
+  return error ? <Failure>{error}</Failure> : <Loading rows={4} />;
+}
+
+/**
+ * The messages of what is open: a conversation (Inbox), oldest first, the reader's own reply included; or one message.
+ * Its newest, what is unread and what a reply in the address answers start open, and so does one that arrives while it
+ * is (a reply just sent). Opening a conversation with unread mail marks it read. `newest` is the newest in the inbox,
+ * which Sift's row is about.
+ */
+function Messages({
+  conversation,
+  newest,
+  answered,
+  onAnswer,
+  onRead,
+}: {
+  conversation: MailConversation | null;
+  newest: MessageDetail;
+  answered: string | null;
+  onAnswer?: ((what: Answer) => void) | undefined;
+  onRead: () => void;
+}) {
+  const ids = conversation?.messages.map((m) => m.messageId) ?? [newest.messageId];
   const unread = conversation?.messages.filter((m) => m.unread).map((m) => m.messageId) ?? [];
+  const [open, setOpen] = useState(() => new Set([ids.at(-1) ?? newest.messageId, ...unread, ...(answered ? [answered] : [])]));
+  const [known, setKnown] = useState(ids);
+  const arrived = ids.filter((id) => !known.includes(id));
+  if (arrived.length > 0) {
+    setKnown(ids);
+    setOpen(new Set([...open, ...arrived]));
+  }
+  const { press } = useMailPress();
   // Read is a change in Gmail like any other, made once as it opens.
   const marked = useRef(false);
   useEffect(() => {
     if (marked.current || !conversation || unread.length === 0) return;
     marked.current = true;
     press([{ accountId: conversation.accountId, threadId: conversation.threadId, messageIds: unread, subject: newest.subject }], 'read');
+    onRead();
   });
-  const shown = other ? opened.data : newest;
   const messages = conversation
     ? conversation.messages.map((m) => ({
         id: m.messageId,
@@ -261,12 +304,32 @@ function Messages({ conversation, newest }: { conversation: MailConversation | n
         preview: m.preview ? reveal(m.preview) : null,
         at: <Arrived at={m.receivedAt} />,
       }))
-    : [];
+    : [{ id: newest.messageId, from: reveal(newest.fromName) ?? reveal(newest.fromAddress), preview: null, at: <Arrived at={newest.receivedAt} /> }];
+  const toggle = (id: string) => {
+    const next = new Set(open);
+    if (!next.delete(id)) next.add(id);
+    setOpen(next);
+  };
   return (
-    <MessageStack messages={messages} open={openId} onOpen={setOpenId}>
-      {shown ? <Opened detail={shown} /> : <Loading rows={4} />}
+    <MessageStack messages={messages} open={open} onToggle={toggle}>
+      {(id) => <OpenOne id={id} newest={newest} onAnswer={onAnswer} />}
     </MessageStack>
   );
+}
+
+/** The reply box, at the foot of the conversation, on the message it answers, which it names when that is not the newest. */
+function Answering({ what, newest, onClose }: { what: Answer; newest: MessageDetail; onClose: () => void }) {
+  const { detail, error } = useMessage(what.messageId, newest);
+  if (!detail) return error ? <Failure>{error}</Failure> : <Loading rows={3} />;
+  const who = reveal(detail.fromName) ?? reveal(detail.fromAddress);
+  const about =
+    detail.messageId === newest.messageId ? undefined : (
+      <>
+        {what.kind === 'forward' ? `Forwarding ${who}’s message, ` : `Replying to ${who}, `}
+        <Arrived at={detail.receivedAt} />
+      </>
+    );
+  return <InlineComposer what={what} message={detail} about={about} onClose={onClose} />;
 }
 
 /**
@@ -282,6 +345,7 @@ function OpenedMessage({
   onPick,
   onAnswered,
   onUndone,
+  onRead,
 }: {
   detail: MessageDetail;
   conversation: MailConversation | null;
@@ -290,12 +354,15 @@ function OpenedMessage({
   onPick: (message: Pick<MessageRef, 'accountId' | 'messageId'>) => void;
   onAnswered: () => void;
   onUndone: () => void;
+  /** The conversation was marked read. */
+  onRead: () => void;
 }) {
   const waiting = useLoaded(`suggestion/${reveal(detail.fromAddress)}`, (signal) => api.suggestion(reveal(detail.fromAddress), signal), 120_000);
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const toast = useToast();
   const compose = useCompose();
   const [composeAs] = useParam('compose');
+  const [answering] = useParam('answering');
   const root = useRef<HTMLElement>(null);
   const [adding, setAdding] = useState(false);
   // The rule dialog, opened in place on what this message shows: its sender and label, or one thing Sift saw in it.
@@ -383,8 +450,10 @@ function OpenedMessage({
         {inInbox ? <History detail={detail} conversation={conversation} onUndone={onUndone} /> : null}
       </>
     ) : null;
-  const written = compose ? writing(composeAs, detail.messageId) : null;
-  const reply = (what: Parameters<NonNullable<typeof compose>>[0]) => compose?.(what);
+  // A reply answers the newest in the inbox, or another message of its conversation.
+  const answered = conversation?.messages.some((m) => m.messageId === answering) ? answering : detail.messageId;
+  const written = compose ? writing(composeAs, answered) : null;
+  const reply = inInbox && compose ? compose : undefined;
 
   return (
     <Reader
@@ -450,18 +519,18 @@ function OpenedMessage({
       }
     >
       {conversation ? <Summary conversation={conversation} newest={detail} /> : null}
-      <Messages conversation={conversation} newest={detail} />
+      <Messages conversation={conversation} newest={detail} answered={written && written.kind !== 'new' ? answered : null} onAnswer={reply} onRead={onRead} />
       {written && written.kind !== 'new' ? (
-        <InlineComposer
-          key={`${composeAs}/${detail.messageId}`}
+        <Answering
+          key={`${composeAs}/${answered}`}
           what={written}
-          message={detail}
+          newest={detail}
           onClose={() => {
             closeReply();
             root.current?.focus({ preventScroll: true });
           }}
         />
-      ) : inInbox && compose ? (
+      ) : reply ? (
         <Presses
           presses={[
             { label: 'Reply', key: 'r', onPress: () => reply({ kind: 'reply', messageId: detail.messageId, all: false }) },
@@ -522,12 +591,8 @@ export function MessageReader({
     '',
   );
   const threadId = picked ? undefined : item.threadId;
-  const thread = useLoaded(
-    `thread/${item.accountId}/${threadId ?? ''}`,
-    (signal) => (threadId ? api.mailThread(threadId, signal, item.accountId) : Promise.resolve(null)),
-    30_000,
-    '',
-  );
+  const threadLoad = `thread/${item.accountId}/${threadId ?? ''}`;
+  const thread = useLoaded(threadLoad, (signal) => (threadId ? api.mailThread(threadId, signal, item.accountId) : Promise.resolve(null)), 30_000, '');
   const { press } = useMailPress();
   // Each message starts at its top, as a page does.
   const go = (to: number) => {
@@ -589,6 +654,9 @@ export function MessageReader({
       onPick={pick}
       onUndone={reload}
       onAnswered={next}
+      onRead={() =>
+        changeLoaded<MailConversation | null>(threadLoad, (read) => read && { ...read, messages: read.messages.map((m) => ({ ...m, unread: false })) })
+      }
     />
   );
 }

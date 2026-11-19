@@ -105,9 +105,9 @@ const inbox = [
   // Kept below as Receipts, which that label archives, as moving them back to the inbox in Gmail answers; so Sift proposes keeping them.
   // One conversation, so Inbox has one to fold.
   ...[
-    mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.'),
-    mail('Utility <billing@utility.example.net>', 'Your April bill', 'Your bill is ready.'),
-    mail('Utility <billing@utility.example.net>', 'Your May bill', 'Your bill is ready.'),
+    mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.', [{ name: 'Message-ID', value: '<march@utility.example.net>' }]),
+    mail('Utility <billing@utility.example.net>', 'Your April bill', 'Your bill is ready.', [{ name: 'Message-ID', value: '<april@utility.example.net>' }]),
+    mail('Utility <billing@utility.example.net>', 'Your May bill', 'Your bill is ready.', [{ name: 'Message-ID', value: '<may@utility.example.net>' }]),
   ].map((bill) => ({ ...bill, raw: { ...bill.raw, threadId: 'bills' } })),
   // One address under several names, which the stand-in model places by name, so For review folds them by name and
   // gives the address's page a list of names.

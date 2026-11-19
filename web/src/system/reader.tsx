@@ -1,11 +1,13 @@
 'use client';
-import { ArrowLeftIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
-import { type ComponentProps, type ReactNode, type Ref, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
+import { ArrowLeftIcon, ChevronDownIcon, ChevronUpIcon, EllipsisVerticalIcon, ReplyIcon } from 'lucide-react';
+import { type ComponentProps, type ReactNode, type Ref, createContext, useContext, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { AnswerPicker } from './answer-picker.tsx';
 import { Button } from './button.tsx';
 import { keyName, useShortcut } from './keys.tsx';
+import { Menu } from './menu.tsx';
 import { Heads, Table, Td, Th, Tr } from './table.tsx';
+import { Tooltip } from './tooltip.tsx';
 import { Kbd } from './type.tsx';
 
 /** As wide as a line of mail reads well, and as wide as a 600px email with room either side. */
@@ -170,8 +172,10 @@ export function AnswerRow({
   );
 }
 
-interface Folded {
+/** A message of a conversation as `MessageStack` lists it. */
+interface Listed {
   id: string;
+  /** Who sent it, in words: its folded row, and what its presses are called. */
   from: string;
   /** The first line of its text. */
   preview: string | null;
@@ -179,77 +183,178 @@ interface Folded {
 }
 
 /**
- * A conversation, oldest first: each message folded to who sent it, its first line and when, but the one open
- * (`children`, a `MessageHead` over its text), which a press on a folded one moves to it. One message alone is the open one.
+ * Past this many messages a conversation folds its middle into one "N more" row, keeping the first and the last two
+ * in sight, so a long one opens on its end. Messages open in the middle stay out of it.
+ */
+const FOLDS_PAST = 5;
+const KEPT_AT_END = 2;
+
+/** What the head of an open message in a `MessageStack` can do: fold it again, named by its sender. */
+const Opened = createContext<{ from: string; fold: (() => void) | null }>({ from: '', fold: null });
+
+type Item = { open: Listed } | { folded: Listed } | { more: Listed[] };
+
+/**
+ * A conversation, oldest first, read by scrolling the page: each message open (`children` draws it, a `MessageHead`
+ * over its text) or folded to a row of who sent it, its first line and when. A press on a folded row opens it in
+ * place and a press on an open one's head folds it, so several can be open at once. One message alone is open and
+ * stays so.
  */
 export function MessageStack({
   messages,
   open,
-  onOpen,
+  onToggle,
   children,
 }: {
-  messages: readonly Folded[];
-  open: string;
-  onOpen: (id: string) => void;
-  children: ReactNode;
+  messages: readonly Listed[];
+  open: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+  children: (id: string) => ReactNode;
 }) {
-  const at = Math.max(
-    messages.findIndex((m) => m.id === open),
-    0,
+  const [whole, setWhole] = useState(false);
+  const alone = messages.length === 1;
+  const hides = (i: number) => !whole && messages.length > FOLDS_PAST && i > 0 && i < messages.length - KEPT_AT_END;
+  const items: Item[] = [];
+  for (const [i, m] of messages.entries()) {
+    const last = items.at(-1);
+    if (alone || open.has(m.id)) items.push({ open: m });
+    else if (!hides(i)) items.push({ folded: m });
+    else if (last && 'more' in last) last.more.push(m);
+    else items.push({ more: [m] });
+  }
+  // Folded rows next to each other are one table; each open message stands alone between them.
+  const runs: (Listed | Item[])[] = [];
+  for (const item of items) {
+    const last = runs.at(-1);
+    if ('open' in item) runs.push(item.open);
+    else if (Array.isArray(last)) last.push(item);
+    else runs.push([item]);
+  }
+  const row = (m: Listed) => (
+    <Tr key={m.id} onOpen={() => onToggle(m.id)}>
+      <Td className="w-full max-w-0">
+        <span className="flex items-baseline gap-3">
+          <span className="shrink-0 font-semibold">{m.from}</span>
+          <span className="min-w-0 truncate text-muted-foreground">{m.preview}</span>
+        </span>
+      </Td>
+      <Td num quiet>
+        {m.at}
+      </Td>
+    </Tr>
   );
-  const folded = (list: readonly Folded[]) =>
-    list.length === 0 ? null : (
-      <Table>
-        <Heads>
-          <Th>From</Th>
-          <Th num>Received</Th>
-        </Heads>
-        <tbody>
-          {list.map((m) => (
-            <Tr key={m.id} onOpen={() => onOpen(m.id)}>
-              <Td className="w-full max-w-0">
-                <span className="flex items-baseline gap-3">
-                  <span className="shrink-0 font-semibold">{m.from}</span>
-                  <span className="min-w-0 truncate text-muted-foreground">{m.preview}</span>
-                </span>
-              </Td>
-              <Td num quiet>
-                {m.at}
-              </Td>
-            </Tr>
-          ))}
-        </tbody>
-      </Table>
-    );
   return (
-    <div className="flex min-w-0 flex-col gap-6">
-      {folded(messages.slice(0, at))}
-      <article className="flex min-w-0 flex-col gap-4">{children}</article>
-      {folded(messages.slice(at + 1))}
+    <div className="flex min-w-0 flex-col">
+      {runs.map((run) =>
+        Array.isArray(run) ? (
+          <div key={`folded/${'folded' in run[0] ? run[0].folded.id : 'more' in run[0] ? run[0].more[0].id : ''}`} className="row py-1">
+            <Table>
+              <Heads>
+                <Th>From</Th>
+                <Th num>Received</Th>
+              </Heads>
+              <tbody>
+                {run.map((item) =>
+                  'folded' in item ? (
+                    row(item.folded)
+                  ) : 'more' in item && item.more.length > 1 ? (
+                    <Tr key={`more/${item.more[0].id}`} onOpen={() => setWhole(true)}>
+                      <Td colSpan={2} className="font-semibold text-muted-foreground">
+                        {item.more.length} more
+                      </Td>
+                    </Tr>
+                  ) : 'more' in item ? (
+                    row(item.more[0])
+                  ) : null,
+                )}
+              </tbody>
+            </Table>
+          </div>
+        ) : (
+          <article key={run.id} className="row flex min-w-0 flex-col gap-4 py-5 first:pt-1">
+            <Opened value={{ from: run.from, fold: alone ? null : () => onToggle(run.id) }}>{children(run.id)}</Opened>
+          </article>
+        ),
+      )}
     </div>
   );
 }
 
-/** Who wrote a message and when, over its text: the name, the address after it (not on a phone), the time at the right, who it went to under them. */
-export function MessageHead({ from, address, at, to }: { from: ReactNode; address?: ReactNode; at: ReactNode; to?: ReactNode }) {
+interface Answers {
+  reply: () => void;
+  all: () => void;
+  forward: () => void;
+}
+
+/**
+ * Who wrote a message and when, over its text: the name, the address after it (not on a phone), the time at the right,
+ * who it went to under them. In a `MessageStack` of several, a press anywhere on it but a link folds the message.
+ * `answers` puts Reply, and Reply all and Forward behind one more press, at its end, for answering this message
+ * rather than the newest.
+ */
+export function MessageHead({ from, address, at, to, answers }: { from: ReactNode; address?: ReactNode; at: ReactNode; to?: ReactNode; answers?: Answers }) {
+  const opened = useContext(Opened);
+  // Laid over by the head's words, which let a press through to it but on a link or a button of their own.
+  const through = 'pointer-events-none relative [&_a]:pointer-events-auto [&_button]:pointer-events-auto';
   return (
-    <header className="flex flex-col gap-1">
-      <div className="flex items-baseline gap-x-3">
+    <header className="relative flex flex-col gap-1">
+      {opened.fold ? (
+        <button
+          type="button"
+          aria-expanded
+          aria-label={`Fold the message from ${opened.from}`}
+          onClick={opened.fold}
+          className="absolute -inset-x-(--bleed) -inset-y-2 cursor-pointer hover:bg-(--fill)"
+        />
+      ) : null}
+      <div className={cn('flex items-center gap-x-3', through)}>
         <span className="flex min-w-0 flex-1 items-baseline gap-x-2">
-          <span className="name flex shrink-0 items-baseline gap-1.5">{from}</span>
+          <span className="name flex min-w-0 items-baseline gap-1.5 [&>a]:truncate">{from}</span>
           {address ? <span className="min-w-0 truncate text-sm text-muted-foreground max-sm:hidden">{address}</span> : null}
         </span>
         <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{at}</span>
+        {answers ? (
+          <span className="-my-1 -mr-2 flex shrink-0 items-center">
+            <Tooltip says="Reply">
+              <Button variant="quiet" size="icon" aria-label={`Reply to ${opened.from}`} onClick={answers.reply}>
+                <ReplyIcon aria-hidden />
+              </Button>
+            </Tooltip>
+            <Menu
+              label="Reply all or forward"
+              align="end"
+              trigger={
+                <span className="flex size-(--control) items-center justify-center text-foreground/75">
+                  <EllipsisVerticalIcon aria-hidden className="size-[1.15em]" />
+                </span>
+              }
+              items={[
+                { label: 'Reply all', onSelect: answers.all },
+                { label: 'Forward', onSelect: answers.forward },
+              ]}
+            />
+          </span>
+        ) : null}
       </div>
-      {to ? <div className="text-sm text-muted-foreground">{to}</div> : null}
+      {to ? <div className={cn('text-sm text-muted-foreground', through)}>{to}</div> : null}
     </header>
   );
 }
 
-/** Writing in place under what it answers (Reply, Reply all, Forward): its fields and text, then Send and Discard (`actions`) on a line under them. */
-export function ReplyBox({ label, actions, children }: { label: string; actions: ReactNode; children: ReactNode }) {
+/**
+ * Writing in place at the foot of the conversation (Reply, Reply all, Forward): `about` says which message it answers
+ * when that is not the newest, then its fields and text, and Send and Discard (`actions`) on a line under them. It
+ * brings itself into view as it opens, under however much conversation is above it.
+ */
+export function ReplyBox({ label, about, actions, children }: { label: string; about?: ReactNode; actions: ReactNode; children: ReactNode }) {
+  const own = useRef<HTMLElement>(null);
+  // Braced: a browser may answer a scroll with a promise, which React would take for the effect's cleanup.
+  useEffect(() => {
+    own.current?.scrollIntoView({ block: 'nearest' });
+  }, []);
   return (
-    <section aria-label={label} className="mt-2 flex flex-col gap-4">
+    <section ref={own} aria-label={label} className="mt-2 flex scroll-mb-6 flex-col gap-4">
+      {about ? <p className="text-sm text-muted-foreground">{about}</p> : null}
       {children}
       <div className="flex flex-wrap items-center gap-1.5">{actions}</div>
     </section>

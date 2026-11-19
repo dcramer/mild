@@ -439,6 +439,14 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
   };
 }
 
+/**
+ * Change what `useLoaded(key, …, '')` holds now, for a change this page made and knows the result of, so a view drawn
+ * from it before it is read again (a conversation opened again straight after it was read) is not drawn from the old.
+ */
+export function changeLoaded<T>(key: string, change: (old: T) => T) {
+  queryClientFor().setQueryData<T>([key], (old) => (old === undefined ? old : change(old)));
+}
+
 export interface Pages<T> {
   pages: T[];
   error: string | null;

@@ -43,7 +43,7 @@ test.describe('Inbox', () => {
     await expect(inboxRows(page)).toHaveCount(1);
   });
 
-  test('J and K move, O opens a conversation folded to all but its newest, and opening it marks it read', async ({ page }) => {
+  test('J and K move, O opens a conversation with its unread open, and opening it marks it read', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
     await page.keyboard.press('j');
@@ -59,25 +59,24 @@ test.describe('Inbox', () => {
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
     const open = reader(page);
     await expect(open.getByRole('heading', { name: 'Your March bill', level: 1 })).toBeVisible();
-    const folded = open.getByRole('cell', { name: /^Utility/ });
-    await expect(folded).toHaveCount(2);
+    // Unread, every message starts open.
+    await expect(open.getByRole('article')).toHaveCount(3);
     // Answered as Receipts, as its row says, though Sift could not place it.
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toContainText('Receipts');
     // In Inbox, Sift's reason waits for Why.
     await expect(open.getByText(/^Your answer\. Sift said: /)).toHaveCount(0);
     await open.getByRole('button', { name: 'Why' }).click();
     await expect(open.getByText(/^Your answer\. Sift said: /)).toBeVisible();
-    // When it came, as the list says it, not how long ago.
-    await expect(
-      open
-        .getByRole('row', { name: /^Utility/ })
-        .first()
-        .locator('time'),
-    ).toHaveText(/^(\d{1,2}:\d{2} [AP]M|[A-Z][a-z]{2}( \d{1,2})?)$/);
-    await expect(open.getByText('Your bill is ready.', { exact: true }).last()).toBeVisible();
-    await folded.first().click();
+    await expect(open.getByRole('link', { name: 'Utility', exact: true })).toHaveCount(3);
+    await page.keyboard.press('Escape');
+    await expect(open).toHaveCount(0);
+
+    // Read, it opens folded to all but its newest, each row saying when it came as the list says it, not how long ago.
+    await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
+    await expect(open.getByRole('article')).toHaveCount(1);
+    const folded = open.getByRole('row', { name: /^Utility/ });
     await expect(folded).toHaveCount(2);
-    await expect(open.getByRole('link', { name: 'Utility', exact: true })).toBeVisible();
+    await expect(folded.first().locator('time')).toHaveText(/^(\d{1,2}:\d{2} [AP]M|[A-Z][a-z]{2}( \d{1,2})?)$/);
     await page.keyboard.press('Escape');
     await expect(open).toHaveCount(0);
 

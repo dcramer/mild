@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAction } from '@/lib/action.ts';
 import { type Party, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
 import { api, useLoaded } from '@/lib/api.ts';
@@ -58,11 +58,22 @@ export function Composer({ to, onClose }: { to: string; onClose: () => void }) {
 }
 
 /**
- * A reply or a forward, written in the reader under the conversation, from the mailbox `message` came to, by the address it
- * was sent to. A reply goes to whoever replies go to; a forward to whoever the reader types, with the message quoted under
- * their text. Kept in this browser as a new message is.
+ * A reply or a forward of `message`, written in the reader at the foot of its conversation, from the mailbox it came to,
+ * by the address it was sent to; `about` names the message when it is not the newest. A reply goes to whoever replies go
+ * to; a forward to whoever the reader types, with the message quoted under their text. Kept in this browser as a new
+ * message is.
  */
-export function InlineComposer({ what, message, onClose }: { what: Exclude<Writing, { kind: 'new' }>; message: MessageDetail; onClose: () => void }) {
+export function InlineComposer({
+  what,
+  message,
+  about,
+  onClose,
+}: {
+  what: Exclude<Writing, { kind: 'new' }>;
+  message: MessageDetail;
+  about?: ReactNode;
+  onClose: () => void;
+}) {
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000, '');
   const account = manage.data?.accounts.find((a) => a.id === message.accountId);
   if (!account) return <Loading rows={3} />;
@@ -70,6 +81,7 @@ export function InlineComposer({ what, message, onClose }: { what: Exclude<Writi
   return (
     <Writer
       inline
+      about={about}
       what={what}
       title={TITLES[what.kind === 'reply' && what.all ? 'all' : what.kind]}
       {...(what.kind === 'reply' ? { subject: answering(reveal(message.subject)) } : {})}
@@ -134,6 +146,7 @@ function Writer({
   choices,
   start,
   inline = false,
+  about,
   onClose,
 }: {
   what: Writing;
@@ -143,6 +156,7 @@ function Writer({
   choices: readonly From[];
   start: Draft;
   inline?: boolean;
+  about?: ReactNode;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(() => keptDraft(what) ?? start);
@@ -309,7 +323,7 @@ function Writer({
   );
   if (inline)
     return (
-      <ReplyBox label={title} actions={actions}>
+      <ReplyBox label={title} about={about} actions={actions}>
         {fields}
       </ReplyBox>
     );

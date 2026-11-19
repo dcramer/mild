@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { panelEntry, setParams } from './params.ts';
+import { panelEntry, paramNow, setParams } from './params.ts';
 
 /**
  * What the composer writes: a new message, to someone already (`to`, from their page) or to be said; a reply to one, to
@@ -9,16 +9,25 @@ export type Writing = { kind: 'new'; to?: string } | { kind: 'reply'; messageId:
 
 /**
  * Open the composer. In the address, as a message is: `?compose=new` (with `to` for someone already, from their page) is
- * a panel of its own, which Back closes; `reply`, `all` or `forward` with the message it answers (`?message=<id>`) is
- * written in the reader under it, in the reader's own history entry, so Back goes to the list.
+ * a panel of its own, which Back closes; `reply`, `all` or `forward` is written in the reader, at the foot of the
+ * conversation, in the reader's own history entry, so Back goes to the list. It answers the reader's message
+ * (`?message=<id>`), or another of its conversation, named by `answering`.
  */
 export function openComposer(what: Writing = { kind: 'new' }) {
-  if (what.kind === 'new') setParams({ compose: 'new', ...(what.to ? { to: what.to } : {}) }, { state: { panel: true } });
-  else setParams({ compose: what.kind === 'forward' ? 'forward' : what.all ? 'all' : 'reply', message: what.messageId });
+  if (what.kind === 'new') {
+    setParams({ compose: 'new', ...(what.to ? { to: what.to } : {}) }, { state: { panel: true } });
+    return;
+  }
+  const reading = paramNow('message') || what.messageId;
+  setParams({
+    compose: what.kind === 'forward' ? 'forward' : what.all ? 'all' : 'reply',
+    message: reading,
+    answering: reading === what.messageId ? '' : what.messageId,
+  });
 }
 
 /** Closes the composer written in the reader. */
-export const closeReply = () => setParams({ compose: '' });
+export const closeReply = () => setParams({ compose: '', answering: '' });
 
 /** Closes the panel a new message is written in. */
 export function closeComposer() {

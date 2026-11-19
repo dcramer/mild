@@ -139,7 +139,7 @@ test.describe('with Inbox on', () => {
     await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
     const open = reader(page);
     // Its key is bound once the press is drawn.
-    await expect(open.getByRole('button', { name: /^Reply all/ })).toBeVisible();
+    await expect(open.getByRole('button', { name: /^Reply all(?! or)/ })).toBeVisible();
     await page.keyboard.press('r');
     const writing = composer(page, 'Reply');
     await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('Ada Lovelace <ada@example.org>');
@@ -155,7 +155,9 @@ test.describe('with Inbox on', () => {
 
     await expect(toast(page, 'Re: Lunch on Thursday?')).toContainText('Sent');
     await expect(writing).toHaveCount(0);
-    await expect(open.getByRole('row').filter({ hasText: 'Thursday works.' })).toContainText(ME);
+    // The newest in the conversation now, open under Ada's.
+    await expect(open.getByRole('article').last()).toContainText('Thursday works.');
+    await expect(open.getByRole('article').last()).toContainText(ME);
     // Back on the reader, not on its first link, whose card would open over the conversation.
     await expect(open).toBeFocused();
     expect(readSent(sift.sent()[0]!.raw).headers).toMatchObject({ 'In-Reply-To': '<thursday@example.org>' });
@@ -168,6 +170,77 @@ test.describe('with Inbox on', () => {
     await expect(reader(page).getByText('Thursday works.')).toBeVisible();
     await expect(reader(page).getByRole('row').filter({ hasText: 'Thursday works.' })).toHaveCount(0);
     await expect(reader(page).getByRole('row').filter({ hasText: 'Ada' })).toHaveCount(1);
+  });
+
+  test('the Reply under the conversation answers its newest, in the box at its foot', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    await open.getByRole('button', { name: /^Reply(?! all| to)/ }).click();
+    const writing = composer(page, 'Reply');
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    // The newest needs no saying, and the address names only the reader's own message.
+    await expect(writing.getByText(/^Replying to/)).toHaveCount(0);
+    await param(page, 'answering').toBeNull();
+    expect((await boxOf(writing)).y).toBeGreaterThan((await boxOf(open.getByRole('article').last())).y);
+    await page.keyboard.type('Thanks.');
+    await page.keyboard.press('Control+Enter');
+
+    await expect(toast(page, 'Re: Your March bill')).toContainText('Sent');
+    expect(readSent(sift.sent()[0]!.raw).headers).toMatchObject({ 'In-Reply-To': '<march@utility.example.net>' });
+  });
+
+  test('an earlier message is answered from its own head, in the box at the foot of the conversation, which a reload keeps', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    // Unread, so all three are open; the oldest is May's.
+    const may = open.getByRole('article').first();
+    await expect(open.getByRole('article')).toHaveCount(3);
+    await may.getByRole('button', { name: 'Reply to Utility' }).click();
+    const writing = composer(page, 'Reply');
+    await expect(writing.getByText(/^Replying to Utility, /)).toBeVisible();
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    await expect(writing).toBeInViewport();
+    expect((await boxOf(writing)).y).toBeGreaterThan((await boxOf(open.getByRole('article').last())).y);
+    await param(page, 'message').toBe('m11');
+    await param(page, 'answering').toBe('m13');
+    await page.keyboard.type('Paid already.');
+
+    await page.reload();
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Paid already.');
+    await expect(writing.getByText(/^Replying to Utility, /)).toBeVisible();
+    // Read now, the conversation opens on its newest and the message answered.
+    await expect(open.getByRole('article')).toHaveCount(2);
+    await writing.getByRole('button', { name: /^Send/ }).click();
+
+    await expect(toast(page, 'Re: Your May bill')).toContainText('Sent');
+    await expect(writing).toHaveCount(0);
+    await param(page, 'answering').toBeNull();
+    await expect(open.getByRole('article').last()).toContainText('Paid already.');
+    const [sent, ...more] = sift.sent();
+    expect(more).toEqual([]);
+    expect(sent).toMatchObject({ threadId: 'bills' });
+    expect(readSent(sent!.raw).headers).toMatchObject({
+      To: '"Utility" <billing@utility.example.net>',
+      Subject: 'Re: Your May bill',
+      'In-Reply-To': '<may@utility.example.net>',
+      References: '<may@utility.example.net>',
+    });
+  });
+
+  test('Reply all and Forward of an earlier message are behind one press on its head', async ({ page }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    await open.getByRole('article').first().getByRole('button', { name: 'Reply all or forward' }).click();
+    await page.getByRole('menuitem', { name: 'Forward' }).click();
+    const writing = composer(page, 'Forward');
+    await expect(writing.getByText(/^Forwarding Utility’s message, /)).toBeVisible();
+    await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveValue('Fwd: Your May bill');
+    await expect(writing.getByRole('textbox', { name: 'To' })).toBeFocused();
+    await param(page, 'compose').toBe('forward');
+    await param(page, 'answering').toBe('m13');
   });
 
   test('Forward quotes the message under what is written, and sends it as new mail', async ({ page, sift }) => {
