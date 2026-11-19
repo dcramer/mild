@@ -1,7 +1,7 @@
 'use client';
 import { Dialog as Base } from '@base-ui/react/dialog';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { type ReactNode, useRef } from 'react';
+import { type ReactNode, type RefObject, useRef } from 'react';
 import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer, useShortcut } from './keys.tsx';
 import { Backdrop, LayerContent, LayerFooter, useLayerOpen } from './layer.tsx';
@@ -29,6 +29,7 @@ export function Panel({
   keys = false,
   returnTo,
   actions,
+  focus,
   children,
 }: {
   open: boolean;
@@ -52,6 +53,8 @@ export function Panel({
    * first, then a gap, and at the right what removes it. A section's own action stays beside its heading.
    */
   actions?: ReactNode;
+  /** Where the reader starts, for a panel that is written in (the composer's first empty field). Otherwise the panel takes the focus itself. */
+  focus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
   const popup = useRef<HTMLDivElement>(null);
@@ -64,7 +67,7 @@ export function Panel({
         <Base.Popup
           ref={popup}
           tabIndex={-1}
-          initialFocus={popup}
+          initialFocus={focus ?? popup}
           finalFocus={() => (returnTo === undefined ? null : rowHolding(returnTo)) ?? true}
           // Base UI keeps arrow keys from leaving a dialog, for the menus behind it; the page behind a panel hears no keys anyway.
           onKeyDown={(event) => {

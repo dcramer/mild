@@ -1,8 +1,9 @@
 'use client';
-import type { LucideIcon } from 'lucide-react';
+import { type LucideIcon, SquarePenIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Anchor } from './anchor.tsx';
+import { useShortcut } from './keys.tsx';
 import { type MailboxChoice, MailboxSwitch } from './mailbox.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Wordmark } from './type.tsx';
@@ -17,7 +18,8 @@ export interface NavItem {
 }
 
 /**
- * The sections down the left of every screen on a desktop: the name at the top, then each section as its icon over
+ * The sections down the left of every screen on a desktop: the name at the top, then `compose` (writing a new message,
+ * with Inbox on, also C), then each section as its icon over
  * its name, the current one's icon in the highlighter, then at the foot `aside` (Sift's line, stacked), the
  * `mailbox` the dashboard shows, beside whose they are, and `account` (who is signed in, behind their `Avatar`). No fill; a line sets it apart. As tall as the window, and never taller
  * than what holds it. Given no sections it is the name alone, as `Masthead` is.
@@ -28,9 +30,11 @@ export function Rail({
   aside,
   mailbox,
   account,
+  compose,
 }: {
   items: readonly NavItem[];
   current: string;
+  compose?: (() => void) | undefined;
   aside?: ReactNode;
   mailbox?: MailboxChoice | undefined;
   account?: { name: string; items: readonly MenuItem[] } | undefined;
@@ -40,8 +44,9 @@ export function Rail({
       <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Sift" className="flex min-h-(--control) items-center">
         <Wordmark />
       </Anchor>
+      {compose ? <Compose onPress={compose} /> : null}
       {items.length > 0 ? (
-        <nav aria-label="Sections" className="mt-8 w-full">
+        <nav aria-label="Sections" className={cn('w-full', compose ? 'mt-5' : 'mt-8')}>
           <ul className="flex flex-col items-center gap-3">
             {items.map(({ to, label, icon: Icon, count }) => (
               <li key={to}>
@@ -89,5 +94,27 @@ export function Rail({
         </div>
       ) : null}
     </header>
+  );
+}
+
+/** A new message: a press like a section's, set apart above them, and C from anywhere on the page. */
+function Compose({ onPress }: { onPress: () => void }) {
+  const key = useShortcut('c', 'New message', onPress);
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      aria-keyshortcuts="c"
+      className="group mt-8 flex w-16 cursor-pointer flex-col items-center gap-1 text-label font-semibold text-muted-foreground hover:text-foreground"
+    >
+      <span
+        aria-hidden
+        className="flex h-8 min-w-12 items-center justify-center gap-1 rounded-(--corner) bg-(--fill) px-2 text-foreground transition-colors duration-100 group-hover:bg-(--fill-strong) motion-reduce:transition-none"
+      >
+        <SquarePenIcon className="size-5" strokeWidth={1.75} />
+        {key}
+      </span>
+      <span className="text-center">Compose</span>
+    </button>
   );
 }

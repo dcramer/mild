@@ -34,6 +34,7 @@ import {
   Facts,
   Failure,
   Field,
+  Finish,
   FieldGroup,
   Figure,
   Figures,
@@ -364,6 +365,12 @@ export function SystemView() {
               <Button variant="quiet" size="icon" aria-label="Remove" disabled why="You cannot delete your only remaining mailbox.">
                 <Trash2Icon />
               </Button>
+            </Row>
+            <Row label="Finish" note="The ink press that finishes what is written in a layer, with ⌘↵ or Ctrl ↵ from anywhere in it: the composer's Send.">
+              <Finish onClick={() => toast('Lunch', { kind: 'Sent' })}>Send</Finish>
+              <Finish disabled why="Say who it is to.">
+                Send
+              </Finish>
             </Row>
             <Row label="delete" note="Deleting what nothing brings back: its words in red, or a trash can down a list, and one question for every one.">
               <DeleteButton
@@ -979,6 +986,7 @@ export function SystemView() {
                 aside={<SiftStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} stacked />}
                 mailbox={mailboxes}
                 account={account}
+                compose={() => {}}
               />
             </Sheet>
             <Sheet className="flex h-[38rem]">

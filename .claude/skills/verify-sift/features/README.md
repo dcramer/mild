@@ -43,3 +43,4 @@ An H1 and one paragraph of what the user gets, then four H2s in order: `Sub-feat
 - [What Sift saw in a message](./message-facts.md): the facts shown on an opened message, rules on them, and lists narrowed by them.
 - [Remove a mailbox, delete the account](./remove-mailbox.md): what Sift holds about a mailbox, or a whole person, goes.
 - [Go through the inbox, apply a rule to it](./inbox-run.md): a run over mail already in the inbox, from Settings or a rule, and stopping it.
+- [Write and send mail](./compose.md): the composer, for new mail and replies, with Inbox on.

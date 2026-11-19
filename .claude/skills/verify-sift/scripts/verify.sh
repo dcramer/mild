@@ -2,7 +2,7 @@
 # Drives one disposable sift dashboard. Everything for a run lives in <dir>:
 #   home/       the sift home (seeded, synthetic)     removed by `down`
 #   evidence/   screenshots, snapshots, query output   kept by `down`
-#   pid port cookie dashboard.log gmail.json (the fake Gmail's filters, and with --inbox its messages' labels)
+#   pid port cookie dashboard.log gmail.json (the fake Gmail's filters, and with --inbox its messages' labels) sent.json (mail sent)
 # Usage: verify.sh up <dir> [--bare | --on | --chatgpt | --inbox] [--listing] | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
 set -euo pipefail
 

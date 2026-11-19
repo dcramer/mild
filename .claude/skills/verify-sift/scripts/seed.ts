@@ -15,6 +15,7 @@
  * `--chatgpt` has the model reached through a ChatGPT plan instead of an API key.
  * `--inbox` has Inbox on before the passes, so they keep the text of the inbox's mail, and hands the fake Gmail each
  * message's labels, so the reader's own presses there change it; elsewhere the fake Gmail holds none of the seed's mail.
+ * Google lets Sift send from me@example.org, as itself or as `me+lists@example.org`, and not from the work mailbox.
  */
 import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -27,7 +28,7 @@ import type { GmailApi, RawMessage } from '../../../../src/gmail/api.ts';
 import { saveApiKey } from '../../../../src/model/models.ts';
 import { credentials } from '../../../../src/store/credentials.ts';
 import { writeSecret } from '../../../../src/secrets.ts';
-import { connectAccount } from '../../../../src/store/accounts.ts';
+import { connectAccount, setCanSend, setMailboxAliases } from '../../../../src/store/accounts.ts';
 import { listLabels, removeLabel } from '../../../../src/store/labels.ts';
 import { setActive, setMail, setModel } from '../../../../src/store/preferences.ts';
 import { lastStandingChange } from '../../../../src/store/actions.ts';
@@ -87,7 +88,11 @@ const inbox = [
     ['CATEGORY_PROMOTIONS'],
   ),
   mail('CI <builds@ci.example.org>', 'Build failed on main', 'The build failed at step 3.'),
-  mail('Ada Lovelace <ada@example.org>', 'Lunch on Thursday?', 'Are you free for lunch on Thursday?', [{ name: 'In-Reply-To', value: '<lunch@example.org>' }]),
+  mail('Ada Lovelace <ada@example.org>', 'Lunch on Thursday?', 'Are you free for lunch on Thursday?', [
+    { name: 'Message-ID', value: '<thursday@example.org>' },
+    { name: 'In-Reply-To', value: '<lunch@example.org>' },
+    { name: 'References', value: '<lunch@example.org>' },
+  ]),
   // To everyone at the review, so the panel's Cc folds.
   mail('Grace Hopper <grace@example.net>', 'Notes from the review', 'Attached are my notes.', [
     { name: 'Cc', value: Array.from({ length: 12 }, (_, i) => `reviewer${i + 1}@example.net`).join(', ') },
@@ -262,6 +267,10 @@ await writeRuleFilter({ db, mailbox, now: () => now - HOUR }, newsRule, ACCOUNT)
 // A second mailbox of the same person, with no mail (connected after the passes, so none comes to it), to remove; and a second person, who owns nothing yet and
 // takes over the install when the first deletes their account. Neither can be signed in to here.
 await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
+if (variant === '--inbox') {
+  await setCanSend(db, ACCOUNT, true);
+  await setMailboxAliases(db, ACCOUNT, ['me+lists@example.org']);
+}
 // `--bare` takes the person's labels out, as before they chose any, so every screen is the setting-up steps.
 if (variant === '--bare') for (const label of await listLabels(db)) if (label.id !== LEAVE_IN_INBOX) await removeLabel(db, label.id, now - 23 * HOUR);
 await connectAccount(store, OTHER, '1', now - 22 * HOUR);

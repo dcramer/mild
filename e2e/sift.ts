@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -15,7 +15,7 @@ export const HELD = 'SIFT_E2E_HELD';
 /**
  * `full` is verify-sift's seed (its SKILL.md says what is in it); `bare` leaves the work mailbox without labels, so the page is the setting-up steps;
  * `on` has had a pass with Sift on (`--on` in the seed); `chatgpt` reaches its model through a ChatGPT plan; `inbox` has Inbox on, with the
- * text of the inbox's mail, and a fake Gmail that holds the seed's mail (`--inbox`).
+ * text of the inbox's mail, a fake Gmail that holds the seed's mail, and may send from its first mailbox (`--inbox`).
  */
 export type Variant = 'full' | 'bare' | 'on' | 'chatgpt' | 'inbox';
 
@@ -91,9 +91,12 @@ async function start(variant: Variant, cloud: boolean, listing: boolean, signedO
     return started ? { port, child } : serve(tries - 1);
   };
   const { port, child } = await withTimeout(serve(3), 30_000, 'serve.ts did not start');
+  const sentFile = join(dir, 'sent.json');
   return {
     url: `http://127.0.0.1:${port}`,
     cookie: template.cookie,
+    /** What the stand-in Gmail was asked to send, oldest first. */
+    sent: () => (existsSync(sentFile) ? (JSON.parse(readFileSync(sentFile, 'utf8')) as { mailbox: string; id: string; threadId: string; raw: string }[]) : []),
     stop: async () => {
       const exited = new Promise((done) => child.once('exit', done));
       // Not Next.js's own stop, which waits for a run's step under way: one may wait on Gmail for good (`listing`).
@@ -383,3 +386,14 @@ export const inboxRow = (page: Page, subject: string) =>
 
 /** The conversation open in the message panel, by its Archive in the panel's footer. */
 export const reader = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('button', { name: 'Mark unread', exact: true }) });
+
+/** The composer, by its title: New message, Reply or Reply to all. */
+export const composer = (page: Page, title: 'New message' | 'Reply' | 'Reply to all') => page.getByRole('dialog', { name: title, exact: true });
+
+/** A message the stand-in Gmail was asked to send, its headers unfolded by name and its text decoded. */
+export function readSent(raw: string): { headers: Record<string, string>; text: string } {
+  const split = raw.indexOf('\r\n\r\n');
+  const lines = raw.slice(0, split).replaceAll('\r\n ', ' ').split('\r\n');
+  const headers = Object.fromEntries(lines.map((line) => [line.slice(0, line.indexOf(':')), line.slice(line.indexOf(':') + 2)]));
+  return { headers, text: Buffer.from(raw.slice(split + 4).replaceAll('\r\n', ''), 'base64').toString('utf8') };
+}

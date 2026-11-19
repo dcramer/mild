@@ -5,6 +5,7 @@
  *
  * - Gmail: nothing has happened since the seed's last pass, and each mailbox's filters and messages' labels are a fake
  *   mailbox's, starting from those the seed left in the file `SIFT_STAND_INS` names and written back there as they change.
+ *   Mail sent goes nowhere: each is added to `sent.json` beside that file, as `{ mailbox, id, threadId, raw }`.
  *   A search of the inbox finds nothing, or with `SIFT_STAND_INS_LISTING` set is still being listed for good, so
  *   applying a rule stays under way until it is stopped.
  * - The model that suggests labels and drafts rules, a stand-in. Drafting looks up the second line of its prompt
@@ -16,7 +17,8 @@
  *   the model at about a tenth of a cent each; and for any rule about 1,240 messages it would decide, the newest
  *   five `Found in Gmail 1` to `5`, none needing the model.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
 import type { ExistingFilter } from '../../../../src/actions/filters.ts';
 import type { StandIns } from '../../../../src/sift/sift.ts';
@@ -30,8 +32,21 @@ const file = process.env['SIFT_STAND_INS'];
 if (!file) throw new Error('SIFT_STAND_INS names no file of filters');
 const saved = JSON.parse(readFileSync(file, 'utf8')) as { filters: Record<string, ExistingFilter[]>; labels: Record<string, Record<string, string[]>> };
 
-/** A mailbox whose filters and labels are written back to the file each time they change. */
+const sentFile = join(dirname(file), 'sent.json');
+
+/** A mailbox whose filters and labels are written back to the file each time they change, and whose sent mail is written down. */
 class SavedMailbox extends FakeMailbox {
+  readonly address: string;
+  constructor(address: string) {
+    super();
+    this.address = address;
+  }
+  override async send(message: { raw: string; threadId?: string }) {
+    const sent = await super.send(message);
+    const before = existsSync(sentFile) ? (JSON.parse(readFileSync(sentFile, 'utf8')) as unknown[]) : [];
+    writeFileSync(sentFile, JSON.stringify([...before, { mailbox: this.address, ...sent, raw: message.raw }], null, 1));
+    return sent;
+  }
   override async modifyLabels(...args: Parameters<FakeMailbox['modifyLabels']>) {
     const after = await super.modifyLabels(...args);
     save();
@@ -63,7 +78,7 @@ const save = () =>
 const mailboxOf = (address: string) => {
   let mailbox = mailboxes.get(address);
   if (!mailbox) {
-    mailbox = new SavedMailbox();
+    mailbox = new SavedMailbox(address);
     mailbox.filters = saved.filters[address] ?? [];
     mailbox.labels = new Map(Object.entries(saved.labels[address] ?? {}));
     mailboxes.set(address, mailbox);

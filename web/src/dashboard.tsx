@@ -7,6 +7,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
+import { ComposeContext, closeComposer, openComposer, writing } from '@/lib/compose.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { OpenMessagesContext } from '@/lib/open-messages.ts';
@@ -22,16 +23,18 @@ import type { MessageRef } from '@/views/message-panel.tsx';
 // What opens over a screen is fetched when first needed and, once the page is idle, ahead of need.
 const loadSettings = () => import('@/views/settings.tsx');
 const loadMessage = () => import('@/views/message-panel.tsx');
-// Opened together from the address (`?message=…&settings=1`), each waits for both, so they open in the order they are
+const loadComposer = () => import('@/views/composer.tsx');
+// Opened together from the address (`?message=…&settings=1`), each waits for all, so they open in the order they are
 // drawn, the last on top, whichever arrived first.
-const loadPanels = () => Promise.all([loadSettings(), loadMessage()]);
+const loadPanels = () => Promise.all([loadSettings(), loadMessage(), loadComposer()]);
 const SettingsPanel = dynamic(() => loadPanels().then(([m]) => m.SettingsPanel), { ssr: false });
 const MessagePanel = dynamic(() => loadPanels().then(([, m]) => m.MessagePanel), { ssr: false });
+const Composer = dynamic(() => loadPanels().then(([, , m]) => m.Composer), { ssr: false });
 
 function usePanelsAhead() {
   useEffect(() => {
     const ahead = () => {
-      for (const load of [loadSettings, loadMessage]) void load().catch(() => {});
+      for (const load of [loadSettings, loadMessage, loadComposer]) void load().catch(() => {});
     };
     if ('requestIdleCallback' in window) {
       const id = window.requestIdleCallback(ahead, { timeout: 4000 });
@@ -126,6 +129,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const [messageId] = useParam('message');
   // A conversation, opened on its newest message; the server finds which mailbox holds it, as it does a message.
   const [threadId] = useParam('thread');
+  const [compose] = useParam('compose');
   const listed = list.findIndex((item) => item.messageId === messageId);
   const open =
     messageId === ''
@@ -191,43 +195,56 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
       }
     : undefined;
   const choice = { mailboxes, value: mailbox, onChange: chooseMailbox };
+  // Writing mail is offered only with Inbox on.
+  const composer = manage.data?.mail ? openComposer : null;
+  const written = composer ? writing(compose, messageId) : null;
 
   return (
     <OpenMessagesContext value={openMessages}>
-      <Mailbox value={mailbox}>
-        <div className="md:flex">
-          <Rail current={section ?? ''} items={items} aside={status(true)} mailbox={choice} account={account} />
-          <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6 md:pt-6">
-            <LoadingBar on={going || fetching > 0} />
-            <Masthead
+      <ComposeContext value={composer}>
+        <Mailbox value={mailbox}>
+          <div className="md:flex">
+            <Rail
               current={section ?? ''}
               items={items}
-              aside={status(false)}
-              detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
+              aside={status(true)}
               mailbox={choice}
               account={account}
+              compose={composer ? () => composer() : undefined}
             />
-            {notice ? <div className="flex flex-wrap gap-x-4 gap-y-1 pb-5">{notice}</div> : null}
-            <main className="pb-16">{children}</main>
-            <PageFoot />
+            <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6 md:pt-6">
+              <LoadingBar on={going || fetching > 0} />
+              <Masthead
+                current={section ?? ''}
+                items={items}
+                aside={status(false)}
+                detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
+                mailbox={choice}
+                account={account}
+              />
+              {notice ? <div className="flex flex-wrap gap-x-4 gap-y-1 pb-5">{notice}</div> : null}
+              <main className="pb-16">{children}</main>
+              <PageFoot />
+            </div>
+            {open ? (
+              <MessagePanel
+                key={opened}
+                items={open.items}
+                index={open.index}
+                onIndex={(index) => show(open.items[index])}
+                onClosing={() => (closing.current = true)}
+                // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
+                onClose={() => {
+                  closing.current = false;
+                  if (panelEntry()) window.history.back();
+                  else show(undefined);
+                }}
+              />
+            ) : null}
+            {written ? <Composer key={`${compose}/${messageId}`} what={written} onClose={closeComposer} /> : null}
           </div>
-          {open ? (
-            <MessagePanel
-              key={opened}
-              items={open.items}
-              index={open.index}
-              onIndex={(index) => show(open.items[index])}
-              onClosing={() => (closing.current = true)}
-              // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
-              onClose={() => {
-                closing.current = false;
-                if (panelEntry()) window.history.back();
-                else show(undefined);
-              }}
-            />
-          ) : null}
-        </div>
-      </Mailbox>
+        </Mailbox>
+      </ComposeContext>
     </OpenMessagesContext>
   );
 }

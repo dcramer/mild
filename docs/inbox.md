@@ -46,7 +46,14 @@ Built (`Conversation`, `web/src/views/message-panel.tsx`): a conversation is ope
 
 ## The composer
 
-A panel of its own, from C or the rail's Compose, or under the message in the reader for a reply: From (when there is more than one mailbox), To, Cc, Subject, the text. Plain text only. Sending goes through the executor like every other mailbox change: written to the record first, then sent, then checked. An unsent draft is kept in the browser.
+A narrow panel of its own (`web/src/views/composer.tsx`), opened by C or the rail's Compose on a desktop; on a phone, and from the reader, by a press that calls `useCompose()` (`web/src/lib/compose.ts`): `compose()` for new mail, `compose({ replyTo: { messageId }, all })` for a reply. Where it is open is in the address (`?compose=new`, or `?compose=reply` or `all` with the message it answers, `?message=<id>`, whose mailbox the server finds as the reader's does), so Back closes it, and a reply opened from the reader leaves the reader under it. With Inbox off nothing offers it, and the address opens nothing.
+
+- **From**, when there is more than one address to send as: every mailbox Google lets Sift send from and its aliases (`aliases` in `/api/manage`), and the one it starts on even if it may not yet. New mail starts on the mailbox the switch shows (the primary for All); a reply on the mailbox its message came to, by the address it was sent to, and offers only that mailbox's addresses, since a conversation is one mailbox's.
+- **To and Cc**: addresses typed with commas between, `ada@example.org` or `Ada <ada@example.org>`, each checked once the reader has moved past it, with what is wrong said under the field. Cc is behind a press, open from the start on a reply to all. A reply starts To on whoever replies go to (Reply-To, else the sender; mail the person sent, to whoever it went to), and to all with everyone else on it in Cc, the person's own addresses left out.
+- **Subject** for new mail; a reply's is its message's with "Re: ", shown under the title and set by the server.
+- **The text**, plain, at reading size.
+
+Send is the one `ink` press, with ⌘↵ or Ctrl ↵ from anywhere in it; Discard drops the draft, with Undo on its toast. Sent, it closes and a toast says `Sent` under the subject; a refusal or failure keeps it open with the words under the presses. A mailbox Google has not let Sift send from says so, with the press that asks (`/auth/login?grant=send&mailbox=…&to=<this page>`), and Send waits. What is written is kept in this browser (`localStorage`, one draft for new mail and one per message answered) until it is sent or discarded, with the Message-ID of a press of Send that may not have gone.
 
 ## Turning it on
 

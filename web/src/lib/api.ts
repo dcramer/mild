@@ -59,6 +59,7 @@ import type {
   RuleSummary,
   RuleUsage,
   RuleWaiting,
+  SendRequest,
   SenderPage,
   Session,
   SignInCode,
@@ -245,6 +246,8 @@ export const api = {
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
   /** The reader's own: true, sift carries out its decisions in their Gmail. */
   setActive: (active: boolean) => post('/api/active', { active }),
+  /** Mail the person wrote, sent as them. */
+  send: (mail: SendRequest) => post<{ id: string; threadId: string }>('/api/mail/send', mail),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
   setReasoning: (reasoning: ManageState['model']['reasoning']) => post('/api/model/reasoning', { reasoning }),
