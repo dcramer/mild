@@ -81,7 +81,6 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
       </span>
       {open ? (
         <RuleDialog
-          accountId={proposal.accountId}
           labels={labels}
           start={proposalStart(reveal(proposal.match), proposal.labelId, proposal.disposition)}
           proposal={proposal.id}

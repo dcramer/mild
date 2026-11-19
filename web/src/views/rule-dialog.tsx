@@ -108,7 +108,6 @@ const bodyOf = (rule: RuleSummary): RuleBody => ({
  * Opened on a rule already made (`editing`), it is that rule's form, and saving changes it in place.
  */
 export function RuleDialog({
-  accountId,
   labels,
   editing,
   start: given,
@@ -116,7 +115,6 @@ export function RuleDialog({
   onClose,
   onAdded,
 }: {
-  accountId: string;
   labels: readonly Pick<LabelSummary, 'id' | 'name' | 'disposition'>[];
   /** The rule to change; its exceptions are kept as they are. */
   editing?: RuleSummary;
@@ -165,7 +163,7 @@ export function RuleDialog({
     setNote(reveal(rule.note) ?? null);
     setDescribing(false);
   };
-  const describe = () => goal.trim() !== '' && drafting.run(async () => fill(await api.draftRule(accountId, goal.trim())));
+  const describe = () => goal.trim() !== '' && drafting.run(async () => fill(await api.draftRule(goal.trim())));
   // Once it is made, the rule opens wherever this was, with what it covers in the inbox; ticked, the look at the inbox too.
   const opened = (id: string | undefined) => {
     onClose();

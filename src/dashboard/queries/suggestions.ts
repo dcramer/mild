@@ -15,10 +15,10 @@ import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionIt
 import { outcomeOf } from './labels.ts';
 import { plain, seal } from '../../plain.ts';
 
-/** One sender's waiting mail, newest first. */
-export async function suggestionDetail(db: Sql, scope: Scope, accountId: string, sender: string): Promise<SuggestionDetail | null> {
-  if (!sees(scope, accountId)) return null;
-  const messages = (await pendingSuggestions(db, { accountId, sender, limit: 200 })).map((s) => ({
+/** One sender's waiting mail, in all of the person's mailboxes, newest first. */
+export async function suggestionDetail(db: Sql, scope: Scope, sender: string): Promise<SuggestionDetail> {
+  const messages = (await pendingSuggestions(db, { accounts: scope.accounts, sender, limit: 200 })).map((s) => ({
+    accountId: s.accountId,
     decisionId: s.decisionId,
     messageId: s.messageId,
     subject: s.subject,

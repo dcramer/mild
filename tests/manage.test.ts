@@ -172,12 +172,11 @@ describe('managing sift from the dashboard', () => {
     expect((await bare('POST', '/api/evals/run', { accountId: ACCOUNT })).status).toBe(409);
   });
 
-  it('asks the model to fill in a rule for one of the person’s mailboxes, and makes nothing', async () => {
+  it('asks the model to fill in a rule, and makes nothing', async () => {
     const { call } = await start();
-    const drafted = await call('POST', '/api/rules/draft', { accountId: ACCOUNT, goal: '  Archive everything from example.org  ' });
+    const drafted = await call('POST', '/api/rules/draft', { goal: '  Archive everything from example.org  ' });
     expect(drafted.body).toEqual({ match: { fromDomain: ['example.org'] }, disposition: 'archive', note: 'And another.' });
-    for (const bad of [{ accountId: ACCOUNT }, { accountId: ACCOUNT, goal: '  ' }, { goal: 'x' }])
-      expect((await call('POST', '/api/rules/draft', bad)).status).toBe(400);
+    for (const bad of [{}, { goal: '  ' }, { accountId: ACCOUNT, goal: 'x' }]) expect((await call('POST', '/api/rules/draft', bad)).status).toBe(400);
     expect(calls).toEqual([`draft ${ACCOUNT} Archive everything from example.org`]);
     expect((await call('GET', '/api/rules')).body['rules']).toEqual([]);
   });

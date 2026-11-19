@@ -527,17 +527,17 @@ describe('reading a suggestion', () => {
     expect(await stored()).toEqual([]);
   });
 
-  it("shows one sender's waiting mail, newest first", async () => {
+  it("shows one sender's waiting mail, in every mailbox, newest first", async () => {
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('news@example.com', 'archive', NEWS);
     await suggest('other@example.com', 'archive', NEWS);
 
-    const detail = (await suggestionDetail(db, await everything(db), ACCOUNT, 'news@example.com'))!;
+    const detail = await suggestionDetail(db, await everything(db), 'news@example.com');
     expect(detail.messages.map((m) => [m.messageId, m.subject, m.labelId])).toEqual([
       ['m2', 'Subject m2', 'newsletter'],
       ['m1', 'Subject m1', 'newsletter'],
     ]);
-    expect(await suggestionDetail(db, await everything(db), ACCOUNT, 'stranger@example.net')).toEqual({ messages: [] });
+    expect(await suggestionDetail(db, await everything(db), 'stranger@example.net')).toEqual({ messages: [] });
   });
 });
 

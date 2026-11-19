@@ -27,7 +27,7 @@ The working list for sift. Remove an item when it lands; add what you find. What
 - [ ] Make an exception to a rule from its panel (it shows them; nothing makes one). Reorder rules and labels.
 - [ ] **Undo an apply as one.** Applying a rule to the inbox can move hundreds of messages, each with its own Undo in Activity and none for the press as a whole.
 - [ ] **Rules for one mailbox.** A rule is the person's, for every mailbox. Someone with a personal and a work account may want one in one and not the other: decide how a rule says so, likely a condition on the mailbox the mail came to, and on which of the user's own addresses it was sent to, for aliases.
-- [ ] **What is still per mailbox now that labels and rules are the person's.** The rule drafter looks senders up in one mailbox (`senderDirectory`); a proposal comes from one mailbox's answers, so two can propose the same rule; and a rule's Gmail filter is not written to a mailbox connected after the press.
+- [ ] **What is still per mailbox now that labels and rules are the person's.** A proposal comes from one mailbox's answers, so two can propose the same rule; and a rule's Gmail filter is not written to a mailbox connected after the press.
 
 ## Teaching loop
 

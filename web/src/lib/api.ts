@@ -223,7 +223,7 @@ export const api = {
   rules: (signal: AbortSignal) => get<{ rules: RuleSummary[] }>('/api/rules', {}, signal),
   suggestions: (includeKept: boolean, fact: FactFilter | '', signal: AbortSignal) =>
     get<Suggestions>('/api/suggestions', { ...(includeKept ? { kept: 1 } : {}), ...(fact ? { fact } : {}) }, signal),
-  suggestion: (account: string, sender: string, signal: AbortSignal) => get<SuggestionDetail>('/api/suggestion', { account, sender }, signal),
+  suggestion: (sender: string, signal: AbortSignal) => get<SuggestionDetail>('/api/suggestion', { sender }, signal),
   /** Say what a message is. */
   feedback: (answer: FeedbackRequest) => post<FeedbackReply>('/api/feedback', answer, true),
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
@@ -256,7 +256,7 @@ export const api = {
   /** The hour of the reader's day their digests arrive, in this browser's time zone. */
   setDigestTime: (hour: number) => post('/api/digest', { hour, timeZone: browserZone() }),
   /** The model fills in a rule from the person's words, for the rule dialog. Nothing is made. */
-  draftRule: (accountId: string, goal: string) => post<RuleDraft>('/api/rules/draft', { accountId, goal }),
+  draftRule: (goal: string) => post<RuleDraft>('/api/rules/draft', { goal }),
   addRule: (
     rule: RuleBody & {
       /** The proposal it was made from, which this resolves. */

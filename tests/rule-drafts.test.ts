@@ -139,7 +139,7 @@ describe('looking up senders', () => {
       '2',
     );
     await recordDecision(db, ACCOUNT, 'm1', { disposition: 'archive', subscription: 'preserve', stage: 'model', labelId: 'newsletter', reason: 'r' });
-    expect(await senderDirectory(db, ACCOUNT)).toEqual([
+    expect(await senderDirectory(db, [ACCOUNT])).toEqual([
       { address: 'digest@example.org', name: 'Example Digest', listId: 'digest.example.org', messages: 2, label: 'Newsletters', subject: 'Newer' },
       { address: 'news@example.com', name: null, listId: null, messages: 1, label: null, subject: 'Weekly digest' },
     ]);

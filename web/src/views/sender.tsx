@@ -10,7 +10,6 @@ import { type RuleStart, addedWords, messageStart, nameStart, standingStart } fr
 import { nextMail } from '@/lib/next-mail.ts';
 import { messageKey, setParams, useParam } from '@/lib/params.ts';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
-import { homeOf } from '@/views/rule-panel.tsx';
 import {
   Ago,
   Heads,
@@ -333,8 +332,6 @@ function SenderView({ who }: { who: Who }) {
   // Every other rule this page starts opens the rule dialog on it, to see and change before adding.
   const [starting, setStarting] = useState<RuleStart | null>(null);
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
-  // The rule drafter looks up senders in one mailbox; a sender's page is all of them, so it starts from the primary.
-  const home = homeOf(manage.data);
   // A standing is a rule for exactly them that says only what happens to their mail, so it is given in one press, with Undo.
   const giveStanding = (standing: Given) =>
     give.run(async () => {
@@ -513,9 +510,7 @@ function SenderView({ who }: { who: Who }) {
         )}
       </Section>
 
-      {starting && home ? (
-        <RuleDialog accountId={home} labels={manage.data?.labels ?? []} start={starting} onClose={() => setStarting(null)} onAdded={reload} />
-      ) : null}
+      {starting ? <RuleDialog labels={manage.data?.labels ?? []} start={starting} onClose={() => setStarting(null)} onAdded={reload} /> : null}
     </div>
   );
 }

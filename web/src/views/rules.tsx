@@ -6,7 +6,7 @@ import { type RuleSummary, api, useLoaded } from '@/lib/api.ts';
 import { setParams, useParam } from '@/lib/params.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
-import { RemoveRule, RulePanel, Who, checked, homeOf, whoText } from '@/views/rule-panel.tsx';
+import { RemoveRule, RulePanel, Who, checked, whoText } from '@/views/rule-panel.tsx';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { INBOX, MADE_BY, count, dateTime, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
 import { Ago, Heads, Button, Does, Empty, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
@@ -49,20 +49,18 @@ function Result({ rule }: { rule: RuleSummary }) {
   );
 }
 
-/** Rules' own action: adding one, shown from the start and pressable once the account is known, so it does not arrive late and move the page. */
+/** Rules' own action: adding one, shown from the start and pressable once the labels are known, so it does not arrive late and move the page. */
 export function AddRule() {
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
   const rules = useLoaded('rules', (signal) => api.rules(signal));
   const [adding, setAdding] = useState(false);
-  const home = homeOf(manage.data);
   return (
     <>
-      {/* Shown from the start and enabled once the account is known, so it does not arrive late and move the page. */}
-      <Button disabled={!home} onClick={() => setAdding(true)}>
+      <Button disabled={!manage.data} onClick={() => setAdding(true)}>
         <PlusIcon aria-hidden />
         Add a rule
       </Button>
-      {adding && home ? <RuleDialog accountId={home} labels={manage.data?.labels ?? []} onClose={() => setAdding(false)} onAdded={rules.reload} /> : null}
+      {adding && manage.data ? <RuleDialog labels={manage.data?.labels ?? []} onClose={() => setAdding(false)} onAdded={rules.reload} /> : null}
     </>
   );
 }
@@ -78,7 +76,6 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
   const [source, setSource] = useParam('by', SOURCES);
   const [gmail, setGmail] = useParam('gmail', GMAIL);
   const [open, setOpen] = useParam('rule');
-  const home = homeOf(manage.data);
   const labels = (manage.data?.labels ?? []).map((l) => [l.id, l.name] as const);
   const needle = search.trim().toLowerCase();
   const rules = (data?.rules ?? [])
@@ -147,13 +144,7 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
               <Tr key={rule.id} onOpen={() => setOpen(rule.id)}>
                 <Td className="max-w-0 md:w-full">
                   <span className="block break-words md:truncate">
-                    {rule.name ? (
-                      <span className="name">{reveal(rule.name)}</span>
-                    ) : home ? (
-                      <Who match={reveal(rule.match)} />
-                    ) : (
-                      <span className="name">{whoText(reveal(rule.match))}</span>
-                    )}
+                    {rule.name ? <span className="name">{reveal(rule.name)}</span> : <Who match={reveal(rule.match)} />}
                     {rule.kind === 'when-label' ? <span className="text-muted-foreground"> as {rule.labelName}</span> : null}
                     <ArrowRightIcon aria-label="is" className="mx-2 inline size-4 align-[-0.15em] text-muted-foreground" />
                     <Result rule={rule} />
@@ -180,11 +171,10 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
           </tbody>
         </Table>
       )}
-      {at !== -1 && home ? (
+      {at !== -1 && manage.data ? (
         <RulePanel
           key={rules[at].id}
           rule={rules[at]}
-          home={home}
           labels={manage.data?.labels ?? []}
           active={manage.data?.active ?? false}
           position={`${at + 1} of ${rules.length}`}
