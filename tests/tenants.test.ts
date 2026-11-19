@@ -285,6 +285,11 @@ describe("nobody sees or changes another person's mail", () => {
         { match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal },
         { match: { from: ['x@example.com'] }, label: 'newsletter', proposal: 9999 },
       ],
+      [
+        '/api/rules/edit',
+        { id: theirs.rule, match: { from: ['x@example.com'] }, disposition: 'archive' },
+        { id: 'r-nobody', match: { from: ['x@example.com'] }, disposition: 'archive' },
+      ],
       ['/api/rules/remove', { id: theirs.rule }, { id: 'r-nobody' }],
       ['/api/rules/filter', { id: theirs.rule, on: true }, { id: 'r-nobody', on: true }],
       ['/api/rules/apply', { id: theirs.rule }, { id: 'r-nobody' }],
@@ -312,6 +317,7 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/rules/apply', ALPHA, { id: theirs.rule })).status).toBe(200);
     expect((await call('POST', '/api/rules/draft', ALPHA, { accountId: ALPHA_WORK, goal: 'Archive x' })).status).toBe(200);
     expect(calls).toEqual([`inbox ${theirs.rule}`, 'check', `draft ${ALPHA_WORK}`]);
+    expect((await call('POST', '/api/rules/edit', ALPHA, { id: theirs.rule, match: { from: ['x@example.com'] }, disposition: 'archive' })).status).toBe(200);
     expect((await call('POST', '/api/rules/remove', ALPHA, { id: theirs.rule })).status).toBe(200);
     const fromProposal = { match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal };
     expect((await call('POST', '/api/rules', ALPHA, fromProposal)).status).toBe(200);

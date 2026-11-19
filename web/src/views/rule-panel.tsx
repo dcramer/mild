@@ -1,5 +1,5 @@
 'use client';
-import { type ManageState, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
+import { type LabelSummary, type ManageState, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import {
   HANDLED,
@@ -27,6 +27,8 @@ import { messageKey, useParam } from '@/lib/params.ts';
 import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/lib/open-messages.ts';
 import { GmailFilter } from '@/views/gmail-filter.tsx';
+import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { useState } from 'react';
 import {
   Ago,
   Th,
@@ -323,6 +325,7 @@ export const homeOf = (state: ManageState | null) => (state?.accounts.find((a) =
 export function RulePanel({
   rule,
   home,
+  labels,
   active,
   position,
   onPrevious,
@@ -332,6 +335,7 @@ export function RulePanel({
 }: {
   rule: RuleSummary;
   home: string;
+  labels: readonly LabelSummary[];
   /** Whether Sift is on, which writing a filter to Gmail needs. */
   active: boolean;
   position?: string;
@@ -343,6 +347,7 @@ export function RulePanel({
 }) {
   const remove = useAction();
   const toast = useToast();
+  const [editing, setEditing] = useState(false);
   const action = rule.disposition ?? 'keep';
   const labelId = rule.kind === 'label' ? rule.labelId : null;
   // Leave in inbox, or an action rule that keeps mail, changes nothing in the inbox.
@@ -381,6 +386,11 @@ export function RulePanel({
             {madeBy(rule.source)}, {shortDate(rule.createdAt)}
           </Fact>
         </Facts>
+        <div>
+          <Button variant="plain" onClick={() => setEditing(true)}>
+            Change…
+          </Button>
+        </div>
         <GmailFilter rule={rule} active={active} />
         {moves ? <InInbox rule={rule} onOpen={onOpen} /> : null}
         <div>
@@ -403,6 +413,7 @@ export function RulePanel({
           <Failure>{remove.error}</Failure>
         </div>
       </div>
+      {editing ? <RuleDialog accountId={home} labels={labels} editing={rule} onClose={() => setEditing(false)} /> : null}
     </Panel>
   );
 }
@@ -413,5 +424,15 @@ export function RuleSheet({ id, onOpen, onClose }: { id: string; onOpen: OpenMes
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const rule = rules.data?.rules.find((r) => r.id === id);
   const home = homeOf(manage.data);
-  return rule && home ? <RulePanel key={rule.id} rule={rule} home={home} active={manage.data?.active ?? false} onOpen={onOpen} onClose={onClose} /> : null;
+  return rule && home ? (
+    <RulePanel
+      key={rule.id}
+      rule={rule}
+      home={home}
+      labels={manage.data?.labels ?? []}
+      active={manage.data?.active ?? false}
+      onOpen={onOpen}
+      onClose={onClose}
+    />
+  ) : null;
 }

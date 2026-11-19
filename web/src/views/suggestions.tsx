@@ -31,7 +31,7 @@ import {
   Tr,
 } from '@/system';
 import { AddLabelsDialog } from '@/views/label-panel.tsx';
-import { AddRuleDialog } from '@/views/rule-dialog.tsx';
+import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { fold } from '@/lib/fold.ts';
 import { proposalStart } from '@/lib/rule-start.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
@@ -80,7 +80,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
         </Button>
       </span>
       {open ? (
-        <AddRuleDialog
+        <RuleDialog
           accountId={proposal.accountId}
           labels={labels}
           start={proposalStart(reveal(proposal.match), proposal.labelId, proposal.disposition)}

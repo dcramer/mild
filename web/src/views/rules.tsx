@@ -6,7 +6,7 @@ import { type RuleSummary, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import { setParams, useParam } from '@/lib/params.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
-import { AddRuleDialog } from '@/views/rule-dialog.tsx';
+import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { RulePanel, Who, checked, homeOf, whoText } from '@/views/rule-panel.tsx';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { INBOX, MADE_BY, count, dateTime, describeMatch, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
@@ -63,7 +63,7 @@ export function AddRule() {
         <PlusIcon aria-hidden />
         Add a rule
       </Button>
-      {adding && home ? <AddRuleDialog accountId={home} labels={manage.data?.labels ?? []} onClose={() => setAdding(false)} onAdded={rules.reload} /> : null}
+      {adding && home ? <RuleDialog accountId={home} labels={manage.data?.labels ?? []} onClose={() => setAdding(false)} onAdded={rules.reload} /> : null}
     </>
   );
 }
@@ -204,6 +204,7 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
           key={rules[at].id}
           rule={rules[at]}
           home={home}
+          labels={manage.data?.labels ?? []}
           active={manage.data?.active ?? false}
           position={`${at + 1} of ${rules.length}`}
           onOpen={onOpen}

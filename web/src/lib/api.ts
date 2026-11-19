@@ -185,6 +185,21 @@ const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 /** Sent with labels that digest: until the hour is set under Settings, it is this browser's day the digest keeps to. */
 const zoneFor = (labels: readonly { disposition?: string }[]) => (labels.some((l) => l.disposition === 'digest') ? { timeZone: browserZone() } : {});
 
+/** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */
+export interface RuleBody {
+  match: RuleMatch;
+  /** What the mail is. */
+  label?: string;
+  /** Apply only once sift has said the mail is this label. */
+  whenLabel?: string;
+  disposition?: string;
+  markRead?: boolean;
+  unsubscribe?: boolean;
+  when?: string;
+  /** What the reader calls it; empty for none. */
+  name?: string;
+}
+
 export const api = {
   /** With `label`, each day also says how much of its mail was that label. */
   summary: (days: Days, signal: AbortSignal, label = '') => get<Summary>('/api/summary', { days, label }, signal),
@@ -243,22 +258,14 @@ export const api = {
   setDigestTime: (hour: number) => post('/api/digest', { hour, timeZone: browserZone() }),
   /** The model fills in a rule from the person's words, for the rule dialog. Nothing is made. */
   draftRule: (accountId: string, goal: string) => post<RuleDraft>('/api/rules/draft', { accountId, goal }),
-  /** A rule carries a label, an action (`disposition`), or both; or an action for mail that turns out to be `whenLabel`. */
-  addRule: (rule: {
-    match: RuleMatch;
-    /** What the mail is. */
-    label?: string;
-    /** Apply only once sift has said the mail is this label. */
-    whenLabel?: string;
-    disposition?: string;
-    markRead?: boolean;
-    unsubscribe?: boolean;
-    when?: string;
-    /** What the reader calls it; empty for none. */
-    name?: string;
-    /** The proposal it was made from, which this resolves. */
-    proposal?: number;
-  }) => post<{ id: string; replaced: boolean; filter: RuleFilter | null }>('/api/rules', rule),
+  addRule: (
+    rule: RuleBody & {
+      /** The proposal it was made from, which this resolves. */
+      proposal?: number;
+    },
+  ) => post<{ id: string; replaced: boolean; filter: RuleFilter | null }>('/api/rules', rule),
+  /** Change what a rule matches and says, keeping its place and its exceptions. */
+  editRule: (id: string, rule: RuleBody) => post('/api/rules/edit', { id, ...rule }),
   removeRule: (id: string) => post('/api/rules/remove', { id }),
   /** Write the rule to Gmail as a filter, or take its filter out. */
   ruleFilter: (id: string, on: boolean) => post('/api/rules/filter', { id, on }),

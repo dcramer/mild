@@ -2,7 +2,7 @@
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { paramNow, setParams } from '@/lib/params.ts';
-import { type LabelSummary, type RuleDraft, type RuleFilter, type RuleMatch, api, useLoaded } from '@/lib/api.ts';
+import { type LabelSummary, type RuleBody, type RuleDraft, type RuleFilter, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import { type By, type Condition, type RuleStart, addedWords, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
 import {
@@ -60,6 +60,43 @@ const isNamed = (row: Row): row is Condition => 'by' in row;
 const rowsOf = (conditions: readonly Condition[], facts: readonly FactAnswer[]): Row[] =>
   conditions.length + facts.length === 0 ? [{ by: 'from', value: '' }] : [...conditions, ...facts.map((fact) => ({ fact }))];
 
+/** A rule already made, as the dialog opens on it to change it: everything it says. */
+interface RuleNow extends RuleStart {
+  name: string;
+  when: string;
+  markRead: boolean;
+  unsubscribe: boolean;
+}
+
+/** A rule as it stands. An extra its label brings is shown as the rule's: what the rule does either way. */
+function ruleNow(rule: RuleSummary): RuleNow {
+  const match = reveal(rule.match);
+  const own = ACTIONS.find((a) => a === rule.override);
+  return {
+    conditions: conditionsOf(match),
+    facts: factAnswers(match.facts),
+    ...(rule.labelId === null ? {} : { label: rule.labelId }),
+    ...(rule.whenLabel === null ? {} : { whenLabel: rule.whenLabel }),
+    ...(own === undefined ? {} : { action: own }),
+    name: reveal(rule.name) ?? '',
+    when: rule.when ?? '',
+    markRead: rule.markRead,
+    unsubscribe: rule.unsubscribe,
+  };
+}
+
+/** What the API is sent for a rule as it stands, to put it back. */
+const bodyOf = (rule: RuleSummary): RuleBody => ({
+  match: reveal(rule.match),
+  ...(rule.labelId === null ? {} : { label: rule.labelId }),
+  ...(rule.whenLabel === null ? {} : { whenLabel: rule.whenLabel }),
+  ...(rule.override === null ? {} : { disposition: rule.override }),
+  ...(rule.kind !== 'label' && rule.markRead ? { markRead: true } : {}),
+  ...(rule.kind !== 'label' && rule.unsubscribe ? { unsubscribe: true } : {}),
+  ...(rule.when === null ? {} : { when: rule.when }),
+  name: reveal(rule.name) ?? '',
+});
+
 /**
  * A rule in the order sift applies it: which mail (an address, a domain, a list, a recipient or words in
  * the subject, and what sift saw in it), only when it is something in the reader's words, and the label it
@@ -68,17 +105,21 @@ const rowsOf = (conditions: readonly Condition[], facts: readonly FactAnswer[]):
  *
  * It opens on the rule in the reader's words (what it was opened from, said as a sentence):
  * the model fills the form in from them, looking up senders, and the reader checks it and adds it.
+ * Opened on a rule already made (`editing`), it is that rule's form, and saving changes it in place.
  */
-export function AddRuleDialog({
+export function RuleDialog({
   accountId,
   labels,
-  start,
+  editing,
+  start: given,
   proposal,
   onClose,
   onAdded,
 }: {
   accountId: string;
   labels: readonly Pick<LabelSummary, 'id' | 'name' | 'disposition'>[];
+  /** The rule to change; its exceptions are kept as they are. */
+  editing?: RuleSummary;
   start?: RuleStart;
   /** Adding the rule accepts this proposal; closing without adding leaves it open. */
   proposal?: number;
@@ -90,22 +131,25 @@ export function AddRuleDialog({
   // Undo is pressed after the dialog has closed, so what it reports goes to a toast.
   const later = useAction();
   const toast = useToast();
+  const [now] = useState(() => (editing ? ruleNow(editing) : undefined));
+  const start = now ?? given;
   const [rows, setRows] = useState<Row[]>(() => rowsOf(start?.conditions ?? [], start?.facts ?? []));
   // A line the reader just added takes the cursor; the ones it opened on do not.
   const [grown, setGrown] = useState(false);
-  const [condition, setCondition] = useState('');
-  const [name, setName] = useState('');
+  const [condition, setCondition] = useState(now?.when ?? '');
+  const [name, setName] = useState(now?.name ?? '');
   // A start can name a label since removed (what earlier mail was); it is not one to choose.
   const offered = (id: string | undefined) => (labels.some((l) => l.id === id) ? id! : '');
   const [label, setLabel] = useState(start ? offered(startLabel(start)) : '');
   const [whenLabel, setWhenLabel] = useState(offered(start?.whenLabel));
   const [then, setThen] = useState<'' | Action>(start?.action ?? '');
-  const [markRead, setMarkRead] = useState(false);
-  const [unsubscribe, setUnsubscribe] = useState(false);
+  const [markRead, setMarkRead] = useState(now?.markRead ?? false);
+  const [unsubscribe, setUnsubscribe] = useState(now?.unsubscribe ?? false);
   const [offer, setOffer] = useState<{ id: string; filter: RuleFilter } | null>(null);
-  const [applyNow, setApplyNow] = useState(true);
+  // A rule being changed has likely seen the inbox already.
+  const [applyNow, setApplyNow] = useState(!editing);
   const drafting = useAction();
-  const [describing, setDescribing] = useState(true);
+  const [describing, setDescribing] = useState(!editing);
   const [goal, setGoal] = useState(() => (start ? startWords(start, labels) : ''));
   const [note, setNote] = useState<string | null>(null);
   const fill = ({ match: drafted, ...rule }: RuleDraft) => {
@@ -154,13 +198,18 @@ export function AddRuleDialog({
         : named.from !== undefined
           ? 'Only this address.'
           : undefined;
-  const hint = nameAlone
-    ? 'Anyone can send under any name, so give an address or domain too.'
-    : [readBack, facts.some((f) => READ.has(f.key)) ? 'Sift reads each message to check this.' : undefined].filter(Boolean).join(' ') || undefined;
-  // Adding a rule with exactly the conditions of one already there replaces it, so the dialog says which.
+  // Adding a rule with exactly the conditions of one already there replaces it, so the dialog says which. A rule
+  // being changed cannot take another's conditions: the server refuses, and one with exceptions only it can tell.
   const rules = useLoaded('rules', (signal) => api.rules(signal));
-  const replaces = ready ? replacedBy(rules.data?.rules ?? [], match, waitsFor?.id ?? null) : undefined;
+  const others = (rules.data?.rules ?? []).filter((r) => r.id !== editing?.id);
+  const replaces = ready && !editing?.except.length ? replacedBy(others, match, waitsFor?.id ?? null) : undefined;
+  const twin = editing ? replaces : undefined;
   const replacing = replaces ? (replaces.kind === 'label' ? replaces.override : replaces.disposition) : null;
+  const hint = twin
+    ? `Another rule has exactly these conditions${twin.name ? `: ${reveal(twin.name)}` : ''}. Change that one, or remove it first.`
+    : nameAlone
+      ? 'Anyone can send under any name, so give an address or domain too.'
+      : [readBack, facts.some((f) => READ.has(f.key)) ? 'Sift reads each message to check this.' : undefined].filter(Boolean).join(' ') || undefined;
   // What a line can be: any kind of value, or an answer about a fact no other line asks.
   const kinds = (row: Row) => [
     ...BY,
@@ -181,6 +230,44 @@ export function AddRuleDialog({
     setRows([...rows, { by: last?.by ?? 'from', value: '' }]);
     setGrown(true);
   };
+  const body = (): RuleBody => ({
+    match,
+    ...(chosen ? { label: chosen.id } : {}),
+    ...(waitsFor ? { whenLabel: waitsFor.id } : {}),
+    ...(action ? { disposition: action } : {}),
+    ...(!chosen && markRead ? { markRead } : {}),
+    ...(!chosen && unsubscribe ? { unsubscribe } : {}),
+    ...(chosen && condition.trim() !== '' ? { when: condition.trim() } : {}),
+    // Sent empty too: a rule this replaces is called what the reader left here.
+    name: name.trim(),
+  });
+  // What the toast says the rule now is.
+  const said = (): RuleStart => ({
+    conditions: rows.filter(isNamed),
+    facts,
+    ...(chosen ? { label: chosen.id } : {}),
+    ...(waitsFor ? { whenLabel: waitsFor.id } : {}),
+    ...(action ? { action } : {}),
+  });
+  const save = (rule: RuleSummary) => {
+    const putBack = () =>
+      later.run(
+        () =>
+          api.editRule(rule.id, bodyOf(rule)).catch((failure: unknown) => {
+            toast('Could not put the rule back', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
+            throw failure;
+          }),
+        () => toast('Rule put back'),
+      );
+    run(
+      () => api.editRule(rule.id, body()),
+      () => {
+        toast(addedWords(said(), labels, { name, when: condition }), { kind: 'Rule changed', undo: putBack });
+        if (applyNow && moves) setParams({ rule: rule.id, apply: '1' });
+        onClose();
+      },
+    );
+  };
   const add = () => {
     let added: { id: string; replaced: boolean; filter: RuleFilter | null } | null = null;
     const takeBack = (id: string) =>
@@ -197,30 +284,12 @@ export function AddRuleDialog({
       );
     run(
       async () => {
-        added = await api.addRule({
-          match,
-          ...(chosen ? { label: chosen.id } : {}),
-          ...(waitsFor ? { whenLabel: waitsFor.id } : {}),
-          ...(action ? { disposition: action } : {}),
-          ...(!chosen && markRead ? { markRead } : {}),
-          ...(!chosen && unsubscribe ? { unsubscribe } : {}),
-          ...(chosen && condition.trim() !== '' ? { when: condition.trim() } : {}),
-          // Sent empty too: a rule this replaces is called what the reader left here.
-          name: name.trim(),
-          ...(proposal === undefined ? {} : { proposal }),
-        });
+        added = await api.addRule({ ...body(), ...(proposal === undefined ? {} : { proposal }) });
       },
       () => {
         // Removing a rule that replaced another would not bring the other back, so only a new one can be undone.
         const fresh = added?.replaced === false ? added.id : null;
-        const rule: RuleStart = {
-          conditions: rows.filter(isNamed),
-          facts,
-          ...(chosen ? { label: chosen.id } : {}),
-          ...(waitsFor ? { whenLabel: waitsFor.id } : {}),
-          ...(action ? { action } : {}),
-        };
-        toast(addedWords(rule, labels, { name, when: condition }), {
+        toast(addedWords(said(), labels, { name, when: condition }), {
           kind: added?.replaced ? 'Rule replaced' : 'Rule added',
           ...(fresh === null ? {} : { undo: () => takeBack(fresh) }),
         });
@@ -250,24 +319,31 @@ export function AddRuleDialog({
         onClose={onClose}
       />
     );
+  const go = () => (editing ? save(editing) : add());
   return (
     <Dialog
       open
       onClose={onClose}
-      title="Add a rule"
+      title={editing ? 'Change this rule' : 'Add a rule'}
       footer={
         <>
-          <Button variant="ink" busy={busy} disabled={!ready} onClick={add}>
-            Add rule
+          <Button variant="ink" busy={busy} disabled={!ready || twin !== undefined} onClick={go}>
+            {editing ? 'Save' : 'Add rule'}
           </Button>
-          <Button variant="quiet" onClick={() => setDescribing(true)}>
-            Describe it instead
-          </Button>
+          {editing ? (
+            <Button variant="quiet" onClick={onClose}>
+              Cancel
+            </Button>
+          ) : (
+            <Button variant="quiet" onClick={() => setDescribing(true)}>
+              Describe it instead
+            </Button>
+          )}
           <Failure>{error}</Failure>
         </>
       }
     >
-      <Form onSubmit={() => ready && add()}>
+      <Form onSubmit={() => ready && twin === undefined && go()}>
         {note ? (
           <Note tone="look" title="Not in this rule">
             {note}
@@ -317,7 +393,16 @@ export function AddRuleDialog({
           <Field inline label="Name" hint={name.trim() === '' ? undefined : 'Rules and Activity say this in place of the conditions.'}>
             <Input className="w-full" aria-label="Name" maxLength={80} placeholder="optional" value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
-          {replaces ? (
+          {editing?.except.length ? (
+            <Field inline label="Unless" hint="Kept as they are.">
+              <span className="flex min-h-(--control) flex-col justify-center">
+                {editing.except.map((except, index) => (
+                  <span key={index}>Mail {describeMatch(reveal(except))}</span>
+                ))}
+              </span>
+            </Field>
+          ) : null}
+          {replaces && !twin ? (
             <Field inline label="Replaces">
               <span className="flex min-h-(--control) items-center gap-1">
                 {replaces.labelName ? <span>{replaces.labelName}</span> : null}

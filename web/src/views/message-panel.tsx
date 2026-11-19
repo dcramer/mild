@@ -6,7 +6,7 @@ import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
 import { AddLabelsDialog } from '@/views/label-panel.tsx';
-import { AddRuleDialog } from '@/views/rule-dialog.tsx';
+import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type Confidential, type MessageDetail, type RuleMatch, api, useLoaded } from '@/lib/api.ts';
@@ -276,7 +276,7 @@ function Body({
           </div>
           {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
           {ruling ? (
-            <AddRuleDialog
+            <RuleDialog
               accountId={detail.accountId}
               labels={labels}
               start={ruling}

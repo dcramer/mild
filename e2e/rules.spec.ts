@@ -336,6 +336,36 @@ test.describe('Rules', () => {
     await expect(rulePanel(page, 'anyone at ci.example.org')).toBeVisible();
   });
 
+  test('a rule is changed from its panel in place, never into a twin of another, and Undo puts it back', async ({ page }) => {
+    const opened = await openRule(page, 'anyone at promo.example.com');
+    const id = await ruleId(page);
+    await expect(fact(opened, 'Then')).toHaveText('Spam');
+    await opened.getByRole('button', { name: 'Change…' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Change this rule' });
+    await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('promo.example.com');
+    await expect(dialog.getByRole('combobox', { name: 'What happens to it' })).toContainText('Spam');
+
+    await dialog.getByRole('textbox', { name: 'Value 1' }).fill('news.example.com');
+    await expect(dialog.getByText('Another rule has exactly these conditions. Change that one, or remove it first.')).toBeVisible();
+    const save = dialog.getByRole('button', { name: 'Save', exact: true });
+    await expect(save).toBeDisabled();
+
+    await dialog.getByRole('textbox', { name: 'Value 1' }).fill('deals.example.com');
+    await dialog.getByRole('combobox', { name: 'What happens to it' }).click();
+    await page.getByRole('option', { name: 'Archive', exact: true }).click();
+    await dialog.getByRole('textbox', { name: 'Name' }).fill('Deals');
+    await save.click();
+    await expect(toast(page, 'Deals: archive it')).toContainText('Rule changed');
+    const changed = rulePanel(page, 'Deals');
+    await expect(fact(changed, 'Mail')).toHaveText('anyone at deals.example.com');
+    await expect(fact(changed, 'Then')).toHaveText('Archive');
+    await param(page, 'rule').toBe(id);
+
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(toast(page, 'Rule put back')).toBeVisible();
+    await expect(fact(rulePanel(page, 'anyone at promo.example.com'), 'Then')).toHaveText('Spam');
+  });
+
   test('Undo takes the rule back, and its panel goes from the page and the address', async ({ page }) => {
     await page.goto('/rules');
     const dialog = await writeRule(page);
