@@ -13,8 +13,8 @@ const QUERY = /(\/[^\s?#"]*)\?[^\s#"]*/g;
 const QUERY_KEYS = new Set(['http.query', 'url.query', 'http.fragment', 'url.fragment']);
 
 // A sender's or domain's page names them in its path; it is named by its route instead.
-const ADDRESSED = /\/(sender|domain)\/[^/\s?#"]+\/[^/\s?#"]+/g;
-const routeOf = (text: string) => text.replace(ADDRESSED, (_, page: string) => `/${page}/:account/:${page === 'sender' ? 'address' : 'domain'}`);
+const ADDRESSED = /\/(sender|domain)\/[^/\s?#"]+/g;
+const routeOf = (text: string) => text.replace(ADDRESSED, (_, page: string) => `/${page}/:${page === 'sender' ? 'address' : 'domain'}`);
 
 /** `value` with every link's query, every sender's or domain's page and every address taken out, at any depth. */
 function scrub<T>(value: T): T {

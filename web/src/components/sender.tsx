@@ -7,9 +7,8 @@ import { Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td } from '@
 import { reveal } from '@/lib/reveal.ts';
 
 /** A sender's page; with `name`, their mail under that name. */
-export const senderHref = (accountId: string, address: string, name?: string | null) =>
-  `/sender/${encodeURIComponent(accountId)}/${encodeURIComponent(address)}${name ? `?name=${encodeURIComponent(name)}` : ''}`;
-const domainHref = (accountId: string, domain: string) => `/domain/${encodeURIComponent(accountId)}/${encodeURIComponent(domain)}`;
+export const senderHref = (address: string, name?: string | null) => `/sender/${encodeURIComponent(address)}${name ? `?name=${encodeURIComponent(name)}` : ''}`;
+const domainHref = (domain: string) => `/domain/${encodeURIComponent(domain)}`;
 
 const CONTACT_ICONS = { new: SparkleIcon, mutual: ReplyIcon, 'one-way': MegaphoneIcon } as const;
 
@@ -20,14 +19,14 @@ export function ContactHint({ contact }: { contact: Contact }) {
 }
 
 /** What sift's rules say about a sender, one per line. */
-function Rules({ accountId, rules }: { accountId: string; rules: SenderProfile['rules'] }) {
+function Rules({ rules }: { rules: SenderProfile['rules'] }) {
   return (
     <ul className="flex flex-col gap-1">
       {rules.map((rule) => (
         <li key={rule.id}>
           {reveal(rule.name) ?? (
             <>
-              Mail <MatchWords accountId={accountId} match={reveal(rule.match)} />
+              Mail <MatchWords match={reveal(rule.match)} />
             </>
           )}
           {rule.kind === 'action' || rule.labelId === INBOX ? (
@@ -54,7 +53,7 @@ function Rules({ accountId, rules }: { accountId: string; rules: SenderProfile['
  * what it is, whether the owner writes to them, and the rules about them. `brief` leaves out the rules
  * and the domain, for a preview.
  */
-export function SenderFacts({ accountId, profile, brief }: { accountId: string; profile: SenderProfile; brief?: boolean }) {
+export function SenderFacts({ profile, brief }: { profile: SenderProfile; brief?: boolean }) {
   const [top, ...others] = profile.labels;
   return (
     <Facts>
@@ -83,14 +82,14 @@ export function SenderFacts({ accountId, profile, brief }: { accountId: string; 
       {!brief && profile.domain ? (
         <Fact term="Domain">
           <span className="inline-flex items-center gap-2">
-            <DomainLink accountId={accountId} domain={reveal(profile.domain.name)} />
+            <DomainLink domain={reveal(profile.domain.name)} />
             <ContactHint contact={profile.domain.contact} />
           </span>
         </Fact>
       ) : null}
       {!brief && profile.rules.length > 0 ? (
         <Fact term={profile.rules.length === 1 ? 'Rule' : 'Rules'}>
-          <Rules accountId={accountId} rules={profile.rules} />
+          <Rules rules={profile.rules} />
         </Fact>
       ) : null}
     </Facts>
@@ -99,11 +98,11 @@ export function SenderFacts({ accountId, profile, brief }: { accountId: string; 
 
 type Who = { address: string } | { domain: string };
 
-function Preview({ accountId, who }: { accountId: string; who: Who }) {
+function Preview({ who }: { who: Who }) {
   const key = 'address' in who ? who.address : who.domain;
   const { data, error } = useLoaded(
-    `${'address' in who ? 'sender' : 'domain'}-${accountId}-${key}`,
-    (signal) => ('address' in who ? api.sender(accountId, who.address, signal) : api.domain(accountId, who.domain, signal)),
+    `${'address' in who ? 'sender' : 'domain'}-${key}`,
+    (signal) => ('address' in who ? api.sender(who.address, signal) : api.domain(who.domain, signal)),
     300_000,
   );
   // A domain anyone can get an address at has no page of its own, and the refusal says so.
@@ -118,7 +117,7 @@ function Preview({ accountId, who }: { accountId: string; who: Who }) {
         </p>
         {data.name ? <p className="truncate text-muted-foreground">{key}</p> : null}
       </div>
-      <SenderFacts accountId={accountId} profile={data.profile} brief />
+      <SenderFacts profile={data.profile} brief />
     </div>
   );
 }
@@ -127,43 +126,31 @@ function Preview({ accountId, who }: { accountId: string; who: Who }) {
  * A sender, wherever one is named by address or name: a link to their page. A name opens their mail under
  * that name.
  */
-export function SenderLink({
-  accountId,
-  address,
-  name,
-  children,
-  className,
-}: {
-  accountId: string;
-  address: string;
-  name?: string | null;
-  children?: ReactNode;
-  className?: string;
-}) {
+export function SenderLink({ address, name, children, className }: { address: string; name?: string | null; children?: ReactNode; className?: string }) {
   return (
-    <HoverCard href={senderHref(accountId, address, name)} card={<Preview accountId={accountId} who={{ address }} />} {...(className ? { className } : {})}>
+    <HoverCard href={senderHref(address, name)} card={<Preview who={{ address }} />} {...(className ? { className } : {})}>
       {children ?? name ?? address}
     </HoverCard>
   );
 }
 
 /** A domain, wherever one is named: a link to its page. */
-export function DomainLink({ accountId, domain, className }: { accountId: string; domain: string; className?: string }) {
+export function DomainLink({ domain, className }: { domain: string; className?: string }) {
   return (
-    <HoverCard href={domainHref(accountId, domain)} card={<Preview accountId={accountId} who={{ domain }} />} {...(className ? { className } : {})}>
+    <HoverCard href={domainHref(domain)} card={<Preview who={{ domain }} />} {...(className ? { className } : {})}>
       {domain}
     </HoverCard>
   );
 }
 
 /** One value of a rule's match: an address and a domain link to their pages, and so does a name said beside one address. */
-export function MatchValue({ accountId, match, said }: { accountId: string; match: RuleMatch; said: Said }) {
-  if (said.key === 'from') return <SenderLink accountId={accountId} address={said.plain} />;
-  if (said.key === 'fromDomain') return <DomainLink accountId={accountId} domain={said.plain} />;
+export function MatchValue({ match, said }: { match: RuleMatch; said: Said }) {
+  if (said.key === 'from') return <SenderLink address={said.plain} />;
+  if (said.key === 'fromDomain') return <DomainLink domain={said.plain} />;
   const [only, ...more] = match.from ?? [];
   if (said.key === 'fromName' && only && more.length === 0)
     return (
-      <SenderLink accountId={accountId} address={only} name={said.plain}>
+      <SenderLink address={only} name={said.plain}>
         {said.value}
       </SenderLink>
     );
@@ -171,7 +158,7 @@ export function MatchValue({ accountId, match, said }: { accountId: string; matc
 }
 
 /** `describeMatch`, with its senders and domains linked. */
-export function MatchWords({ accountId, match }: { accountId: string; match: RuleMatch }) {
+export function MatchWords({ match }: { match: RuleMatch }) {
   const named = saidOf(match);
   const asked = factAnswers(match.facts).map(factWords);
   return (
@@ -180,7 +167,7 @@ export function MatchWords({ accountId, match }: { accountId: string; match: Rul
         <Fragment key={`${said.key} ${said.plain}`}>
           {said.joint}
           {said.first ? `${MATCH_WORDS[said.key]} ` : ''}
-          <MatchValue accountId={accountId} match={match} said={said} />
+          <MatchValue match={match} said={said} />
         </Fragment>
       ))}
       {asked.length > 0 ? `${named.length > 0 ? ', ' : ''}that ${asked.join(' and ')}` : null}
@@ -197,7 +184,6 @@ const SENDER_CELL = 'max-w-0 md:w-[24%] md:min-w-52';
  * `children` go under it (an `OnPhone`). `term` marks a search match.
  */
 export function SenderCell({
-  accountId,
   address,
   name,
   contact,
@@ -205,7 +191,6 @@ export function SenderCell({
   aside,
   children,
 }: {
-  accountId: string;
   address: string;
   name: string | null;
   contact?: Contact;
@@ -219,7 +204,7 @@ export function SenderCell({
       <span className="flex items-baseline gap-3">
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="name min-w-0 truncate">
-            <SenderLink accountId={accountId} address={address} name={name}>
+            <SenderLink address={address} name={name}>
               {marked(name ?? address)}
             </SenderLink>
           </span>
@@ -229,9 +214,7 @@ export function SenderCell({
       </span>
       {name ? (
         <Sub className="hidden md:block">
-          <SenderLink accountId={accountId} address={address}>
-            {marked(address)}
-          </SenderLink>
+          <SenderLink address={address}>{marked(address)}</SenderLink>
         </Sub>
       ) : null}
       {children}
@@ -240,15 +223,11 @@ export function SenderCell({
 }
 
 /** `SenderCell` on an address's own page, where only the name tells its mail apart: the name, a link to their mail under it. */
-export function NameCell({ accountId, address, name, children }: { accountId: string; address: string; name: string | null; children?: ReactNode }) {
+export function NameCell({ address, name, children }: { address: string; name: string | null; children?: ReactNode }) {
   return (
     <Td className={SENDER_CELL}>
       <span className="name block truncate">
-        {name === null ? (
-          <span className="font-normal text-muted-foreground">No name</span>
-        ) : (
-          <SenderLink accountId={accountId} address={address} name={name} />
-        )}
+        {name === null ? <span className="font-normal text-muted-foreground">No name</span> : <SenderLink address={address} name={name} />}
       </span>
       {children}
     </Td>

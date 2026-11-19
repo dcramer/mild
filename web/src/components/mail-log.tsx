@@ -79,7 +79,7 @@ export function MailLog({
             const s = status(row);
             return (
               <Tr key={row.id} onOpen={() => onOpen(items, index)} holds={[messageKey(row)]}>
-                <SenderCell accountId={row.accountId} address={reveal(row.fromAddress)} name={reveal(row.fromName)} contact={row.contact} {...term}>
+                <SenderCell address={reveal(row.fromAddress)} name={reveal(row.fromName)} contact={row.contact} {...term}>
                   <OnPhone>
                     <span className="w-full truncate text-foreground">{reveal(row.subject) || '(no subject)'}</span>
                     <Happened row={row} labelled={labelled} />

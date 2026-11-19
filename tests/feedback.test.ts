@@ -49,7 +49,7 @@ describe('leaving mail in the inbox', () => {
     // As the dashboard answers: carried out, so the answer is a decision of its own.
     for (const messageId of ['m1', 'm2'])
       await applyFeedback(db, { accountId: ACCOUNT, sender: 'bills@example.com', label: 'everything_else', messageId, carryOut: true });
-    expect((await senderFacts(db, ACCOUNT, 'bills@example.com')).answered).toEqual([{ id: 'everything_else', messages: 2 }]);
+    expect((await senderFacts(db, [ACCOUNT], 'bills@example.com')).answered).toEqual([{ id: 'everything_else', messages: 2 }]);
     await expect(
       applyFeedback(db, { accountId: ACCOUNT, sender: 'bills@example.com', label: 'everything_else', disposition: 'archive', messageId: 'm1' }),
     ).rejects.toThrow('stays there');

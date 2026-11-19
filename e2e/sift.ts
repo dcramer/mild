@@ -227,10 +227,10 @@ const ME = encodeURIComponent('me@example.org');
 export const messageQuery = (id: string) => `message=${id}&account=${ME}`;
 
 /** A sender's page, by their address. */
-export const senderPage = (address: string) => `/sender/${ME}/${encodeURIComponent(address)}`;
+export const senderPage = (address: string) => `/sender/${encodeURIComponent(address)}`;
 
 /** A domain's page. */
-export const domainPage = (domain: string) => `/domain/${ME}/${domain}`;
+export const domainPage = (domain: string) => `/domain/${domain}`;
 
 /** For review's rows of mail, without its header. */
 export const reviewRows = (page: Page) => page.getByRole('row').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });

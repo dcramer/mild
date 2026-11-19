@@ -46,8 +46,8 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
 
   const userHasWritten = await ownerHasWritten(sources, facts);
   const now = (sources.now ?? Date.now)();
-  const sender = await senderFacts(db, facts.accountId, facts.from.address, now);
-  const domain = await domainFacts(db, facts.accountId, facts.from.domain, now);
+  const sender = await senderFacts(db, [facts.accountId], facts.from.address, now);
+  const domain = await domainFacts(db, [facts.accountId], facts.from.domain, now);
   const underName = await answersUnderName(db, facts.accountId, facts.from);
   return {
     facts,

@@ -25,7 +25,7 @@ test.describe('What the page sends Sentry', () => {
     // For review's list was read in the page load's trace, which the server's spans for it are under.
     await expect.poll(() => traces.get('/api/suggestions')).toBeDefined();
     await expect.poll(() => sent.some((envelope) => envelope.includes(traces.get('/api/suggestions')!) && envelope.includes('"pageload"'))).toBe(true);
-    await expect.poll(() => sent.join('\n')).toContain('/sender/:account/:address');
+    await expect.poll(() => sent.join('\n')).toContain('/sender/:address');
 
     const all = sent.join('\n');
     for (const named of ['ada@example.org', 'ada%40example.org', 'me@example.org', 'me%40example.org', 'Lunch on Thursday', '?message=', '?id=', 'account='])

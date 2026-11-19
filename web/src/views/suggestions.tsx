@@ -67,7 +67,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
     <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
       <p className="min-w-0 flex-1 basis-80">
         <span className="font-semibold">
-          {outcomeName(proposal.disposition)} {proposal.labelName} <MatchWords accountId={proposal.accountId} match={reveal(proposal.match)} />?
+          {outcomeName(proposal.disposition)} {proposal.labelName} <MatchWords match={reveal(proposal.match)} />?
         </span>{' '}
         <span className="text-muted-foreground">
           You {USER_DID[proposal.disposition]?.(n)}, but the label {LABEL_DOES[proposal.labelDisposition]}.
@@ -131,7 +131,6 @@ function SuggestionRow({
     <Tr onOpen={onOpen} holds={[item, ...rest].map(messageKey)}>
       {/* On a phone the row reads like a mail app's: who and what sift thinks, the subject, a line of the text. It opens to answer. */}
       <SenderCell
-        accountId={item.accountId}
         address={reveal(item.sender)}
         name={reveal(item.senderName)}
         contact={item.contact}

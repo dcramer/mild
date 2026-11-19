@@ -129,7 +129,8 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   );
   const known = await contacts(
     db,
-    shown.map((s) => ({ accountId: s.accountId, address: plain(s.fromAddress) })),
+    scope.accounts,
+    shown.map((s) => plain(s.fromAddress)),
   );
   const items = shown.map((s): SuggestionItem => ({
     accountId: s.accountId,
@@ -137,7 +138,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
     decisionId: s.decisionId,
     sender: s.fromAddress,
     senderName: s.fromName,
-    contact: known.get(`${s.accountId}\n${plain(s.fromAddress)}`) ?? null,
+    contact: known.get(plain(s.fromAddress)) ?? null,
     subject: s.subject,
     receivedAt: s.receivedAt,
     disposition: s.block ? 'block' : s.digest ? 'digest' : s.disposition,

@@ -434,16 +434,9 @@ describe('contact', () => {
     );
     await rememberCorrespondent(d, ACCOUNT, 'deals@example.com', false);
     await rememberCorrespondent(d, ACCOUNT, 'ada@example.org', true);
-    const known = await contacts(
-      d,
-      ['new@example.com', 'deals@example.com', 'ada@example.org'].map((address) => ({ accountId: ACCOUNT, address })),
-    );
-    expect(Object.fromEntries(known)).toEqual({
-      [`${ACCOUNT}\nnew@example.com`]: 'new',
-      [`${ACCOUNT}\ndeals@example.com`]: 'one-way',
-      [`${ACCOUNT}\nada@example.org`]: 'mutual',
-    });
-    expect(await senderFacts(d, ACCOUNT, 'deals@example.com')).toMatchObject({ contact: 'one-way' });
+    const known = await contacts(d, [ACCOUNT], ['new@example.com', 'deals@example.com', 'ada@example.org']);
+    expect(Object.fromEntries(known)).toEqual({ 'new@example.com': 'new', 'deals@example.com': 'one-way', 'ada@example.org': 'mutual' });
+    expect(await senderFacts(d, [ACCOUNT], 'deals@example.com')).toMatchObject({ contact: 'one-way' });
   });
 });
 
@@ -468,10 +461,10 @@ describe('standing', () => {
   it('is new until enough mail has come, then known, and says how consistent the owner found the mail', async () => {
     const d = await db();
     await mail(d, 'a', 'news@example.com', 'newsletter', 1000, 'rules');
-    expect(await senderFacts(d, ACCOUNT, 'news@example.com', 2000)).toMatchObject({ messages: 1, standing: 'new', consistency: null, userHasWritten: null });
+    expect(await senderFacts(d, [ACCOUNT], 'news@example.com', 2000)).toMatchObject({ messages: 1, standing: 'new', consistency: null, userHasWritten: null });
     for (const id of ['b', 'c', 'd']) await mail(d, id, 'news@example.com', 'newsletter', 1000, 'rules');
     await mail(d, 'e', 'news@example.com', 'transactional', 1000, 'rules');
-    expect(await senderFacts(d, ACCOUNT, 'news@example.com', 2000)).toMatchObject({
+    expect(await senderFacts(d, [ACCOUNT], 'news@example.com', 2000)).toMatchObject({
       messages: 5,
       recent: 5,
       labels: [
@@ -489,7 +482,7 @@ describe('standing', () => {
     await mail(d, 'b', 'news@example.com', 'newsletter');
     await mail(d, 'c', 'news@example.com', 'marketing');
     await mail(d, 'd', 'news@example.com', 'transactional', 1000, 'rules');
-    expect(await senderFacts(d, ACCOUNT, 'news@example.com')).toMatchObject({
+    expect(await senderFacts(d, [ACCOUNT], 'news@example.com')).toMatchObject({
       labels: [
         { id: 'newsletter', messages: 2 },
         { id: 'marketing', messages: 1 },
@@ -504,7 +497,7 @@ describe('standing', () => {
       ACCOUNT,
       guessed,
     );
-    expect((await senderFacts(d, ACCOUNT, 'news@example.com')).answered).toEqual([
+    expect((await senderFacts(d, [ACCOUNT], 'news@example.com')).answered).toEqual([
       { id: 'newsletter', messages: 1 },
       { id: 'transactional', messages: 1 },
     ]);
@@ -514,10 +507,10 @@ describe('standing', () => {
     const d = await db();
     await mail(d, 'a', 'ada@example.org', 'personal');
     await rememberCorrespondent(d, ACCOUNT, 'ada@example.org', true);
-    expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'known', why: 'you have written to them' });
+    expect(await senderFacts(d, [ACCOUNT], 'ada@example.org')).toMatchObject({ standing: 'known', why: 'you have written to them' });
 
     await addRule(d, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
-    expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
+    expect(await senderFacts(d, [ACCOUNT], 'ada@example.org')).toMatchObject({ standing: 'trusted', why: 'a rule keeps their mail' });
   });
 
   it('makes a rule that only keeps their mail Leave in inbox, which trusts them; one with an extra stays an action', async () => {
@@ -525,7 +518,7 @@ describe('standing', () => {
     const ada = await addRule(d, { match: { from: ['ada@example.org'] }, disposition: 'keep' }, 'user');
     expect((await listRules(d)).find((r) => r.id === ada)).toMatchObject({ labelId: 'everything_else' });
     expect((await listRules(d)).find((r) => r.id === ada)).not.toHaveProperty('disposition');
-    expect(await senderFacts(d, ACCOUNT, 'ada@example.org')).toMatchObject({ standing: 'trusted' });
+    expect(await senderFacts(d, [ACCOUNT], 'ada@example.org')).toMatchObject({ standing: 'trusted' });
     const read = await addRule(d, { match: { from: ['digest@example.com'] }, disposition: 'keep', markRead: true }, 'user');
     expect((await listRules(d)).find((r) => r.id === read)).toMatchObject({ disposition: 'keep' });
     expect((await listRules(d)).find((r) => r.id === read)).not.toHaveProperty('labelId');
@@ -535,14 +528,14 @@ describe('standing', () => {
     const d = await db();
     await mail(d, 'a', 'promo@example.com', 'marketing');
     await addRule(d, { match: { from: ['promo@example.com'] }, whenLabel: 'marketing' }, 'user');
-    expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('new');
+    expect((await senderFacts(d, [ACCOUNT], 'promo@example.com')).standing).toBe('new');
     // One rule for them and another sender says how the owner regards both, not this one.
     await addRule(d, { match: { from: ['promo@example.com', 'deals@example.com'] }, disposition: 'archive' }, 'user');
-    expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('new');
+    expect((await senderFacts(d, [ACCOUNT], 'promo@example.com')).standing).toBe('new');
     await addRule(d, { match: { from: ['promo@example.com'] }, disposition: 'archive' }, 'user');
-    expect((await senderFacts(d, ACCOUNT, 'promo@example.com')).standing).toBe('unwanted');
+    expect((await senderFacts(d, [ACCOUNT], 'promo@example.com')).standing).toBe('unwanted');
     await addRule(d, { match: { from: ['scam@example.net'] }, labelId: 'phishing' }, 'user');
-    expect((await senderFacts(d, ACCOUNT, 'scam@example.net')).standing).toBe('blocked');
+    expect((await senderFacts(d, [ACCOUNT], 'scam@example.net')).standing).toBe('blocked');
   });
 
   it('gives a domain a standing of its own, except one anyone can get an address at', async () => {
@@ -550,8 +543,8 @@ describe('standing', () => {
     await mail(d, 'a', 'one@example.com', 'newsletter');
     await mail(d, 'b', 'two@example.com', 'newsletter');
     await addRule(d, { match: { fromDomain: ['example.com'] }, labelId: 'personal' }, 'user');
-    expect(await domainFacts(d, ACCOUNT, 'example.com')).toMatchObject({ messages: 2, senders: 2, standing: 'trusted' });
-    expect(await domainFacts(d, ACCOUNT, 'gmail.com')).toBeNull();
+    expect(await domainFacts(d, [ACCOUNT], 'example.com')).toMatchObject({ messages: 2, senders: 2, standing: 'trusted' });
+    expect(await domainFacts(d, [ACCOUNT], 'gmail.com')).toBeNull();
   });
 });
 
