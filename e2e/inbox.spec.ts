@@ -61,6 +61,13 @@ test.describe('Inbox', () => {
     await expect(open.getByRole('heading', { name: 'Your March bill', level: 2 })).toBeVisible();
     const folded = open.getByRole('cell', { name: /^Utility/ });
     await expect(folded).toHaveCount(2);
+    // When it came, as the list says it, not how long ago.
+    await expect(
+      open
+        .getByRole('row', { name: /^Utility/ })
+        .first()
+        .locator('time'),
+    ).toHaveText(/^(\d{1,2}:\d{2} [AP]M|[A-Z][a-z]{2}( \d{1,2})?)$/);
     await expect(open.getByText('Your bill is ready.', { exact: true }).last()).toBeVisible();
     await folded.first().click();
     await expect(folded).toHaveCount(2);

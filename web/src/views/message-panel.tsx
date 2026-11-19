@@ -15,6 +15,7 @@ import { useAction } from '@/lib/action.ts';
 import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
   Ago,
+  Arrived,
   Th,
   Heads,
   AnswerPicker,
@@ -382,7 +383,7 @@ function Conversation({ conversation, newest }: { conversation: MailConversation
                   {m.preview ? <Sub>{reveal(m.preview)}</Sub> : null}
                 </Td>
                 <Td num quiet>
-                  <Ago at={m.receivedAt} />
+                  <Arrived at={m.receivedAt} />
                 </Td>
               </Tr>
             ))}
