@@ -14,7 +14,7 @@ import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
 import { latestArrival, listUndecided, purgeSuggestionBodies } from '../store/messages.ts';
 import { listUnsettledDecisions } from '../store/decisions.ts';
 import { preferences } from '../store/preferences.ts';
-import { KEEP_BODY_DAYS, bodiesDue, keepSuggestionBodies } from './bodies.ts';
+import { KEEP_BODY_DAYS, bodiesDue, keepMailBodies, keepSuggestionBodies, mailBodiesDue } from './bodies.ts';
 import { captureExamples, examplesDue } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { continueEval, goingEvals } from '../learn/evals.ts';
@@ -260,8 +260,9 @@ async function goThroughInbox(db: Sql, account: Account, run: number, options: R
     account,
     run,
   );
-  // The text the model read is kept for what is now waiting on the person; the rest waits for a pass.
+  // The text the model read is kept for what is now waiting on the person, and for Inbox; the rest waits for a pass.
   await keepSuggestionBodies(db, api, account.id, options.now, { held, fetch: false });
+  await keepMailBodies(db, api, account.id, options.now, { held, fetch: false });
   if (went && went.to > went.from) options.log(`${account.email}: went through ${went.to} of ${went.of} in the inbox`);
 }
 
@@ -318,6 +319,7 @@ async function recordWants(db: Sql, account: Account, options: RunOptions, now: 
   if (active && (await reconcileDue(db, account.id))) return true;
   if ((await listUnsettledDecisions(db, account.id, active ? {} : { byUserOnly: true })).length > 0) return true;
   if (await bodiesDue(db, account.id, now)) return true;
+  if (await mailBodiesDue(db, account.id)) return true;
   if (await examplesDue(db, account.id)) return true;
   if (await filtersDue(db, account.id, active, now)) return true;
   // With no model, what no rule covers waits for one and a pass leaves it be. A rule added since decides it at the next
@@ -359,6 +361,8 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     const out = Boolean(result.triage.unfinished) || over();
     // Out of time, the text the model read is still kept for the mail it left waiting; the rest waits for the next pass.
     await keepSuggestionBodies(db, api, account.id, options.now, { held, fetch: !out });
+    // After triage, unlike waiting mail's: Inbox shows mail as it is, so classifying comes first.
+    await keepMailBodies(db, api, account.id, options.now, { held, fetch: !out });
     if (out) return finish(result, active, options, true);
     result.captured = await captureExamples(db, api, account.id);
     try {

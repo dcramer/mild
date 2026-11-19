@@ -22,7 +22,7 @@ Quotas (projects created since 2026-05-01; older ones keep their old quotas):
 
 | Per | Units | |
 | --- | --- | --- |
-| User, minute | 6,000 | 100 full reads. One pass's bodies and examples (50 each) use it all. |
+| User, minute | 6,000 | 100 full reads. One pass's bodies and examples (50 each) use it all; with Inbox on, its 50 more wait for the next minute. |
 | Project, minute | 1,200,000 | Per install. |
 | Project, day | 80,000,000 | Not raisable; Google plans to bill above it. A 200-messages-a-day mailbox uses ~33,000. |
 

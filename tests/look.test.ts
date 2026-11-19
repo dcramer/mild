@@ -6,7 +6,7 @@ import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { finishAction, insertPendingAction } from '../src/store/actions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { setRuleFilter } from '../src/store/filters.ts';
-import { setActive } from '../src/store/preferences.ts';
+import { setActive, setMail } from '../src/store/preferences.ts';
 import { examples } from '../src/store/query.ts';
 import { addRule } from '../src/store/rules.ts';
 import { goingInboxRuns, startInboxRuns } from '../src/store/inbox.ts';
@@ -201,6 +201,17 @@ describe('the timed tick', () => {
     await setActive(db, false);
     await recordDecision(db, ACCOUNT, 'news', decision('archive'), { carryOut: true, byUser: true, now: clock });
     expect(await timedTickPasses()).toBe(true);
+  });
+
+  it('begins one for inbox mail without its text only while Inbox is on, and none once it has it', async () => {
+    // Decided, so nothing else is due for it.
+    await recordDecision(db, ACCOUNT, 'news', decision('keep'), { now: clock });
+    expect(await timedTickPasses()).toBe(false);
+    await setMail(db, true);
+    expect(await timedTickPasses()).toBe(true);
+    await workDue(store, options(), Infinity);
+    expect(await raw(db).all('SELECT message_id FROM mail_bodies')).toEqual([{ message_id: 'news' }]);
+    expect(await timedTickPasses()).toBe(false);
   });
 
   it('begins one for the text of mail waiting on the person, to keep or to let go', async () => {

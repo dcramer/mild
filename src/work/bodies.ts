@@ -1,4 +1,4 @@
-import { and, eq, suggestionBodies } from '../store/query.ts';
+import { and, desc, eq, mailBodies, messages, notExists, preferences, sql, suggestionBodies } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { pendingSuggestions } from '../learn/feedback.ts';
@@ -68,6 +68,75 @@ export async function keepSuggestionBodies(
       .insert(suggestionBodies)
       .values({ accountId, messageId, ...body })
       .onConflictDoUpdate({ target: [suggestionBodies.userId, suggestionBodies.accountId, suggestionBodies.messageId], set: body });
+    if (!inHand) fetched++;
+  }
+  return fetched;
+}
+
+/** Inbox mail Sift has a record of and no text for, newest first. `messages_inbox` serves it. */
+const textless = (db: Sql, accountId: string, limit: number) =>
+  db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.accountId, accountId),
+        sql`${messages.labelIds} @> '["INBOX"]'::jsonb`,
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(mailBodies)
+            .where(and(eq(mailBodies.accountId, messages.accountId), eq(mailBodies.messageId, messages.id))),
+        ),
+      ),
+    )
+    .orderBy(desc(messages.receivedAt))
+    .limit(limit);
+
+/** Read in one batch: deep enough to reach the mail this pass has already read, which is mostly the newest. */
+const LOOKED_AT = 500;
+
+const inboxOn = async (db: Sql) => (await db.select({ mail: preferences.mail }).from(preferences))[0]?.mail === true;
+
+/** Whether `keepMailBodies` has text to fetch: Inbox is on and some inbox mail has none. */
+export async function mailBodiesDue(db: Sql, accountId: string): Promise<boolean> {
+  return (await inboxOn(db)) && (await textless(db, accountId, 1)).length > 0;
+}
+
+/**
+ * While Inbox is on, keep the whole text and HTML of the mail in the inbox: up to `PER_PASS` fetched, newest first, and
+ * whatever of it this pass has already read (`held`) however many. A message that has gone is stored empty, so it is not
+ * asked for again. Returns how many were fetched.
+ */
+export async function keepMailBodies(
+  db: Sql,
+  api: Pick<GmailApi, 'getContent'>,
+  accountId: string,
+  now: () => number = Date.now,
+  { held = () => false, fetch = true }: { held?: (messageId: string) => boolean; fetch?: boolean } = {},
+): Promise<number> {
+  if (!(await inboxOn(db))) return 0;
+  let fetched = 0;
+  for (const { id: messageId } of await textless(db, accountId, LOOKED_AT)) {
+    const inHand = held(messageId);
+    if (!inHand && (!fetch || fetched >= PER_PASS)) continue;
+    const content = await api.getContent(messageId);
+    const body = {
+      bodyText: sealPart(db, accountId, messageId, 'text', content?.whole ?? content?.text ?? '')!,
+      bodyHtml: sealPart(db, accountId, messageId, 'html', content?.html ?? null),
+      fetchedAt: now(),
+    };
+    const kept = await db.transaction(async (tx) => {
+      // Holds back Inbox being turned off until this is written, so the delete that turns it off finds it; once it is off, nothing is written.
+      const [on] = await tx.select({ mail: preferences.mail }).from(preferences).for('share');
+      if (on?.mail)
+        await tx
+          .insert(mailBodies)
+          .values({ accountId, messageId, ...body })
+          .onConflictDoNothing();
+      return on?.mail === true;
+    });
+    if (!kept) break;
     if (!inHand) fetched++;
   }
   return fetched;
