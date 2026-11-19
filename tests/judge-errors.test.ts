@@ -13,7 +13,7 @@ async function failedWith(error: string | Error): Promise<unknown> {
   models.setProvider(faux.provider);
   faux.setResponses([fauxAssistantMessage([], { stopReason: 'error', errorMessage: String(error) })]);
   const throwing = {
-    complete: async () => {
+    completeSimple: async () => {
       throw error;
     },
   } as unknown as Models;
@@ -21,6 +21,7 @@ async function failedWith(error: string | Error): Promise<unknown> {
   const verdict = await createJudge(
     typeof error === 'string' ? models : throwing,
     faux.getModel(),
+    'low',
   )({
     evidence: { facts: f, known: deriveFacts(f), body: SECRET, sender: { messagesSeen: 1, userHasWritten: false } },
     labels: SAMPLE_LABELS,

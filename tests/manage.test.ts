@@ -549,6 +549,10 @@ describe('managing sift from the dashboard', () => {
     await call('POST', '/api/labels/add', { labels: [{ name: 'Builds', description: '', disposition: 'digest' }], timeZone: 'Asia/Tokyo' });
     expect(await preferences(db)).toMatchObject({ digestHour: 7, timeZone: 'America/Denver' });
     expect((await call('POST', '/api/digest', { hour: 6, timeZone: 'Asia/Tokyo' })).status).toBe(200);
+    expect((await call('GET', '/api/manage')).body['model']).toMatchObject({ reasoning: 'low' });
+    expect((await call('POST', '/api/model/reasoning', { reasoning: 'medium' })).status).toBe(200);
+    expect(await preferences(db)).toMatchObject({ reasoning: 'medium' });
+    for (const reasoning of ['off', 'none', 'max']) expect((await call('POST', '/api/model/reasoning', { reasoning })).status, reasoning).toBe(400);
     expect(await preferences(db)).toMatchObject({ digestHour: 6, timeZone: 'Asia/Tokyo' });
     for (const body of [
       { hour: 24, timeZone: 'Asia/Tokyo' },

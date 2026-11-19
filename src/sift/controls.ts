@@ -64,17 +64,23 @@ const modelsFor = async (config: Config, ephemeral: Ephemeral, db: Sql) =>
  * Null when they have chosen no model. Throws, with what to do, when they have chosen one they cannot reach.
  */
 async function openModel(config: Config, ephemeral: Ephemeral, db: Sql): Promise<ChosenModel | null> {
-  const { model: spec } = await preferences(db);
+  const { model: spec, reasoning } = await preferences(db);
   if (!spec) return null;
   const models = await modelsFor(config, ephemeral, db);
   const model = resolveModel(models, spec);
   if (!(await models.getAuth(model))) throw new Refusal(`Not signed in to ${model.provider}. Sign in under Settings in the dashboard.`);
-  return { spec, models, model };
+  return { spec, models, model, reasoning };
 }
 
 export async function openModelTier(config: Config, ephemeral: Ephemeral, db: Sql) {
   const opened = await openModel(config, ephemeral, db);
-  return opened && { spec: opened.spec, judge: createJudge(opened.models, opened.model), highlight: createHighlighter(opened.models, opened.model) };
+  return (
+    opened && {
+      spec: opened.spec,
+      judge: createJudge(opened.models, opened.model, opened.reasoning),
+      highlight: createHighlighter(opened.models, opened.model, opened.reasoning),
+    }
+  );
 }
 
 /** What the dashboard may ask this process to do. See `Controls`. */
@@ -183,12 +189,12 @@ export async function buildControls(
     proposeLabels: async (db, request) => {
       const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
-      return seal(await proposeLabels({ db, propose: createProposer(opened.models, opened.model), model: opened.spec }, request));
+      return seal(await proposeLabels({ db, propose: createProposer(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
     },
     draftRule: async (db, request) => {
       const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
-      return seal(await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model), model: opened.spec }, request));
+      return seal(await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
     },
     ruleFilter: async (db, ruleId, on) => {
       // Every mailbox is tried, so one Gmail refusing does not leave the others as they were.

@@ -233,6 +233,7 @@ export const api = {
   setActive: (active: boolean) => post('/api/active', { active }),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
+  setReasoning: (reasoning: ManageState['model']['reasoning']) => post('/api/model/reasoning', { reasoning }),
   /** Start a ChatGPT sign-in: resolves with where to go, and by device code the code to enter there. */
   signInChatGPT: () => post<SignInCode>('/api/model/chatgpt', {}),
   /** Finish a Sign in with ChatGPT with the address the browser was sent back to. */

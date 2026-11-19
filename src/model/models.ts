@@ -8,12 +8,14 @@ import { registerLazyOAuthFlows } from '@earendil-works/pi-ai/lazy-oauth';
 import { type SignIns, credentialStore } from './credentials.ts';
 import { Refusal } from '../refusal.ts';
 import { tracedFetch } from '../telemetry.ts';
+import type { Reasoning } from './reasoning.ts';
 
 /** A person's chosen model, ready to call. */
 export interface ChosenModel {
   spec: string;
   models: Models;
   model: Model<Api>;
+  reasoning: Reasoning;
 }
 
 // Without this pi-ai imports its OAuth flows through a variable specifier, which Vercel's file

@@ -2,6 +2,7 @@ import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earen
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt, forModel, fromModel } from '../triage/prompt.ts';
 import { type Judge, UNSURE, describeFailure as failure } from '../triage/stages/model.ts';
 import { chat, executeTool } from './chat.ts';
+import type { Reasoning } from './reasoning.ts';
 
 const MAX_REASON = 300;
 /**
@@ -15,7 +16,7 @@ const CALL = { timeoutMs: 60_000, maxRetries: 0 };
  * act with: its only output is a single structured verdict, which is validated here before use.
  * Any failure (provider error, no verdict, malformed verdict) is returned as one, never as `unsure`.
  */
-export function createJudge(models: Models, model: Model<Api>): Judge {
+export function createJudge(models: Models, model: Model<Api>, reasoning: Reasoning): Judge {
   return async (input) => {
     const ids = [...input.labels.map((l) => forModel(l.id)), UNSURE];
     const tool: Tool = {
@@ -43,7 +44,7 @@ export function createJudge(models: Models, model: Model<Api>): Judge {
 
     let message: AssistantMessage;
     try {
-      message = await chat(models, model, context, CALL);
+      message = await chat(models, model, context, { ...CALL, reasoning });
     } catch (error) {
       return { failed: failure(error) };
     }

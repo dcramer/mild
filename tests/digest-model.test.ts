@@ -82,8 +82,8 @@ describe('asking the model about a digest', () => {
     const faux = fauxProvider();
     const models = createModels();
     models.setProvider(faux.provider);
-    const complete = vi.spyOn(models, 'complete');
-    const highlight = createHighlighter(models, faux.getModel());
+    const complete = vi.spyOn(models, 'completeSimple');
+    const highlight = createHighlighter(models, faux.getModel(), 'low');
     const input = {
       label: { name: 'Builds', description: 'CI results.' },
       lines: [{ fromAddress: 'ci@example.org', subject: 'Failed', received: 'Wed 6:00 AM' }],

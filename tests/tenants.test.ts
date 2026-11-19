@@ -329,6 +329,7 @@ describe("nobody sees or changes another person's mail", () => {
     for (const [path, body] of [
       ['/api/active', { active: true }],
       ['/api/model', { model: 'openai/small' }],
+      ['/api/model/reasoning', { reasoning: 'high' }],
       ['/api/model/chatgpt', {}],
       ['/api/model/chatgpt/finish', { address: 'http://127.0.0.1:1455/auth/callback?code=c' }],
       ['/api/model/key', { provider: 'openai', key: 'k' }],
@@ -337,8 +338,20 @@ describe("nobody sees or changes another person's mail", () => {
     ] as const)
       expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
     expect(calls.filter((c) => c !== 'check')).toEqual([`chatgpt ${bravo}`, `finish ${bravo}`, `key openai ${bravo}`, `signout openai ${bravo}`]);
-    expect(await preferences(await dbOf(BRAVO))).toMatchObject({ active: true, model: 'openai/small', digestHour: 6, timeZone: 'Europe/Berlin' });
-    expect(await preferences(await dbOf(ALPHA))).toMatchObject({ active: false, model: 'alpha-own-words/model', digestHour: 7, timeZone: null });
+    expect(await preferences(await dbOf(BRAVO))).toMatchObject({
+      active: true,
+      model: 'openai/small',
+      reasoning: 'high',
+      digestHour: 6,
+      timeZone: 'Europe/Berlin',
+    });
+    expect(await preferences(await dbOf(ALPHA))).toMatchObject({
+      active: false,
+      model: 'alpha-own-words/model',
+      reasoning: 'low',
+      digestHour: 7,
+      timeZone: null,
+    });
     expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ active: true, digest: { hour: 6, timeZone: 'Europe/Berlin' } });
     expect((await call('GET', '/api/manage', ALPHA)).body).toMatchObject({ active: false, digest: { hour: 7, timeZone: null } });
     expect((await call('POST', '/api/model', null, { model: 'nobody/model' })).status).toBe(401);

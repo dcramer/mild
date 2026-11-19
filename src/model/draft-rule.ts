@@ -15,6 +15,7 @@ import { DECIDED } from '../triage/types.ts';
 import type { Usage } from '../triage/stages/model.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
 import { chat, executeTool } from './chat.ts';
+import type { Reasoning } from './reasoning.ts';
 
 /** One attempt per turn, as for the judge; the person asks again. */
 const CALL = { timeoutMs: 60_000, maxRetries: 0 };
@@ -89,7 +90,7 @@ const add = (a: Usage | undefined, b: Usage): Usage =>
  * the rule, which is checked here before use and sent back once with what is wrong when it cannot be. The last
  * turn offers only the second.
  */
-export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafter {
+export function createRuleDrafter(models: Models, model: Model<Api>, reasoning: Reasoning): RuleDrafter {
   return async (input, findSenders) => {
     const record = fill(input.labels.map((l) => l.name));
     const context: Context = {
@@ -104,7 +105,7 @@ export function createRuleDrafter(models: Models, model: Model<Api>): RuleDrafte
       const last = lookups >= MAX_LOOKUPS;
       let message: AssistantMessage;
       try {
-        message = await chat(models, model, { ...context, tools: last ? [record] : [find, record] }, CALL);
+        message = await chat(models, model, { ...context, tools: last ? [record] : [find, record] }, { ...CALL, reasoning });
       } catch (error) {
         return { failed: failure(error), ...spent() };
       }

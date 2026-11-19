@@ -2,6 +2,7 @@ import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earen
 import { HIGHLIGHT_PROMPT, HIGHLIGHT_TOOL, type Highlighter, MAX_HIGHLIGHTS, buildHighlightPrompt, readHighlights } from '../triage/digest.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
 import { chat, executeTool } from './chat.ts';
+import type { Reasoning } from './reasoning.ts';
 
 /** One attempt, as for the judge: a digest that fails goes without highlights rather than wait. */
 const CALL = { timeoutMs: 60_000, maxRetries: 0 };
@@ -10,7 +11,7 @@ const CALL = { timeoutMs: 60_000, maxRetries: 0 };
  * A Highlighter backed by a pi-ai model: one request with a day's headers, no bodies, and no tool but the one
  * that records its picks, which are checked here before use.
  */
-export function createHighlighter(models: Models, model: Model<Api>): Highlighter {
+export function createHighlighter(models: Models, model: Model<Api>, reasoning: Reasoning): Highlighter {
   return async (input) => {
     const tool: Tool = {
       name: HIGHLIGHT_TOOL,
@@ -46,7 +47,7 @@ export function createHighlighter(models: Models, model: Model<Api>): Highlighte
     let message: AssistantMessage;
     try {
       // Shown mail, so its prompt and answer stay off the span.
-      message = await chat(models, model, context, CALL);
+      message = await chat(models, model, context, { ...CALL, reasoning });
     } catch (error) {
       return { failed: failure(error) };
     }

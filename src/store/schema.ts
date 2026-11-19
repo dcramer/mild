@@ -32,6 +32,7 @@ import {
   unique,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { REASONING } from '../model/reasoning.ts';
 import type { Facts } from '../triage/facts.ts';
 import { DECIDED, DISPOSITIONS, LEAVE_IN_INBOX, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
 
@@ -145,10 +146,11 @@ export const preferences = pgTable(
     // false (off): their decisions are only suggestions. true (on): sift carries them out in their mailboxes.
     active: boolean('active').notNull().default(false),
     model: text('model'),
+    reasoning: text('reasoning', { enum: REASONING }).notNull().default('low'),
     digestHour: integer('digest_hour').notNull().default(7), // the hour of their day a label's digest arrives
     timeZone: text('time_zone'), // their browser's IANA zone, as last said; null: never said, so UTC
   },
-  (t) => [check('preferences_digest_hour', sql`${t.digestHour} BETWEEN 0 AND 23`), own()],
+  (t) => [check('preferences_digest_hour', sql`${t.digestHour} BETWEEN 0 AND 23`), oneOf('preferences_reasoning', t.reasoning, REASONING), own()],
 ).enableRLS();
 
 /**

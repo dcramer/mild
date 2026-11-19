@@ -11,6 +11,7 @@ import type { Confidential } from '../confidential.ts';
 import { RULE_FACTS, type RuleFacts as Conditions, factCondition } from '../triage/facts.ts';
 import { GIVEN } from '../triage/standing.ts';
 import { DRAFT_ACTIONS } from '../triage/proposal.ts';
+import { REASONING } from '../model/reasoning.ts';
 import { DECIDED } from '../triage/types.ts';
 
 export const STAGES = ['rules', 'classifier', 'model', 'fallback'] as const;
@@ -649,6 +650,7 @@ export const ManageState = z.object({
   /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
   model: z.object({
     chosen: z.string().nullable(),
+    reasoning: z.enum(REASONING),
     choices: z.array(z.object({ provider: z.string(), label: z.string(), how: z.enum(['device-code', 'redirect', 'key']) })),
     signedIn: z.array(z.string()),
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),

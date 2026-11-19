@@ -30,6 +30,7 @@ import modelChatgptFinishWrite from './routes/model/chatgpt/finish/post.ts';
 import modelChatgptWrite from './routes/model/chatgpt/post.ts';
 import modelKeyWrite from './routes/model/key/post.ts';
 import modelWrite from './routes/model/post.ts';
+import modelReasoningWrite from './routes/model/reasoning/post.ts';
 import modelSignoutWrite from './routes/model/signout/post.ts';
 import modelsRead from './routes/models/get.ts';
 import proposalsWrite from './routes/proposals/post.ts';
@@ -99,6 +100,7 @@ export const WRITES: readonly Write[] = [
   modelChatgptWrite,
   modelChatgptFinishWrite,
   modelKeyWrite,
+  modelReasoningWrite,
   modelSignoutWrite,
   proposalsWrite,
   rulesWrite,

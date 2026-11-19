@@ -122,7 +122,7 @@ faux.setResponses([answer, answer]);
 
 const standIns: StandIns = {
   gmail: (address) => ({ api: nothingNew(address), mailbox: mailboxOf(address) }),
-  model: { spec: 'faux/stand-in', models, model: faux.getModel() },
+  model: { spec: 'faux/stand-in', models, model: faux.getModel(), reasoning: 'low' },
   inbox: {
     inboxEstimate: async (_db, _mailboxes, reach) =>
       reach === 'inbox' ? { messages: 2412, model: 1830, cost: 3.1 } : { messages: 300, model: 228, cost: 0.39 },
