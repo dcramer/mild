@@ -83,7 +83,7 @@ Tokens and the role classes are in `web/src/index.css`.
 
 Every part has an answer for a phone, and a new part needs one before it is added.
 
-On a phone a row keeps only what identifies it and what it is; figures, dates and who made it go to the panel the row opens, and so does anything that cannot be taken back, so a thumb cannot remove something by brushing a row.
+On a phone a row keeps only what identifies it and what it is; figures, dates and who made it go to the panel the row opens, and so does anything that cannot be taken back, so a thumb cannot remove something by brushing a row. A row of mail is the exception for its date: it reads as a mail app's does, the sender with when it came at the top right, then the subject, then a line of the text with what Sift thinks it is, newest first under `TrGroup` headings for Today, Yesterday, This week, Last week and each month before (`period`, `Arrived`).
 
 | Part | On a narrow screen |
 | --- | --- |

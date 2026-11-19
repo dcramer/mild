@@ -1,4 +1,4 @@
-export { Ago } from './ago.tsx';
+export { Ago, Arrived, useNow } from './ago.tsx';
 export { AnswerPicker, type Pick } from './answer-picker.tsx';
 export { Button } from './button.tsx';
 export { StackedBars, Swatch } from './chart.tsx';

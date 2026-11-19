@@ -7,6 +7,7 @@ import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
   Ago,
+  Arrived,
   Heads,
   Blank,
   Does,
@@ -254,6 +255,13 @@ export function SystemView() {
           <Sheet>
             <Row label="Ago" note="How long since, drawn only in the browser: the server's clock and zone are not the reader's.">
               <Ago at={SYNCED} />
+            </Row>
+            <Row label="Arrived" note="When mail came, under its period's TrGroup heading: the time of day until yesterday, then the weekday, then the date.">
+              <p className="flex gap-4">
+                <Arrived at={SYNCED} />
+                <Arrived at={SYNCED - 3 * 86_400_000} />
+                <Arrived at={SYNCED - 20 * 86_400_000} />
+              </p>
             </Row>
             <Row label="Sift does" note="Its icon and its word, the same whether suggested, done or a setting. Never what comes with it.">
               {ACTIONS.map(([key]) => (

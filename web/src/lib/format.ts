@@ -150,6 +150,33 @@ export const longDay = (day: string) => new Date(`${day}T12:00:00`).toLocaleDate
 export const shortDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 export const dateTime = (ms: number) => new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
+/** Whole days from `ms`'s day to `now`'s, in the reader's zone: 0 today, 1 yesterday. */
+const daysBack = (ms: number, now: number) =>
+  Math.round((new Date(new Date(now).toDateString()).getTime() - new Date(new Date(ms).toDateString()).getTime()) / 86_400_000);
+
+/** Which part of a list of mail, newest first, `ms` falls in: a day or week back, then its month. */
+export function period(ms: number, now: number): string {
+  const days = daysBack(ms, now);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return 'This week';
+  if (days < 14) return 'Last week';
+  const sameYear = new Date(ms).getFullYear() === new Date(now).getFullYear();
+  return new Date(ms).toLocaleDateString(undefined, sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' });
+}
+
+/** When mail came, under its `period`: the time of day until yesterday, then the weekday, then the date. */
+export function arrived(ms: number, now: number): string {
+  const days = daysBack(ms, now);
+  const at = new Date(ms);
+  if (days <= 1) return at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (days < 7) return at.toLocaleDateString(undefined, { weekday: 'short' });
+  return at.toLocaleDateString(
+    undefined,
+    at.getFullYear() === new Date(now).getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' },
+  );
+}
+
 export function ago(ms: number): string {
   const minutes = Math.round((Date.now() - ms) / 60_000);
   if (minutes < 1) return 'just now';

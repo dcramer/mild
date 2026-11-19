@@ -49,6 +49,27 @@ test.describe('For review', () => {
     await expect(panel(page)).toHaveCount(0);
     await query(page).toBe('');
   });
+
+  test.describe('On a phone', () => {
+    test.use({ viewport: PHONE });
+
+    // The seed's mail came 4 to 21 hours before a run at midday: today's, then yesterday's.
+    test('each row says when its mail came, as a mail app does, newest first under its day', async ({ page }) => {
+      await page.goto('/');
+      const today = page.getByRole('columnheader', { name: 'Today', exact: true });
+      const yesterday = page.getByRole('columnheader', { name: 'Yesterday', exact: true });
+      await expect(today).toBeVisible();
+      await expect(yesterday).toBeVisible();
+      expect((await boxOf(today)).y).toBeLessThan((await boxOf(yesterday)).y);
+
+      const newest = row(page, '48 hours only: 30% off');
+      expect((await boxOf(today)).y).toBeLessThan((await boxOf(newest)).y);
+      expect((await boxOf(newest)).y).toBeLessThan((await boxOf(row(page, 'Winter sale starts now'))).y);
+      await expect(newest.locator('time').filter({ visible: true })).toHaveText(/^\d{1,2}:\d{2}\s[AP]M$/);
+      await expect(newest.getByText('Unlabelled').filter({ visible: true })).toHaveCount(1);
+      await sideScroll(page).toBe(0);
+    });
+  });
 });
 
 test.describe('For review, with Sift on', () => {

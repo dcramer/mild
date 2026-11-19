@@ -126,6 +126,30 @@ describe('suggestions', () => {
     expect((await listSuggestions(db, await everything(db), { includeKept: true })).waiting).toBe(6);
   });
 
+  it('are listed newest received first, however late Sift decided them', async () => {
+    const at = { older: 2 * DAY, newer: 3 * DAY };
+    for (const [id, receivedAt] of [
+      ['newer', at.newer],
+      ['older', at.older],
+    ] as const)
+      await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address: `${id}@example.com`, domain: 'example.com' }, receivedAt })], '2');
+    await recordDecision(
+      db,
+      ACCOUNT,
+      'newer',
+      { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'looks like it', ...NEWS },
+      { now: 1 },
+    );
+    await recordDecision(
+      db,
+      ACCOUNT,
+      'older',
+      { disposition: 'archive', subscription: 'preserve', stage: 'model', reason: 'looks like it', ...NEWS },
+      { now: 2 },
+    );
+    expect((await listSuggestions(db, await everything(db))).items.map((i) => i.messageId)).toEqual(['newer', 'older']);
+  });
+
   it('carry the start of the text sift holds for each, on one line', async () => {
     await suggest('a@example.com', 'archive', NEWS);
     await suggest('b@example.com', 'archive', NEWS);

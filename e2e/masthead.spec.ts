@@ -37,7 +37,8 @@ test.describe("The masthead's line", () => {
 
     await pointAt(cost);
     for (const window of ['24H', '7D', '30D']) await expect(page.getByRole('term').filter({ hasText: window })).toBeVisible();
-    await expect(page.getByText('Today', { exact: true })).toBeVisible();
+    // For review's own Today is a heading over its rows.
+    await expect(page.getByText('Today', { exact: true }).and(page.locator(':not(th)'))).toBeVisible();
   });
 
   test('on a phone, the bar is the name, the line and the menu, and the menu shows the costs above the account', async ({ page }) => {
