@@ -17,7 +17,7 @@ import { MAX_LABELS, listLabels } from '../src/store/labels.ts';
 import { LEAVE_IN_INBOX } from '../src/triage/types.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
-import { preferences, setActive } from '../src/store/preferences.ts';
+import { preferences, setActive, setMail } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { ACCOUNT, DAY, FakeMailbox, UNSURE, facts, quietSources, rawMessage, storeExample, testModel, workDue } from './helpers.ts';
 import { type Reply, firstAccount, modelRun, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
@@ -63,6 +63,14 @@ const controls: Controls = {
   draftRule: async (_db, { accountId, goal }) => (
     calls.push(`draft ${accountId} ${goal}`),
     seal({ match: { fromDomain: ['example.org'] }, disposition: 'archive' as const, note: 'And another.' })
+  ),
+  askMail: async (_db, { accountId, words, today }) => (
+    calls.push(`ask ${accountId} ${words} ${today}`),
+    seal({ filter: { domain: ['example.org'], since: '2026-11-01' }, note: 'Sift does not know what you answered.' })
+  ),
+  summarize: async (_db, { accountId, threadId }) => (
+    calls.push(`summarize ${accountId} ${threadId}`),
+    { newestId: 'm2', at: 1, model: 'p/m', inputTokens: 1, outputTokens: 1, costUsd: 0.001, summary: seal<string>('They ask you to pay.'), failed: false }
   ),
   ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
@@ -181,6 +189,24 @@ describe('managing sift from the dashboard', () => {
     for (const bad of [{}, { goal: '  ' }, { accountId: ACCOUNT, goal: 'x' }]) expect((await call('POST', '/api/rules/draft', bad)).status).toBe(400);
     expect(calls).toEqual([`draft ${ACCOUNT} Archive everything from example.org`]);
     expect((await call('GET', '/api/rules')).body['rules']).toEqual([]);
+  });
+
+  it('turns words into a filter on Inbox and summarizes a conversation through the model, only while Inbox is on', async () => {
+    const { call } = await start();
+    const ask = { words: ' invoices this month ', today: '2026-11-19' };
+    const summary = { accountId: ACCOUNT, threadId: 't-m1' };
+    expect(await call('POST', '/api/mail/ask', ask)).toMatchObject({ status: 409, body: { error: 'Turn Inbox on first.' } });
+    expect(await call('POST', '/api/mail/summary', summary)).toMatchObject({ status: 409, body: { error: 'Turn Inbox on first.' } });
+    await setMail(db, true);
+    expect((await call('POST', '/api/mail/ask', ask)).body).toEqual({
+      filter: { domain: ['example.org'], since: '2026-11-01' },
+      note: 'Sift does not know what you answered.',
+    });
+    for (const bad of [{ words: 'x' }, { words: ' ', today: '2026-11-19' }, { words: 'x', today: 'today' }])
+      expect((await call('POST', '/api/mail/ask', bad)).status).toBe(400);
+    expect((await call('POST', '/api/mail/summary', summary)).body).toMatchObject({ summary: 'They ask you to pay.', costUsd: 0.001 });
+    expect((await call('POST', '/api/mail/summary', { accountId: 'nobody@example.org', threadId: 't' })).status).toBe(404);
+    expect(calls).toEqual([`ask ${ACCOUNT} invoices this month 2026-11-19`, `summarize ${ACCOUNT} t-m1`]);
   });
 
   it('asks the model for labels from what the person wants, and makes the ones they keep when they have none, all or none', async () => {

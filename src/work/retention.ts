@@ -14,6 +14,7 @@ import {
   isNull,
   lt,
   mailBodies,
+  mailSummaries,
   messages,
   modelRuns,
   not,
@@ -118,6 +119,11 @@ export async function pruneOld(db: Sql, now: number = Date.now()): Promise<numbe
         and(eq(t.accountId, m.accountId), eq(t.messageId, m.id));
       await tx.delete(suggestionBodies).where(of(suggestionBodies));
       await tx.delete(mailBodies).where(of(mailBodies));
+      // What the model said of a conversation goes with its newest message's text; what it cost stays.
+      await tx
+        .update(mailSummaries)
+        .set({ summary: null })
+        .where(and(eq(mailSummaries.accountId, m.accountId), eq(mailSummaries.newestId, m.id)));
       await tx.delete(actions).where(of(actions));
       await tx.delete(feedback).where(inArray(feedback.decisionId, tx.select({ id: decisions.id }).from(decisions).where(of(decisions))));
       await tx.delete(decisions).where(of(decisions));

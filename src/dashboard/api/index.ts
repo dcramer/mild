@@ -21,8 +21,10 @@ import labelsWrite from './routes/labels/post.ts';
 import labelsProposalRead from './routes/labels/proposal/get.ts';
 import labelsProposeWrite from './routes/labels/propose/post.ts';
 import labelsRemoveWrite from './routes/labels/remove/post.ts';
+import mailAskWrite from './routes/mail/ask/post.ts';
 import mailChangeWrite from './routes/mail/change/post.ts';
 import mailOnWrite from './routes/mail/on/post.ts';
+import mailSummaryWrite from './routes/mail/summary/post.ts';
 import mailThreadRead from './routes/mail/thread/get.ts';
 import mailThreadsRead from './routes/mail/threads/get.ts';
 
@@ -102,9 +104,12 @@ export const WRITES: readonly Write[] = [
   labelsAcceptWrite,
   labelsProposeWrite,
   labelsRemoveWrite,
+  mailAskWrite,
   mailChangeWrite,
   mailOnWrite,
   mailSendWrite,
+
+  mailSummaryWrite,
   mailboxPrimaryWrite,
   mailboxRemoveWrite,
   modelWrite,

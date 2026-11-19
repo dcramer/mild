@@ -435,6 +435,20 @@
       "when": 1795080442070,
       "tag": "0061_inbox_marks_read",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1795082811121,
+      "tag": "0062_inbox_asks_and_summaries",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1795082812042,
+      "tag": "0063_inbox_asks_and_summaries_row_security",
+      "breakpoints": true
     }
   ]
 }

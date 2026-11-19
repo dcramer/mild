@@ -1,4 +1,4 @@
-import { isNull, mailBodies, preferences as preferenceRows } from './query.ts';
+import { isNull, mailBodies, mailSummaries, preferences as preferenceRows } from './query.ts';
 import type { Reasoning } from '../model/reasoning.ts';
 import type { Sql } from './sql.ts';
 
@@ -35,11 +35,14 @@ export async function setActive(db: Sql, active: boolean): Promise<void> {
   await db.update(preferenceRows).set({ active });
 }
 
-/** Off, the text Sift kept of their inbox mail goes in the same write. */
+/** Off, the text Sift kept of their inbox mail goes in the same write, and what the model said of it, though not what that cost. */
 export async function setMail(db: Sql, on: boolean): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.update(preferenceRows).set({ mail: on });
-    if (!on) await tx.delete(mailBodies);
+    if (!on) {
+      await tx.delete(mailBodies);
+      await tx.update(mailSummaries).set({ summary: null });
+    }
   });
 }
 

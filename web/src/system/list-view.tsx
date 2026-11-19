@@ -13,7 +13,8 @@ interface ActiveFilter {
 
 /**
  * The standard way to show many of one thing, inside a `ListPage`: `intro` (anything the page shows before its
- * list), then one outlined bar holding the search and the filter button, then the rows. While rows are selected
+ * list), then one outlined bar holding the search and the filter button, then the rows. With `search.ask`, words in the
+ * search can be put to the model, which answers with filters that then show as any others do. While rows are selected
  * (`RowCheck`), the bar holds what to do with them in place of the search (`selected`): how many, the presses, and a
  * way to select none, so the rows do not move.
  *
@@ -31,7 +32,8 @@ export function ListView({
 }: {
   /** What the page shows between its header and its list. */
   intro?: ReactNode;
-  search?: { value: string; onChange: (value: string) => void; placeholder: string };
+  /** `ask`: what is typed can also be put to the model (Inbox), by a press at the end of the box or Enter. */
+  search?: { value: string; onChange: (value: string) => void; placeholder: string; ask?: { onAsk: () => void; busy: boolean } };
   /** Which of a few ways to see the list, as segments at the end of the search bar: "Changed" or "Everything". */
   view?: { label: string; value: string; options: readonly (readonly [string, string])[]; onChange: (value: string) => void };
   filters?: { panel: ReactNode; active: ActiveFilter[] };
@@ -77,9 +79,17 @@ export function ListView({
                     value={search.value}
                     onChange={(event) => search.onChange(event.target.value)}
                     // Escape hands the keys back to the list.
-                    onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') event.currentTarget.blur();
+                      else if (event.key === 'Enter' && search.ask && search.value.trim() !== '' && !search.ask.busy) search.ask.onAsk();
+                    }}
                   />
                   {slash}
+                  {search.ask && search.value.trim() !== '' ? (
+                    <Button variant="quiet" className="-mr-2" busy={search.ask.busy} onClick={search.ask.onAsk}>
+                      Ask
+                    </Button>
+                  ) : null}
                 </label>
               ) : (
                 <span className="h-9 flex-1" />

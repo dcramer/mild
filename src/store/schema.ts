@@ -693,6 +693,51 @@ export const ruleDrafts = pgTable(
   (t) => [unique('rule_drafts_own').on(t.userId, t.id), mailbox(t), index('rule_drafts_time').on(t.accountId, t.startedAt), own()],
 ).enableRLS();
 
+/** One row per Ask in Inbox's search: the person's words turned into a filter on the list by their model. */
+export const mailAsks = pgTable(
+  'mail_asks',
+  {
+    id: id(),
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    startedAt: time('started_at').notNull(),
+    finishedAt: time('finished_at'),
+    model: text('model').notNull(),
+    words: text('words').notNull(), // encrypted, as a rule draft's goal
+    answer: text('answer'), // the filter, or why there is none, encrypted JSON
+    lookups: integer('lookups').notNull().default(0),
+    error: text('error'), // its status and kind, never the provider's text
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    costUsd: doublePrecision('cost_usd').notNull().default(0),
+  },
+  (t) => [unique('mail_asks_own').on(t.userId, t.id), mailbox(t), index('mail_asks_time').on(t.accountId, t.startedAt), own()],
+).enableRLS();
+
+/**
+ * One row per Summarize in the reader. Not `model_runs`, whose rows are the classification's: their failures count
+ * toward a message's three tries, and their costs are what an estimate of classifying averages.
+ */
+export const mailSummaries = pgTable(
+  'mail_summaries',
+  {
+    id: id(),
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    threadId: text('thread_id').notNull(),
+    newestId: text('newest_id').notNull(), // the conversation's newest message then: a newer one makes the summary old
+    startedAt: time('started_at').notNull(),
+    finishedAt: time('finished_at'),
+    model: text('model').notNull(),
+    summary: text('summary'), // encrypted; null when the call failed, and once Inbox is off or the message is gone
+    error: text('error'),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    costUsd: doublePrecision('cost_usd').notNull().default(0),
+  },
+  (t) => [unique('mail_summaries_own').on(t.userId, t.id), mailbox(t), index('mail_summaries_thread').on(t.accountId, t.threadId, t.startedAt), own()],
+).enableRLS();
+
 /** One row per example judged: labels and cost, no message content. */
 export const evalResults = pgTable(
   'eval_results',

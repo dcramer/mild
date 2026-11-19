@@ -9,6 +9,7 @@ import {
   eq,
   exists,
   feedback,
+  gte,
   inArray,
   isNull,
   lt,
@@ -22,7 +23,8 @@ import {
 import type { Sql } from '../../store/sql.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { listLabels } from '../../store/labels.ts';
-import { openEnvelope, openPart } from '../../store/content.ts';
+import { hashOf, openEnvelope, openPart } from '../../store/content.ts';
+import { summariesOf } from '../../store/mail-calls.ts';
 import { type Scope, within } from '../scope.ts';
 import { Refusal } from '../../refusal.ts';
 import type { MailConversation, MailThread, MailThreads, MailView } from '../types.ts';
@@ -49,6 +51,13 @@ export interface ThreadQuery {
   q?: string | undefined;
   unread?: boolean;
   before?: string | undefined;
+  /** Senders, any of which wrote a message of the conversation: addresses, and domains for everyone at one. */
+  from?: readonly string[];
+  domain?: readonly string[];
+  /** The newest message came on or after it. */
+  since?: number | undefined;
+  /** Words, any of which a subject of the conversation has. */
+  subject?: readonly string[];
 }
 
 /** The conversations that have mail in the inbox now, newest first, a page at a time. */
@@ -83,6 +92,14 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
   const disposition = sql<string | null>`CASE WHEN ${answered} THEN ${feedback.disposition} ELSE ${decisions.disposition} END`;
   const cursor = query.before === undefined ? null : CURSOR.exec(query.before);
   const needle = query.q?.trim().toLowerCase() ?? '';
+  const words = (query.subject ?? []).map((w) => w.toLowerCase());
+  // What matches is in encrypted headers, opened here: a search reads through the newest conversations.
+  const scanning = needle !== '' || words.length > 0;
+  const senders = [
+    ...(query.from ?? []).map((a) => [hashOf(db, a), 'sender'] as const),
+    ...(query.domain ?? []).map((d) => [hashOf(db, d), 'domain'] as const),
+  ];
+  const sent = alias(messages, 'sent');
   const rows = await db
     .select({
       accountId: threads.accountId,
@@ -122,23 +139,40 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
         query.view === 'needs' ? or(isNull(decisions.id), sql`${disposition} IN ('keep', 'review')`) : undefined,
         query.view === 'sorted' ? sql`${disposition} IN ('archive', 'spam')` : undefined,
         query.unread ? eq(threads.unread, true) : undefined,
+        query.since === undefined ? undefined : gte(threads.newestAt, query.since),
+        senders.length > 0
+          ? exists(
+              db
+                .select({ one: sql`1` })
+                .from(sent)
+                .where(
+                  and(
+                    eq(sent.accountId, threads.accountId),
+                    eq(sent.threadId, threads.threadId),
+                    or(...senders.map(([hash, by]) => eq(by === 'sender' ? sent.senderHash : sent.domainHash, hash))),
+                  ),
+                ),
+            )
+          : undefined,
       ),
     )
     .orderBy(desc(threads.newestAt), desc(threads.threadId))
-    .limit((needle ? SEARCH_REACH : PAGE) + 1);
+    .limit((scanning ? SEARCH_REACH : PAGE) + 1);
 
-  const scanned = rows.slice(0, needle ? SEARCH_REACH : PAGE);
+  const scanned = rows.slice(0, scanning ? SEARCH_REACH : PAGE);
   const inThreads = await threadMessages(
     db,
     scope,
     scanned.map((r) => [r.accountId, r.threadId] as const),
   );
-  const matches = needle
-    ? scanned.filter((r) =>
-        (inThreads.get(`${r.accountId}\n${r.threadId}`) ?? []).some((m) =>
-          [m.fromAddress, m.fromName ?? '', m.subject].some((text) => plain(text).toLowerCase().includes(needle)),
-        ),
-      )
+  const matches = scanning
+    ? scanned.filter((r) => {
+        const all = inThreads.get(`${r.accountId}\n${r.threadId}`) ?? [];
+        return (
+          (needle === '' || all.some((m) => [m.fromAddress, m.fromName ?? '', m.subject].some((text) => plain(text).toLowerCase().includes(needle)))) &&
+          (words.length === 0 || all.some((m) => words.some((w) => plain(m.subject).toLowerCase().includes(w))))
+        );
+      })
     : scanned;
   const shown = matches.slice(0, PAGE);
   const last = matches.length > PAGE ? shown.at(-1) : rows.length > scanned.length ? scanned.at(-1) : undefined;
@@ -266,5 +300,6 @@ export async function conversation(db: Sql, scope: Scope, threadId: string): Pro
       unread: m.unread,
       preview: previews.get(`${accountId}\n${m.messageId}`) ?? null,
     })),
+    summaries: await summariesOf(db, accountId, threadId),
   };
 }

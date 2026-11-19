@@ -1,6 +1,7 @@
 'use client';
 import { type ReactNode, useDeferredValue, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
+import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { Thinks, useMailPress, whoWrote } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, useLoaded, usePages } from '@/lib/api.ts';
@@ -16,10 +17,12 @@ import {
   Callout,
   Check,
   Empty,
+  Failure,
   FilterGroup,
   Heads,
   ListView,
   More,
+  Note,
   OnPhone,
   RowCheck,
   Sub,
@@ -108,9 +111,10 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const view = asked || 'all';
   const [unread, setUnread] = useParam('unread');
   const q = useDeferredValue(search.trim());
-  const query = { view, label, q, unread: unread === '1' } as const;
+  const ask = useAsk();
+  const query = { view, label, q, unread: unread === '1', ...ask.query } as const;
   const on = manage.data?.mail === true;
-  const pages = usePages(`mail-threads-${on}-${query.view}-${label}-${query.unread}-${q}`, (before, signal) =>
+  const pages = usePages(`mail-threads-${on}-${query.view}-${label}-${query.unread}-${q}-${JSON.stringify(ask.query)}`, (before, signal) =>
     on ? api.mailThreads(query, before, signal) : Promise.resolve({ threads: [], next: null }),
   );
   const hidden = useHidden();
@@ -140,15 +144,16 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
       </Callout>
     );
 
-  const narrowed = q !== '' || label !== '' || unread === '1' || view !== 'all';
+  const narrowed = q !== '' || label !== '' || unread === '1' || view !== 'all' || ask.narrowed;
   return (
     <ListView
-      search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects' }}
+      search={{ value: search, onChange: setSearch, placeholder: 'Search senders and subjects', ask: { onAsk: () => ask.ask(search.trim()), busy: ask.busy } }}
       view={{ label: 'Show', value: view, options: VIEWS, onChange: (next) => setView(next === 'all' ? '' : (next as MailView)) }}
       filters={{
         active: [
           ...(label === '' ? [] : [{ label: `Label: ${names.get(label) ?? label}`, clear: () => setLabel('') }]),
           ...(unread === '1' ? [{ label: 'Unread', clear: () => setUnread('') }] : []),
+          ...ask.active,
         ],
         panel: (
           <>
@@ -171,6 +176,12 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
     >
       {pages.error ? <ErrorNote message={pages.error} /> : null}
       {error ? <ErrorNote message={error} /> : null}
+      <Failure>{ask.error}</Failure>
+      {ask.said ? (
+        <Note>
+          <p>{ask.said}</p>
+        </Note>
+      ) : null}
       {pages.loading || !manage.data ? (
         loadingRows
       ) : threads.length === 0 ? (

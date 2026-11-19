@@ -697,6 +697,20 @@ export const MailThreads = z.object({
 });
 export type MailThreads = z.infer<typeof MailThreads>;
 
+/** POST /api/mail/summary: what the model said a conversation says, and what that cost. */
+export const MailSummary = z.object({
+  newestId: z.string(),
+  at: z.number(),
+  model: z.string(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  costUsd: z.number(),
+  /** Null when the call failed, or the text has since been deleted. */
+  summary: held.nullable(),
+  failed: z.boolean(),
+});
+export type MailSummary = z.infer<typeof MailSummary>;
+
 /** GET /api/mail/thread: the messages Sift has of one conversation, oldest first, each as its folded row shows it. A message's text is `/api/message`'s. */
 export const MailConversation = z.object({
   accountId: z.string(),
@@ -711,6 +725,8 @@ export const MailConversation = z.object({
       preview: held.nullable(),
     }),
   ),
+  /** Every Summarize of it, oldest first, for its history; one whose `newestId` is the newest message's is about it as it is now. */
+  summaries: z.array(MailSummary),
 });
 export type MailConversation = z.infer<typeof MailConversation>;
 
@@ -721,6 +737,26 @@ export const MailChange = z.strictObject({
   change: z.enum(['archive', 'read', 'unread']),
 });
 export type MailChange = z.infer<typeof MailChange>;
+
+/** POST /api/mail/ask: the person's words as a filter on Inbox's list, each part of it one the list takes, or why there is none. Held as it is stored. */
+export const MailAsk = z.union([
+  z.object({
+    filter: z.object({
+      from: heldValues,
+      domain: heldValues,
+      label: held.optional(),
+      view: z.enum(['needs', 'sorted']).optional(),
+      unread: z.literal(true).optional(),
+      /** `YYYY-MM-DD`, in the reader's days. */
+      since: held.optional(),
+      subject: heldValues,
+    }),
+    /** What of their words it leaves out. */
+    note: held.optional(),
+  }),
+  z.object({ cannot: held }),
+]);
+export type MailAsk = z.infer<typeof MailAsk>;
 
 /** Which of the newest messages a press goes through: the whole inbox, or enough to teach with. */
 export const InboxReach = z.enum(['inbox', 'recent']);

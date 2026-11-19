@@ -14,7 +14,9 @@ export type {
   LabelProposal,
   LabelSummary,
   ListedDecision,
+  MailAsk,
   MailConversation,
+  MailSummary,
   MailThread,
   MailView,
   ManageState,
@@ -44,8 +46,10 @@ import type {
   FeedbackRequest,
   Given,
   LabelProposal,
+  MailAsk,
   MailChange,
   MailConversation,
+  MailSummary,
   MailThreads,
   MailView,
   ManageState,
@@ -297,9 +301,31 @@ export const api = {
   dismissProposal: (id: number) => post('/api/proposals', { id }),
   /** `message`: what the page will not show by itself, if anything. */
   undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
-  /** Inbox's conversations, a page from `before`; empty `label` and `q` narrow nothing. */
-  mailThreads: (query: { view: MailView; label: string; q: string; unread: boolean }, before: string, signal: AbortSignal) =>
-    get<MailThreads>('/api/mail/threads', { view: query.view, label: query.label, q: query.q, ...(query.unread ? { unread: 1 } : {}), before }, signal),
+  /** Inbox's conversations, a page from `before`; empty `label`, `q`, `from`, `domain` and `subject` (each comma-separated) narrow nothing. */
+  mailThreads: (
+    query: { view: MailView; label: string; q: string; unread: boolean; from: string; domain: string; subject: string; since: number | null },
+    before: string,
+    signal: AbortSignal,
+  ) =>
+    get<MailThreads>(
+      '/api/mail/threads',
+      {
+        view: query.view,
+        label: query.label,
+        q: query.q,
+        ...(query.unread ? { unread: 1 } : {}),
+        from: query.from,
+        domain: query.domain,
+        subject: query.subject,
+        ...(query.since === null ? {} : { since: query.since }),
+        before,
+      },
+      signal,
+    ),
+  /** The model turns words into a filter on Inbox's list. `today` is the reader's, `YYYY-MM-DD`. */
+  askMail: (words: string, today: string) => post<MailAsk>('/api/mail/ask', { words, today }),
+  /** What a conversation says: recorded already, or asked of the model now. */
+  summarize: (accountId: string, threadId: string) => post<MailSummary>('/api/mail/summary', { accountId, threadId }),
   /** A conversation by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
   mailThread: (thread: string, signal: AbortSignal, mailbox = '') =>
     get<MailConversation>('/api/mail/thread', mailbox ? { thread, mailbox } : { thread }, signal),

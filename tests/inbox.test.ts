@@ -77,6 +77,16 @@ describe('Inbox’s list', () => {
     expect(await ids({ view: 'all', unread: true })).toEqual(['lunch']);
   });
 
+  it('narrows by what an Ask makes: senders and domains in any message of it, when its newest came, and subject words', async () => {
+    const ids = async (query: Partial<Parameters<typeof listThreads>[2]>) => (await list({ view: 'all', ...query })).threads.map((t) => t.threadId);
+    expect(await ids({ from: ['ADA@example.org'] })).toEqual(['lunch']);
+    expect(await ids({ from: ['nobody@example.org'], domain: ['example.com'] })).toEqual(['news']);
+    expect(await ids({ domain: ['example.org'] })).toEqual(['lunch']);
+    expect(await ids({ since: 260 })).toEqual(['lunch']);
+    expect(await ids({ subject: ['nothing', 'lunch'] })).toEqual(['lunch']);
+    expect(await ids({ subject: ['widgets'], from: [ada.address] })).toEqual([]);
+  });
+
   it('goes on from where a page ended', async () => {
     await recordSync(
       db,

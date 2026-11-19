@@ -13,6 +13,7 @@ import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
 import { proposeLabels } from '../learn/labels.ts';
 import { draftRule } from '../learn/rules.ts';
+import { askMail, summarizeThread } from '../learn/mail.ts';
 import { clientFor, loadClientSecrets, revokeGrant } from '../gmail/auth.ts';
 import { createGmailMailbox } from '../gmail/mailbox.ts';
 import { pacer } from '../gmail/quota.ts';
@@ -22,6 +23,8 @@ import { createJudge } from '../model/judge.ts';
 import { createHighlighter } from '../model/digest.ts';
 import { createProposer } from '../model/propose.ts';
 import { createRuleDrafter } from '../model/draft-rule.ts';
+import { createMailAsker } from '../model/ask.ts';
+import { createSummarizer } from '../model/summarize.ts';
 import { type ChosenModel, modelChoices, offerModel, openModels, priceOf, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
@@ -213,6 +216,16 @@ export async function buildControls(
       const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
       return seal(await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
+    },
+    askMail: async (db, request) => {
+      const opened = await chosen(db);
+      if (!opened) throw new Refusal('Choose a model first.');
+      return seal(await askMail({ db, ask: createMailAsker(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
+    },
+    summarize: async (db, request) => {
+      const opened = await chosen(db);
+      if (!opened) throw new Refusal('Choose a model first.');
+      return await summarizeThread({ db, summarize: createSummarizer(opened.models, opened.model, opened.reasoning), model: opened.spec }, request);
     },
     ruleFilter: async (db, ruleId, on) => {
       // Every mailbox is tried, so one Gmail refusing does not leave the others as they were.

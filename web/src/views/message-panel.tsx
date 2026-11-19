@@ -6,6 +6,7 @@ import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
 import { useMailPress } from '@/components/mail.tsx';
+import { Summary, SummaryEvent } from '@/components/summary.tsx';
 import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
@@ -196,6 +197,11 @@ function Body({
         />
       ),
     })),
+    ...(conversation?.summaries ?? []).map((summary) => ({
+      at: summary.at,
+      order: 2,
+      node: <SummaryEvent key={`s${summary.at}/${summary.newestId}`} summary={summary} />,
+    })),
   ].toSorted((x, y) => x.at - y.at || x.order - y.order);
   const current = detail.decisions.at(-1);
   const waitingNow = waiting.data?.messages ?? [];
@@ -260,6 +266,7 @@ function Body({
       </div>
       <div className="max-lg:contents lg:-mt-1 lg:-mr-6 lg:-mb-6 lg:-ml-4 lg:flex lg:flex-col lg:gap-8 lg:overflow-x-hidden lg:overflow-y-auto lg:pt-1 lg:pr-6 lg:pb-6 lg:pl-4">
         <div className="flex min-w-0 flex-col gap-3 max-lg:order-1">
+          {conversation ? <Summary conversation={conversation} newest={detail} /> : null}
           <AnswerPicker
             key={current?.id ?? 'undecided'}
             className="min-w-0"

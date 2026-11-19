@@ -687,12 +687,17 @@ export function SystemView() {
 
         <Section
           title="Rows to select"
-          meta="a check on each row, X on the one the keys are on; what to do with them takes the search's place; more rows load as the end is reached"
+          meta="a check on each row, X on the one the keys are on; what to do with them takes the search's place; more rows load as the end is reached; words typed can be asked"
         >
           <Sheet className="p-5">
             <ListPage title="Inbox">
               <ListView
-                search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
+                search={{
+                  value: search,
+                  onChange: setSearch,
+                  placeholder: 'Search',
+                  ask: { onAsk: () => toast('Asks the model to make filters of the words'), busy: false },
+                }}
                 selected={{
                   count: picked.size,
                   clear: () => setPicked(new Set()),
