@@ -128,6 +128,11 @@ beforeEach(async () => {
     },
     // Reads Gmail for whichever mailboxes it is given: only the route's scope keeps it to the asker's.
     inboxEstimate: async (_db, mailboxes) => (calls.push(`estimate ${mailboxes.join(',')}`), { messages: 1, model: 1, cost: null }),
+    mailReach: async (_db, mailboxes) => {
+      calls.push(`reach ${mailboxes.join(',')}`);
+      const each = { messages: 1, bytes: 1, minutes: 1 };
+      return { year: each, three_years: each, all: each };
+    },
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
     proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal: seal(goal), drafts: [], at: 0 }),
     draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), seal({ match: { from: ['x@example.com'] }, disposition: 'archive' as const })),
@@ -368,7 +373,7 @@ describe("nobody sees or changes another person's mail", () => {
     const bravo = (await userOf(store.central, BRAVO))!.id;
     for (const [path, body] of [
       ['/api/active', { active: true }],
-      ['/api/mail/on', { on: true }],
+      ['/api/mail/on', { on: true, window: 'all' }],
       ['/api/model', { model: 'openai/small' }],
       ['/api/model/reasoning', { reasoning: 'high' }],
       ['/api/model/chatgpt', {}],
@@ -392,6 +397,7 @@ describe("nobody sees or changes another person's mail", () => {
     expect(await preferences(await dbOf(BRAVO))).toMatchObject({
       active: true,
       mail: true,
+      mailWindow: 'all',
       model: 'openai/small',
       reasoning: 'high',
       digestHour: 6,
@@ -407,6 +413,9 @@ describe("nobody sees or changes another person's mail", () => {
     });
     expect((await call('GET', '/api/manage', BRAVO)).body).toMatchObject({ active: true, mail: true, digest: { hour: 6, timeZone: 'Europe/Berlin' } });
     expect((await call('GET', '/api/manage', ALPHA)).body).toMatchObject({ active: false, mail: false, digest: { hour: 7, timeZone: null } });
+    // Copying Bravo's mail began in Bravo's mailbox alone.
+    expect(await raw(await dbOf(ALPHA)).all('SELECT account_id FROM mail_copies')).toEqual([]);
+    expect(await raw(await dbOf(BRAVO)).all('SELECT account_id FROM mail_copies')).toEqual([{ account_id: BRAVO }]);
     expect((await call('POST', '/api/model', null, { model: 'nobody/model' })).status).toBe(401);
   });
 
@@ -445,6 +454,9 @@ describe("nobody sees or changes another person's mail", () => {
   it("goes through only the asker's own inboxes, and stops only theirs", async () => {
     expect((await call('GET', '/api/inbox?reach=inbox', ALPHA_WORK)).status).toBe(200);
     expect(calls).toEqual([`estimate ${ALPHA},${ALPHA_WORK}`]);
+    expect((await call('GET', '/api/mail/reach', ALPHA_WORK)).status).toBe(200);
+    expect(calls.at(-1)).toBe(`reach ${ALPHA},${ALPHA_WORK}`);
+    calls = [];
     expect((await call('POST', '/api/inbox/start', ALPHA, { reach: 'recent' })).status).toBe(200);
     expect(
       (await raw(await dbOf(ALPHA)).all<{ account_id: string }>('SELECT account_id FROM inbox_runs ORDER BY account_id')).map((r) => r.account_id),

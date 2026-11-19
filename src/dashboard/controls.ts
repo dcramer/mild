@@ -1,6 +1,6 @@
 import type { Sql } from '../store/sql.ts';
 import type { Reach } from '../store/inbox.ts';
-import type { InboxEstimate, LabelProposal, MailAsk, MailChange, MailSummary, RuleDraft, RuleInbox } from './types.ts';
+import type { InboxEstimate, LabelProposal, MailAsk, MailChange, MailReach, MailSummary, RuleDraft, RuleInbox } from './types.ts';
 
 /**
  * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
@@ -39,6 +39,8 @@ export interface Controls {
    * many messages, how many of those likely need the model, and about what that costs.
    */
   inboxEstimate(db: Sql, mailboxes: readonly string[], reach: Reach): Promise<InboxEstimate>;
+  /** What copying these of the person's mailboxes for Inbox would take for each window it can keep, read from Gmail's counts. */
+  mailReach(db: Sql, mailboxes: readonly string[]): Promise<MailReach>;
   /**
    * After the user has corrected a decision: take back what sift last did to that message, so the new
    * decision can be carried out from where the message started.

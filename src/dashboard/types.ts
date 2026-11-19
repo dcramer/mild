@@ -12,6 +12,7 @@ import { RULE_FACTS, type RuleFacts as Conditions, factCondition } from '../tria
 import { GIVEN } from '../triage/standing.ts';
 import { DRAFT_ACTIONS } from '../triage/proposal.ts';
 import { REASONING } from '../model/reasoning.ts';
+import { MAIL_WINDOWS } from '../mail-window.ts';
 import { DECIDED } from '../triage/types.ts';
 
 export const STAGES = ['rules', 'classifier', 'model', 'fallback'] as const;
@@ -803,14 +804,25 @@ export type MailAsk = z.infer<typeof MailAsk>;
 /** Which of the newest messages a press goes through: the whole inbox, or enough to teach with. */
 export const InboxReach = z.enum(['inbox', 'recent']);
 
+/** How far back Inbox keeps the viewer's mail. */
+export const MailWindow = z.enum(MAIL_WINDOWS);
+
+/** GET /api/mail/reach: for each window, about how many messages copying it reads from Gmail, what they take to keep, in bytes, and how long reading them takes. */
+const Reach = z.object({ messages: z.number(), bytes: z.number(), minutes: z.number() });
+export const MailReach = z.object({ year: Reach, three_years: Reach, all: Reach });
+export type MailReach = z.infer<typeof MailReach>;
+
 /** GET /api/manage: everything the Settings view shows. */
 export const ManageState = z.object({
   /** Whether the viewer owns the install, and so may change what applies to all of it. */
   owner: z.boolean(),
   /** Whether sift is on for the viewer. Off, it only suggests for their mail; on, it carries its decisions out in Gmail. */
   active: z.boolean(),
-  /** Whether Inbox is on for the viewer: Sift keeps the text of their inbox mail, and may send as them. */
+  /** Whether Inbox is on for the viewer: Sift keeps a copy of their mail, and may send as them. */
   mail: z.boolean(),
+  mailWindow: MailWindow,
+  /** Copying the viewer's mailboxes for Inbox, all of them together: `total` is Gmail's estimate. Null when none is going. */
+  copying: z.object({ done: z.number(), total: z.number(), startedAt: z.number() }).nullable(),
   /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
   model: z.object({
     chosen: z.string().nullable(),

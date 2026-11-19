@@ -97,3 +97,8 @@ export function readContent(payload: BodyPart | null | undefined): MessageConten
     },
   };
 }
+
+/** A message's content from all of its text that Inbox holds, as `readContent` gives it. */
+export function heldContent(whole: string, html: string | null, facts: ContentFacts): MessageContent {
+  return { text: shortened(whole), ...(whole.length > MAX_BODY_CHARS ? { whole } : {}), html, facts };
+}

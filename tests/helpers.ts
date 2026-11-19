@@ -6,7 +6,8 @@ import type { SignIn } from '../src/dashboard/controls.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
-import type { RawMessage } from '../src/gmail/api.ts';
+import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
+import { readContent } from '../src/gmail/body.ts';
 import type { SignIns } from '../src/model/credentials.ts';
 import { recordSync, listAccounts } from '../src/store/accounts.ts';
 import { examples, labels } from '../src/store/query.ts';
@@ -387,4 +388,42 @@ export async function workDue(store: Store, options: RunOptions, limitMs: number
     if (result) results.push(result);
   }
   return results;
+}
+
+/** A message in `gmailOf`'s mailbox: as Gmail's metadata read returns it, and its text. */
+export type HeldMail = RawMessage & { text?: string };
+
+/**
+ * A Gmail holding `mail`, whose search lists all of it newest first, `most` a page, whatever it asks for (Gmail's search is
+ * Gmail's to test), and whose history hands over `added` once. `calls` says what was read: `list:<page>`, `whole:<id>`,
+ * `text:<id>`, `meta:<id>`.
+ */
+export function gmailOf(mail: HeldMail[], added: { id: string; labelIds: string[] }[] = []): GmailApi & { calls: string[] } {
+  const calls: string[] = [];
+  let cursor = 1;
+  const find = (id: string) => mail.find((m) => m.id === id);
+  const content = (m: HeldMail) => readContent({ mimeType: 'text/plain', body: { data: b64(m.text ?? `Text of ${m.id}.`) } });
+  const raw = (m: HeldMail): RawMessage => ({ id: m.id, threadId: m.threadId, labelIds: m.labelIds, internalDate: m.internalDate, headers: m.headers });
+  return {
+    calls,
+    getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(cursor) }),
+    listHistory: async () => ({ additions: added.splice(0), historyId: String(++cursor) }),
+    searchInbox: async () => ({ ids: [] }),
+    searchMail: async (_query, most, pageToken) => {
+      calls.push(`list:${pageToken ?? ''}`);
+      const from = Number(pageToken ?? 0);
+      const ids = mail.toSorted((a, b) => b.internalDate - a.internalDate).map((m) => m.id);
+      const next = from + most < ids.length ? String(from + most) : undefined;
+      return { ids: ids.slice(from, from + most), estimate: ids.length, ...(next ? { nextPageToken: next } : {}) };
+    },
+    mailboxSize: async () => mail.length,
+    inboxSize: async () => mail.filter((m) => m.labelIds.includes('INBOX')).length,
+    getMetadata: async (id) => (calls.push(`meta:${id}`), find(id) ? raw(find(id)!) : null),
+    getLabelIds: async (id) => find(id)?.labelIds ?? null,
+    listLabels: async () => [],
+    getContent: async (id) => (calls.push(`text:${id}`), find(id) ? content(find(id)!) : null),
+    getMessage: async (id) => (calls.push(`whole:${id}`), find(id) ? { raw: raw(find(id)!), content: content(find(id)!) } : null),
+    getThread: async () => null,
+    listSendAs: async () => [ACCOUNT],
+  };
 }

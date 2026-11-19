@@ -2,7 +2,8 @@ import type { Sql } from '../store/sql.ts';
 import { reconcile, reconcileDue } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
-import type { MessageContent } from '../gmail/body.ts';
+import { type MessageContent, heldContent } from '../gmail/body.ts';
+import { heldText } from '../store/kept.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
@@ -20,6 +21,9 @@ import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { continueEval, goingEvals } from '../learn/evals.ts';
 import { hasOwnLabels } from '../store/labels.ts';
 import { continueInboxRun, continueRuleRun } from './inbox.ts';
+import { copyMail } from './copy.ts';
+import { dropTextBefore, goingCopies } from '../store/copies.ts';
+import { windowStart } from '../mail-window.ts';
 import { goingInboxRun, goingInboxRuns } from '../store/inbox.ts';
 import { checkFiltersWhenDue, filtersDue } from './filters.ts';
 import { type PassStatus, lastPass, recordPassStatus } from './status.ts';
@@ -84,6 +88,7 @@ export type Work =
   | { kind: 'pass'; person: number; mailbox: number }
   | { kind: 'upkeep'; person: number }
   | { kind: 'inbox'; person: number; mailbox: number; run: number }
+  | { kind: 'copy'; person: number; mailbox: number }
   | { kind: 'eval'; person: number; run: number }
   | { kind: 'digest'; person: number };
 
@@ -103,11 +108,15 @@ export async function dueWork(store: Store, options: RunOptions, people?: readon
     // Nothing is read from their Gmail until the person has said, with a label of their own, what they want of it.
     const reading = await hasOwnLabels(db);
     const evals = await goingEvals(db);
+    const copies = (await preferences(db)).mail ? await goingCopies(db) : [];
     // Going through an inbox and a test run wait for a model, so the timed tick begins neither without one. Applying a rule needs none.
     const modelled = Boolean(people) || ((runs.some((run) => !run.ruleId) || evals.length > 0) && Boolean(options.model && (await options.model(db))));
     for (const account of await listAccounts(db)) {
       if (!reading) continue;
       if (people || (await passWanted(db, account, options))) due.push({ kind: 'pass', person, mailbox: account.number });
+      // An expired sign-in fails a copy as it fails a pass.
+      if (copies.some((c) => c.accountId === account.id) && (people || !(await lastPass(options.ephemeral, account.id))?.expired))
+        due.push({ kind: 'copy', person, mailbox: account.number });
       const going = runs.filter((run) => run.accountId === account.id && (run.ruleId || modelled));
       // An expired sign-in fails a slice as it fails a pass; the look above finds when Gmail answers again.
       if (going.length === 0 || (!people && (await lastPass(options.ephemeral, account.id))?.expired)) continue;
@@ -124,11 +133,13 @@ export const describeWork = (work: Work) =>
     ? `Mailbox ${work.mailbox}: pass`
     : work.kind === 'inbox'
       ? `Mailbox ${work.mailbox}: inbox run ${work.run}`
-      : work.kind === 'eval'
-        ? 'A test run'
-        : work.kind === 'digest'
-          ? 'Daily digests'
-          : 'Deleting old records';
+      : work.kind === 'copy'
+        ? `Mailbox ${work.mailbox}: copying mail for Inbox`
+        : work.kind === 'eval'
+          ? 'A test run'
+          : work.kind === 'digest'
+            ? 'Daily digests'
+            : 'Deleting old records';
 
 /**
  * Run one piece of due work, starting nothing after `until`. Everything it touches is opened here from the
@@ -161,6 +172,15 @@ export const runWork = (store: Store, work: Work, options: RunOptions, until: nu
           return account ? await passMailbox(db, account, options, until) : null;
         case 'inbox':
           if (account) await goThroughInbox(db, account, work.run, options, until);
+          return null;
+        case 'copy':
+          if (account) {
+            const copied = await copyMail(
+              { db, api: (await options.connect(db, account)).api, until, ...(options.now ? { now: options.now } : {}) },
+              account.id,
+            );
+            if (copied) options.log(`${account.email}: copied ${copied} message${copied === 1 ? '' : 's'} for Inbox`);
+          }
           return null;
         case 'eval': {
           const tier = options.model ? await options.model(db) : null;
@@ -207,20 +227,26 @@ async function digests(store: Store, db: Sql, person: number, options: RunOption
 
 /**
  * Gmail for one pass, reading each message whole at most once: the model, the examples and the bodies kept
- * for waiting mail share the read. `held` says which were read; a read that failed is asked for again. Held only for the pass.
+ * for waiting mail share the read, and a message whose text Sift holds is not read from Gmail at all (`heldText`).
+ * `held` says which were read from Gmail; a read that failed is asked for again. Held only for the pass.
  */
-function readingOnce(api: GmailApi): { api: GmailApi; held: (messageId: string) => boolean } {
+function readingOnce(db: Sql, accountId: string, api: GmailApi): { api: GmailApi; held: (messageId: string) => boolean } {
   const reads = new Map<string, Promise<MessageContent | null>>();
   const done = new Set<string>();
+  const fromGmail = (messageId: string) => {
+    const read = api.getContent(messageId);
+    read.then(
+      () => done.add(messageId),
+      () => reads.delete(messageId),
+    );
+    return read;
+  };
   const getContent = (messageId: string) => {
     let read = reads.get(messageId);
     if (!read) {
-      read = api.getContent(messageId);
+      read = heldText(db, accountId, messageId).then((text) => (text ? heldContent(text.text, text.html, text.read) : fromGmail(messageId)));
       reads.set(messageId, read);
-      read.then(
-        () => done.add(messageId),
-        () => reads.delete(messageId),
-      );
+      read.catch(() => reads.delete(messageId));
     }
     return read;
   };
@@ -244,7 +270,7 @@ async function goThroughInbox(db: Sql, account: Account, run: number, options: R
   const { active } = await preferences(db);
   const leave = options.unsubscribe;
   const { api: gmail, mailbox } = await options.connect(db, account);
-  const { api, held } = readingOnce(gmail);
+  const { api, held } = readingOnce(db, account.id, gmail);
   const went = await continueInboxRun(
     {
       db,
@@ -339,7 +365,7 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
   const result: PassResult = { email: account.email };
   try {
     const { api: gmail, mailbox } = await options.connect(db, account);
-    const { api, held } = readingOnce(gmail);
+    const { api, held } = readingOnce(db, account.id, gmail);
     const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
     if (active) await reconcile(deps, { accountId: account.id });
     result.sync = await syncAccount(db, api, account, options.now, until);
@@ -403,6 +429,7 @@ function describe(result: PassResult, active: boolean): string | null {
   const { sync, triage } = result;
   if (sync?.mode === 'recovery') parts.push('history cursor had expired, searched the last 7 days');
   if (sync && sync.added.length > 0) parts.push(`${sync.added.length} new`);
+  if (sync?.kept) parts.push(`${sync.kept} more kept for Inbox`);
   if (sync?.corrections) parts.push(`learned from ${sync.corrections} message${sync.corrections === 1 ? '' : 's'} you moved or relabelled in Gmail`);
   if (triage) {
     const decided = Object.entries(triage.decided).filter(([, n]) => n > 0);
@@ -436,4 +463,8 @@ export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>):
     pruned = await pruneOld(db, now);
     if (pruned > 0) options.log(`Forgot ${pruned} message${pruned === 1 ? '' : 's'} with nothing newer than ${RETENTION_DAYS} days`);
   } while (pruned >= PRUNE_PER_RUN);
+  // A record that a recent decision or change keeps past Inbox's window keeps no text.
+  const { mail, mailWindow } = await preferences(db);
+  const since = mail ? windowStart(mailWindow, now) : null;
+  if (since !== null) await dropTextBefore(db, since);
 }

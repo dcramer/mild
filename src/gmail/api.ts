@@ -4,7 +4,7 @@ import { type MessageContent, readContent } from './body.ts';
 import { calls, isNotFound } from './call.ts';
 import type { Pace } from './quota.ts';
 
-/** Headers fetched for triage. Bodies are never requested here. */
+/** Headers fetched for triage, and all a message read whole (`getMessage`) keeps of its own. */
 const METADATA_HEADERS = [
   'From',
   'To',
@@ -88,6 +88,10 @@ export interface GmailApi {
   /** Throws HistoryExpiredError when `startHistoryId` is too old. */
   listHistory(startHistoryId: string, pageToken?: string): Promise<HistoryPage>;
   searchInbox(query: string, pageToken?: string): Promise<MessageIdPage>;
+  /** A search of the whole mailbox but Spam and Trash, newest first, `most` a page. */
+  searchMail(query: string, most: number, pageToken?: string): Promise<MessageIdPage>;
+  /** How many messages the mailbox holds, as Gmail counts them, Spam and Trash among them. */
+  mailboxSize(): Promise<number>;
   /** How many messages are in the inbox, as Gmail counts them for its label. */
   inboxSize(): Promise<number>;
   /** Null when the message no longer exists. Does not mark it read. */
@@ -98,10 +102,22 @@ export interface GmailApi {
   listLabels(): Promise<{ id: string; name: string }[]>;
   /** The message's readable text (truncated), its HTML part, and the facts only the whole message shows (attachments, tracking); null when the message no longer exists. Does not mark it read. */
   getContent(messageId: string): Promise<MessageContent | null>;
+  /** One read of the whole message (60 units, as `getContent`), for its headers and labels as `getMetadata` gives them and its content. Null when it no longer exists. */
+  getMessage(messageId: string): Promise<{ raw: RawMessage; content: MessageContent } | null>;
   /** A thread's messages, oldest first, with their labels and nothing else. Null when the thread no longer exists. */
   getThread(threadId: string): Promise<{ id: string; labelIds: string[] }[] | null>;
   /** The addresses the owner can send as, the account's own among them, lowercased. */
   listSendAs(): Promise<string[]>;
+}
+
+const ASKED = new Set(METADATA_HEADERS.map((name) => name.toLowerCase()));
+
+/** A message as `getMetadata` gives it. `only`: the headers to keep of a whole message's, which carries all of them. */
+function rawOf(data: gmail_v1.Schema$Message, only: ReadonlySet<string> | null): RawMessage {
+  const headers: RawMessage['headers'] = [];
+  for (const h of data.payload?.headers ?? [])
+    if (h.name && typeof h.value === 'string' && (!only || only.has(h.name.toLowerCase()))) headers.push({ name: h.name, value: h.value });
+  return { id: data.id!, threadId: data.threadId!, labelIds: data.labelIds ?? [], internalDate: Number(data.internalDate ?? 0), headers };
 }
 
 /** The account's address and current history id. Unpaced when the account is only being signed in to. */
@@ -177,6 +193,34 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
       };
     },
 
+    async searchMail(query, most, pageToken) {
+      const data = await call('users.messages.list', 5, () =>
+        client.users.messages.list({ userId, q: query, maxResults: most, ...(pageToken ? { pageToken } : {}) }),
+      );
+      const ids = (data.messages ?? []).map((m) => m.id).filter((id) => typeof id === 'string');
+      return {
+        ids,
+        ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}),
+        ...(typeof data.resultSizeEstimate === 'number' ? { estimate: data.resultSizeEstimate } : {}),
+      };
+    },
+
+    async mailboxSize() {
+      const data = await call('users.getProfile', 1, () => client.users.getProfile({ userId }));
+      return data.messagesTotal ?? 0;
+    },
+
+    async getMessage(messageId) {
+      try {
+        const data = await call('users.messages.get', 60, () => client.users.messages.get({ userId, id: messageId, format: 'full' }));
+        if (!data.id || !data.threadId) return null;
+        return { raw: rawOf(data, ASKED), content: readContent(data.payload) };
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+
     async inboxSize() {
       const data = await call('users.labels.get', 1, () => client.users.labels.get({ userId, id: 'INBOX' }));
       return data.messagesTotal ?? 0;
@@ -232,9 +276,7 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
           client.users.messages.get({ userId, id: messageId, format: 'metadata', metadataHeaders: [...METADATA_HEADERS] }),
         );
         if (!data.id || !data.threadId) return null;
-        const headers: RawMessage['headers'] = [];
-        for (const h of data.payload?.headers ?? []) if (h.name && typeof h.value === 'string') headers.push({ name: h.name, value: h.value });
-        return { id: data.id, threadId: data.threadId, labelIds: data.labelIds ?? [], internalDate: Number(data.internalDate ?? 0), headers };
+        return rawOf(data, null);
       } catch (error) {
         if (isNotFound(error)) return null;
         throw error;

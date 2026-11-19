@@ -311,6 +311,28 @@ describe('a message', () => {
   });
 });
 
+describe('Inbox turned on before it copied all mail', () => {
+  it('starts copying a year of every mailbox of whoever has it on, by a migration, as a Postgres server runs it', async () => {
+    const { db, run } = await migratedBefore('0065_inbox_copies_mail_row_security');
+    await db.exec(`
+      INSERT INTO users (id, owner, created_at) VALUES (1, true, 0), (2, false, 0);
+      INSERT INTO accounts (id, user_id, created_at, "primary") VALUES ('a@example.org', 1, 0, true), ('a@work.example.com', 1, 1, false), ('b@example.net', 2, 2, true);
+      INSERT INTO mailboxes (user_id, id) VALUES (1, 'a@example.org'), (1, 'a@work.example.com'), (2, 'b@example.net');
+      INSERT INTO preferences (user_id, mail) VALUES (1, true), (2, false);
+    `);
+    await run('0065_inbox_copies_mail_row_security');
+    const rows = (
+      await db.query<{ user_id: number; account_id: string; year: boolean }>(
+        `SELECT user_id, account_id, before - since = 31536000000 AND finished_at IS NULL AS year FROM mail_copies ORDER BY account_id`,
+      )
+    ).rows;
+    expect(rows).toEqual([
+      { user_id: 1, account_id: 'a@example.org', year: true },
+      { user_id: 1, account_id: 'a@work.example.com', year: true },
+    ]);
+  });
+});
+
 describe('a model call', () => {
   it('made before calls said which rule they checked is given the rule whose condition it met, by a migration', async () => {
     // On a Postgres server row-level security hid every row from it, so only a machine's install was given them.

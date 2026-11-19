@@ -1,4 +1,6 @@
-import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
+import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, preferences, users } from './query.ts';
+import { startCopies } from './copies.ts';
+import { windowStart } from '../mail-window.ts';
 import { inboxRow } from './labels.ts';
 import type { Sql } from './sql.ts';
 import { sealFacts, sealMessage } from './content.ts';
@@ -57,10 +59,15 @@ export async function ensureMailbox(db: Sql, mailbox: { id: string; historyId?: 
   });
 }
 
-/** A mailbox in one person's own database, or its cursor reset if it is there already. */
-export async function addMailbox(db: Sql, id: string, historyId: string): Promise<void> {
+/** A mailbox in one person's own database, or its cursor reset if it is there already. A new one is copied for Inbox while it is on. */
+export async function addMailbox(db: Sql, id: string, historyId: string, now: number = Date.now()): Promise<void> {
   await db.transaction(async (tx) => {
-    if (!(await ensureMailbox(tx, { id, historyId }))) await tx.update(mailboxes).set({ historyId }).where(eq(mailboxes.id, id));
+    if (!(await ensureMailbox(tx, { id, historyId }))) {
+      await tx.update(mailboxes).set({ historyId }).where(eq(mailboxes.id, id));
+      return;
+    }
+    const [inbox] = await tx.select({ on: preferences.mail, window: preferences.mailWindow }).from(preferences);
+    if (inbox?.on) await startCopies(tx, [id], { since: windowStart(inbox.window, now), before: now, now });
   });
 }
 

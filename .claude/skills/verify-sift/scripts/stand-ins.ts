@@ -15,7 +15,8 @@
  *   which mail you have answered. Summarizing says how many messages it was shown and the subject, and that nothing is asked. Suggesting gives Sales pitches when
  *   the words name pitches, Build results (Digest) when they name builds, and notes that Receipts and transactions
  *   covers receipts already when they name receipts; words naming none of these are an unusable answer. A pass is given no model.
- * - What Gmail would count: an inbox of 2,412 messages (the newest 300 while setting up), three in four needing
+ * - What Gmail would count: for Inbox's copy, 8,240 messages in the last year, 21,500 in three and 46,800 in all; an inbox
+ *   of 2,412 messages (the newest 300 while setting up), three in four needing
  *   the model at about a tenth of a cent each; and for any rule about 1,240 messages it would decide, the newest
  *   five `Found in Gmail 1` to `5`, none needing the model.
  */
@@ -97,6 +98,9 @@ const nothingNew = (address: string): GmailApi => ({
   listHistory: async () => ({ additions: [], historyId: '1' }),
   searchInbox: listing ? () => new Promise<never>(() => {}) : async () => ({ ids: [] }),
   inboxSize: async () => 0,
+  searchMail: async () => ({ ids: [] }),
+  mailboxSize: async () => 0,
+  getMessage: async () => null,
   getMetadata: async () => null,
   getLabelIds: async () => null,
   listLabels: async () => [],
@@ -177,6 +181,11 @@ const standIns: StandIns = {
   inbox: {
     inboxEstimate: async (_db, _mailboxes, reach) =>
       reach === 'inbox' ? { messages: 2412, model: 1830, cost: 3.1 } : { messages: 300, model: 228, cost: 0.39 },
+    mailReach: async () => ({
+      year: { messages: 8240, bytes: 247_200_000, minutes: 103 },
+      three_years: { messages: 21_500, bytes: 645_000_000, minutes: 269 },
+      all: { messages: 46_800, bytes: 1_404_000_000, minutes: 585 },
+    }),
     ruleInbox: async () => ({
       examples: Array.from({ length: 5 }, (_, i) => ({
         accountId: 'me@example.org',

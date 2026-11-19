@@ -9,6 +9,9 @@ import { REACH, modelShare } from '../store/inbox.ts';
 import { averageCall } from '../store/runs.ts';
 import { hasOwnLabels } from '../store/labels.ts';
 import { EXAMPLES as RULE_EXAMPLES, ruleInbox } from '../work/apply.ts';
+import { reachOf } from '../work/copy.ts';
+import { keptSize } from '../store/kept.ts';
+import { MAIL_WINDOWS } from '../mail-window.ts';
 import { createGmailApi } from '../gmail/api.ts';
 import { startEval } from '../learn/evals.ts';
 import { proposeLabels } from '../learn/labels.ts';
@@ -39,6 +42,8 @@ import { seal } from '../plain.ts';
 const DAY_MS = 86_400_000;
 /** How far back an estimate looks for how much mail went to the model: recent enough to reflect the rules as they are. */
 const ESTIMATE_DAYS = 30;
+/** What a message's text and HTML take to keep, in bytes, for someone whose own mail does not say yet: a guess. */
+const KEPT_GUESS = 30_000;
 
 /** A Gmail client for one of the person's mailboxes, with the sign-in kept in their database. */
 async function gmailClient(config: Config, db: Sql, email: string) {
@@ -193,6 +198,25 @@ export async function buildControls(
       const model = Math.round(messages * ((await modelShare(db, Date.now() - ESTIMATE_DAYS * DAY_MS)) ?? 1));
       const each = await costEach(db);
       return { messages, model, cost: each === null ? null : model * each };
+    },
+    mailReach: async (db, mailboxes) => {
+      const reach = {
+        year: { messages: 0, bytes: 0, minutes: 0 },
+        three_years: { messages: 0, bytes: 0, minutes: 0 },
+        all: { messages: 0, bytes: 0, minutes: 0 },
+      };
+      const each = (await keptSize(db)) ?? KEPT_GUESS;
+      for (const account of await listAccounts(db)) {
+        if (!mailboxes.includes(account.id) || !(await hasOwnLabels(db))) continue;
+        const mailbox = await reachOf((await gmail(db, account.id)).api, Date.now());
+        for (const window of MAIL_WINDOWS) {
+          reach[window].messages += mailbox[window].messages;
+          reach[window].bytes += Math.round(mailbox[window].messages * each);
+          // Each mailbox has a quota of its own, and its copy a run of its own, so they go side by side.
+          reach[window].minutes = Math.max(reach[window].minutes, mailbox[window].minutes);
+        }
+      }
+      return reach;
     },
     putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);

@@ -33,6 +33,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { REASONING } from '../model/reasoning.ts';
+import { MAIL_WINDOWS } from '../mail-window.ts';
 import type { Facts } from '../triage/facts.ts';
 import { DECIDED, DISPOSITIONS, LEAVE_IN_INBOX, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
 
@@ -149,14 +150,21 @@ export const preferences = pgTable(
     userId: userId().primaryKey(),
     // false (off): their decisions are only suggestions. true (on): sift carries them out in their mailboxes.
     active: boolean('active').notNull().default(false),
-    // Inbox: Sift keeps the text of all their inbox mail (`mail_bodies`), and may send as them where a mailbox lets it.
+    // Inbox: Sift keeps a copy of their mail (`messages`, `mail_bodies`), and may send as them where a mailbox lets it.
     mail: boolean('mail').notNull().default(false),
+    // How far back that copy goes.
+    mailWindow: text('mail_window', { enum: MAIL_WINDOWS }).notNull().default('year'),
     model: text('model'),
     reasoning: text('reasoning', { enum: REASONING }).notNull().default('low'),
     digestHour: integer('digest_hour').notNull().default(7), // the hour of their day a label's digest arrives
     timeZone: text('time_zone'), // their browser's IANA zone, as last said; null: never said, so UTC
   },
-  (t) => [check('preferences_digest_hour', sql`${t.digestHour} BETWEEN 0 AND 23`), oneOf('preferences_reasoning', t.reasoning, REASONING), own()],
+  (t) => [
+    check('preferences_digest_hour', sql`${t.digestHour} BETWEEN 0 AND 23`),
+    oneOf('preferences_reasoning', t.reasoning, REASONING),
+    oneOf('preferences_mail_window', t.mailWindow, MAIL_WINDOWS),
+    own(),
+  ],
 ).enableRLS();
 
 /**
@@ -195,7 +203,8 @@ export const messages = pgTable(
     applyRule: text('apply_rule'), // pulled in by "Apply to inbox" on this rule: what it decides here is carried out, Sift on or off
     facts: jsonb('facts').$type<Facts>().notNull(),
     readAt: time('read_at'), // when a sync saw the user had opened it
-    // A decision has been recorded for it (`recordDecision`). What has none is the triage queue, which a tick looks at every minute.
+    // A decision has been recorded for it (`recordDecision`), or it is not mail to triage: the person's own, or copied for Inbox
+    // (`recordKept`). What is neither is the triage queue, which a tick looks at every minute.
     decided: boolean('decided').notNull().default(false),
   },
   (t) => [
@@ -590,6 +599,26 @@ export const mailBodies = pgTable(
     fetchedAt: time('fetched_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.accountId, t.messageId] }), mailbox(t), message(t), own()],
+).enableRLS();
+
+/**
+ * Copying a mailbox for Inbox: its mail received from `since` (null: all of it) to `before`, and what is in its inbox, listed
+ * newest first a page at a time, each message recorded with its text (`copyMail`, src/work/copy.ts). One a mailbox.
+ */
+export const mailCopies = pgTable(
+  'mail_copies',
+  {
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    since: time('since'),
+    before: time('before').notNull(),
+    pageToken: text('page_token'), // where the page under way starts in Gmail's listing; null: at the top
+    done: integer('done').notNull().default(0), // listed and recorded, in this listing
+    total: integer('total').notNull().default(0), // Gmail's estimate of what the listing holds, from its first page
+    startedAt: time('started_at').notNull(),
+    finishedAt: time('finished_at'), // null while it goes on
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.accountId] }), mailbox(t), own()],
 ).enableRLS();
 
 /** A replay of the model over stored examples, with the settings it ran with: the same hashes mean the model was asked the same way. */

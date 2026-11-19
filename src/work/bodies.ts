@@ -3,6 +3,8 @@ import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { pendingSuggestions } from '../learn/feedback.ts';
 import { sealPart } from '../store/content.ts';
+import { type Text, keepText } from '../store/kept.ts';
+import type { MessageContent } from '../gmail/body.ts';
 
 const PER_PASS = 50;
 export const KEEP_BODY_DAYS = 30;
@@ -73,6 +75,13 @@ export async function keepSuggestionBodies(
   return fetched;
 }
 
+/** What Inbox keeps of a message read whole. One that has gone is kept empty, so it is not asked for again. */
+export const textOf = (content: MessageContent | null): Text => ({
+  text: content?.whole ?? content?.text ?? '',
+  html: content?.html ?? null,
+  read: content?.facts ?? { hasAttachments: false },
+});
+
 /** Inbox mail Sift has a record of and no text for, newest first. `messages_inbox` serves it. */
 const textless = (db: Sql, accountId: string, limit: number) =>
   db
@@ -96,7 +105,7 @@ const textless = (db: Sql, accountId: string, limit: number) =>
 /** Read in one batch: deep enough to reach the mail this pass has already read, which is mostly the newest. */
 const LOOKED_AT = 500;
 
-const inboxOn = async (db: Sql) => (await db.select({ mail: preferences.mail }).from(preferences))[0]?.mail === true;
+export const inboxOn = async (db: Sql) => (await db.select({ mail: preferences.mail }).from(preferences))[0]?.mail === true;
 
 /** Whether `keepMailBodies` has text to fetch: Inbox is on and some inbox mail has none. */
 export async function mailBodiesDue(db: Sql, accountId: string): Promise<boolean> {
@@ -121,21 +130,7 @@ export async function keepMailBodies(
     const inHand = held(messageId);
     if (!inHand && (!fetch || fetched >= PER_PASS)) continue;
     const content = await api.getContent(messageId);
-    const body = {
-      bodyText: sealPart(db, accountId, messageId, 'text', content?.whole ?? content?.text ?? '')!,
-      bodyHtml: sealPart(db, accountId, messageId, 'html', content?.html ?? null),
-      fetchedAt: now(),
-    };
-    const kept = await db.transaction(async (tx) => {
-      // Holds back Inbox being turned off until this is written, so the delete that turns it off finds it; once it is off, nothing is written.
-      const [on] = await tx.select({ mail: preferences.mail }).from(preferences).for('share');
-      if (on?.mail)
-        await tx
-          .insert(mailBodies)
-          .values({ accountId, messageId, ...body })
-          .onConflictDoNothing();
-      return on?.mail === true;
-    });
+    const kept = await keepText(db, accountId, messageId, textOf(content), now());
     if (!kept) break;
     if (!inHand) fetched++;
   }

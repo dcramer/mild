@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { canSend, lastSyncedAt, listAccounts, mailboxAliases } from '../../../../store/accounts.ts';
 import { inboxProgress } from '../../../../store/inbox.ts';
+import { copyProgress } from '../../../../store/copies.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
 import { waitingCount } from '../../../../learn/feedback.ts';
 import { preferences } from '../../../../store/preferences.ts';
@@ -18,6 +19,13 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
     owner: scope.owner,
     active: own.active,
     mail: own.mail,
+    mailWindow: own.mailWindow,
+    copying: (
+      await copyProgress(
+        db,
+        accounts.map((a) => a.id),
+      )
+    ).going,
     model: { chosen: own.model, reasoning: own.reasoning, ...(controls ? await controls.modelSignIns(db) : { choices: [], signedIn: [], pending: null }) },
     activity: {
       ...activity,

@@ -27,7 +27,7 @@ export type Beginning = { begun: true } | { begun: false; since?: number };
 export interface StandIns {
   gmail: (email: string) => { api: GmailApi; mailbox: Mailbox };
   model: ChosenModel;
-  inbox: Pick<Controls, 'inboxEstimate' | 'ruleInbox'>;
+  inbox: Pick<Controls, 'inboxEstimate' | 'mailReach' | 'ruleInbox'>;
 }
 
 /** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/runtime.md). */
@@ -77,6 +77,8 @@ export function runKey(piece: Work): string {
       return `pass:${piece.mailbox}`;
     case 'inbox':
       return `inbox:${piece.mailbox}:${piece.run}`;
+    case 'copy':
+      return `copy:${piece.mailbox}`;
     case 'eval':
       return `eval:${piece.person}:${piece.run}`;
     case 'upkeep':

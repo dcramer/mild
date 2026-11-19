@@ -1,12 +1,16 @@
-import { isNull, mailBodies, mailSummaries, preferences as preferenceRows } from './query.ts';
+import { isNull, mailBodies, mailCopies, mailSummaries, mailboxes, preferences as preferenceRows } from './query.ts';
+import { moveWindow, startCopies } from './copies.ts';
+import { type MailWindow, windowStart } from '../mail-window.ts';
 import type { Reasoning } from '../model/reasoning.ts';
 import type { Sql } from './sql.ts';
 
 export interface Preferences {
   /** Whether sift is on for them. Off: what sift decides for their mail stays a suggestion. On: it is carried out in Gmail. */
   active: boolean;
-  /** Whether Inbox is on for them: Sift keeps the text of their inbox mail, and may send as them from a mailbox that lets it. */
+  /** Whether Inbox is on for them: Sift keeps a copy of their mail, and may send as them from a mailbox that lets it. */
   mail: boolean;
+  /** How far back that copy goes. */
+  mailWindow: MailWindow;
   /** `provider/model-id`, or null for no model: mail no rule covers is then left for them. */
   model: string | null;
   /** How hard their model thinks before it answers. */
@@ -22,27 +26,51 @@ export async function preferences(db: Sql): Promise<Preferences> {
     .select({
       active: preferenceRows.active,
       mail: preferenceRows.mail,
+      mailWindow: preferenceRows.mailWindow,
       model: preferenceRows.model,
       reasoning: preferenceRows.reasoning,
       digestHour: preferenceRows.digestHour,
       timeZone: preferenceRows.timeZone,
     })
     .from(preferenceRows);
-  return { active: row!.active, mail: row!.mail, model: row!.model, reasoning: row!.reasoning, digestHour: row!.digestHour, timeZone: row!.timeZone };
+  return {
+    active: row!.active,
+    mail: row!.mail,
+    mailWindow: row!.mailWindow,
+    model: row!.model,
+    reasoning: row!.reasoning,
+    digestHour: row!.digestHour,
+    timeZone: row!.timeZone,
+  };
 }
 
 export async function setActive(db: Sql, active: boolean): Promise<void> {
   await db.update(preferenceRows).set({ active });
 }
 
-/** Off, the text Sift kept of their inbox mail goes in the same write, and what the model said of it, though not what that cost. */
-export async function setMail(db: Sql, on: boolean): Promise<void> {
+/**
+ * On, every mailbox starts copying its mail from as far back as `window` says. Off, the text Sift kept of their mail goes in
+ * the same write, with the copies under way and what the model said of it, though not what that cost.
+ */
+export async function setMail(db: Sql, on: boolean, { now = Date.now(), window }: { now?: number; window?: MailWindow } = {}): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.update(preferenceRows).set({ mail: on });
+    const [was] = await tx.select({ mail: preferenceRows.mail, mailWindow: preferenceRows.mailWindow }).from(preferenceRows).for('update');
     if (!on) {
+      await tx.update(preferenceRows).set({ mail: false });
       await tx.delete(mailBodies);
+      await tx.delete(mailCopies);
       await tx.update(mailSummaries).set({ summary: null });
+      return;
     }
+    const chosen = window ?? was!.mailWindow;
+    await tx.update(preferenceRows).set({ mail: true, mailWindow: chosen });
+    if (was!.mail) return await moveWindow(tx, was!.mailWindow, chosen, now);
+    const all = await tx.select({ id: mailboxes.id }).from(mailboxes);
+    await startCopies(
+      tx,
+      all.map((m) => m.id),
+      { since: windowStart(chosen, now), before: now, now },
+    );
   });
 }
 

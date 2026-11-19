@@ -14,7 +14,8 @@
  * widgets newsletter, archived as Newsletters by its rule, which stands.
  * `--chatgpt` has the model reached through a ChatGPT plan instead of an API key.
  * `--inbox` has Inbox on before the passes, so they keep the text of the inbox's mail, and hands the fake Gmail each
- * message's labels, so the reader's own presses there change it; elsewhere the fake Gmail holds none of the seed's mail.
+ * message's labels, so the reader's own presses there change it; elsewhere the fake Gmail holds none of the seed's mail. Its
+ * copy of the last year is part-way, 1,240 of about 8,240, until a pass is begun.
  * Google lets Sift send from me@example.org, as itself or as `me+lists@example.org`, and not from the work mailbox.
  */
 import { createHmac, randomBytes } from 'node:crypto';
@@ -31,6 +32,7 @@ import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount, setCanSend, setMailboxAliases } from '../../../../src/store/accounts.ts';
 import { listLabels, removeLabel } from '../../../../src/store/labels.ts';
 import { setActive, setMail, setModel } from '../../../../src/store/preferences.ts';
+import { advanceCopy, goingCopy, startCopies } from '../../../../src/store/copies.ts';
 import { lastStandingChange } from '../../../../src/store/actions.ts';
 import { undo } from '../../../../src/actions/executor.ts';
 import { listProposals } from '../../../../src/store/proposals.ts';
@@ -178,6 +180,9 @@ const api: GmailApi = {
   }),
   searchInbox: async () => ({ ids: [] }),
   inboxSize: async () => inbox.length,
+  searchMail: async () => ({ ids: [] }),
+  mailboxSize: async () => 0,
+  getMessage: async () => null,
   getMetadata: async (id) => find(id)?.raw ?? null,
   getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
   listLabels: async () => [],
@@ -270,6 +275,10 @@ await connectAccount(store, WORK, '1', now - 23 * HOUR, user);
 if (variant === '--inbox') {
   await setCanSend(db, ACCOUNT, true);
   await setMailboxAliases(db, ACCOUNT, ['me+lists@example.org']);
+  // Copying the year part-way, as if Inbox had been turned on ten minutes ago with that much more in Gmail; the next pass begun finishes it.
+  await startCopies(db, [ACCOUNT], { since: now - 365 * 24 * HOUR, before: now - 10 * 60_000, now: now - 10 * 60_000 });
+  const copy = (await goingCopy(db, ACCOUNT))!;
+  await advanceCopy(db, copy, { listed: 1240, next: 'p2', estimate: 8240 }, now);
 }
 // `--bare` takes the person's labels out, as before they chose any, so every screen is the setting-up steps.
 if (variant === '--bare') for (const label of await listLabels(db)) if (label.id !== LEAVE_IN_INBOX) await removeLabel(db, label.id, now - 23 * HOUR);
