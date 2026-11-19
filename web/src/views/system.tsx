@@ -72,6 +72,7 @@ import {
   RowActions,
   RowCheck,
   More,
+  Pager,
   Section,
   Select,
   SomeOf,
@@ -187,6 +188,7 @@ export function SystemView() {
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [made, setMade] = useState('');
   const [labelled, setLabelled] = useState('');
+  const [offset, setOffset] = useState(0);
   const [mailbox, setMailbox] = useState('');
   const mailboxes = { mailboxes: ['ada@example.org', 'ada@work.example.org'], value: mailbox, onChange: setMailbox };
   const toast = useToast();
@@ -352,6 +354,11 @@ export function SystemView() {
               <span className="flex items-center gap-2 font-medium">
                 Ada Lovelace
                 <Hint icon={ReplyIcon} says="You have written to them" />
+              </span>
+            </Row>
+            <Row label="hint, said" note="The icon with its words, where they are the point: under a sender's name on their own page.">
+              <span className="text-muted-foreground">
+                <Hint icon={SparkleIcon} says="The first time Sift has seen them" tone="look" said />
               </span>
             </Row>
           </Sheet>
@@ -640,6 +647,7 @@ export function SystemView() {
                     ))}
                   </tbody>
                 </Table>
+                <Pager offset={offset} size={50} total={120} onGo={setOffset} />
               </ListView>
             </ListPage>
           </Sheet>

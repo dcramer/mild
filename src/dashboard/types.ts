@@ -334,12 +334,26 @@ export const MessageDetail = z.object({
 });
 export type MessageDetail = z.infer<typeof MessageDetail>;
 
+/**
+ * What a sender's or domain's next message gets (`nextOf`, src/dashboard/queries/contacts.ts): what the rule for all their
+ * mail does (`ruleId`), or else what their mail has been, the reader's answers included; `usually` when it is of several kinds.
+ */
+const NextMail = z.object({
+  labelId: z.string().nullable(),
+  labelName: z.string().nullable(),
+  disposition: z.string(),
+  usually: z.boolean(),
+  ruleId: z.string().nullable(),
+});
+export type NextMail = z.infer<typeof NextMail>;
+
 /** GET /api/sender and /api/domain. */
 export const SenderPage = z.object({
   kind: z.enum(['sender', 'domain']),
   /** The name the sender last used. */
   name: held.nullable(),
   profile: SenderProfile,
+  next: NextMail,
   /** For an address that sends under more than one name: each name (null for mail with none), most mail first, with what its mail is by label. */
   names: z.array(
     z.object({
@@ -357,6 +371,27 @@ export const SenderPage = z.object({
   decisions: z.array(ListedDecision),
 });
 export type SenderPage = z.infer<typeof SenderPage>;
+
+/** GET /api/contacts: everyone the person has mail from, newest first, a page of them and how many match in all. */
+export const ContactPage = z.object({
+  total: z.number(),
+  rows: z.array(
+    z.object({
+      address: held,
+      /** The name on their newest message. */
+      name: held.nullable(),
+      contact: Contact,
+      given: Given.nullable(),
+      /** Rules that name them or their domain. */
+      rules: z.number(),
+      next: NextMail,
+      /** Messages in the last 30 days. */
+      recent: z.number(),
+      lastSeenAt: z.number(),
+    }),
+  ),
+});
+export type ContactPage = z.infer<typeof ContactPage>;
 
 /** One sender's mail that is waiting on the user. GET /api/suggestion. */
 export const SuggestionDetail = z.object({

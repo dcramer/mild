@@ -32,6 +32,7 @@ An H1 and one paragraph of what the user gets, then four H2s in order: `Sub-feat
 
 ## Features
 
+- [Contacts](./contacts.md): everyone who writes, what Sift does with their next mail and where they stand, and each one's page.
 - [Agree with a suggestion](./agree-suggestion.md): press the check beside the label Sift gave a row.
 - [Answer a suggestion](./answer-suggestion.md): teach Sift what a waiting message is, and the rule that makes.
 - [Add a rule](./add-rule.md): a rule made on the Rules screen, and its effect on what is waiting.

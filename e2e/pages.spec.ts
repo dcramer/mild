@@ -14,6 +14,7 @@ import {
   PHONE,
   query,
   row,
+  section,
   senderPage,
   sideScroll,
   test,
@@ -178,7 +179,7 @@ test.describe('A sender', () => {
     await expect(page.getByRole('heading', { name: 'notifications@code.example.com', level: 1 })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Answer 8 waiting' })).toBeVisible();
 
-    const names = page.getByRole('table').first();
+    const names = section(page, 'Names');
     await expect(rows(page).filter({ has: page.getByRole('button', { name: 'Make a rule…' }) })).toHaveCount(4);
     await expect(names.getByRole('row', { name: /^Dependabot 3 · 38%/ })).toContainText('Notifications');
     await expect(names.getByRole('row', { name: /^Security alerts 2 · 25%/ })).toContainText('Account alerts');
@@ -191,7 +192,7 @@ test.describe('A sender', () => {
 
   test('From narrows their mail to one name, and is kept in the address', async ({ page }) => {
     await page.goto(SENDER);
-    const mail = rows(page, page.getByRole('table').nth(1));
+    const mail = rows(page, section(page, 'Their mail'));
     await expect(mail).toHaveCount(8);
     await page.getByRole('combobox', { name: 'From' }).click();
     await page.getByRole('option', { name: 'Dependabot' }).click();
@@ -275,7 +276,7 @@ test.describe('Who sent it is a link wherever it is named', () => {
     await sent.getByRole('link', { name: 'Ada Lovelace' }).click();
     await expect(page.getByRole('heading', { name: 'notifications@code.example.com', level: 1 })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'From' })).toContainText('Ada Lovelace');
-    await expect(rows(page, page.getByRole('table').nth(1))).toHaveCount(1);
+    await expect(rows(page, section(page, 'Their mail'))).toHaveCount(1);
     await expect(panel(page)).toHaveCount(0);
 
     await page.goBack();
@@ -286,7 +287,7 @@ test.describe('Who sent it is a link wherever it is named', () => {
 
   test("a name on its sender's page narrows their mail to it", async ({ page }) => {
     await page.goto(SENDER);
-    await page.getByRole('table').first().getByRole('link', { name: 'Dependabot' }).click();
+    await section(page, 'Names').getByRole('link', { name: 'Dependabot' }).click();
     await expect(page.getByRole('combobox', { name: 'From' })).toContainText('Dependabot');
     await param(page, 'name').toBe('Dependabot');
   });
@@ -324,19 +325,17 @@ test.describe('Who sent it is a link wherever it is named', () => {
 });
 
 test.describe('A domain', () => {
-  test('shows what its mail is, who writes from it, and their mail', async ({ page }) => {
+  test('shows what its mail is, the people there, and their mail', async ({ page }) => {
     await page.goto(DOMAIN);
     await expect(page.getByRole('heading', { name: 'code.example.com', level: 1 })).toBeVisible();
     await expect(page.getByRole('row', { name: /^Notifications 5 · 71%/ })).toBeVisible();
     await expect(page.getByRole('row', { name: /^Account alerts 2 · 29%/ })).toBeVisible();
     await expect(
-      page
-        .getByRole('table')
-        .nth(1)
+      section(page, 'People here')
         .getByRole('row')
         .filter({ has: page.getByRole('link', { name: 'Dependabot' }) }),
     ).toContainText('notifications@code.example.com');
-    await expect(rows(page, page.getByRole('table').nth(2))).toHaveCount(8);
+    await expect(rows(page, section(page, 'Their mail'))).toHaveCount(8);
     for (const name of ['Trust', 'Unwanted', 'Block']) await expect(standing(page, 'code.example.com', name)).toHaveAttribute('aria-pressed', 'false');
   });
 

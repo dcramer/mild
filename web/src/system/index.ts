@@ -16,7 +16,7 @@ export { Check, Field, FieldGroup, Form, Input, TextArea } from './field.tsx';
 export { Figure, Figures } from './figures.tsx';
 export { HoverCard } from './hover-card.tsx';
 export { setShortcutsOn, useShortcutsOn } from './keys.tsx';
-export { FilterGroup, ListView } from './list-view.tsx';
+export { FilterGroup, ListView, Pager } from './list-view.tsx';
 export { MailFrame } from './mail-frame.tsx';
 export { MailboxSwitch } from './mailbox.tsx';
 export { Avatar, Menu } from './menu.tsx';

@@ -2,6 +2,7 @@ import type { Frame, Read, Write } from './route.ts';
 import accountDeleteWrite from './routes/account/delete/post.ts';
 import activeWrite from './routes/active/post.ts';
 import checkWrite from './routes/check/post.ts';
+import contactsRead from './routes/contacts/get.ts';
 import decisionsRead from './routes/decisions/get.ts';
 import digestWrite from './routes/digest/post.ts';
 import domainRead from './routes/domain/get.ts';
@@ -66,6 +67,7 @@ import usageRead from './routes/usage/get.ts';
  * the session, the scope and the write checks to all of them.
  */
 export const READS: readonly Read[] = [
+  contactsRead,
   decisionsRead,
   domainRead,
   evalRead,

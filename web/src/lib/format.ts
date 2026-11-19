@@ -340,6 +340,21 @@ export const CONTACT_SAYS = {
   'one-way': 'They write often and you have never written back',
 } as const;
 
+/** How the owner and a sender know each other, as a filter names it. */
+export const CONTACT_FILTER = [
+  ['', 'Anyone'],
+  ['new', 'New'],
+  ['mutual', 'You write to them'],
+  ['one-way', 'Never written back'],
+] as const;
+
+/** A standing the owner gave: the press that gives it, and the state it leaves. */
+export const STANDINGS = [
+  ['trusted', 'Trust', 'Trusted'],
+  ['unwanted', 'Unwanted', 'Unwanted'],
+  ['blocked', 'Block', 'Blocked'],
+] as const;
+
 // Mail no tier could place is left in the inbox with Sift's own Gmail label: what Sift did there is ask.
 const DID: Record<string, string> = {
   archive: 'Archived',

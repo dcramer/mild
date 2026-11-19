@@ -5,6 +5,7 @@ import { traceHeaders } from './trace.ts';
 
 export type {
   Contact,
+  ContactPage,
   InboxEstimate,
   DecisionPage,
   DecisionRow,
@@ -39,6 +40,7 @@ export type {
 } from '../../../src/dashboard/types.ts';
 export type { Confidential } from '../../../src/confidential.ts';
 import type {
+  ContactPage,
   DecisionPage,
   InboxEstimate,
   FactFilter,
@@ -83,6 +85,16 @@ interface DecisionQuery {
   fact: FactFilter | '';
   /** A label's id; empty for any. */
   label: string;
+  limit: number;
+  offset: number;
+}
+
+interface ContactQuery {
+  q: string;
+  /** Empty for any. */
+  standing: Given | '';
+  /** How they and the person know each other; empty for any. */
+  know: 'new' | 'mutual' | 'one-way' | '';
   limit: number;
   offset: number;
 }
@@ -232,6 +244,8 @@ export const api = {
   message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
   /** Where a frame loads a message as the HTML Sift holds for it. */
   messageHtml: (id: string, mailbox: string) => `/api/message/html?${new URLSearchParams({ id, mailbox })}`,
+  /** Everyone the person has mail from, newest first, a page at a time. */
+  contacts: (q: ContactQuery, signal: AbortSignal) => get<ContactPage>('/api/contacts', { ...q }, signal),
   /** `name` lists only their mail under that name. */
   sender: (address: string, signal: AbortSignal, name?: string) => get<SenderPage>('/api/sender', name === undefined ? { address } : { address, name }, signal),
   domain: (domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { domain }, signal),

@@ -1,6 +1,7 @@
 'use client';
 import { CheckIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { type ReactNode, useState, useRef } from 'react';
+import { count } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
 import { useShortcut } from './keys.tsx';
@@ -169,6 +170,27 @@ export function ListView({
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * Under a list too long for one page (Activity, Contacts): which of its rows these are and how many in all, and the
+ * presses to the page before and after, newest first. Nothing while the list fits on one.
+ */
+export function Pager({ offset, size, total, onGo }: { offset: number; size: number; total: number; onGo: (offset: number) => void }) {
+  if (total <= size) return null;
+  return (
+    <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground tabular-nums">
+      <span>
+        {count(offset + 1)}–{count(Math.min(offset + size, total))} of {count(total)}
+      </span>
+      <Button disabled={offset === 0} onClick={() => onGo(Math.max(0, offset - size))}>
+        Newer
+      </Button>
+      <Button disabled={offset + size >= total} onClick={() => onGo(offset + size)}>
+        Older
+      </Button>
+    </div>
   );
 }
 

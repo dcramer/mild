@@ -18,6 +18,7 @@ test("the page cannot be framed by another site, sends no referrer, and holds no
 test('every screen calls it Sift, and only its wordmark sift', async ({ page }) => {
   for (const [path, heading] of [
     ['/', 'For review'],
+    ['/contacts', 'Contacts'],
     ['/activity', 'Activity'],
     ['/labels', 'Labels'],
     ['/rules', 'Rules'],
@@ -35,6 +36,7 @@ test('each screen is an address of its own, and anything else is missing', async
   const { request } = page;
   for (const path of [
     '/',
+    '/contacts',
     '/activity',
     '/labels',
     '/rules',
@@ -122,6 +124,7 @@ test("a screen's HTML is drawn for whoever asked, with what Sift does not encryp
   const session = (await (await request.get('/api/session')).json()) as Session;
   for (const [path, heading] of [
     ['/', 'For review'],
+    ['/contacts', 'Contacts'],
     ['/activity', 'Activity'],
     ['/labels', 'Labels'],
     ['/rules', 'Rules'],

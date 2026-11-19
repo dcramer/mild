@@ -169,6 +169,8 @@ const READS = (account: string, mark: string) => [
   '/api/labels/proposal',
   `/api/message?id=m-${mark}`,
   `/api/suggestion?sender=sender@${mark}.example.com`,
+  '/api/contacts',
+  `/api/contacts?q=${mark}`,
   `/api/sender?address=sender@${mark}.example.com`,
   `/api/domain?domain=${mark}.example.com`,
   `/api/examples?mailbox=${encodeURIComponent(account)}`,

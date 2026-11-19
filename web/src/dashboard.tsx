@@ -1,6 +1,6 @@
 'use client';
 import { type DehydratedState, HydrationBoundary, useIsFetching } from '@tanstack/react-query';
-import { ActivityIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { ActivityIcon, ContactRoundIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -48,6 +48,7 @@ function usePanelsAhead() {
 const SECTIONS = [
   { to: '', label: 'For review', icon: ListChecksIcon },
   { to: 'inbox', label: 'Inbox', icon: InboxIcon },
+  { to: 'contacts', label: 'Contacts', icon: ContactRoundIcon },
   { to: 'activity', label: 'Activity', icon: ActivityIcon },
   { to: 'labels', label: 'Labels', icon: TagIcon },
   { to: 'rules', label: 'Rules', icon: WorkflowIcon },
@@ -121,7 +122,9 @@ const firstLoad = { predicate: (query: { state: { data: unknown } }) => query.st
 
 function Frame({ signedInAs, children }: { signedInAs: string | null; children: ReactNode }) {
   usePanelsAhead();
-  const [, section] = usePathname().split('/');
+  const [, page] = usePathname().split('/');
+  // A sender's and a domain's page are a contact's.
+  const section = page === 'sender' || page === 'domain' ? 'contacts' : page;
   // The message panel. Which message is open is in the address, so it can be linked to and Back closes
   // it; the list it was opened from, for previous and next, is only known when it was opened from one here.
   const [list, setList] = useState<MessageRef[]>([]);
@@ -130,6 +133,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   // A conversation, opened on its newest message; the server finds which mailbox holds it, as it does a message.
   const [threadId] = useParam('thread');
   const [compose] = useParam('compose');
+  const [to] = useParam('to');
   const listed = list.findIndex((item) => item.messageId === messageId);
   const open =
     messageId === ''
@@ -197,7 +201,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const choice = { mailboxes, value: mailbox, onChange: chooseMailbox };
   // Writing mail is offered only with Inbox on.
   const composer = manage.data?.mail ? openComposer : null;
-  const written = composer ? writing(compose, messageId) : null;
+  const written = composer ? writing(compose, messageId, to) : null;
 
   return (
     <OpenMessagesContext value={openMessages}>
@@ -241,7 +245,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
                 }}
               />
             ) : null}
-            {written ? <Composer key={`${compose}/${messageId}`} what={written} onClose={closeComposer} /> : null}
+            {written ? <Composer key={`${compose}/${messageId}/${to}`} what={written} onClose={closeComposer} /> : null}
           </div>
         </Mailbox>
       </ComposeContext>
