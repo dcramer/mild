@@ -240,7 +240,7 @@ const sent = alias(messages, 'sent');
  * the label their newest labelled mail got. Senders are found only by keyed hash, so this reads one record
  * of each and the caller searches it.
  */
-export async function senderDirectory(db: Sql, accountId: string): Promise<FoundSender[]> {
+export async function senderDirectory(db: Sql, accounts: readonly string[]): Promise<FoundSender[]> {
   const names = await labelNames(db);
   const rows = await db
     .select({
@@ -250,12 +250,12 @@ export async function senderDirectory(db: Sql, accountId: string): Promise<Found
         .select({ id: decisions.labelId })
         .from(decisions)
         .innerJoin(sent, and(eq(sent.accountId, decisions.accountId), eq(sent.id, decisions.messageId)))
-        .where(and(eq(sent.accountId, accountId), eq(sent.senderHash, messages.senderHash), isNotNull(decisions.labelId)))
+        .where(and(inArray(sent.accountId, [...accounts]), eq(sent.senderHash, messages.senderHash), isNotNull(decisions.labelId)))
         .orderBy(desc(decisions.id))
         .limit(1)}`,
     })
     .from(messages)
-    .where(eq(messages.accountId, accountId))
+    .where(inArray(messages.accountId, [...accounts]))
     .groupBy(messages.senderHash)
     .orderBy(desc(count()), asc(messages.senderHash));
   return rows.map((r) => {

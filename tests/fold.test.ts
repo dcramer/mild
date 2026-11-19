@@ -23,7 +23,7 @@ describe("For review's rows", () => {
     ).toEqual([['a', 'c', 'd'], ['b']]);
   });
 
-  it('keep apart what was given another label, another name, or came to another mailbox', () => {
+  it('keep apart what was given another label or came under another name, but not what came to another mailbox', () => {
     expect(
       rows([
         mail('a', 'bot@example.com', 'notification', 'Dependabot'),
@@ -32,7 +32,7 @@ describe("For review's rows", () => {
         mail('d', 'bot@example.com', 'notification', 'Dependabot', 'me@work.example.org'),
         mail('e', 'bot@example.com', 'notification', 'Dependabot'),
       ]),
-    ).toEqual([['a', 'e'], ['b'], ['c'], ['d']]);
+    ).toEqual([['a', 'd', 'e'], ['b'], ['c']]);
   });
 
   it('never fold mail Sift could not place: each needs its own answer', () => {

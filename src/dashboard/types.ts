@@ -354,6 +354,7 @@ export type SenderPage = z.infer<typeof SenderPage>;
 export const SuggestionDetail = z.object({
   messages: z.array(
     z.object({
+      accountId: z.string(),
       decisionId: z.number(),
       messageId: z.string(),
       subject: held,

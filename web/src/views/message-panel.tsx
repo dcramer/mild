@@ -144,15 +144,11 @@ function Body({
 }: {
   detail: MessageDetail;
   /** Show another message from the same sender in this panel. */
-  onPick: (messageId: string) => void;
+  onPick: (message: Pick<MessageRef, 'accountId' | 'messageId'>) => void;
   onAnswered: () => void;
   onUndone: () => void;
 }) {
-  const waiting = useLoaded(
-    `suggestion/${detail.accountId}/${reveal(detail.fromAddress)}`,
-    (signal) => api.suggestion(detail.accountId, reveal(detail.fromAddress), signal),
-    120_000,
-  );
+  const waiting = useLoaded(`suggestion/${reveal(detail.fromAddress)}`, (signal) => api.suggestion(reveal(detail.fromAddress), signal), 120_000);
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const undo = useAction();
   const toast = useToast();
@@ -182,7 +178,7 @@ function Body({
   ].toSorted((x, y) => x.at - y.at || x.order - y.order);
   const current = detail.decisions.at(-1);
   const waitingNow = waiting.data?.messages ?? [];
-  const others = waitingNow.filter((m) => m.messageId !== detail.messageId);
+  const others = waitingNow.filter((m) => m.accountId !== detail.accountId || m.messageId !== detail.messageId);
   const labels = manage.data?.labels ?? [];
   // Mail sift never decided (the model could not judge it) is answered all the same.
   const target = {
@@ -195,7 +191,7 @@ function Body({
   const { answer, choices } = useAnswer(
     labels,
     waitingNow.map((m) => ({
-      accountId: detail.accountId,
+      accountId: m.accountId,
       sender: reveal(detail.fromAddress),
       messageId: m.messageId,
       decisionId: m.decisionId,
@@ -277,7 +273,6 @@ function Body({
           {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
           {ruling ? (
             <RuleDialog
-              accountId={detail.accountId}
               labels={labels}
               start={ruling}
               onClose={() => setRuling(null)}
@@ -303,7 +298,7 @@ function Body({
                   </Heads>
                   <tbody>
                     {others.map((m) => (
-                      <Tr key={m.messageId} onOpen={() => onPick(m.messageId)}>
+                      <Tr key={`${m.accountId}/${m.messageId}`} onOpen={() => onPick(m)}>
                         <Td className="w-full max-w-0 truncate">{reveal(m.subject) || '(no subject)'}</Td>
                         <Td num quiet>
                           <Ago at={m.receivedAt} />
@@ -356,15 +351,15 @@ export function MessagePanel({
 }) {
   const item = items[index];
   // Another message from the same sender, looked at without leaving this place in the list.
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Pick<MessageRef, 'accountId' | 'messageId'> | null>(null);
   const [shownAt, setShownAt] = useState(index);
   if (shownAt !== index) {
     setShownAt(index);
     setPicked(null);
   }
-  const messageId = picked ?? item?.messageId ?? '';
-  const { data, error, loading, reload } = useLoaded(`message/${item?.accountId ?? ''}/${messageId}`, (signal) =>
-    item ? api.message(item.accountId, messageId, signal) : Promise.reject(new Error('Nothing is open.')),
+  const shown = picked ?? item;
+  const { data, error, loading, reload } = useLoaded(`message/${shown?.accountId ?? ''}/${shown?.messageId ?? ''}`, (signal) =>
+    shown ? api.message(shown.accountId, shown.messageId, signal) : Promise.reject(new Error('Nothing is open.')),
   );
   if (!item) return null;
 

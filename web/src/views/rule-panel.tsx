@@ -1,5 +1,5 @@
 'use client';
-import { type LabelSummary, type ManageState, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
+import { type LabelSummary, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import {
   HANDLED,
@@ -318,9 +318,6 @@ function Use({ rule }: { rule: RuleSummary }) {
   );
 }
 
-/** The mailbox whose sender and domain pages a rule's links open, a rule being the person's: their primary one. */
-export const homeOf = (state: ManageState | null) => (state?.accounts.find((a) => a.primary) ?? state?.accounts[0])?.id;
-
 /** Removing a rule, from its panel or, as a trash can, its row. Its Gmail filter goes with it. */
 export function RemoveRule({ rule, icon, onRemoved }: { rule: RuleSummary; icon?: ReactNode; onRemoved?: () => void }) {
   const remove = useAction();
@@ -345,7 +342,6 @@ export function RemoveRule({ rule, icon, onRemoved }: { rule: RuleSummary; icon?
 /** One rule, opened from the Rules list or wherever it was just made. */
 export function RulePanel({
   rule,
-  home,
   labels,
   active,
   position,
@@ -355,7 +351,6 @@ export function RulePanel({
   onClose,
 }: {
   rule: RuleSummary;
-  home: string;
   labels: readonly LabelSummary[];
   /** Whether Sift is on, which writing a filter to Gmail needs. */
   active: boolean;
@@ -427,7 +422,7 @@ export function RulePanel({
         <GmailFilter rule={rule} active={active} />
         {moves ? <InInbox rule={rule} onOpen={onOpen} /> : null}
       </div>
-      {editing ? <RuleDialog accountId={home} labels={labels} editing={rule} onClose={() => setEditing(false)} /> : null}
+      {editing ? <RuleDialog labels={labels} editing={rule} onClose={() => setEditing(false)} /> : null}
     </Panel>
   );
 }
@@ -437,16 +432,7 @@ export function RuleSheet({ id, onOpen, onClose }: { id: string; onOpen: OpenMes
   const rules = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const rule = rules.data?.rules.find((r) => r.id === id);
-  const home = homeOf(manage.data);
-  return rule && home ? (
-    <RulePanel
-      key={rule.id}
-      rule={rule}
-      home={home}
-      labels={manage.data?.labels ?? []}
-      active={manage.data?.active ?? false}
-      onOpen={onOpen}
-      onClose={onClose}
-    />
+  return rule && manage.data ? (
+    <RulePanel key={rule.id} rule={rule} labels={manage.data?.labels ?? []} active={manage.data?.active ?? false} onOpen={onOpen} onClose={onClose} />
   ) : null;
 }

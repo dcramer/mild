@@ -1,4 +1,5 @@
 import { Refusal } from '../refusal.ts';
+import { listAccounts } from '../store/accounts.ts';
 import { listLabels } from '../store/labels.ts';
 import { finishRuleDraft, startRuleDraft } from '../store/rules.ts';
 import { senderDirectory } from '../store/senders.ts';
@@ -8,7 +9,8 @@ import { type FoundSender, type RuleDraft, type RuleDrafter, searchSenders } fro
 
 /**
  * Ask the model to fill in a rule from what the person said, looking up their senders as it needs, recorded
- * before the call and with what it cost. Nothing is made: the dialog shows the rule for them to add.
+ * before the call and with what it cost, under `accountId`. It looks senders up in all of the person's mailboxes,
+ * as their rules apply to all of them. Nothing is made: the dialog shows the rule for them to add.
  * Rejects when the call failed.
  */
 export async function draftRule(
@@ -21,7 +23,16 @@ export async function draftRule(
   const labels = await listLabels(db);
   // Read once, on the first look-up: most of what is asked for names no sender.
   let senders: Promise<FoundSender[]> | undefined;
-  const find = async (query: string) => searchSenders(await (senders ??= senderDirectory(db, request.accountId)), query);
+  const find = async (query: string) =>
+    searchSenders(
+      await (senders ??= listAccounts(db).then((accounts) =>
+        senderDirectory(
+          db,
+          accounts.map((a) => a.id),
+        ),
+      )),
+      query,
+    );
   const answer = await invokeAgent('rules', [db.person, id], { 'sift.rule_draft': id }, async () => {
     try {
       return await deps.draft({ goal: request.goal, labels }, find);

@@ -151,7 +151,7 @@ const READS = (account: string, mark: string) => [
   '/api/models',
   '/api/labels/proposal',
   `/api/message?account=${encodeURIComponent(account)}&id=m-${mark}`,
-  `/api/suggestion?account=${encodeURIComponent(account)}&sender=sender@${mark}.example.com`,
+  `/api/suggestion?sender=sender@${mark}.example.com`,
   `/api/sender?address=sender@${mark}.example.com`,
   `/api/domain?domain=${mark}.example.com`,
   `/api/examples?account=${encodeURIComponent(account)}`,
@@ -298,7 +298,6 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/examples/delete', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/examples/delete-all', { accountId: ALPHA }, { accountId: NOBODY }],
       ['/api/evals/run', { accountId: ALPHA }, { accountId: NOBODY }],
-      ['/api/rules/draft', { accountId: ALPHA, goal: 'Archive x' }, { accountId: NOBODY, goal: 'Archive x' }],
       ['/api/mailbox/remove', { address: ALPHA }, { address: NOBODY }],
       ['/api/mailbox/primary', { address: ALPHA }, { address: NOBODY }],
     ];
@@ -315,8 +314,8 @@ describe("nobody sees or changes another person's mail", () => {
     // The same writes are the owner's to make on their own mail.
     expect((await call('GET', `/api/rules/inbox?id=${theirs.rule}`, ALPHA)).text).toContain(MARK[ALPHA_WORK]);
     expect((await call('POST', '/api/rules/apply', ALPHA, { id: theirs.rule })).status).toBe(200);
-    expect((await call('POST', '/api/rules/draft', ALPHA, { accountId: ALPHA_WORK, goal: 'Archive x' })).status).toBe(200);
-    expect(calls).toEqual([`inbox ${theirs.rule}`, 'check', `draft ${ALPHA_WORK}`]);
+    expect((await call('POST', '/api/rules/draft', ALPHA, { goal: 'Archive x' })).status).toBe(200);
+    expect(calls).toEqual([`inbox ${theirs.rule}`, 'check', `draft ${ALPHA}`]);
     expect((await call('POST', '/api/rules/edit', ALPHA, { id: theirs.rule, match: { from: ['x@example.com'] }, disposition: 'archive' })).status).toBe(200);
     expect((await call('POST', '/api/rules/remove', ALPHA, { id: theirs.rule })).status).toBe(200);
     const fromProposal = { match: { from: ['x@example.com'] }, label: 'newsletter', proposal: theirs.proposal };
