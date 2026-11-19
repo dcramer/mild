@@ -204,6 +204,8 @@ function Body({
     })),
   ].toSorted((x, y) => x.at - y.at || x.order - y.order);
   const current = detail.decisions.at(-1);
+  // What the message is, as every list shows it: the user's answer where they gave one, else Sift's.
+  const shownLabel = current?.answer ? current.answer.labelId : (current?.labelId ?? null);
   const waitingNow = waiting.data?.messages ?? [];
   const others = waitingNow.filter((m) => m.accountId !== detail.accountId || m.messageId !== detail.messageId);
   const labels = manage.data?.labels ?? [];
@@ -268,10 +270,10 @@ function Body({
         <div className="flex min-w-0 flex-col gap-3 max-lg:order-1">
           {conversation ? <Summary conversation={conversation} newest={detail} /> : null}
           <AnswerPicker
-            key={current?.id ?? 'undecided'}
+            key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
             className="min-w-0"
             label="What this message is"
-            value={current?.labelId ?? null}
+            value={shownLabel}
             groups={groups}
             empty={outcomeName('review')}
             onSubmit={(id) => answer(reveal(target), id)}
@@ -279,7 +281,8 @@ function Body({
           />
           {current ? (
             <p className="text-muted-foreground">
-              {capitalised(reveal(current.reason))}
+              {current.answer ? 'Your answer. Sift said: ' : null}
+              {current.answer ? reveal(current.reason) : capitalised(reveal(current.reason))}
               {current.carryOut ? (
                 <>
                   {' · '}
@@ -294,7 +297,7 @@ function Body({
                 Keep as {keepable.name}…
               </Button>
             ) : null}
-            <Button variant="quiet" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), current?.labelId ?? null))}>
+            <Button variant="quiet" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
               Make a rule…
             </Button>
           </div>

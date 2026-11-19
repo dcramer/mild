@@ -28,6 +28,8 @@ test.describe('with Inbox on', () => {
     await page.goto('/');
     // Drawn by the server; its key is bound once the page has loaded.
     await expect(reviewRows(page).first()).toBeVisible();
+    // C works with no keycap drawn: the rail is not a list worked through.
+    await expect(compose(page)).toHaveAccessibleName('Compose');
     await page.keyboard.press('c');
     const writing = composer(page, 'New message');
     const to = writing.getByRole('textbox', { name: 'To' });

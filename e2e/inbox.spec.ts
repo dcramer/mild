@@ -61,6 +61,9 @@ test.describe('Inbox', () => {
     await expect(open.getByRole('heading', { name: 'Your March bill', level: 2 })).toBeVisible();
     const folded = open.getByRole('cell', { name: /^Utility/ });
     await expect(folded).toHaveCount(2);
+    // Answered as Receipts, as its row says, though Sift could not place it.
+    await expect(open.getByRole('combobox', { name: 'What this message is' })).toContainText('Receipts');
+    await expect(open.getByText(/^Your answer\. Sift said: /)).toBeVisible();
     // When it came, as the list says it, not how long ago.
     await expect(
       open

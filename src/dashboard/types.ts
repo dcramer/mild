@@ -311,7 +311,14 @@ export const MessageDetail = z.object({
   unsubscribe: z.enum(['available', 'done', 'manual', 'none']),
   /** Every decision made about this message, oldest first. */
   decisions: z.array(
-    DecisionRow.extend({ ruleId: z.string().nullable(), inputTokens: z.number(), outputTokens: z.number(), durationMs: z.number().nullable() }),
+    DecisionRow.extend({
+      ruleId: z.string().nullable(),
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      durationMs: z.number().nullable(),
+      /** What the user said this message is, where they answered for this decision; it beats the decision. */
+      answer: z.object({ labelId: z.string().nullable(), disposition: z.string() }).nullable(),
+    }),
   ),
   /** Every mailbox change made to this message, oldest first. */
   actions: z.array(

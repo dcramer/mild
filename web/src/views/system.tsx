@@ -306,10 +306,23 @@ export function SystemView() {
                 <Verdict labelId="marketing" labelName="Marketing" disposition="archive" />
               </p>
             </Row>
-            <Row label="meter" note="How sure Sift is about a label, in three steps. A suggestion's label is its answer button, meter first.">
+            <Row
+              label="meter"
+              note="How sure Sift is about a label, in three steps. A suggestion's label is its answer button, meter first. Unlabelled keeps the bars' room, so a column of answers lines up."
+            >
               <Meter level={1} />
               <Meter level={2} />
               <Meter level={3} />
+              <span className="inline-flex flex-col gap-1">
+                <span className="inline-flex items-baseline gap-2">
+                  <Meter level={2} />
+                  Newsletters
+                </span>
+                <span className="inline-flex items-baseline gap-2">
+                  <Meter level={null} />
+                  Unlabelled
+                </span>
+              </span>
               <Button>
                 <Meter level={3} />
                 Marketing

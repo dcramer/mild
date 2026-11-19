@@ -13,13 +13,13 @@ export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
-  /** Something waiting there, shown beside the icon. */
+  /** Something waiting there, shown as a bubble on the icon's corner. */
   count?: number;
 }
 
 /**
  * The sections down the left of every screen on a desktop: the name at the top, then `compose` (writing a new message,
- * with Inbox on, also C), then each section as its icon over
+ * with Inbox on, also C, with no keycap: the rail is not a list worked through), then each section as its icon over
  * its name, the current one's icon in the highlighter, then at the foot `aside` (Sift's line, stacked), the
  * `mailbox` the dashboard shows, beside whose they are, and `account` (who is signed in, behind their `Avatar`). No fill; a line sets it apart. As tall as the window, and never taller
  * than what holds it. Given no sections it is the name alone, as `Masthead` is.
@@ -58,15 +58,19 @@ export function Rail({
                   <span
                     aria-hidden
                     className={cn(
-                      'flex h-8 min-w-12 items-center justify-center gap-1 px-2 transition-colors duration-100 motion-reduce:transition-none',
+                      'relative flex h-8 w-12 items-center justify-center transition-colors duration-100 motion-reduce:transition-none',
                       to === current ? 'hl mx-0' : 'rounded-(--corner) group-hover:bg-(--fill)',
                     )}
                   >
                     <Icon className="size-5" strokeWidth={1.75} />
-                    {count ? <span className="tabular-nums">{count}</span> : null}
+                    {count ? (
+                      <span className="absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-label leading-none font-semibold text-background tabular-nums">
+                        {count > 99 ? '99+' : count}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="text-center">{label}</span>
-                  {/* Read after the name ("For review 12"); the figure shown is beside the icon. */}
+                  {/* Read after the name ("For review 12"); the bubble is hidden from a screen reader. */}
                   {count ? <span className="sr-only">{count}</span> : null}
                 </Anchor>
               </li>
@@ -97,9 +101,9 @@ export function Rail({
   );
 }
 
-/** A new message: a press like a section's, set apart above them, and C from anywhere on the page. */
+/** A new message: a press like a section's, set apart above them, and C from anywhere on the page, which `?` lists. */
 function Compose({ onPress }: { onPress: () => void }) {
-  const key = useShortcut('c', 'New message', onPress);
+  void useShortcut('c', 'New message', onPress);
   return (
     <button
       type="button"
@@ -109,10 +113,9 @@ function Compose({ onPress }: { onPress: () => void }) {
     >
       <span
         aria-hidden
-        className="flex h-8 min-w-12 items-center justify-center gap-1 rounded-(--corner) bg-(--fill) px-2 text-foreground transition-colors duration-100 group-hover:bg-(--fill-strong) motion-reduce:transition-none"
+        className="flex h-8 w-12 items-center justify-center rounded-(--corner) bg-(--fill) text-foreground transition-colors duration-100 group-hover:bg-(--fill-strong) motion-reduce:transition-none"
       >
         <SquarePenIcon className="size-5" strokeWidth={1.75} />
-        {key}
       </span>
       <span className="text-center">Compose</span>
     </button>

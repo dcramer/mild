@@ -1,4 +1,4 @@
-import { actions, and, asc, decisions, eq, examples, mailBodies, messages, modelRuns, sql, suggestionBodies } from '../../store/query.ts';
+import { actions, and, asc, decisions, eq, examples, feedback, mailBodies, messages, modelRuns, sql, suggestionBodies } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt, openPayload } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
@@ -52,11 +52,17 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
           inputTokens: sql<number>`coalesce(${modelRuns.inputTokens}, 0)`.mapWith(Number),
           outputTokens: sql<number>`coalesce(${modelRuns.outputTokens}, 0)`.mapWith(Number),
           durationMs: decisions.durationMs,
+          answerLabel: feedback.labelId,
+          answerDisposition: feedback.disposition,
         })
         .from(decisions)
         .leftJoin(modelRuns, eq(modelRuns.id, decisions.runId))
+        .leftJoin(feedback, eq(feedback.decisionId, decisions.id))
         .where(ofMessage)
-    ).map(({ id, ...rest }) => [id, rest] as const),
+    ).map(
+      ({ id, answerLabel, answerDisposition, ...rest }) =>
+        [id, { ...rest, answer: answerDisposition === null ? null : { labelId: answerLabel, disposition: answerDisposition } }] as const,
+    ),
   );
   const changes = await db
     .select({
