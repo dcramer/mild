@@ -19,6 +19,10 @@ const VARIANT = {
   ink: `bg-foreground font-semibold text-background hover:bg-foreground/85 ${UNPRESSABLE}`,
   /** A page's own action (adding to its list), and everything else that is not repeated. */
   plain: `bg-(--fill) hover:bg-(--fill-strong) ${UNPRESSABLE}`,
+  /** A press that destroys what nothing brings back, said once (a panel's Remove, Delete account…): red words, filled only when pointed at. Never down a list. */
+  danger: `text-destructive hover:bg-(--fill) ${UNPRESSABLE}`,
+  /** The press that does the destroying, once asked: red, with dark words, as a failure's toast has (light words on that red cannot be read). */
+  destroy: `bg-destructive font-semibold text-background hover:brightness-110 ${UNPRESSABLE}`,
   /** Actions that repeat down a list (they firm up when their row is pointed at), and ways out. */
   quiet:
     'text-foreground/75 hover:bg-(--fill) hover:text-foreground group-hover/row:bg-(--fill-strong) group-hover/row:text-foreground disabled:opacity-45 aria-disabled:opacity-45',

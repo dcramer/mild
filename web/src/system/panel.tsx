@@ -4,7 +4,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';
 import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer, useShortcut } from './keys.tsx';
-import { Backdrop, LayerBody, LayerHeader, useLayerOpen } from './layer.tsx';
+import { Backdrop, LayerBody, LayerFooter, LayerHeader, useLayerOpen } from './layer.tsx';
 import { rowHolding } from './table.tsx';
 
 /**
@@ -28,6 +28,7 @@ export function Panel({
   narrow,
   keys = false,
   returnTo,
+  actions,
   children,
 }: {
   open: boolean;
@@ -46,6 +47,11 @@ export function Panel({
   keys?: boolean;
   /** What it shows, as the list's rows name it (`holds` on a `Tr`): closing goes back to that row, wherever it was opened from. */
   returnTo?: string;
+  /**
+   * What is done to the item itself (save, change, remove), in a footer that stays put while the rest scrolls: what changes it
+   * first, then a gap, and at the right what removes it. A section's own action stays beside its heading.
+   */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   const popup = useRef<HTMLDivElement>(null);
@@ -69,6 +75,7 @@ export function Panel({
           <KeyLayer moves>
             <LayerHeader title={title} subtitle={subtitle} />
             <LayerBody>{children}</LayerBody>
+            {actions ? <LayerFooter>{actions}</LayerFooter> : null}
             {stepping ? (
               <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
                 <Step

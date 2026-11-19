@@ -185,6 +185,23 @@ describe('red means a failure the reader can do something about', () => {
   });
 });
 
+describe('red is also deleting, always through DeleteButton', () => {
+  test('a press that removes or deletes is a DeleteButton, and nothing else draws its red', () => {
+    // One question for every deletion: a Button or ConfirmButton saying Remove or Delete is one built by hand.
+    const failures: string[] = [];
+    for (const path of [...SCREENS, join(WEB, 'views/system.tsx')]) {
+      const source = readFileSync(path, 'utf8');
+      const file = `web/src/${relative(WEB, path)}`;
+      const at = (index: number | undefined) => source.slice(0, index).split('\n').length;
+      for (const press of source.matchAll(/<(Button|ConfirmButton)\b[^<]*?>\s*(Remove|Delete)\b/g))
+        failures.push(`${file}:${at(press.index)} a ${press[1]} that says ${press[2]}: deleting is a DeleteButton.`);
+      for (const press of source.matchAll(/variant="(danger|destroy)"/g))
+        failures.push(`${file}:${at(press.index)} variant="${press[1]}": only DeleteButton draws it.`);
+    }
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+});
+
 test('whatever can be pressed shows the pointer', () => {
   // A choice in a menu or a select is pressed like a button. Only a disabled one keeps the arrow, through a variant.
   const bare = [...SYSTEM].flatMap((path) => words(path)).filter(({ word }) => word === 'cursor-default');

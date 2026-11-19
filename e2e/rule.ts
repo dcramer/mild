@@ -64,13 +64,13 @@ export async function seededRulesOnly(page: Page) {
   await expect(ruleRows(page)).toHaveCount(4);
 }
 
-/** Presses Remove in a rule's row or panel, and Remove again in the question it asks there. */
+/** Presses Remove… in a rule's panel, or the trash can in its row, and Remove in the question it opens. */
 export async function removeRule(within: Locator) {
-  await within.getByRole('button', { name: 'Remove', exact: true }).click();
-  await removeQuestion(within).getByRole('button', { name: 'Remove', exact: true }).click();
+  await within.getByRole('button', { name: /^Remove(…| this rule)$/ }).click();
+  await removeQuestion(within.page()).getByRole('button', { name: 'Remove', exact: true }).click();
 }
 
-export const removeQuestion = (within: Locator) => within.getByRole('group', { name: 'Remove this rule?' });
+export const removeQuestion = (page: Page) => page.getByRole('dialog', { name: 'Remove this rule?' });
 
 /** The rule For review proposes from what the seed's user has been doing. */
 export const proposal = (page: Page) => page.getByRole('listitem').filter({ hasText: 'Keep Receipts from billing@utility.example.net?' });

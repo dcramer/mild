@@ -4,7 +4,7 @@ import { closeSettings, expect, param, path, query, settings, settingsFromMenu, 
 /** Confirms a removal in the open dialog `title` by typing `address`. */
 async function confirmRemoval(page: Page, title: string, address: string, action: string) {
   const confirm = page.getByRole('dialog', { name: title });
-  await confirm.getByRole('textbox', { name: 'The address' }).fill(address);
+  await confirm.getByRole('textbox', { name: `Type ${address} to confirm` }).fill(address);
   await confirm.getByRole('button', { name: action }).click();
 }
 
@@ -17,9 +17,10 @@ test.describe('Removing a mailbox', () => {
     await expect(confirm).toContainText('The filters Sift made in Gmail stay there, as do its labels on your mail');
     const remove = confirm.getByRole('button', { name: 'Remove mailbox' });
     await expect(remove).toBeDisabled();
-    await confirm.getByRole('textbox', { name: 'The address' }).fill('me@example.org');
+    const typed = confirm.getByRole('textbox', { name: 'Type me@work.example.org to confirm' });
+    await typed.fill('me@example.org');
     await expect(remove).toBeDisabled();
-    await confirm.getByRole('textbox', { name: 'The address' }).fill('me@work.example.org');
+    await typed.fill('me@work.example.org');
     await remove.click();
 
     await expect(confirm).toHaveCount(0);

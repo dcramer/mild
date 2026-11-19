@@ -18,6 +18,7 @@ import {
   ChoiceGroup,
   Code,
   ConfirmButton,
+  DeleteButton,
   Copyable,
   Dialog,
   Clause,
@@ -152,6 +153,8 @@ const VARIANTS = [
   ['ink', 'What finishes a dialog or a form. Never down a list.'],
   ['plain', 'A page’s own action, and everything else said once.'],
   ['quiet', 'Repeated down a list (firmer when its row is pointed at), and ways out.'],
+  ['danger', 'Deleting what nothing brings back, said once. Only DeleteButton draws it.'],
+  ['destroy', 'The press that deletes, once asked. Only DeleteButton draws it.'],
 ] as const;
 
 /** Every part of the design system in every state, at `/system`. Add to it when the system grows. */
@@ -331,16 +334,45 @@ export function SystemView() {
                 <Trash2Icon />
               </Button>
             </Row>
-            <Row label="confirm" note="A press that cannot be taken back asks first, in place.">
-              <ConfirmButton question="Remove this rule?" onConfirm={() => toast('Mail from news@example.com', { kind: 'Rule removed' })}>
-                Remove
-              </ConfirmButton>
-              <ConfirmButton
+            <Row label="delete" note="Deleting what nothing brings back: its words in red, or a trash can down a list, and one question for every one.">
+              <DeleteButton
                 question="Remove this rule?"
-                icon={<Trash2Icon aria-hidden />}
-                onConfirm={() => toast('Mail from news@example.com', { kind: 'Rule removed' })}
+                what="anyone at news.example.com"
+                onDelete={async () => toast('Mail from news.example.com', { kind: 'Rule removed' })}
               >
                 Remove
+              </DeleteButton>
+              <DeleteButton
+                question="Remove this rule?"
+                what="anyone at news.example.com"
+                says="Its Gmail filter is taken out of Gmail too."
+                icon={<Trash2Icon aria-hidden />}
+                onDelete={async () => toast('Mail from news.example.com', { kind: 'Rule removed' })}
+              >
+                Remove
+              </DeleteButton>
+              <DeleteButton
+                question="Delete your account?"
+                action="Delete everything"
+                typed="me@example.org"
+                says="Sift stops reading every mailbox and deletes everything it recorded."
+                onDelete={() => Promise.reject(new Error('Sift stopped answering, so this may not have been saved.'))}
+              >
+                Delete account
+              </DeleteButton>
+              <DeleteButton
+                question="Remove me@example.org?"
+                icon={<Trash2Icon aria-hidden />}
+                disabled
+                why="You cannot delete your only remaining mailbox."
+                onDelete={async () => {}}
+              >
+                Remove
+              </DeleteButton>
+            </Row>
+            <Row label="confirm" note="A press that is hard to take back, but deletes nothing, asks first, in place.">
+              <ConfirmButton variant="plain" question="Archive, label and mark spam on new mail by itself?" onConfirm={() => toast('Sift is on')}>
+                Turn on
               </ConfirmButton>
             </Row>
           </Sheet>
@@ -1031,6 +1063,16 @@ export function SystemView() {
           subtitle="Example Weekly · Nov 13, 3:21 PM"
           position="1 of 3"
           onNext={() => {}}
+          actions={
+            <>
+              <Button>Change…</Button>
+              <span className="ml-auto">
+                <DeleteButton question="Remove this rule?" onDelete={async () => setPanel(false)}>
+                  Remove
+                </DeleteButton>
+              </span>
+            </>
+          }
         >
           <p className="max-w-[68ch] text-reading leading-relaxed">
             The message on the left; on the right what Sift said, the answer, the sender and the history.

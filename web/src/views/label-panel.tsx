@@ -10,7 +10,7 @@ import {
   Button,
   Check,
   Code,
-  ConfirmButton,
+  DeleteButton,
   Dialog,
   Failure,
   Field,
@@ -141,8 +141,37 @@ export function LabelPanel({
   // No toast: the panel shows what was saved.
   const save = () => run(() => api.saveLabel(label.id, { ...draft, name: draft.name.trim(), description: draft.description.trim() }), onSaved);
 
+  const actions =
+    label.gmailLabel === null ? undefined : (
+      <>
+        <Button variant="ink" busy={busy} disabled={!ready} onClick={save}>
+          Save
+        </Button>
+        {changed ? (
+          <Button variant="quiet" onClick={() => setDraft(initial)}>
+            Undo changes
+          </Button>
+        ) : null}
+        <Failure>{error}</Failure>
+        <span className="ml-auto">
+          <DeleteButton
+            question={label.rules > 0 ? `Remove ${label.name} and its ${plural(label.rules, 'rule')}?` : `Remove ${label.name}?`}
+            says="The mail you said was this stops being shown to the model as examples."
+            onDelete={async () => {
+              await remove.settle(() => api.removeLabel(label.id));
+              toast(label.name, { kind: 'Label removed' });
+              onSaved();
+              onClose();
+            }}
+          >
+            Remove
+          </DeleteButton>
+        </span>
+      </>
+    );
+
   return (
-    <Panel narrow open onClose={onClose} title={label.name} position={position} onPrevious={onPrevious} onNext={onNext}>
+    <Panel narrow open onClose={onClose} actions={actions} title={label.name} position={position} onPrevious={onPrevious} onNext={onNext}>
       <div className="flex flex-col gap-8">
         <Figures>
           {/* The count is of all time; Activity reaches back 90 days at most. */}
@@ -168,41 +197,7 @@ export function LabelPanel({
         ) : (
           <Form onSubmit={() => ready && save()}>
             <LabelFields draft={draft} onChange={setDraft} gmailLabel={label.gmailLabel} />
-            <div className="flex items-center gap-2 sm:pl-28">
-              <Button variant="ink" busy={busy} disabled={!ready} onClick={save}>
-                Save
-              </Button>
-              {changed ? (
-                <Button variant="quiet" onClick={() => setDraft(initial)}>
-                  Undo changes
-                </Button>
-              ) : null}
-              <Failure>{error}</Failure>
-            </div>
           </Form>
-        )}
-        {/* Leave in inbox is what mail is when it is none of the others. */}
-        {label.gmailLabel === null ? null : (
-          <div>
-            <ConfirmButton
-              question={label.rules > 0 ? `Remove ${label.name} and its ${plural(label.rules, 'rule')}?` : `Remove ${label.name}?`}
-              variant="plain"
-              disabled={remove.busy}
-              onConfirm={() =>
-                remove.run(
-                  () => api.removeLabel(label.id),
-                  () => {
-                    toast(label.name, { kind: 'Label removed' });
-                    onSaved();
-                    onClose();
-                  },
-                )
-              }
-            >
-              Remove
-            </ConfirmButton>
-            <Failure>{remove.error}</Failure>
-          </div>
         )}
       </div>
     </Panel>

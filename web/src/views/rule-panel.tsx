@@ -28,14 +28,14 @@ import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/lib/open-messages.ts';
 import { GmailFilter } from '@/views/gmail-filter.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import {
   Ago,
   Th,
   Heads,
   Blank,
   Button,
-  ConfirmButton,
+  DeleteButton,
   Dialog,
   Does,
   Empty,
@@ -321,6 +321,27 @@ function Use({ rule }: { rule: RuleSummary }) {
 /** The mailbox whose sender and domain pages a rule's links open, a rule being the person's: their primary one. */
 export const homeOf = (state: ManageState | null) => (state?.accounts.find((a) => a.primary) ?? state?.accounts[0])?.id;
 
+/** Removing a rule, from its panel or, as a trash can, its row. Its Gmail filter goes with it. */
+export function RemoveRule({ rule, icon, onRemoved }: { rule: RuleSummary; icon?: ReactNode; onRemoved?: () => void }) {
+  const remove = useAction();
+  const toast = useToast();
+  return (
+    <DeleteButton
+      question="Remove this rule?"
+      what={ruleTitle(rule)}
+      {...(rule.filterId ? { says: 'Its Gmail filter is taken out of Gmail too.' } : {})}
+      {...(icon ? { icon } : {})}
+      onDelete={async () => {
+        await remove.settle(() => api.removeRule(rule.id));
+        toast(reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`, { kind: 'Rule removed' });
+        onRemoved?.();
+      }}
+    >
+      Remove
+    </DeleteButton>
+  );
+}
+
 /** One rule, opened from the Rules list or wherever it was just made. */
 export function RulePanel({
   rule,
@@ -345,15 +366,32 @@ export function RulePanel({
   onOpen: OpenMessages;
   onClose: () => void;
 }) {
-  const remove = useAction();
-  const toast = useToast();
   const [editing, setEditing] = useState(false);
   const action = rule.disposition ?? 'keep';
   const labelId = rule.kind === 'label' ? rule.labelId : null;
   // Leave in inbox, or an action rule that keeps mail, changes nothing in the inbox.
   const moves = doesName(labelId, action) !== INBOX_NAME;
+  const actions = (
+    <>
+      <Button variant="plain" onClick={() => setEditing(true)}>
+        Change…
+      </Button>
+      <span className="ml-auto">
+        <RemoveRule rule={rule} onRemoved={onClose} />
+      </span>
+    </>
+  );
   return (
-    <Panel narrow open onClose={onClose} title={ruleTitle(rule)} {...(position === undefined ? {} : { position })} onPrevious={onPrevious} onNext={onNext}>
+    <Panel
+      narrow
+      open
+      onClose={onClose}
+      actions={actions}
+      title={ruleTitle(rule)}
+      {...(position === undefined ? {} : { position })}
+      onPrevious={onPrevious}
+      onNext={onNext}
+    >
       <div className="flex flex-col gap-8">
         <Use rule={rule} />
         <Facts>
@@ -386,32 +424,8 @@ export function RulePanel({
             {madeBy(rule.source)}, {shortDate(rule.createdAt)}
           </Fact>
         </Facts>
-        <div>
-          <Button variant="plain" onClick={() => setEditing(true)}>
-            Change…
-          </Button>
-        </div>
         <GmailFilter rule={rule} active={active} />
         {moves ? <InInbox rule={rule} onOpen={onOpen} /> : null}
-        <div>
-          <ConfirmButton
-            question="Remove this rule?"
-            variant="plain"
-            disabled={remove.busy}
-            onConfirm={() =>
-              remove.run(
-                () => api.removeRule(rule.id),
-                () => {
-                  toast(reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`, { kind: 'Rule removed' });
-                  onClose();
-                },
-              )
-            }
-          >
-            Remove
-          </ConfirmButton>
-          <Failure>{remove.error}</Failure>
-        </div>
       </div>
       {editing ? <RuleDialog accountId={home} labels={labels} editing={rule} onClose={() => setEditing(false)} /> : null}
     </Panel>

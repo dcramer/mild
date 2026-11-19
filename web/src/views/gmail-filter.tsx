@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { type RuleFilter, type RuleSummary, api } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import { dateTime } from '@/lib/format.ts';
-import { Button, Code, Dialog, Fact, Facts, Failure, Section, Timeline, TimelineEvent, useToast } from '@/system';
+import { Button, Code, DeleteButton, Dialog, Fact, Facts, Failure, Section, Timeline, TimelineEvent, useToast } from '@/system';
 import { reveal } from '@/lib/reveal.ts';
 
 type Plan = NonNullable<RuleFilter['plan']>;
@@ -132,18 +132,16 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
       title="Gmail filter"
       action={
         rule.filterId ? (
-          <Button
-            variant="plain"
-            busy={remove.busy}
-            onClick={() =>
-              remove.run(
-                () => api.ruleFilter(rule.id, false),
-                () => toast('Gmail filter removed'),
-              )
-            }
+          <DeleteButton
+            question="Remove the Gmail filter?"
+            says={`The rule stays, and applies only while Sift is on.${state === 'changed' ? ' What you changed in the filter in Gmail goes with it.' : ''}`}
+            onDelete={async () => {
+              await remove.settle(() => api.ruleFilter(rule.id, false));
+              toast('Gmail filter removed');
+            }}
           >
             Remove filter
-          </Button>
+          </DeleteButton>
         ) : active && possible ? (
           <Button variant="plain" onClick={() => setAdding(true)}>
             Add as a Gmail filter…
@@ -161,7 +159,6 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
           ))}
         </Timeline>
       ) : null}
-      <Failure>{remove.error}</Failure>
       {adding ? <FilterDialog rule={rule} onClose={() => setAdding(false)} /> : null}
     </Section>
   );

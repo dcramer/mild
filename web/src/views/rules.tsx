@@ -3,14 +3,13 @@ import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleSummary, api, useLoaded } from '@/lib/api.ts';
-import { useAction } from '@/lib/action.ts';
 import { setParams, useParam } from '@/lib/params.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
-import { RulePanel, Who, checked, homeOf, whoText } from '@/views/rule-panel.tsx';
+import { RemoveRule, RulePanel, Who, checked, homeOf, whoText } from '@/views/rule-panel.tsx';
 import { useOpenMessages } from '@/lib/open-messages.ts';
-import { INBOX, MADE_BY, count, dateTime, describeMatch, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
-import { Ago, Heads, Button, ConfirmButton, Does, Empty, Failure, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr, useToast } from '@/system';
+import { INBOX, MADE_BY, count, dateTime, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
+import { Ago, Heads, Button, Does, Empty, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
 import { usePlan } from '@/components/model-connect.tsx';
 import { approx, atApiPrices } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -74,8 +73,6 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
   const plan = usePlan();
   const { data, error, loading } = useLoaded('rules', (signal) => api.rules(signal));
   const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
-  const remove = useAction();
-  const toast = useToast();
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [source, setSource] = useParam('by', SOURCES);
@@ -97,23 +94,6 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
   const at = rules.findIndex((r) => r.id === open);
   const costs = (data?.rules ?? []).some(checked);
 
-  const removeButton = (rule: RuleSummary) => (
-    <ConfirmButton
-      question="Remove this rule?"
-      variant="quiet"
-      icon={<Trash2Icon aria-hidden />}
-      disabled={remove.busy}
-      onConfirm={() =>
-        remove.run(
-          () => api.removeRule(rule.id),
-          () => toast(reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`, { kind: 'Rule removed' }),
-        )
-      }
-    >
-      Remove
-    </ConfirmButton>
-  );
-
   return (
     <ListView
       search={{ value: search, onChange: setSearch, placeholder: 'Search senders, domains and labels' }}
@@ -133,7 +113,6 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
       }}
     >
       {error ? <ErrorNote message={error} /> : null}
-      <Failure>{remove.error}</Failure>
       {loading ? (
         loadingRows
       ) : rules.length === 0 ? (
@@ -193,7 +172,9 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
                     {checked(rule) ? approx(rule.checkCost, plan) : null}
                   </Td>
                 ) : null}
-                <RowActions>{removeButton(rule)}</RowActions>
+                <RowActions>
+                  <RemoveRule rule={rule} icon={<Trash2Icon aria-hidden />} />
+                </RowActions>
               </Tr>
             ))}
           </tbody>

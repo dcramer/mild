@@ -23,7 +23,8 @@ export function Dialog({
   subtitle?: ReactNode;
   /** Stays in view under the content: the actions that finish the dialog. */
   footer?: ReactNode;
-  children: ReactNode;
+  /** None for a question its title and footer say whole. */
+  children?: ReactNode;
 }) {
   return (
     <Base.Root {...useLayerOpen(open, onClose)}>
@@ -37,7 +38,7 @@ export function Dialog({
         >
           <LayerHeader title={title} subtitle={subtitle} />
           <KeyLayer>
-            <LayerBody>{children}</LayerBody>
+            {children ? <LayerBody>{children}</LayerBody> : null}
             {footer ? <LayerFooter>{footer}</LayerFooter> : null}
           </KeyLayer>
         </Base.Popup>
