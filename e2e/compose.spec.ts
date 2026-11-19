@@ -1,5 +1,22 @@
 import type { Page } from '@playwright/test';
-import { PHONE, WORK, boxOf, composer, expect, panelHeading, param, readSent, reviewRows, sideScroll, switchMailbox, test, toast, toasts } from './sift.ts';
+import {
+  PHONE,
+  WORK,
+  boxOf,
+  composer,
+  expect,
+  inboxRow,
+  panelHeading,
+  param,
+  readSent,
+  reader,
+  reviewRows,
+  sideScroll,
+  switchMailbox,
+  test,
+  toast,
+  toasts,
+} from './sift.ts';
 
 const ME = 'me@example.org';
 const compose = (page: Page) => page.getByRole('button', { name: /Compose/ });
@@ -110,6 +127,50 @@ test.describe('with Inbox on', () => {
       'In-Reply-To': '<thursday@example.org>',
       References: '<lunch@example.org> <thursday@example.org>',
     });
+  });
+
+  test('R in the reader replies to the conversation, and the reply sent is in it, with the reader where it was', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    // Its key is bound once the press is drawn.
+    await expect(open.getByRole('button', { name: /^Reply all/ })).toBeVisible();
+    await page.keyboard.press('r');
+    const writing = composer(page, 'Reply');
+    await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('Ada Lovelace <ada@example.org>');
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    await page.keyboard.type('Thursday works.');
+    await page.keyboard.press('Control+Enter');
+
+    await expect(toast(page, 'Re: Lunch on Thursday?')).toContainText('Sent');
+    await expect(writing).toHaveCount(0);
+    await expect(open.getByRole('row').filter({ hasText: 'Thursday works.' })).toContainText(ME);
+    // Back on the reader, not on its first link, whose card would open over the conversation.
+    await expect(open).toBeFocused();
+    expect(readSent(sift.sent()[0]!.raw).headers).toMatchObject({ 'In-Reply-To': '<thursday@example.org>' });
+  });
+
+  test('Forward quotes the message under what is written, and sends it as new mail', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    await reader(page)
+      .getByRole('button', { name: /^Forward/ })
+      .click();
+    const writing = composer(page, 'Forward');
+    const to = writing.getByRole('textbox', { name: 'To' });
+    await expect(to).toBeFocused();
+    await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveValue('Fwd: Lunch on Thursday?');
+    await page.keyboard.type('grace@example.net');
+    await writing.getByRole('textbox', { name: 'Message' }).focus();
+    await page.keyboard.type('Are you free too?');
+    await writing.getByRole('button', { name: /^Send/ }).click();
+
+    await expect(toast(page, 'Fwd: Lunch on Thursday?')).toContainText('Sent');
+    const { headers, text } = readSent(sift.sent()[0]!.raw);
+    expect(headers).toMatchObject({ To: 'grace@example.net', Subject: 'Fwd: Lunch on Thursday?' });
+    expect(headers['In-Reply-To']).toBeUndefined();
+    expect(text).toMatch(/^Are you free too\?\r\n\r\n---------- Forwarded message ---------\r\nFrom: Ada Lovelace <ada@example\.org>\r\nDate: .+\r\n/);
+    expect(text).toContain('Subject: Lunch on Thursday?\r\nTo: Me <me@example.org>\r\n\r\nAre you free for lunch on Thursday?');
   });
 
   test('on a phone it covers the screen, and nothing scrolls sideways', async ({ page }) => {

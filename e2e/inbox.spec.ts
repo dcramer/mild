@@ -82,6 +82,21 @@ test.describe('Inbox', () => {
     await expect(inboxRow(page, 'Your March bill')).toHaveCount(0);
   });
 
+  test('in the reader E archives the conversation and goes on to the next, and Shift+U marks it unread and closes it', async ({ page }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'This week in widgets').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    await expect(open.getByRole('button', { name: /^Archive/ })).toBeEnabled();
+    await page.keyboard.press('e');
+    await expect(toast(page, 'This week in widgets')).toBeVisible();
+    await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 2 })).toBeVisible();
+    await page.keyboard.press('Shift+U');
+    // Closed once Gmail has it.
+    await expect(open).toHaveCount(0);
+    await page.goto('/inbox?unread=1');
+    await expect(inboxRow(page, 'Widgets, part two')).toBeVisible();
+  });
+
   test('X selects, E archives what is selected, and Undo puts it back', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);

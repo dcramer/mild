@@ -384,11 +384,11 @@ export const inboxRows = (page: Page) => page.getByRole('row').filter({ has: pag
 export const inboxRow = (page: Page, subject: string) =>
   page.getByRole('row').filter({ has: page.getByRole('checkbox', { name: `Select ${subject}`, exact: true }) });
 
-/** The conversation open in the message panel, by its Archive in the panel's footer. */
-export const reader = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('button', { name: 'Mark unread', exact: true }) });
+/** The conversation open in the message panel, by its Mark unread in the panel's footer. */
+export const reader = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('button', { name: /^Mark unread/ }) });
 
-/** The composer, by its title: New message, Reply or Reply to all. */
-export const composer = (page: Page, title: 'New message' | 'Reply' | 'Reply to all') => page.getByRole('dialog', { name: title, exact: true });
+/** The composer, by its title. */
+export const composer = (page: Page, title: 'New message' | 'Reply' | 'Reply to all' | 'Forward') => page.getByRole('dialog', { name: title, exact: true });
 
 /** A message the stand-in Gmail was asked to send, its headers unfolded by name and its text decoded. */
 export function readSent(raw: string): { headers: Record<string, string>; text: string } {

@@ -1,8 +1,9 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAction } from '@/lib/action.ts';
 import { type Party, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
 import { api, useLoaded } from '@/lib/api.ts';
+import { dateTime } from '@/lib/format.ts';
 import { type Draft, type Writing, keepDraft, keptDraft, newMessageId, useCompose } from '@/lib/compose.ts';
 import { useChosenMailbox } from '@/lib/mailbox.ts';
 import { useHere } from '@/lib/params.ts';
@@ -22,6 +23,10 @@ const addressesOf = (account: ManageState['accounts'][number]): From[] =>
 
 /** "Re: " once, as Gmail and the server put it. */
 const answering = (subject: string) => (/^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}`);
+/** "Fwd: " once. */
+const forwarding = (subject: string) => (/^fwd?:/i.test(subject.trim()) ? subject.trim() : `Fwd: ${subject.trim()}`);
+
+const TITLES = { new: 'New message', reply: 'Reply', all: 'Reply to all', forward: 'Forward' } as const;
 
 /**
  * Writing mail, in a narrow panel over whatever is open: a new message, or a reply to one, which the address names. From
@@ -32,9 +37,9 @@ export function Composer({ what, onClose }: { what: Writing; onClose: () => void
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000, '');
   const accounts = manage.data?.accounts ?? [];
   const chosen = useChosenMailbox(accounts.map((a) => a.email));
-  const title = what.kind === 'new' ? 'New message' : what.all ? 'Reply to all' : 'Reply';
+  const title = TITLES[what.kind === 'reply' && what.all ? 'all' : what.kind];
   if (!manage.data) return <Waiting title={title} onClose={onClose} />;
-  if (what.kind === 'reply') return <Reply what={what} title={title} accounts={accounts} onClose={onClose} />;
+  if (what.kind !== 'new') return <FromMessage what={what} title={title} accounts={accounts} onClose={onClose} />;
 
   // Every address that may send, and the one it starts on even if it may not yet, so the composer can say so.
   const start = accounts.find((a) => a.id === chosen) ?? accounts.find((a) => a.primary && a.canSend) ?? accounts.find((a) => a.canSend) ?? accounts[0];
@@ -59,14 +64,17 @@ function Waiting({ title, onClose }: { title: string; onClose: () => void }) {
   );
 }
 
-/** A reply starts from the message: from the mailbox it came to, by the address it was sent to; to whoever replies go to. */
-function Reply({
+/**
+ * A reply or a forward starts from the message, from the mailbox it came to, by the address it was sent to. A reply goes
+ * to whoever replies go to; a forward to whoever the reader types, with the message quoted under their text.
+ */
+function FromMessage({
   what,
   title,
   accounts,
   onClose,
 }: {
-  what: Extract<Writing, { kind: 'reply' }>;
+  what: Exclude<Writing, { kind: 'new' }>;
   title: string;
   accounts: ManageState['accounts'];
   onClose: () => void;
@@ -92,19 +100,27 @@ function Reply({
     <Writer
       what={what}
       title={title}
-      subtitle={answering(reveal(message.data.subject))}
+      {...(what.kind === 'reply' ? { subtitle: answering(reveal(message.data.subject)) } : {})}
       choices={choices}
-      start={replyDraft(message.data, choices, what.all)}
+      start={what.kind === 'reply' ? replyDraft(message.data, choices, what.all) : forwardDraft(message.data, choices)}
       onClose={onClose}
     />
   );
 }
 
-function replyDraft(message: MessageDetail, choices: readonly From[], all: boolean): Draft {
+const shown = (list: MessageDetail['to']): Party[] => list.map((p) => ({ address: reveal(p.address), ...(p.name ? { name: reveal(p.name) } : {}) }));
+const senderOf = (message: MessageDetail): Party => ({ address: reveal(message.fromAddress), ...(message.fromName ? { name: reveal(message.fromName) } : {}) });
+const owns = (choices: readonly From[]) => {
   const own = new Set(choices.map((c) => c.address.toLowerCase()));
-  const isOwn = (p: Party) => own.has(p.address.toLowerCase());
-  const shown = (list: MessageDetail['to']): Party[] => list.map((p) => ({ address: reveal(p.address), ...(p.name ? { name: reveal(p.name) } : {}) }));
-  const sender = { address: reveal(message.fromAddress), ...(message.fromName ? { name: reveal(message.fromName) } : {}) };
+  return (p: Party) => own.has(p.address.toLowerCase());
+};
+/** The address the message was sent to, of those it can be answered from. */
+const answeredFrom = (message: MessageDetail, choices: readonly From[]) =>
+  [...shown(message.to), ...shown(message.cc)].find(owns(choices))?.address ?? choices[0].address;
+
+function replyDraft(message: MessageDetail, choices: readonly From[], all: boolean): Draft {
+  const isOwn = owns(choices);
+  const sender = senderOf(message);
   const asked = message.headers['reply-to'] ? readAddresses(reveal(message.headers['reply-to'])).parties : [];
   const recipients = [...shown(message.to), ...shown(message.cc)];
   // Mail the person sent themselves is answered as Gmail does: to whoever it went to.
@@ -112,7 +128,7 @@ function replyDraft(message: MessageDetail, choices: readonly From[], all: boole
   const answered = new Set(to.map((p) => p.address.toLowerCase()));
   const cc = all ? recipients.filter((p) => !isOwn(p) && !answered.has(p.address.toLowerCase())) : [];
   return {
-    from: recipients.find(isOwn)?.address ?? choices[0].address,
+    from: answeredFrom(message, choices),
     to: to.map(typed).join(', '),
     cc: cc.map(typed).join(', '),
     showCc: cc.length > 0,
@@ -120,6 +136,22 @@ function replyDraft(message: MessageDetail, choices: readonly From[], all: boole
     text: '',
     id: null,
   };
+}
+
+/** Gmail's quote of a forwarded message, under two empty lines for the reader's own text. Its attachments do not go with it. */
+function forwardDraft(message: MessageDetail, choices: readonly From[]): Draft {
+  const subject = reveal(message.subject);
+  const quoted = [
+    '---------- Forwarded message ---------',
+    `From: ${typed(senderOf(message))}`,
+    `Date: ${dateTime(message.receivedAt)}`,
+    `Subject: ${subject}`,
+    ...(message.to.length > 0 ? [`To: ${shown(message.to).map(typed).join(', ')}`] : []),
+    ...(message.cc.length > 0 ? [`Cc: ${shown(message.cc).map(typed).join(', ')}`] : []),
+    '',
+    reveal(message.body) ?? '',
+  ];
+  return { from: answeredFrom(message, choices), to: '', cc: '', showCc: false, subject: forwarding(subject), text: `\n\n${quoted.join('\n')}`, id: null };
 }
 
 function Writer({
@@ -149,6 +181,10 @@ function Writer({
   // Cc asked for: entered once it is drawn.
   const ccAsked = useRef(false);
   const textField = useRef<HTMLTextAreaElement>(null);
+  // A forward's text starts with the quote; the reader writes above it.
+  useEffect(() => {
+    if (what.kind === 'forward') textField.current?.setSelectionRange(0, 0);
+  }, [what.kind]);
   const toast = useToast();
   const compose = useCompose();
   const here = useHere();
@@ -182,7 +218,7 @@ function Writer({
       kind: 'Draft discarded',
       undo: () => {
         keepDraft(what, draft);
-        compose?.(what.kind === 'reply' ? { replyTo: what, all: what.all } : undefined);
+        compose?.(what);
       },
     });
     onClose();
@@ -221,7 +257,7 @@ function Writer({
       title={title}
       {...(subtitle ? { subtitle } : {})}
       actions={actions}
-      focus={what.kind === 'new' && draft.to === '' ? toField : textField}
+      focus={what.kind !== 'reply' && draft.to === '' ? toField : textField}
     >
       {/* Not a Form: Enter in To or Subject must not send. */}
       <div className="flex flex-col gap-5">
@@ -286,11 +322,11 @@ function Writer({
             />
           </Field>
         ) : null}
-        {what.kind === 'new' ? (
+        {what.kind === 'reply' ? null : (
           <Field inline label="Subject">
             <Input aria-label="Subject" className="flex-1" value={draft.subject} onChange={(event) => change({ subject: event.target.value })} />
           </Field>
-        ) : null}
+        )}
         <TextArea ref={textField} aria-label="Message" className="min-h-72" value={draft.text} onChange={(event) => change({ text: event.target.value })} />
       </div>
     </Panel>

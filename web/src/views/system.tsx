@@ -1173,6 +1173,11 @@ export function SystemView() {
           subtitle="Example Weekly · Nov 13, 3:21 PM"
           position="1 of 3"
           onNext={() => {}}
+          keys
+          presses={[
+            { label: 'Reply', key: 'r', onPress: () => toast('R was pressed') },
+            { label: 'Mark unread', key: 'Shift+u', quiet: true, onPress: () => toast('Shift+U was pressed') },
+          ]}
           actions={
             <>
               <Button>Change…</Button>

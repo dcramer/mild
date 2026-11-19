@@ -12,6 +12,7 @@ import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { type Confidential, type MailConversation, type MessageDetail, type RuleMatch, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
+import { useCompose } from '@/lib/compose.ts';
 import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
   Ago,
@@ -479,6 +480,7 @@ export function MessagePanel({
     '',
   );
   const { press } = useMailPress();
+  const compose = useCompose();
   const next = () => (index < items.length - 1 ? onIndex(index + 1) : onClose());
   if (!item) return null;
   const conversation = threadId ? thread.data : null;
@@ -519,18 +521,25 @@ export function MessagePanel({
       position={items.length > 1 ? `${index + 1} of ${items.length}` : undefined}
       onPrevious={index > 0 ? () => onIndex(index - 1) : undefined}
       onNext={index < items.length - 1 ? () => onIndex(index + 1) : undefined}
-      // Reply, Reply all and Forward go first here, as what answers the conversation.
-      actions={
-        threadId ? (
-          <>
-            <Button disabled={!pressed} onClick={() => pressed && press([pressed], 'archive', next)}>
-              Archive
-            </Button>
-            <Button variant="quiet" disabled={!pressed} onClick={() => pressed && press([pressed], 'unread', onClose)}>
-              Mark unread
-            </Button>
-          </>
-        ) : undefined
+      // Reply, Reply all and Forward go first, as what answers the conversation: its newest message, as Gmail's do.
+      presses={
+        threadId
+          ? [
+              ...(compose && data
+                ? [
+                    { label: 'Reply', key: 'r', onPress: () => compose({ kind: 'reply', messageId: data.messageId, all: false }) },
+                    {
+                      label: 'Reply all',
+                      key: 'a',
+                      onPress: () => compose({ kind: 'reply', messageId: data.messageId, all: true }),
+                    },
+                    { label: 'Forward', key: 'f', onPress: () => compose({ kind: 'forward', messageId: data.messageId }) },
+                  ]
+                : []),
+              { label: 'Archive', key: 'e', disabled: !pressed, onPress: () => pressed && press([pressed], 'archive', next) },
+              { label: 'Mark unread', key: 'Shift+u', quiet: true, disabled: !pressed, onPress: () => pressed && press([pressed], 'unread', onClose) },
+            ]
+          : undefined
       }
     >
       {loading || (threadId && thread.loading) ? (

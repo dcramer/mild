@@ -1,11 +1,18 @@
 'use client';
 import { Dialog as Base } from '@base-ui/react/dialog';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { type ReactNode, type RefObject, useRef } from 'react';
+import { type ReactNode, type RefObject, useRef, useState } from 'react';
+import { Button } from './button.tsx';
 import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer, useShortcut } from './keys.tsx';
 import { Backdrop, LayerContent, LayerFooter, useLayerOpen } from './layer.tsx';
 import { rowHolding } from './table.tsx';
+
+/**
+ * What had the focus as each panel opened, for its close to return there: the message panel under the composer, say,
+ * through the composer's panel that was replaced once it loaded.
+ */
+const openers = new WeakMap<HTMLElement, HTMLElement | null>();
 
 /**
  * One thing from a list, opened beside the list: it slides over from the right, as wide as three
@@ -28,6 +35,7 @@ export function Panel({
   narrow,
   keys = false,
   returnTo,
+  presses,
   actions,
   focus,
   children,
@@ -48,6 +56,8 @@ export function Panel({
   keys?: boolean;
   /** What it shows, as the list's rows name it (`holds` on a `Tr`): closing goes back to that row, wherever it was opened from. */
   returnTo?: string;
+  /** What is done to the item, each with its key while `keys` is on (the reader's Reply and Archive), first in the footer. */
+  presses?: readonly { label: string; key: string; onPress: () => void; disabled?: boolean; quiet?: boolean }[];
   /**
    * What is done to the item itself (save, change, remove), in a footer that stays put while the rest scrolls: what changes it
    * first, then a gap, and at the right what removes it. A section's own action stays beside its heading.
@@ -58,6 +68,12 @@ export function Panel({
   children: ReactNode;
 }) {
   const popup = useRef<HTMLDivElement>(null);
+  const [opener] = useState(() => (typeof document === 'undefined' || !(document.activeElement instanceof HTMLElement) ? null : document.activeElement));
+  const returnFocus = () => {
+    let to = opener;
+    while (to && !to.isConnected) to = openers.get(to) ?? null;
+    return to;
+  };
   const stepping = onPrevious !== undefined || onNext !== undefined;
   return (
     <Base.Root {...useLayerOpen(open, onClose, onClosing)}>
@@ -65,10 +81,20 @@ export function Panel({
         <Backdrop />
         {/* The panel takes the focus itself, not its first button, which Enter would press. */}
         <Base.Popup
-          ref={popup}
+          // Kept as the popup is attached, which the portal does after the panel's own effects have run.
+          ref={(node) => {
+            popup.current = node;
+            if (node) openers.set(node, opener);
+          }}
           tabIndex={-1}
           initialFocus={focus ?? popup}
-          finalFocus={() => (returnTo === undefined ? null : rowHolding(returnTo)) ?? true}
+          finalFocus={() => {
+            const to = (returnTo === undefined ? null : rowHolding(returnTo)) ?? returnFocus();
+            if (!to || to.tabIndex >= 0) return to ?? true;
+            // Base UI would move on to the first thing inside that is tabbable: in the message panel, the sender, whose card would open.
+            queueMicrotask(() => to.focus({ preventScroll: true }));
+            return false;
+          }}
           // Base UI keeps arrow keys from leaving a dialog, for the menus behind it; the page behind a panel hears no keys anyway.
           onKeyDown={(event) => {
             if (keys && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) event.preventBaseUIHandler();
@@ -79,7 +105,22 @@ export function Panel({
             <LayerContent title={title} subtitle={subtitle}>
               {children}
             </LayerContent>
-            {actions ? <LayerFooter>{actions}</LayerFooter> : null}
+            {presses || actions ? (
+              <LayerFooter>
+                {presses?.map((p) => (
+                  <Button
+                    key={p.label}
+                    {...(p.quiet ? { variant: 'quiet' as const } : {})}
+                    {...(keys ? { shortcut: p.key } : {})}
+                    disabled={p.disabled}
+                    onClick={p.onPress}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+                {actions}
+              </LayerFooter>
+            ) : null}
             {stepping ? (
               <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
                 <Step
