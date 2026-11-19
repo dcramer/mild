@@ -3,7 +3,7 @@ import { Dialog as Base } from '@base-ui/react/dialog';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { KeyLayer } from './keys.tsx';
-import { Backdrop, LayerBody, LayerFooter, LayerHeader, useLayerOpen } from './layer.tsx';
+import { Backdrop, LayerContent, LayerFooter, useLayerOpen } from './layer.tsx';
 
 /**
  * Something opened from the page and read or answered without leaving it: one message, one sender, a
@@ -36,9 +36,10 @@ export function Dialog({
             'md:inset-auto md:top-1/2 md:left-1/2 md:max-h-[calc(100svh-4rem)] md:w-[calc(100vw-4rem)] md:-translate-x-1/2 md:-translate-y-1/2 md:max-w-xl',
           )}
         >
-          <LayerHeader title={title} subtitle={subtitle} />
           <KeyLayer>
-            {children ? <LayerBody>{children}</LayerBody> : null}
+            <LayerContent title={title} subtitle={subtitle}>
+              {children}
+            </LayerContent>
             {footer ? <LayerFooter>{footer}</LayerFooter> : null}
           </KeyLayer>
         </Base.Popup>

@@ -70,26 +70,31 @@ export function useLayerOpen(open: boolean, onClose: () => void, onClosing?: () 
 
 const GUTTER = 'px-5 md:px-6';
 
-export function LayerHeader({ title, subtitle }: { title: string; subtitle?: ReactNode }) {
+/**
+ * The title, what is under it, and the body. On a large screen the header stays and the body scrolls under it, so a
+ * panel can lay its body out to the screen's height; below that the two scroll as one, so a tall header (a message
+ * to a mailing list, its recipients opened) never leaves the body no room. Close stays in the corner either way, on
+ * the layer's own fill, over whatever scrolls under it.
+ */
+export function LayerContent({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children?: ReactNode }) {
   return (
-    <header className={cn('flex items-start gap-3 pt-5 pb-4', GUTTER)}>
-      <div className="min-w-0 flex-1">
-        <Base.Title className="title break-words">{title}</Base.Title>
-        {subtitle ? <div className="mt-1 text-sm text-muted-foreground">{subtitle}</div> : null}
+    <>
+      <div className="flex min-h-0 flex-1 flex-col max-lg:overflow-y-auto">
+        <header className={cn('pt-5 pb-4 pr-14 md:pr-16', GUTTER)}>
+          <Base.Title className="title break-words">{title}</Base.Title>
+          {subtitle ? <div className="mt-1 text-sm text-muted-foreground">{subtitle}</div> : null}
+        </header>
+        {children ? <div className={cn('pt-1 pb-6 lg:min-h-0 lg:flex-1 lg:overflow-y-auto', GUTTER)}>{children}</div> : null}
       </div>
       <Base.Close
         aria-label="Close"
         aria-keyshortcuts="Escape"
-        className="press -mt-0.5 -mr-2 flex size-(--control) shrink-0 cursor-pointer items-center justify-center text-muted-foreground hover:bg-(--fill) hover:text-foreground"
+        className="press absolute top-[1.125rem] right-3 flex size-(--control) cursor-pointer items-center justify-center bg-(--surface) text-muted-foreground hover:bg-(--fill) hover:text-foreground md:right-4"
       >
         <XIcon className="size-4" />
       </Base.Close>
-    </header>
+    </>
   );
-}
-
-export function LayerBody({ children }: { children: ReactNode }) {
-  return <div className={cn('min-h-0 flex-1 overflow-y-auto pt-1 pb-6', GUTTER)}>{children}</div>;
 }
 
 export function LayerFooter({ className, children }: { className?: string; children: ReactNode }) {

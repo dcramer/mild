@@ -123,6 +123,14 @@ test.describe('Who a message went to', () => {
     await expect(fewer).toHaveAttribute('aria-expanded', 'true');
     await expect(open.getByText(/reviewer12@example\.net Fewer$/)).toBeVisible();
 
+    // On a phone the header scrolls with the rest, so however long it is the whole panel can be read, and Close stays.
+    const last = open.getByText(/^History · /);
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeInViewport();
+    await expect(panelHeading(page, 'Notes from the review')).not.toBeInViewport();
+    await expect(open.getByRole('button', { name: 'Close' })).toBeInViewport();
+    await fewer.scrollIntoViewIfNeeded();
+
     await fewer.click();
     await expect(open.getByRole('button', { name: '9 more' })).toHaveAttribute('aria-expanded', 'false');
   });
