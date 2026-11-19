@@ -12,7 +12,7 @@ import { finishAction, insertPendingAction, setActionStatus } from '../src/store
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { firstAccount, modelRun, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
-import { addRule, removeRule } from '../src/store/rules.ts';
+import { addRule, countRuleHit, removeRule } from '../src/store/rules.ts';
 import { ACCOUNT, DAY, codeSignIn, everything, facts, quietSources, testModel } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 import { triageAccount } from '../src/work/triage.ts';
@@ -574,6 +574,39 @@ describe('dashboard server', () => {
     // Made once: the same proposal again makes no second rule.
     expect((await post('/api/rules', { match: { fromDomain: ['example.org'] }, label: 'transactional', proposal })).status).toBe(409);
     expect((await listRuleSummaries(db, await everything(db), Date.now())).filter((r) => plain(r.match['fromDomain']?.[0]) === 'example.org')).toEqual([]);
+  });
+
+  it('changes a rule in place, keeping its place, exceptions and count, and never into a twin of another', async () => {
+    const { store, db } = await seededStore();
+    const base = await start({}, store);
+    const post = (path: string, body: object) =>
+      fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', origin: base, 'x-sift': '1' }, body: JSON.stringify(body) });
+    const summaries = async () => await listRuleSummaries(db, await everything(db), Date.now());
+    const id = await addRule(db, { match: { from: ['cold@example.net'] }, except: [{ subjectContains: ['invoice'] }], labelId: 'newsletter' }, 'learned');
+    await countRuleHit(db, id);
+    const before = (await summaries()).map((r) => r.id);
+
+    const edited = await post('/api/rules/edit', { id, match: { fromDomain: ['example.net'] }, disposition: 'archive', markRead: true, name: 'Cold mail' });
+    expect(edited.status).toBe(200);
+    const rule = (await summaries()).find((r) => r.id === id)!;
+    expect(plain(rule.match)).toEqual({ fromDomain: ['example.net'] });
+    expect(plain(rule.except)).toEqual([{ subjectContains: ['invoice'] }]);
+    // Its one hit kept, and one more: the seed's mail from example.net waiting in the inbox, decided again.
+    expect(rule).toMatchObject({ kind: 'action', labelId: null, disposition: 'archive', markRead: true, hits: 2, source: 'user' });
+    expect(plain(rule.name)).toBe('Cold mail');
+    expect((await summaries()).map((r) => r.id)).toEqual(before);
+
+    // Another rule's exact conditions would leave which one decides to their order.
+    await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    const other = await addRule(db, { match: { from: ['other@example.com'] }, labelId: 'newsletter' }, 'user');
+    const twin = await post('/api/rules/edit', { id: other, match: { from: ['news@example.com'] }, label: 'transactional' });
+    expect(twin.status).toBe(409);
+    expect(((await twin.json()) as { error: string }).error).toMatch(/Another rule already has exactly these conditions/);
+    // Waiting for a label, it is a different rule for the same sender.
+    expect((await post('/api/rules/edit', { id: other, match: { from: ['news@example.com'] }, whenLabel: 'newsletter', disposition: 'archive' })).status).toBe(
+      200,
+    );
+    expect((await post('/api/rules/edit', { id: 'r-gone', match: { from: ['x@example.com'] }, disposition: 'archive' })).status).toBe(409);
   });
 
   it("tells the page only that something failed when it is Sift's own error, and logs why", async () => {

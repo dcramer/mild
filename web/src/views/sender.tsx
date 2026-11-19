@@ -9,7 +9,7 @@ import { INBOX, count, dateTime, describeMatch, doesName, longDay, outcomeName, 
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
 import { messageKey, setParams, useParam } from '@/lib/params.ts';
-import { AddRuleDialog } from '@/views/rule-dialog.tsx';
+import { RuleDialog } from '@/views/rule-dialog.tsx';
 import {
   Ago,
   Heads,
@@ -508,7 +508,7 @@ function SenderView({ accountId, who }: { accountId: string; who: Who }) {
       </Section>
 
       {starting ? (
-        <AddRuleDialog accountId={accountId} labels={manage.data?.labels ?? []} start={starting} onClose={() => setStarting(null)} onAdded={reload} />
+        <RuleDialog accountId={accountId} labels={manage.data?.labels ?? []} start={starting} onClose={() => setStarting(null)} onAdded={reload} />
       ) : null}
     </div>
   );

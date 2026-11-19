@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { type RULE_SOURCES, and, asc, eq, proposals, ruleDrafts, rules, sql } from './query.ts';
+import { type RULE_SOURCES, and, asc, eq, ne, proposals, ruleDrafts, rules, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import { conditionsHash, openJson, ruleDraftName, ruleName, sealJson } from './content.ts';
 import type { RuleDraft } from '../triage/rule-draft.ts';
@@ -161,11 +161,7 @@ export async function hasRuleFor(db: Sql, match: RuleMatch, whenLabel: string | 
  */
 export async function setRule(db: Sql, match: RuleMatch, says: RuleSays, source: RuleSource, now: number = Date.now()): Promise<string> {
   const rule = leaveInInbox(says);
-  // Whatever sift was proposing for this mail, in any mailbox, is settled by the user saying what it is.
-  await db
-    .update(proposals)
-    .set({ status: 'accepted', resolvedAt: now })
-    .where(and(eq(proposals.conditions, conditionsHash(db, match)), eq(proposals.status, 'open')));
+  await settleProposals(db, match, now);
   const existing = await ruleMatching(db, match, rule.whenLabel ?? null);
   if (!existing) return await addRule(db, { match, ...rule }, source, now);
   await check(db, rule);
@@ -182,6 +178,52 @@ export async function setRule(db: Sql, match: RuleMatch, says: RuleSays, source:
     })
     .where(eq(rules.id, existing.id));
   return existing.id;
+}
+
+/** Whatever sift was proposing for this mail, in any mailbox, is settled by the user saying what it is. */
+async function settleProposals(db: Sql, match: RuleMatch, now: number): Promise<void> {
+  await db
+    .update(proposals)
+    .set({ status: 'accepted', resolvedAt: now })
+    .where(and(eq(proposals.conditions, conditionsHash(db, match)), eq(proposals.status, 'open')));
+}
+
+/**
+ * Change what rule `id` matches and says, keeping its place, its exceptions, its count and its Gmail filter, which
+ * the filter check brings into line. The user wrote it now, whoever made it. Refuses when another rule already has
+ * exactly these conditions and waits for the same label: two would leave which one decides to their order.
+ */
+export async function editRule(db: Sql, id: string, match: RuleMatch, says: RuleSays, now: number = Date.now()): Promise<void> {
+  const rule = leaveInInbox(says);
+  const tidy = tidyMatch(match);
+  if (Object.keys(tidy).length === 0) throw new Refusal('A rule needs at least one condition.');
+  const [row] = await db.select({ except: rules.except }).from(rules).where(eq(rules.id, id));
+  if (!row) throw new Refusal('That rule no longer exists.');
+  await check(db, rule);
+  const except = plain(openJson<RuleMatch[]>(db, ruleName(db, id, 'except'), row.except));
+  const conditions = conditionsHash(db, tidy, except);
+  const [twin] = await db
+    .select({ id: rules.id })
+    .from(rules)
+    .where(and(eq(rules.conditions, conditions), sql`${rules.whenLabel} IS NOT DISTINCT FROM ${rule.whenLabel ?? null}`, ne(rules.id, id)))
+    .limit(1);
+  if (twin) throw new Refusal('Another rule already has exactly these conditions. Change that one, or remove it first.');
+  await settleProposals(db, tidy, now);
+  await db
+    .update(rules)
+    .set({
+      match: sealJson(db, ruleName(db, id, 'match'), tidy),
+      conditions,
+      name: sealName(db, id, rule.name),
+      labelId: rule.labelId ?? null,
+      whenLabel: rule.whenLabel ?? null,
+      disposition: rule.disposition ?? null,
+      subscription: rule.subscription ?? 'preserve',
+      markRead: rule.markRead ?? false,
+      condition: rule.when?.trim() || null,
+      source: 'user',
+    })
+    .where(eq(rules.id, id));
 }
 
 /**
