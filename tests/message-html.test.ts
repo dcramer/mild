@@ -108,7 +108,7 @@ describe('the frame route', () => {
 
   it('sends the HTML Sift holds, cleaned, under a strict policy of its own, in a sandbox, loading nothing', async () => {
     const { call } = await startDashboard(people(store));
-    const reply = await call('GET', `/api/message/html?account=${encodeURIComponent(ACCOUNT)}&id=m1`);
+    const reply = await call('GET', `/api/message/html?id=m1`);
     expect(reply.status).toBe(200);
     expect(reply.text).toContain(MARKER);
     expect(reply.text).not.toContain('<script');
@@ -127,16 +127,16 @@ describe('the frame route', () => {
   it('says so, in the frame, when Sift holds no HTML for it', async () => {
     const { call } = await startDashboard(people(store));
     for (const id of ['plain', 'unheld', 'unknown']) {
-      const reply = await call('GET', `/api/message/html?account=${encodeURIComponent(ACCOUNT)}&id=${id}`);
+      const reply = await call('GET', `/api/message/html?id=${id}`);
       expect(reply.status, id).toBe(404);
       expect(reply.headers['content-security-policy']).toContain('sandbox');
     }
-    expect((await call('GET', '/api/message/html?account=other%40example.com&id=m1')).status).toBe(404);
+    expect((await call('GET', '/api/message/html?mailbox=other%40example.com&id=m1')).status).toBe(404);
   });
 
   it('tells the page whether Sift holds the HTML, so it never offers a frame with nothing in it', async () => {
     const { call } = await startDashboard(people(store));
-    const open = async (id: string) => (await call('GET', `/api/message?account=${encodeURIComponent(ACCOUNT)}&id=${id}`)).body;
+    const open = async (id: string) => (await call('GET', `/api/message?id=${id}`)).body;
     expect(await open('m1')).toMatchObject({ body: 'Sale', hasHtml: true });
     expect(await open('plain')).toMatchObject({ body: 'Plain', hasHtml: false });
     expect(await open('unheld')).toMatchObject({ body: null, hasHtml: false });

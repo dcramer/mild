@@ -19,18 +19,16 @@ import type { MessageRef } from '@/views/message-panel.tsx';
 // What opens over a screen is fetched when first needed and, once the page is idle, ahead of need.
 const loadSettings = () => import('@/views/settings.tsx');
 const loadMessage = () => import('@/views/message-panel.tsx');
-const loadRule = () => import('@/views/rule-panel.tsx');
-// Opened together from the address (`?message=…&settings=1`), each waits for all, so they open in the order they are
+// Opened together from the address (`?message=…&settings=1`), each waits for both, so they open in the order they are
 // drawn, the last on top, whichever arrived first.
-const loadPanels = () => Promise.all([loadSettings(), loadMessage(), loadRule()]);
+const loadPanels = () => Promise.all([loadSettings(), loadMessage()]);
 const SettingsPanel = dynamic(() => loadPanels().then(([m]) => m.SettingsPanel), { ssr: false });
 const MessagePanel = dynamic(() => loadPanels().then(([, m]) => m.MessagePanel), { ssr: false });
-const RuleSheet = dynamic(() => loadPanels().then(([, , m]) => m.RuleSheet), { ssr: false });
 
 function usePanelsAhead() {
   useEffect(() => {
     const ahead = () => {
-      for (const load of [loadSettings, loadMessage, loadRule]) void load().catch(() => {});
+      for (const load of [loadSettings, loadMessage]) void load().catch(() => {});
     };
     if ('requestIdleCallback' in window) {
       const id = window.requestIdleCallback(ahead, { timeout: 4000 });
@@ -117,14 +115,11 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   // The message panel. Which message is open is in the address, so it can be linked to and Back closes
   // it; the list it was opened from, for previous and next, is only known when it was opened from one here.
   const [list, setList] = useState<MessageRef[]>([]);
+  // The address names the message alone: the server finds which mailbox holds it.
   const [messageId] = useParam('message');
-  // A rule opened away from the Rules list, as when one has just been made; the list opens its own.
-  const [ruleId] = useParam('rule');
-  const [accountId] = useParam('account');
-  const listed = list.findIndex((item) => item.messageId === messageId && item.accountId === accountId);
-  const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId, messageId, subject: null }], index: 0 } : { items: list, index: listed };
-  const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) =>
-    setParams({ message: item?.messageId ?? '', account: item?.accountId ?? '' }, push);
+  const listed = list.findIndex((item) => item.messageId === messageId);
+  const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId: '', messageId, subject: null }], index: 0 } : { items: list, index: listed };
+  const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) => setParams({ message: item?.messageId ?? '' }, push);
   const online = useOnline();
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const expired = manage.data?.activity.expired ?? [];
@@ -191,7 +186,6 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
 
         <main className="pb-16">{children}</main>
         <PageFoot />
-        {ruleId !== '' && section !== 'rules' ? <RuleSheet id={ruleId} onOpen={openMessages} onClose={() => setParams({ rule: '', apply: '' })} /> : null}
         {open ? (
           <MessagePanel
             key={opened}

@@ -4,16 +4,32 @@ import { unsubscribedAt, openPayload } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
 import { openEnvelope, openPart } from '../../store/content.ts';
 import { bulkSignals, passedDmarc } from '../../triage/features.ts';
-import { type Scope, sees } from '../scope.ts';
+import { Refusal } from '../../refusal.ts';
+import { type Scope, within } from '../scope.ts';
 import type { MessageDetail } from '../types.ts';
 import { decisionsJoined, toDecisionRow } from './decisions.ts';
 import { senderProfile } from './senders.ts';
 import { plain, seal } from '../../plain.ts';
 import type { Confidential } from '../../confidential.ts';
 
-/** One message with its full history, or null if sift has not seen it. */
-export async function messageDetail(db: Sql, scope: Scope, accountId: string, messageId: string): Promise<MessageDetail | null> {
-  if (!sees(scope, accountId)) return null;
+/**
+ * Which of the scope's mailboxes holds the message with Gmail's id `messageId`, or null when none does. Gmail's ids
+ * are each one mailbox's own, so two of a person's could in principle hold the same one: then the request must name
+ * the mailbox (`?mailbox=`).
+ */
+async function mailboxOf(db: Sql, scope: Scope, messageId: string): Promise<string | null> {
+  const found = await db
+    .select({ accountId: messages.accountId })
+    .from(messages)
+    .where(and(within(scope, messages.accountId), eq(messages.id, messageId)));
+  if (found.length > 1) throw new Refusal('More than one of your mailboxes has a message with that id; say which.');
+  return found[0]?.accountId ?? null;
+}
+
+/** One message with its full history, in whichever of the scope's mailboxes holds it, or null if sift has not seen it. */
+export async function messageDetail(db: Sql, scope: Scope, messageId: string): Promise<MessageDetail | null> {
+  const accountId = await mailboxOf(db, scope, messageId);
+  if (accountId === null) return null;
   const [stored] = await db
     .select({
       headers: messages.headers,
@@ -95,8 +111,9 @@ async function storedBody(db: Sql, accountId: string, messageId: string): Promis
 }
 
 /** The HTML of one of the scope's messages, as sift holds it; null when it holds none. */
-export async function storedHtml(db: Sql, scope: Scope, accountId: string, messageId: string): Promise<string | null> {
-  if (!sees(scope, accountId)) return null;
+export async function storedHtml(db: Sql, scope: Scope, messageId: string): Promise<string | null> {
+  const accountId = await mailboxOf(db, scope, messageId);
+  if (accountId === null) return null;
   return plain((await storedBody(db, accountId, messageId))?.html ?? null);
 }
 

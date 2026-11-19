@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { expect, param } from './sift.ts';
+import { expect, path } from './sift.ts';
 
 export const ruleDialog = (page: Page) => page.getByRole('dialog', { name: 'Add a rule' });
 
@@ -49,10 +49,10 @@ export async function addRule(dialog: Locator) {
   ).toBeVisible();
 }
 
-/** The rule whose panel is open, once the address holds one. */
+/** The rule whose panel is open, once the address is its own (`/rules/<id>`). */
 export async function ruleId(page: Page) {
-  await param(page, 'rule').toMatch(/^r-/);
-  return new URL(page.url()).searchParams.get('rule')!;
+  await path(page).toMatch(/^\/rules\/r-/);
+  return decodeURIComponent(new URL(page.url()).pathname.split('/')[2]!);
 }
 
 /** The rows of the Rules list, top to bottom, without its header. */

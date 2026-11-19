@@ -25,6 +25,9 @@ export default withWorkflow({
       { source: '/.well-known/workflow/v1/webhook/:path*', destination: '/.well-known/workflow/v1/no-webhook' },
       { source: '/sender/:address', destination: '/sender' },
       { source: '/domain/:domain', destination: '/domain' },
+      // A rule's and a label's own address: its list, with it open, read from the path in the browser.
+      { source: '/rules/:id', destination: '/rules' },
+      { source: '/labels/:id', destination: '/labels' },
     ],
     afterFiles: [],
     fallback: [],

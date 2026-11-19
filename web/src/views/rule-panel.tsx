@@ -426,13 +426,3 @@ export function RulePanel({
     </Panel>
   );
 }
-
-/** A rule opened by id away from the Rules list, as when one has just been made. */
-export function RuleSheet({ id, onOpen, onClose }: { id: string; onOpen: OpenMessages; onClose: () => void }) {
-  const rules = useLoaded('rules', (signal) => api.rules(signal));
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
-  const rule = rules.data?.rules.find((r) => r.id === id);
-  return rule && manage.data ? (
-    <RulePanel key={rule.id} rule={rule} labels={manage.data?.labels ?? []} active={manage.data?.active ?? false} onOpen={onOpen} onClose={onClose} />
-  ) : null;
-}

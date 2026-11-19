@@ -43,6 +43,8 @@ test('each screen is an address of its own, and anything else is missing', async
     '/privacy',
     '/sender/news%40example.com',
     '/domain/example.com',
+    '/rules/r-1',
+    '/labels/newsletter',
   ]) {
     const page = await request.get(path);
     expect(page.status(), path).toBe(200);

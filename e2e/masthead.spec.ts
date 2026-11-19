@@ -8,7 +8,7 @@ test.describe('When a Google sign-in expired', () => {
   test('Reconnect signs in again and comes back to the same page', async ({ page }) => {
     await patchJson(page, '**/api/manage*', (manage) => ({ ...manage, activity: { ...manage.activity, expired: ['me@example.org'] } }));
     await page.clock.install();
-    await page.goto('/rules?rule=r-1');
+    await page.goto('/rules/r-1');
     await expect(page.getByRole('heading', { name: 'Rules', level: 1 })).toBeVisible();
     // The page came drawn with the server's own; a minute on it asks again, and gets the reply above.
     await page.clock.runFor(60_000);
@@ -16,7 +16,7 @@ test.describe('When a Google sign-in expired', () => {
     await expect(page.getByRole('banner').getByText('Google sign-in expired').filter({ visible: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Reconnect' }).filter({ visible: true })).toHaveAttribute(
       'href',
-      `/auth/login?to=${encodeURIComponent('/rules?rule=r-1')}`,
+      `/auth/login?to=${encodeURIComponent('/rules/r-1')}`,
     );
   });
 });

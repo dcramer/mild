@@ -8,7 +8,7 @@ import { useAction } from '@/lib/action.ts';
 import { INBOX, count, dateTime, describeMatch, doesName, duration, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
-import { messageKey, setParams, useParam } from '@/lib/params.ts';
+import { messageKey, rulePath, useOpenRule, useParam } from '@/lib/params.ts';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import {
   Ago,
@@ -66,8 +66,6 @@ const forExactly = (data: SenderPage, rule: Rule) => {
 /** The rule that decides their next message: one for exactly them wins over one for their domain. */
 const decidingRule = (data: SenderPage): Rule | null => data.profile.rules.find((r) => forExactly(data, r)) ?? data.profile.rules.find(forAll) ?? null;
 
-const ruleHref = (id: string) => `/rules?rule=${encodeURIComponent(id)}`;
-
 const ruleWords = (rule: Rule) =>
   `${reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`}${
     rule.kind === 'action' || rule.labelId === INBOX
@@ -91,12 +89,12 @@ function NextMail({ data, rule, labels, more }: { data: SenderPage; rule: Rule |
       <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
         {rule ? (
           <li>
-            <TextLink href={ruleHref(rule.id)}>{ruleWords(rule)}</TextLink>
+            <TextLink href={rulePath(rule.id)}>{ruleWords(rule)}</TextLink>
           </li>
         ) : null}
         {others.map((r) => (
           <li key={r.id}>
-            <TextLink href={ruleHref(r.id)}>{ruleWords(r)}</TextLink>
+            <TextLink href={rulePath(r.id)}>{ruleWords(r)}</TextLink>
           </li>
         ))}
         {decides ? null : (
@@ -326,6 +324,7 @@ function SenderView({ who }: { who: Who }) {
     'address' in who ? api.sender(who.address, signal) : api.domain(who.domain, signal),
   );
   const give = useAction();
+  const openRule = useOpenRule();
   // Undo is pressed after the standing is given, so what it reports goes to a toast.
   const later = useAction();
   const toast = useToast();
@@ -351,7 +350,7 @@ function SenderView({ who }: { who: Who }) {
         kind: given.was ? 'Rule replaced' : 'Rule added',
         undo: takeBack,
         // Mail already in the inbox stays until the rule is applied there, as the dialog offers.
-        ...(standing === 'trusted' ? {} : { action: { label: 'Apply to inbox…', onPress: () => setParams({ rule: given.id, apply: '1' }) } }),
+        ...(standing === 'trusted' ? {} : { action: { label: 'Apply to inbox…', onPress: () => openRule(given.id, true) } }),
       });
     }, reload);
   const [now] = useState(() => Date.now());

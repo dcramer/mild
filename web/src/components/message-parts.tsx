@@ -48,7 +48,7 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
         </div>
       ) : null}
       {html ? (
-        <MailFrame src={api.messageHtml(detail.accountId, detail.messageId)} title={reveal(detail.subject) || '(no subject)'} />
+        <MailFrame src={api.messageHtml(detail.messageId, detail.accountId)} title={reveal(detail.subject) || '(no subject)'} />
       ) : detail.body === null ? (
         <p className="text-muted-foreground">
           Sift does not hold this message’s text. It keeps it only while the message waits on you, and for good once you have answered for it.

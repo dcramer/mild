@@ -150,12 +150,12 @@ const READS = (account: string, mark: string) => [
   `/api/eval?id=${ids[account]!.run}`,
   '/api/models',
   '/api/labels/proposal',
-  `/api/message?account=${encodeURIComponent(account)}&id=m-${mark}`,
+  `/api/message?id=m-${mark}`,
   `/api/suggestion?sender=sender@${mark}.example.com`,
   `/api/sender?address=sender@${mark}.example.com`,
   `/api/domain?domain=${mark}.example.com`,
-  `/api/examples?account=${encodeURIComponent(account)}`,
-  `/api/message/html?account=${encodeURIComponent(account)}&id=m-${mark}`,
+  `/api/examples?mailbox=${encodeURIComponent(account)}`,
+  `/api/message/html?id=m-${mark}`,
   `/api/rules/waiting?id=${ids[account]!.rule}`,
   `/api/rules/usage?id=${ids[account]!.rule}`,
   `/api/rules/inbox?id=${ids[account]!.rule}`,
@@ -250,7 +250,7 @@ describe("nobody sees or changes another person's mail", () => {
       expect(work).not.toContain(MARK[ALPHA]);
     }
     // A message's HTML, from any of their own mailboxes.
-    const html = await call('GET', `/api/message/html?account=${encodeURIComponent(ALPHA_WORK)}&id=m-${MARK[ALPHA_WORK]}`, ALPHA);
+    const html = await call('GET', `/api/message/html?id=m-${MARK[ALPHA_WORK]}`, ALPHA);
     expect(html.status).toBe(200);
     expect(html.text).toContain(MARK[ALPHA_WORK]);
     // Someone else's mailbox is not one that can be asked for.

@@ -9,6 +9,7 @@ import {
   openMessage,
   panel,
   param,
+  path,
   PHONE,
   query,
   refused,
@@ -66,7 +67,7 @@ test.describe('Labels', () => {
     await expect(section(page, 'Archived').getByText('Newsletters', { exact: true })).toBeVisible();
 
     const opened = await openLabel(page, 'Newsletters');
-    await param(page, 'label').toBe('newsletter');
+    await path(page).toBe('/labels/newsletter');
     await expect(opened.getByRole('textbox', { name: 'Name' })).toHaveValue('Newsletters');
     await expect(opened.getByRole('combobox', { name: 'What Sift does with it' })).toHaveText(/Archive/);
     await expect(opened.getByRole('checkbox', { name: 'Unsubscribe, when the sender offers a safe way' })).not.toBeChecked();
@@ -80,7 +81,7 @@ test.describe('Labels', () => {
     // Saving leaves the panel open on what was saved.
     await expect(opened.getByRole('button', { name: 'Save' })).toBeDisabled();
     await expect(opened.getByRole('button', { name: 'Undo changes' })).toHaveCount(0);
-    await param(page, 'label').toBe('newsletter');
+    await path(page).toBe('/labels/newsletter');
 
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(opened).toHaveCount(0);
@@ -122,7 +123,7 @@ test.describe('Labels', () => {
   });
 
   test('Spam has no Mark it read, and Undo changes puts the form back', async ({ page }) => {
-    await page.goto('/labels?label=marketing');
+    await page.goto('/labels/marketing');
     const opened = labelPanel(page, 'Marketing');
     const markRead = opened.getByRole('checkbox', { name: 'Mark it read' });
     await markRead.check();
@@ -152,7 +153,7 @@ test.describe('Labels', () => {
     await opened.getByRole('button', { name: 'Save' }).click();
 
     await expect(page.getByRole('dialog', { name: 'Digests' })).toBeVisible();
-    await param(page, 'label').toBe('newsletter');
+    await path(page).toBe('/labels/newsletter');
     await page.getByRole('dialog', { name: 'Digests' }).getByRole('button', { name: 'Close' }).click();
     const listed = section(page, 'Archived').getByRole('row', { name: /^Digests / });
     await expect(listed).toContainText('Weekly roundups I read on Sundays.');
@@ -160,7 +161,7 @@ test.describe('Labels', () => {
   });
 
   test('a label cannot be saved without a name', async ({ page }) => {
-    await page.goto('/labels?label=newsletter');
+    await page.goto('/labels/newsletter');
     const opened = labelPanel(page, 'Newsletters');
     await opened.getByRole('textbox', { name: 'Name' }).fill('  ');
     await expect(opened.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -284,7 +285,7 @@ test.describe('Labels', () => {
   });
 
   test('Escape puts back the question to remove, and leaves the panel open', async ({ page }) => {
-    await page.goto('/labels?label=newsletter');
+    await page.goto('/labels/newsletter');
     const opened = labelPanel(page, 'Newsletters');
     await opened.getByRole('button', { name: 'Remove…' }).click();
     const ask = page.getByRole('dialog', { name: 'Remove Newsletters and its 1 rule?' });
@@ -293,11 +294,11 @@ test.describe('Labels', () => {
     await settled(page);
     await expect(ask).toHaveCount(0);
     await expect(opened.getByRole('button', { name: 'Remove…' })).toBeVisible();
-    await param(page, 'label').toBe('newsletter');
+    await path(page).toBe('/labels/newsletter');
   });
 
   test('Escape in the outcome list closes only the list', async ({ page }) => {
-    await page.goto('/labels?label=newsletter');
+    await page.goto('/labels/newsletter');
     const opened = labelPanel(page, 'Newsletters');
     await opened.getByRole('combobox', { name: 'What Sift does with it' }).click();
     await expect(page.getByRole('option', { name: 'Keep' })).toBeVisible();
@@ -305,11 +306,11 @@ test.describe('Labels', () => {
     await expect(page.getByRole('option')).toHaveCount(0);
     await settled(page);
     await expect(opened).toBeVisible();
-    await param(page, 'label').toBe('newsletter');
+    await path(page).toBe('/labels/newsletter');
   });
 
   test('a label’s rule count leads to those rules alone', async ({ page }) => {
-    await page.goto('/labels?label=newsletter');
+    await page.goto('/labels/newsletter');
     await labelPanel(page, 'Newsletters').getByRole('link', { name: '1', exact: true }).click();
     await expect(page).toHaveURL(/\/rules\?label=newsletter$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -334,7 +335,7 @@ test.describe('Labels', () => {
     await first.getByRole('button', { name: 'Next' }).click();
     const second = labelPanel(page, 'Account alerts');
     await expect(second.getByRole('heading', { name: 'Account alerts', level: 2 })).toBeVisible();
-    await param(page, 'label').toBe('security');
+    await path(page).toBe('/labels/security');
     await second.getByRole('button', { name: 'Previous' }).click();
     await expect(labelPanel(page, 'Leave in inbox')).toBeVisible();
   });

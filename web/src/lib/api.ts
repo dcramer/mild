@@ -210,9 +210,10 @@ export const api = {
       { days: q.days, status: q.status, q: q.search, fact: q.fact, label: q.label, limit: q.limit, offset: q.offset },
       signal,
     ),
-  message: (account: string, id: string, signal: AbortSignal) => get<MessageDetail>('/api/message', { account, id }, signal),
+  /** A message by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
+  message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
   /** Where a frame loads a message as the HTML Sift holds for it. */
-  messageHtml: (account: string, id: string) => `/api/message/html?${new URLSearchParams({ account, id })}`,
+  messageHtml: (id: string, mailbox: string) => `/api/message/html?${new URLSearchParams({ id, mailbox })}`,
   /** `name` lists only their mail under that name. */
   sender: (address: string, signal: AbortSignal, name?: string) => get<SenderPage>('/api/sender', name === undefined ? { address } : { address, name }, signal),
   domain: (domain: string, signal: AbortSignal) => get<SenderPage>('/api/domain', { domain }, signal),

@@ -13,7 +13,7 @@ A message Sift could not place, or placed wrongly, waits in For review. The user
 ## How to get to it (user POV)
 
 - For review, a row, then the dropdown and the check at the top of the panel.
-- From any screen with `?message=<id>&account=me%40example.org` in the address.
+- From any screen with `?message=<id>` in the address.
 
 ## Driving it with verify.sh
 
@@ -23,7 +23,7 @@ Preconditions:
 
 - **Open.** `ab open "$B/"`, then `ab find role cell click --name "48 hours only: 30% off"`. The address gains `?message=m4`, a level-2 heading reads `48 hours only: 30% off`, the dropdown reads `Unlabelled`, and the check is disabled.
 - **Choose and save.** `ab find role combobox click --name "What this message is"`, `ab find role option click --name "Marketing"`, then `ab find role button click --name "Save: Marketing"`. A toast reads `Archive as Marketing`. Deals was the last row, so the panel closes (the address is `/` again) and the link's count is one fewer.
-- **A rule, on purpose.** `ab open "$B/?message=m6&account=me%40example.org"`, `ab find role button click --name "Make a rule…"` (the open panel hides the proposal line's button of the same name). The rule dialog opens over the panel on `What should it do?`, its box started on the sender alone (`Mail from ada@example.org: `, since Ada's mail has no label); `Write it yourself` shows `Value 1` reading `ada@example.org`; the address keeps `?message=m6`. `ab press Escape`.
+- **A rule, on purpose.** `ab open "$B/?message=m6"`, `ab find role button click --name "Make a rule…"` (the open panel hides the proposal line's button of the same name). The rule dialog opens over the panel on `What should it do?`, its box started on the sender alone (`Mail from ada@example.org: `, since Ada's mail has no label); `Write it yourself` shows `Value 1` reading `ada@example.org`; the address keeps `?message=m6`. `ab press Escape`.
 - **Only this one.** `ab open "$B/"`, `ab find role cell click --name "Replica lag on db-3"`, choose `Notifications`, `ab find role button click --name "Save: Notifications"`. The toast reads `Archive as Notifications` with `Same for 1 more`; leave it. The panel moves to `Disk 91% full on db-2`, still `Unlabelled`, and that row stays on For review.
 - **Second view.** `ab open "$B/rules"`. As many rules as before: answering made none.
 - **Stored.** `verify.sh sql "$RUN" "SELECT label_id, carry_out, by_user, outcome FROM decisions WHERE message_id = 'm4' ORDER BY id DESC LIMIT 1"` returns `marketing`, `true`, `true`, `skipped`: the answer began a pass, which found no such message in the stand-in Gmail. `SELECT message_id, label_id FROM examples WHERE message_id IN ('m4', 'm9', 'm10')` returns `m4` with `marketing` and `m10` with `notification`, and no `m9` (the seed's three bills are examples too).

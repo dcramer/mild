@@ -182,20 +182,19 @@ test.describe('What Sift saw', () => {
     await param(page, 'message').toBe('m4');
   });
 
-  test('a rule added from the panel opens over it, and Escape closes the rule, then the panel', async ({ page }) => {
+  test('a rule added from the panel opens at its own address, and Back returns to the message', async ({ page }) => {
     await page.goto('/');
     const dialog = await makeRule(await openMessage(page, 'Winter sale starts now'));
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await addRule(dialog);
     const sheet = rulePanel(page, 'sale@store.example.com');
     await expect(sheet).toContainText('Marketing');
-    await param(page, 'message').toBe('m8');
-    await param(page, 'rule').not.toBeNull();
+    await path(page).toMatch(/^\/rules\/r-/);
 
-    await page.keyboard.press('Escape');
-    await expect(sheet).toHaveCount(0);
+    await page.goBack();
     await expect(panelHeading(page, 'Winter sale starts now')).toBeVisible();
-    await param(page, 'rule').toBeNull();
+    await path(page).toBe('/');
+    await param(page, 'message').toBe('m8');
 
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
