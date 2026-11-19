@@ -147,7 +147,7 @@ describe('recorded facts', () => {
     const db = await openUserDb(ACCOUNT);
     await recordSync(db, ACCOUNT, [campaign], '2');
     expect((await raw(db).get<{ facts: unknown }>('SELECT facts FROM messages'))!.facts).toEqual(sealFacts(deriveFacts(campaign)));
-    expect((await messageDetail(db, await everything(db), ACCOUNT, campaign.messageId))?.facts).toMatchObject({
+    expect((await messageDetail(db, await everything(db), campaign.messageId))?.facts).toMatchObject({
       bulkService: 'Mailchimp',
       category: 'promotions',
     });

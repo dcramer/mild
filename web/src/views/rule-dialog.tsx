@@ -1,7 +1,7 @@
 'use client';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
-import { paramNow, setParams } from '@/lib/params.ts';
+import { useOpenRule, useOpened } from '@/lib/params.ts';
 import { type LabelSummary, type RuleBody, type RuleDraft, type RuleFilter, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import { type By, type Condition, type RuleStart, addedWords, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
@@ -130,6 +130,8 @@ export function RuleDialog({
   const later = useAction();
   const toast = useToast();
   const [now] = useState(() => (editing ? ruleNow(editing) : undefined));
+  const openRule = useOpenRule();
+  const [openRuleId, setOpenRule] = useOpened('rules');
   const start = now ?? given;
   const [rows, setRows] = useState<Row[]>(() => rowsOf(start?.conditions ?? [], start?.facts ?? []));
   // A line the reader just added takes the cursor; the ones it opened on do not.
@@ -164,12 +166,6 @@ export function RuleDialog({
     setDescribing(false);
   };
   const describe = () => goal.trim() !== '' && drafting.run(async () => fill(await api.draftRule(goal.trim())));
-  // Once it is made, the rule opens wherever this was, with what it covers in the inbox; ticked, the look at the inbox too.
-  const opened = (id: string | undefined) => {
-    onClose();
-    if (id) setParams({ rule: id, apply: applyNow && moves ? '1' : '' });
-  };
-  const filterStep = useFilterOffer(() => opened(offer?.id));
   // A rule that waits for a label takes the label a tier gives, so it names none of its own.
   const waitsFor = labels.find((l) => l.id === whenLabel);
   const chosen = waitsFor ? undefined : labels.find((l) => l.id === label);
@@ -178,6 +174,12 @@ export function RuleDialog({
   const needsLabel = !waitsFor && condition.trim() !== '' && !chosen;
   // A label that leaves mail in the inbox, or an action alone that keeps it, changes nothing there; the rule's panel says the same.
   const moves = chosen ? chosen.disposition !== 'keep' : waitsFor !== undefined || action !== 'keep';
+  // Once it is made, the rule opens wherever this was, with what it covers in the inbox; ticked, the look at the inbox too.
+  const opened = (id: string | undefined) => {
+    onClose();
+    if (id) openRule(id, applyNow && moves);
+  };
+  const filterStep = useFilterOffer(() => opened(offer?.id));
   const facts = rows.flatMap((row) => (isNamed(row) ? [] : [row.fact]));
   const named = matchOf(rows.filter(isNamed));
   const match = facts.length > 0 ? { ...named, facts: factConditions(facts) } : named;
@@ -261,7 +263,7 @@ export function RuleDialog({
       () => api.editRule(rule.id, body()),
       () => {
         toast(addedWords(said(), labels, { name, when: condition }), { kind: 'Rule changed', undo: putBack });
-        if (applyNow && moves) setParams({ rule: rule.id, apply: '1' });
+        if (applyNow && moves) openRule(rule.id, true);
         onClose();
       },
     );
@@ -277,7 +279,7 @@ export function RuleDialog({
           }),
         () => {
           toast('Rule taken back');
-          if (paramNow('rule') === id) setParams({ rule: '', apply: '' });
+          if (openRuleId === id) setOpenRule('', { apply: '' });
         },
       );
     run(

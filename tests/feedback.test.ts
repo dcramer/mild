@@ -532,9 +532,9 @@ describe('reading a suggestion', () => {
     ]);
     expect(await keepSuggestionBodies(db, api, ACCOUNT, () => 1000)).toBe(0);
     expect(fetched.toSorted()).toEqual(['m1', 'm2', 'm4']);
-    expect(await messageDetail(db, await everything(db), ACCOUNT, 'm1')).toMatchObject({ body: 'Text of m1', hasHtml: true });
-    expect(await messageDetail(db, await everything(db), ACCOUNT, 'm2')).toMatchObject({ body: 'Text of m2', hasHtml: false });
-    expect(await messageDetail(db, await everything(db), ACCOUNT, 'm3')).toMatchObject({ body: null, hasHtml: false });
+    expect(await messageDetail(db, await everything(db), 'm1')).toMatchObject({ body: 'Text of m1', hasHtml: true });
+    expect(await messageDetail(db, await everything(db), 'm2')).toMatchObject({ body: 'Text of m2', hasHtml: false });
+    expect(await messageDetail(db, await everything(db), 'm3')).toMatchObject({ body: null, hasHtml: false });
 
     // Answered: the temporary copy goes at once, to the example.
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: 'newsletter', messageId: 'm1' });

@@ -220,11 +220,8 @@ export async function openMessage(page: Page, subject: string) {
   return panel(page);
 }
 
-/** The seed's own account, as it is in an address. */
-const ME = encodeURIComponent('me@example.org');
-
 /** What opens message `id` (`m6`) over a page, for after its `?` or `&`. */
-export const messageQuery = (id: string) => `message=${id}&account=${ME}`;
+export const messageQuery = (id: string) => `message=${id}`;
 
 /** A sender's page, by their address. */
 export const senderPage = (address: string) => `/sender/${encodeURIComponent(address)}`;

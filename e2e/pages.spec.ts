@@ -225,7 +225,7 @@ test.describe('A sender', () => {
   test('a message opened from their mail closes back to their page', async ({ page }) => {
     await page.goto(SENDER);
     await openMessage(page, 'Bump zod from 4.0.0 to 4.0.2');
-    await param(page, 'account').toBe('me@example.org');
+    await param(page, 'message').not.toBeNull();
 
     await panel(page).getByRole('button', { name: 'Close' }).click();
     await expect(panel(page)).toHaveCount(0);

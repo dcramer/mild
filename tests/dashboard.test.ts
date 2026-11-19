@@ -354,12 +354,12 @@ describe('dashboard server', () => {
   it('returns one message with its decisions and actions', async () => {
     const base = await start();
     const detail = await get<{ subject: string; decisions: { stage: string; inputTokens: number; durationMs: number }[]; actions: unknown[] }>(
-      `${base}/api/message?account=${encodeURIComponent(ACCOUNT)}&id=c`,
+      `${base}/api/message?id=c`,
     );
     expect(detail.subject).toBe('<img src=x onerror=alert(1)>');
     expect(detail.decisions).toMatchObject([{ stage: 'model', inputTokens: 900, durationMs: 1500 }]);
     expect(detail.actions).toEqual([]);
-    expect((await fetch(`${base}/api/message?account=${encodeURIComponent(ACCOUNT)}&id=nope`)).status).toBe(404);
+    expect((await fetch(`${base}/api/message?id=nope`)).status).toBe(404);
   });
 
   it('lists rules with their hits', async () => {
@@ -643,7 +643,7 @@ describe('dashboard server', () => {
     await raw(db).run("UPDATE messages SET headers = 'sift-secret:v1:deadbeef:x:y' WHERE id = 'c'");
     const logged: string[] = [];
     const base = await start({ log: (line) => logged.push(line) }, store);
-    const reply = await fetch(`${base}/api/message?account=${encodeURIComponent(ACCOUNT)}&id=c`);
+    const reply = await fetch(`${base}/api/message?id=c`);
     expect([reply.status, await reply.json()]).toEqual([500, { error: 'Sift could not do that. Why is in its log.' }]);
     expect(logged).toEqual([expect.stringMatching(/^GET \/api\/message: .*SIFT_KEY/)]);
   });

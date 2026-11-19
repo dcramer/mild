@@ -42,6 +42,7 @@ import { reveal } from '@/lib/reveal.ts';
 /** Open the message panel on one item of a list, so it can step through the rest. */
 
 export interface MessageRef {
+  /** `''` when only its id is known, as from the address. */
   accountId: string;
   messageId: string;
   /** Null when the list it was opened from does not know it. */
@@ -373,7 +374,7 @@ export function MessagePanel({
   }
   const shown = picked ?? item;
   const { data, error, loading, reload } = useLoaded(`message/${shown?.accountId ?? ''}/${shown?.messageId ?? ''}`, (signal) =>
-    shown ? api.message(shown.accountId, shown.messageId, signal) : Promise.reject(new Error('Nothing is open.')),
+    shown ? api.message(shown.messageId, signal, shown.accountId) : Promise.reject(new Error('Nothing is open.')),
   );
   if (!item) return null;
 

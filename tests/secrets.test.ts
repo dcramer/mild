@@ -230,14 +230,14 @@ describe('mail', () => {
     const db = await as(A);
     const [m1] = await raw(db).all<{ headers: string }>('SELECT headers FROM messages ORDER BY id');
     expect(m1!.headers).toMatch(/^sift-secret:v1:/);
-    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({
+    expect(await messageDetail(db, await everything(db), 'm1')).toMatchObject({
       fromAddress: 'news@example.com',
       fromName: 'Example News',
       subject: 'Weekly digest',
       to: [{ address: 'me@example.org' }],
       headers: { subject: 'Weekly digest' },
     });
-    await expect(messageDetail(await as(B), await everything(db), 'alpha@example.org', 'm1')).rejects.toThrow('SIFT_KEY');
+    await expect(messageDetail(await as(B), await everything(db), 'm1')).rejects.toThrow('SIFT_KEY');
   });
 
   it('finds a sender by a hash of their address that differs for each person, and shows it decrypted', async () => {
@@ -255,7 +255,7 @@ describe('mail', () => {
     expect(b1!.sender_hash).not.toBe(m1!.sender_hash);
     expect(await senderFacts(db, ['alpha@example.org'], 'NEWS@example.com')).toMatchObject({ messages: 2 });
     expect(await domainFacts(db, ['alpha@example.org'], 'example.com')).toMatchObject({ messages: 2, senders: 1 });
-    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
+    expect(await messageDetail(db, await everything(db), 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
   });
 
   it('keeps only that there is a list id, and gives it back from the headers, to examples too', async () => {
@@ -306,11 +306,11 @@ describe('mail', () => {
 
   it('brings mail recorded before there was a key under it, for every person in the store', async () => {
     const { as } = await alpha();
-    await expect(messageDetail(await as(A), await everything(await as(A)), 'alpha@example.org', 'm1')).rejects.toThrow('stored unencrypted');
+    await expect(messageDetail(await as(A), await everything(await as(A)), 'm1')).rejects.toThrow('stored unencrypted');
     expect(await rekeyStore(await freshStore(A), true)).toEqual({ credentials: [], messages: 2 });
     const db = await as(A);
     expect(JSON.stringify(await raw(db).all('SELECT headers, sender_hash FROM messages'))).not.toContain('example.com');
-    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
+    expect(await messageDetail(db, await everything(db), 'm1')).toMatchObject({ fromAddress: 'news@example.com' });
     expect(await senderFacts(db, ['alpha@example.org'], 'news@example.com')).toMatchObject({ messages: 2 });
   });
 
@@ -461,9 +461,9 @@ describe('mail', () => {
     const db = await as(NONE);
     const forged = `sift-secret:v1:${A.current!.id}:AAAAAAAAAAAAAAAA:AAAA`;
     await recordSync(db, 'alpha@example.org', [facts({ accountId: 'alpha@example.org', messageId: 'm3', subject: forged })], '3', 0);
-    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm3')).toMatchObject({ subject: forged });
+    expect(await messageDetail(db, await everything(db), 'm3')).toMatchObject({ subject: forged });
     expect(await rekeyContent(await as(A))).toBe(3);
-    expect(await messageDetail(await as(A), await everything(db), 'alpha@example.org', 'm3')).toMatchObject({ subject: forged });
+    expect(await messageDetail(await as(A), await everything(db), 'm3')).toMatchObject({ subject: forged });
   });
 
   it('keeps the text and HTML encrypted, with no HTML as null, and opens them only for their own message', async () => {
@@ -475,23 +475,23 @@ describe('mail', () => {
     expect(m1).toMatchObject({ body_text: expect.stringMatching(/^sift-secret:v1:/), body_html: expect.stringMatching(/^sift-secret:v1:/) });
     expect(JSON.stringify(m1)).not.toContain('Hello');
     expect(m2!.body_html).toBeNull();
-    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
-    expect(await messageDetail(db, await everything(db), 'alpha@example.org', 'm2')).toMatchObject({ body: 'Plain', hasHtml: false });
+    expect(await messageDetail(db, await everything(db), 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
+    expect(await messageDetail(db, await everything(db), 'm2')).toMatchObject({ body: 'Plain', hasHtml: false });
     expect(() => openPart(db, 'alpha@example.org', 'm2', 'text', m1!.body_text)).toThrow('SIFT_KEY');
-    await expect(messageDetail(await as(B), await everything(db), 'alpha@example.org', 'm1')).rejects.toThrow('SIFT_KEY');
+    await expect(messageDetail(await as(B), await everything(db), 'm1')).rejects.toThrow('SIFT_KEY');
   });
 
   it('brings bodies stored plain or under an old key under the current one', async () => {
     const { as, hold, stored } = await alpha();
     await hold(await as(NONE), 'm1', 'Hello', '<p>Hello</p>');
     await hold(await as(A), 'm2', 'Plain', null);
-    await expect(messageDetail(await as(A), await everything(await as(A)), 'alpha@example.org', 'm1')).rejects.toThrow('stored unencrypted');
+    await expect(messageDetail(await as(A), await everything(await as(A)), 'm1')).rejects.toThrow('stored unencrypted');
     expect(await rekeyContent(await as(B_AFTER_A), false)).toBe(2);
     expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
     expect(await rekeyContent(await as(B))).toBe(0);
     for (const row of await stored()) expect(row.body_text).toMatch(/^sift-secret:v1:/);
     for (const row of await raw(await as(B)).all<{ headers: string }>('SELECT headers FROM messages')) expect(row.headers).toMatch(/^sift-secret:v1:/);
-    expect(await messageDetail(await as(B), await everything(await as(B)), 'alpha@example.org', 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
+    expect(await messageDetail(await as(B), await everything(await as(B)), 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
   });
 });
 

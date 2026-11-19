@@ -3,7 +3,7 @@ import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type RuleSummary, api, useLoaded } from '@/lib/api.ts';
-import { setParams, useParam } from '@/lib/params.ts';
+import { useOpened, useParam } from '@/lib/params.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { RemoveRule, RulePanel, Who, checked, whoText } from '@/views/rule-panel.tsx';
@@ -75,7 +75,7 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
   const [label, setLabel] = useParam('label');
   const [source, setSource] = useParam('by', SOURCES);
   const [gmail, setGmail] = useParam('gmail', GMAIL);
-  const [open, setOpen] = useParam('rule');
+  const [open, setOpen] = useOpened('rules');
   const labels = (manage.data?.labels ?? []).map((l) => [l.id, l.name] as const);
   const needle = search.trim().toLowerCase();
   const rules = (data?.rules ?? [])
@@ -181,7 +181,7 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
           onOpen={onOpen}
           onPrevious={at > 0 ? () => setOpen(rules[at - 1].id) : undefined}
           onNext={at < rules.length - 1 ? () => setOpen(rules[at + 1].id) : undefined}
-          onClose={() => setParams({ rule: '', apply: '' })}
+          onClose={() => setOpen('', { apply: '' })}
         />
       ) : null}
     </ListView>

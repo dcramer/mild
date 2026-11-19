@@ -12,9 +12,11 @@ const ADDRESS = /[^\s@<>()[\]"'`,;:/\\]+(?:@|%40)[^\s@<>()[\]"'`,;:/\\]+\.[a-z]{
 const QUERY = /(\/[^\s?#"]*)\?[^\s#"]*/g;
 const QUERY_KEYS = new Set(['http.query', 'url.query', 'http.fragment', 'url.fragment']);
 
-// A sender's or domain's page names them in its path; it is named by its route instead.
-const ADDRESSED = /\/(sender|domain)\/[^/\s?#"]+/g;
-const routeOf = (text: string) => text.replace(ADDRESSED, (_, page: string) => `/${page}/:${page === 'sender' ? 'address' : 'domain'}`);
+// A sender's or domain's page names them in its path, and a rule's or label's its id; each is named by its route
+// instead, so one route is one name. The API's own paths (`/api/rules/inbox`) are not pages.
+const ADDRESSED = /(?<!\/api)\/(sender|domain|rules|labels)\/[^/\s?#"]+/g;
+const PARAM = { sender: 'address', domain: 'domain', rules: 'id', labels: 'id' } as const;
+const routeOf = (text: string) => text.replace(ADDRESSED, (_, page: keyof typeof PARAM) => `/${page}/:${PARAM[page]}`);
 
 /** `value` with every link's query, every sender's or domain's page and every address taken out, at any depth. */
 function scrub<T>(value: T): T {

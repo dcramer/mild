@@ -218,8 +218,11 @@ describe('managing sift from the dashboard', () => {
     await connectAccount(store, 'other@example.org', '1', 0, 1);
     await storeExample(db, 'other@example.org', { id: 'o1', from: 'cy@example.org', label: 'personal', markedAt: 4 });
 
-    const listed = await call('GET', `/api/examples?account=${encodeURIComponent(ACCOUNT)}`);
-    expect(listed.body).toMatchObject({ held: { [ACCOUNT]: 3, 'other@example.org': 1 } });
+    const all = await call('GET', '/api/examples');
+    expect(all.body).toMatchObject({ held: { [ACCOUNT]: 3, 'other@example.org': 1 } });
+    expect((all.body['examples'] as { messageId: string }[]).map((e) => e.messageId)).toEqual(['e3', 'e2', 'e1', 'o1']);
+    const listed = await call('GET', `/api/examples?mailbox=${encodeURIComponent(ACCOUNT)}`);
+    expect(listed.body['held']).toEqual({ [ACCOUNT]: 3 });
     expect((listed.body['examples'] as { messageId: string }[]).map((e) => e.messageId)).toEqual(['e3', 'e2', 'e1']);
     expect((listed.body['examples'] as unknown[])[2]).toEqual({
       accountId: ACCOUNT,

@@ -3,7 +3,7 @@ import { PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { type LabelSummary, api, useLoaded } from '@/lib/api.ts';
-import { useParam } from '@/lib/params.ts';
+import { useOpened } from '@/lib/params.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { INBOX, count, percent } from '@/lib/format.ts';
 import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
@@ -58,7 +58,7 @@ export function LabelActions() {
  */
 export function LabelsView({ loading: loadingRows }: { loading: ReactNode }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
-  const [open, setOpen] = useParam('label');
+  const [open, setOpen] = useOpened('labels');
   const all = data?.labels ?? [];
   const mail = all.reduce((sum, label) => sum + label.messages, 0);
   const groups = GROUPS.map((group) => ({ ...group, rows: all.filter(group.has).toSorted(order) })).filter((g) => g.rows.length > 0);

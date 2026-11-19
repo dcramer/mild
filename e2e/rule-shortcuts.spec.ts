@@ -1,5 +1,5 @@
 import { addRule, fact, makeRule, proposal, ruleDialog, rulePanel, seededRulesOnly, standing } from './rule.ts';
-import { domainPage, expect, messageQuery, panel, param, query, row, senderPage, test, toast } from './sift.ts';
+import { domainPage, expect, messageQuery, panel, param, path, query, row, senderPage, test, toast } from './sift.ts';
 
 /** The store's Winter sale starts now, open. */
 const STORE = `?${messageQuery('m8')}`;
@@ -36,14 +36,16 @@ test.describe('Rules from a shortcut', () => {
 
     const opened = rulePanel(page, 'anyone at utility.example.net');
     await expect(fact(opened, 'Then')).toHaveText('Leave in inbox');
-    await param(page, 'rule').toMatch(/^r-/);
-    await expect(proposal(page)).toHaveCount(0);
+    await path(page).toMatch(/^\/rules\/r-/);
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(opened).toHaveCount(0);
+    await path(page).toBe('/rules');
     await query(page).toBe('');
-
-    await page.getByRole('link', { name: 'Rules' }).click();
     await expect(row(page, 'anyone at utility.example.net as Receipts')).toContainText('Leave in inbox');
+
+    await page.goBack();
+    await path(page).toBe('/');
+    await expect(proposal(page)).toHaveCount(0);
   });
 
   test('Dismiss takes the proposal away in one press and makes no rule', async ({ page }) => {
@@ -81,7 +83,7 @@ test.describe('Rules from a shortcut', () => {
     await query(page).toBe(STORE);
   });
 
-  test("a rule added from a message opens over it, and closing the rule's panel returns to the message", async ({ page }) => {
+  test('a rule added from a message opens at its own address, and Back returns to the message', async ({ page }) => {
     await page.goto(`/${STORE}`);
     const message = panel(page);
     const dialog = await makeRule(message);
@@ -90,10 +92,9 @@ test.describe('Rules from a shortcut', () => {
 
     const opened = rulePanel(page, 'sale@store.example.com');
     await expect(fact(opened, 'Then')).toContainText('as Marketing');
-    await param(page, 'message').toBe('m8');
-    await param(page, 'rule').toMatch(/^r-/);
+    await path(page).toMatch(/^\/rules\/r-/);
 
-    await opened.getByRole('button', { name: 'Close' }).click();
+    await page.goBack();
     await expect(opened).toHaveCount(0);
     await expect(message.getByText('Rule: from sale@store.example.com is Marketing').first()).toBeVisible();
     await query(page).toBe(STORE);
