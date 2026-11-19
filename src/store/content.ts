@@ -19,7 +19,6 @@ import {
   labelProposals,
   mailAsks,
   mailBodies,
-  mailSummaries,
   messages,
   notLike,
   or,
@@ -45,7 +44,6 @@ export const labelProposalName = (db: Sql, accountId: string, field: 'goal' | 'l
   `person ${db.person} label proposal ${field} of ${accountId}`;
 export const ruleDraftName = (db: Sql, accountId: string, field: 'goal' | 'rule') => `person ${db.person} rule draft ${field} of ${accountId}`;
 export const askName = (db: Sql, accountId: string, field: 'words' | 'answer') => `person ${db.person} ask ${field} of ${accountId}`;
-export const summaryName = (db: Sql, accountId: string, threadId: string) => `person ${db.person} summary of ${accountId} ${threadId}`;
 export const digestName = (db: Sql, id: number) => `person ${db.person} digest ${id} highlights`;
 
 /**
@@ -252,7 +250,7 @@ function asLists(stored: unknown): RuleMatch {
 }
 
 /**
- * Rules, proposals, label proposals, rule drafts, asks, summaries and digests: few, so read whole. Their conditions are hashed again with the key, and those a
+ * Rules, proposals, label proposals, rule drafts, asks and digests: few, so read whole. Their conditions are hashed again with the key, and those a
  * migration could not hash (`unset:`) are hashed here even without one.
  */
 async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): Promise<void> {
@@ -329,16 +327,6 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
         seal(db, askName(db, r.accountId, field), reopen(db, askName(db, r.accountId, field), stored));
       return { id: r.id, set: { words: again('words', r.words), answer: r.answer === null ? null : again('answer', r.answer) } };
     });
-  const summaryUpdates = (
-    await db
-      .select({ id: mailSummaries.id, accountId: mailSummaries.accountId, threadId: mailSummaries.threadId, summary: mailSummaries.summary })
-      .from(mailSummaries)
-  )
-    .filter((r) => behind(r.summary))
-    .map((r) => {
-      const name = summaryName(db, r.accountId, r.threadId);
-      return { id: r.id, summary: seal(db, name, reopen(db, name, r.summary!)) };
-    });
   const digestUpdates = (await db.select({ id: digests.id, highlights: digests.highlights }).from(digests))
     .filter((r) => behind(r.highlights))
     .map((r) => ({ id: r.id, highlights: seal(db, digestName(db, r.id), reopen(db, digestName(db, r.id), r.highlights!)) }));
@@ -347,7 +335,6 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
       for (const { id, highlights } of digestUpdates) await tx.update(digests).set({ highlights }).where(eq(digests.id, id));
       for (const { id, set } of draftUpdates) await tx.update(ruleDrafts).set(set).where(eq(ruleDrafts.id, id));
       for (const { id, set } of askUpdates) await tx.update(mailAsks).set(set).where(eq(mailAsks.id, id));
-      for (const { id, summary } of summaryUpdates) await tx.update(mailSummaries).set({ summary }).where(eq(mailSummaries.id, id));
       for (const { id, set } of ruleUpdates) await tx.update(rules).set(set).where(eq(rules.id, id));
       for (const { ruleId, accountId, written } of filterUpdates)
         await tx

@@ -8,11 +8,11 @@
  *   Mail sent goes nowhere: each is added to `sent.json` beside that file, as `{ mailbox, id, threadId, raw }`.
  *   A search of the inbox finds nothing, or with `SIFT_STAND_INS_LISTING` set is still being listed for good, so
  *   applying a rule stays under way until it is stopped.
- * - The model that suggests labels, drafts rules, asks Inbox and summarizes, a stand-in. Drafting looks up the second
+ * - The model that suggests labels, drafts rules and asks Inbox, a stand-in. Drafting looks up the second
  *   line of its prompt (the words the person typed), then fills in a rule archiving and marking read mail from the
  *   first sender found, with a note naming the second; nothing found fills in `nobody@example.com`. Asking looks up
  *   the words the same way and narrows Inbox to the first sender found, or with none found says Sift cannot tell
- *   which mail you have answered. Summarizing says how many messages it was shown and the subject, and that nothing is asked. Suggesting gives Sales pitches when
+ *   which mail you have answered. Suggesting gives Sales pitches when
  *   the words name pitches, Build results (Digest) when they name builds, and notes that Receipts and transactions
  *   covers receipts already when they name receipts; words naming none of these are an unusable answer. A pass is given no model.
  * - What Gmail would count: for Inbox's copy, 8,240 messages in the last year, 21,500 in three and 46,800 in all; an inbox
@@ -29,7 +29,6 @@ import type { GmailApi } from '../../../../src/gmail/api.ts';
 import { PROPOSAL_TOOL } from '../../../../src/triage/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../../../../src/triage/rule-draft.ts';
 import { ASK_TOOL } from '../../../../src/triage/mail-ask.ts';
-import { SUMMARY_TOOL } from '../../../../src/triage/mail-summary.ts';
 import { FakeMailbox } from '../../../../tests/helpers.ts';
 import { seal } from '../../../../src/plain.ts';
 
@@ -148,14 +147,6 @@ const answer = (context: Context) => {
     );
   }
   const found = () => [...JSON.stringify(context.messages.at(-1)?.content).matchAll(/<([^>\s]+@[^>\s]+)>|- ([^\s,<]+@[^\s,]+)/g)].map((m) => m[1] ?? m[2]);
-  if (tools.has(SUMMARY_TOOL)) {
-    const prompt = String(context.messages.find((m) => m.role === 'user')?.content);
-    const subject = /^# Subject: (.*)$/m.exec(prompt)?.[1] ?? '';
-    const messages = prompt.match(/^## From /gm)?.length ?? 0;
-    return fauxAssistantMessage([fauxToolCall(SUMMARY_TOOL, { summary: `${messages} messages about ${subject}. Nothing is asked of you.` })], {
-      stopReason: 'toolUse',
-    });
-  }
   if (tools.has(ASK_TOOL) && context.messages.at(-1)?.role === 'toolResult') {
     const sender = found()[0];
     const narrow = { reading: '', from: sender ? [sender] : [], domains: [], label: '', view: '', unread: false, since: '', subject: [] };
@@ -171,7 +162,7 @@ const answer = (context: Context) => {
     );
   }
   if (tools.has(FIND_TOOL)) return fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: typed(context) })], { stopReason: 'toolUse' });
-  return fauxAssistantMessage('The stand-in model answers only for labels, rules, Ask and Summarize.', { stopReason: 'error', errorMessage: 'stand-in' });
+  return fauxAssistantMessage('The stand-in model answers only for labels, rules and Ask.', { stopReason: 'error', errorMessage: 'stand-in' });
 };
 faux.setResponses([answer, answer]);
 

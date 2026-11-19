@@ -26,7 +26,6 @@ import mailAskWrite from './routes/mail/ask/post.ts';
 import mailChangeWrite from './routes/mail/change/post.ts';
 import mailOnWrite from './routes/mail/on/post.ts';
 import mailReachRead from './routes/mail/reach/get.ts';
-import mailSummaryWrite from './routes/mail/summary/post.ts';
 import mailThreadRead from './routes/mail/thread/get.ts';
 import mailThreadsRead from './routes/mail/threads/get.ts';
 
@@ -113,7 +112,6 @@ export const WRITES: readonly Write[] = [
   mailOnWrite,
   mailSendWrite,
 
-  mailSummaryWrite,
   mailboxPrimaryWrite,
   mailboxRemoveWrite,
   modelWrite,

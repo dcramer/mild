@@ -1,6 +1,6 @@
 import type { Sql } from '../store/sql.ts';
 import type { Reach } from '../store/inbox.ts';
-import type { InboxEstimate, LabelProposal, MailAsk, MailChange, MailReach, MailSummary, RuleDraft, RuleInbox } from './types.ts';
+import type { InboxEstimate, LabelProposal, MailAsk, MailChange, MailReach, RuleDraft, RuleInbox } from './types.ts';
 
 /**
  * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
@@ -66,11 +66,6 @@ export interface Controls {
    * drafter does. `today` is the reader's, `YYYY-MM-DD`. Rejects with a sentence for them when there is no model or the call failed.
    */
   askMail(db: Sql, request: { accountId: string; words: string; today: string }): Promise<MailAsk>;
-  /**
-   * What one of the person's conversations says, from the text Sift holds of it: recorded already for it as it is
-   * now, or asked of their model. Rejects with a sentence for them when there is no model, no text, or the call failed.
-   */
-  summarize(db: Sql, request: { accountId: string; threadId: string }): Promise<MailSummary>;
   /**
    * Copy a rule to Gmail as a filter (`on`), or take its filter out again. Rejects with a sentence for
    * the user when the rule cannot be a filter or Gmail refused.

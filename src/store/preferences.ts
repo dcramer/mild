@@ -1,4 +1,4 @@
-import { isNull, mailBodies, mailCopies, mailSummaries, mailboxes, preferences as preferenceRows } from './query.ts';
+import { isNull, mailBodies, mailCopies, mailboxes, preferences as preferenceRows } from './query.ts';
 import { moveWindow, startCopies } from './copies.ts';
 import { type MailWindow, windowStart } from '../mail-window.ts';
 import type { Reasoning } from '../model/reasoning.ts';
@@ -50,7 +50,7 @@ export async function setActive(db: Sql, active: boolean): Promise<void> {
 
 /**
  * On, every mailbox starts copying its mail from as far back as `window` says. Off, the text Sift kept of their mail goes in
- * the same write, with the copies under way and what the model said of it, though not what that cost.
+ * the same write, with the copies under way.
  */
 export async function setMail(db: Sql, on: boolean, { now = Date.now(), window }: { now?: number; window?: MailWindow } = {}): Promise<void> {
   await db.transaction(async (tx) => {
@@ -59,7 +59,6 @@ export async function setMail(db: Sql, on: boolean, { now = Date.now(), window }
       await tx.update(preferenceRows).set({ mail: false });
       await tx.delete(mailBodies);
       await tx.delete(mailCopies);
-      await tx.update(mailSummaries).set({ summary: null });
       return;
     }
     const chosen = window ?? was!.mailWindow;

@@ -24,7 +24,6 @@ import type { Sql } from '../../store/sql.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { listLabels } from '../../store/labels.ts';
 import { hashOf, openEnvelope, openPart } from '../../store/content.ts';
-import { summariesOf } from '../../store/mail-calls.ts';
 import { type Scope, within } from '../scope.ts';
 import { Refusal } from '../../refusal.ts';
 import type { MailConversation, MailThread, MailThreads, MailView } from '../types.ts';
@@ -300,6 +299,5 @@ export async function conversation(db: Sql, scope: Scope, threadId: string): Pro
       unread: m.unread,
       preview: previews.get(`${accountId}\n${m.messageId}`) ?? null,
     })),
-    summaries: await summariesOf(db, accountId, threadId),
   };
 }

@@ -72,10 +72,6 @@ const controls: Controls = {
     calls.push(`ask ${accountId} ${words} ${today}`),
     seal({ filter: { domain: ['example.org'], since: '2026-11-01' }, note: 'Sift does not know what you answered.' })
   ),
-  summarize: async (_db, { accountId, threadId }) => (
-    calls.push(`summarize ${accountId} ${threadId}`),
-    { newestId: 'm2', at: 1, model: 'p/m', inputTokens: 1, outputTokens: 1, costUsd: 0.001, summary: seal<string>('They ask you to pay.'), failed: false }
-  ),
   ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
     await setRuleFilter(target, ruleId, ACCOUNT, on ? { filterId: 'f1', state: 'active', written: null } : { filterId: null, state: null, written: null }, 0);
@@ -195,12 +191,10 @@ describe('managing sift from the dashboard', () => {
     expect((await call('GET', '/api/rules')).body['rules']).toEqual([]);
   });
 
-  it('turns words into a filter on Inbox and summarizes a conversation through the model, only while Inbox is on', async () => {
+  it('turns words into a filter on Inbox through the model, only while Inbox is on', async () => {
     const { call } = await start();
     const ask = { words: ' invoices this month ', today: '2026-11-19' };
-    const summary = { accountId: ACCOUNT, threadId: 't-m1' };
     expect(await call('POST', '/api/mail/ask', ask)).toMatchObject({ status: 409, body: { error: 'Turn Inbox on first.' } });
-    expect(await call('POST', '/api/mail/summary', summary)).toMatchObject({ status: 409, body: { error: 'Turn Inbox on first.' } });
     await setMail(db, true);
     expect((await call('POST', '/api/mail/ask', ask)).body).toEqual({
       filter: { domain: ['example.org'], since: '2026-11-01' },
@@ -208,9 +202,7 @@ describe('managing sift from the dashboard', () => {
     });
     for (const bad of [{ words: 'x' }, { words: ' ', today: '2026-11-19' }, { words: 'x', today: 'today' }])
       expect((await call('POST', '/api/mail/ask', bad)).status).toBe(400);
-    expect((await call('POST', '/api/mail/summary', summary)).body).toMatchObject({ summary: 'They ask you to pay.', costUsd: 0.001 });
-    expect((await call('POST', '/api/mail/summary', { accountId: 'nobody@example.org', threadId: 't' })).status).toBe(404);
-    expect(calls).toEqual([`ask ${ACCOUNT} invoices this month 2026-11-19`, `summarize ${ACCOUNT} t-m1`]);
+    expect(calls).toEqual([`ask ${ACCOUNT} invoices this month 2026-11-19`]);
   });
 
   it('asks the model for labels from what the person wants, and makes the ones they keep when they have none, all or none', async () => {

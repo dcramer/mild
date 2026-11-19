@@ -740,20 +740,6 @@ export const MailThreads = z.object({
 });
 export type MailThreads = z.infer<typeof MailThreads>;
 
-/** POST /api/mail/summary: what the model said a conversation says, and what that cost. */
-export const MailSummary = z.object({
-  newestId: z.string(),
-  at: z.number(),
-  model: z.string(),
-  inputTokens: z.number(),
-  outputTokens: z.number(),
-  costUsd: z.number(),
-  /** Null when the call failed, or the text has since been deleted. */
-  summary: held.nullable(),
-  failed: z.boolean(),
-});
-export type MailSummary = z.infer<typeof MailSummary>;
-
 /** GET /api/mail/thread: the messages Sift has of one conversation, oldest first, each as its folded row shows it. A message's text is `/api/message`'s. */
 export const MailConversation = z.object({
   accountId: z.string(),
@@ -768,8 +754,6 @@ export const MailConversation = z.object({
       preview: held.nullable(),
     }),
   ),
-  /** Every Summarize of it, oldest first, for its history; one whose `newestId` is the newest message's is about it as it is now. */
-  summaries: z.array(MailSummary),
 });
 export type MailConversation = z.infer<typeof MailConversation>;
 

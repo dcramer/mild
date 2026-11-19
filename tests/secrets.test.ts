@@ -2,7 +2,7 @@ import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { openDigests, recordHighlights, startDigest } from '../src/store/digests.ts';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
-import { finishAsk, finishSummary, startAsk, startSummary, summariesOf } from '../src/store/mail-calls.ts';
+import { finishAsk, startAsk } from '../src/store/mail-calls.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { loadConfig, loadEnvFiles, saveKeyFile, secretPaths } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
@@ -363,15 +363,13 @@ describe('mail', () => {
     await startRuleDraft(db, { accountId: 'alpha@example.org', goal: 'Archive news@example.com', model: 'test/model', now: 0 });
     const asked = await startAsk(db, { accountId: 'alpha@example.org', words: 'Example news this week', model: 'test/model', now: 0 });
     await finishAsk(db, 'alpha@example.org', asked, { answer: { filter: { from: ['news@example.com'] } }, lookups: 1, now: 0 });
-    const summarized = await startSummary(db, { accountId: 'alpha@example.org', threadId: 't1', newestId: 'm1', model: 'test/model', now: 0 });
-    await finishSummary(db, { accountId: 'alpha@example.org', threadId: 't1' }, summarized, { summary: 'Example news asks nothing.', now: 0 });
     const digest = await startDigest(db, { labelId: 'everything_else', accountId: 'alpha@example.org', since: 0, until: 1, count: 1, model: null, now: 0 });
     await recordHighlights(db, digest.id, { highlights: [{ id: 'm1', why: 'Example news, late' }] });
     const stored = await raw(db).all(
       'SELECT r.match, r.except_matches, r.conditions, r.name, f.written, d.reason, a.payload, l.goal, l.labels, l.note, rd.goal, dg.highlights FROM rules r, rule_filters f, decisions d, actions a, label_proposals l, rule_drafts rd, digests dg',
     );
-    const asksAndSummaries = await raw(db).all('SELECT k.words, k.answer, s.summary FROM mail_asks k, mail_summaries s');
-    for (const rows of [stored, asksAndSummaries]) {
+    const asks = await raw(db).all('SELECT words, answer FROM mail_asks');
+    for (const rows of [stored, asks]) {
       expect(JSON.stringify(rows)).not.toContain('example.com');
       expect(JSON.stringify(rows)).not.toContain('Example news');
     }
@@ -401,7 +399,6 @@ describe('mail', () => {
     const [{ words, answer }] = (await raw(b).all('SELECT words, answer FROM mail_asks')) as [{ words: string; answer: string }];
     expect(openJson(b, askName(b, 'alpha@example.org', 'words'), words)).toBe('Example news this week');
     expect(openJson(b, askName(b, 'alpha@example.org', 'answer'), answer)).toEqual({ filter: { from: ['news@example.com'] } });
-    expect((await summariesOf(b, 'alpha@example.org', 't1'))[0]?.summary).toBe('Example news asks nothing.');
   });
 
   it('hashes at start the conditions a migration could not, with or without a key', async () => {

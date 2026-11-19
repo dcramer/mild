@@ -18,7 +18,6 @@ export type {
   MailAsk,
   MailConversation,
   MailReach,
-  MailSummary,
   MailThread,
   MailView,
   ManageState,
@@ -53,7 +52,6 @@ import type {
   MailAsk,
   MailChange,
   MailConversation,
-  MailSummary,
   MailThreads,
   MailView,
   ManageState,
@@ -341,7 +339,6 @@ export const api = {
   /** The model turns words into a filter on Inbox's list. `today` is the reader's, `YYYY-MM-DD`. */
   askMail: (words: string, today: string) => post<MailAsk>('/api/mail/ask', { words, today }),
   /** What a conversation says: recorded already, or asked of the model now. */
-  summarize: (accountId: string, threadId: string) => post<MailSummary>('/api/mail/summary', { accountId, threadId }),
   /** A conversation by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
   mailThread: (thread: string, signal: AbortSignal, mailbox = '') =>
     get<MailConversation>('/api/mail/thread', mailbox ? { thread, mailbox } : { thread }, signal),

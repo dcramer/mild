@@ -463,6 +463,13 @@
       "when": 1795113106466,
       "tag": "0065_inbox_copies_mail_row_security",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795115261366,
+      "tag": "0066_drop_mail_summaries",
+      "breakpoints": true
     }
   ]
 }

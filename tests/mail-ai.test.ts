@@ -1,17 +1,11 @@
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { describe, expect, it, vi } from 'vitest';
-import { askMail, summarizeThread } from '../src/learn/mail.ts';
+import { askMail } from '../src/learn/mail.ts';
 import { createMailAsker } from '../src/model/ask.ts';
-import { createSummarizer } from '../src/model/summarize.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { recordSync } from '../src/store/accounts.ts';
-import { sealPart } from '../src/store/content.ts';
-import { setMail } from '../src/store/preferences.ts';
-import { mailBodies } from '../src/store/query.ts';
 import { ASK_TOOL, type MailAsker, readMailFilter } from '../src/triage/mail-ask.ts';
-import { SUMMARY_TOOL, type Summarizer, buildSummaryPrompt } from '../src/triage/mail-summary.ts';
 import { FIND_TOOL } from '../src/triage/rule-draft.ts';
-import { plain } from '../src/plain.ts';
 import { personWith, raw } from './fixtures.ts';
 import { SAMPLE_LABELS, facts } from './helpers.ts';
 
@@ -151,97 +145,5 @@ describe('asking Inbox in words', () => {
     await expect(askMail({ db, ask: failing, model: 'p/m' }, { accountId: ACCOUNT, words: 'x', today: TODAY })).rejects.toThrow('rate limited');
     expect(reportError).toHaveBeenCalledWith(new Error('Asking failed: rate limited'));
     expect(await raw(db).all('SELECT error, answer, cost_usd FROM mail_asks')).toEqual([{ error: 'rate limited', answer: null, cost_usd: 0.01 }]);
-  });
-});
-
-describe('the conversation the model summarizes', () => {
-  it('is each message’s own words, oldest first, keeping the newest when it is long', () => {
-    const prompt = buildSummaryPrompt({
-      subject: 'Lunch?',
-      messages: [
-        { from: 'Ada <ada@example.org>', receivedAt: 0, text: 'Old '.repeat(3000) },
-        { from: 'Ada <ada@example.org>', receivedAt: 1, text: 'w'.repeat(4000) },
-        { from: 'Ada <ada@example.org>', receivedAt: 1, text: 'x'.repeat(4000) },
-        { from: 'Ada <ada@example.org>', receivedAt: 2, text: 'y'.repeat(4000) },
-        { from: 'Ada <ada@example.org>', receivedAt: 3, text: 'z'.repeat(4000) },
-        { from: 'Ada <ada@example.org>', receivedAt: 4, text: 'Thursday works.\n> When are you free?\n>> Lunch?' },
-      ],
-    });
-    expect(prompt).toContain('Thursday works.');
-    expect(prompt).not.toContain('When are you free?');
-    expect(prompt).toContain('(1 older message left out)');
-    expect(prompt).not.toContain('Old');
-  });
-});
-
-describe('summarizing a conversation', () => {
-  async function conversation() {
-    const { db } = await personWith(KEYS, ACCOUNT);
-    const ada = { address: 'ada@example.org', domain: 'example.org', name: 'Ada' };
-    await recordSync(
-      db,
-      ACCOUNT,
-      [
-        facts({ accountId: ACCOUNT, messageId: 'q', threadId: 'lunch', from: ada, subject: 'Lunch?', receivedAt: 1 }),
-        facts({ accountId: ACCOUNT, messageId: 'r', threadId: 'lunch', from: ada, subject: 'Re: Lunch?', receivedAt: 2 }),
-      ],
-      '2',
-    );
-    await setMail(db, true);
-    for (const [id, text] of [
-      ['q', 'Lunch on Thursday?'],
-      ['r', 'Please confirm by Wednesday.'],
-    ] as const)
-      await db.insert(mailBodies).values({ accountId: ACCOUNT, messageId: id, bodyText: sealPart(db, ACCOUNT, id, 'text', text)!, fetchedAt: 0 });
-    return db;
-  }
-
-  it('asks the model once with the text Sift holds, records it encrypted with its cost, and shows the recorded one while nothing new came', async () => {
-    const db = await conversation();
-    const { provider, complete, models, model } = faux();
-    provider.setResponses([
-      fauxAssistantMessage([fauxToolCall(SUMMARY_TOOL, { summary: ' Ada asks you to lunch on Thursday.  Confirm by Wednesday. ' })], { stopReason: 'toolUse' }),
-    ]);
-    const deps = { db, summarize: createSummarizer(models, model, 'low'), model: 'faux/m', now: () => 9 };
-    const first = await summarizeThread(deps, { accountId: ACCOUNT, threadId: 'lunch' });
-    expect(plain(first)).toMatchObject({ newestId: 'r', at: 9, summary: 'Ada asks you to lunch on Thursday. Confirm by Wednesday.', failed: false });
-    const shown = JSON.stringify(complete.mock.calls[0]?.[1].messages[0]?.content);
-    expect(shown).toContain('Please confirm by Wednesday.');
-    expect(shown).toContain('Ada <ada@example.org>');
-    expect(complete.mock.calls[0]?.[1].tools?.map((t) => t.name)).toEqual([SUMMARY_TOOL]);
-    const row = await raw(db).get('SELECT * FROM mail_summaries');
-    expect(row).toMatchObject({ thread_id: 'lunch', newest_id: 'r', model: 'faux/m', error: null });
-    expect(JSON.stringify(row)).not.toContain('Thursday');
-
-    expect(plain(await summarizeThread(deps, { accountId: ACCOUNT, threadId: 'lunch' })).summary).toBe(first.summary);
-    expect(complete).toHaveBeenCalledTimes(1);
-
-    // Turning Inbox off takes what it said with the mail it said it of; what it cost stays.
-    await setMail(db, false);
-    expect(await raw(db).all('SELECT summary, newest_id FROM mail_summaries')).toEqual([{ summary: null, newest_id: 'r' }]);
-  });
-
-  it('asks again once the conversation has a newer message', async () => {
-    const db = await conversation();
-    const answers = ['First.', 'Second.'];
-    const summarize: Summarizer = async () => ({ summary: answers.shift()!, usage });
-    await summarizeThread({ db, summarize, model: 'p/m' }, { accountId: ACCOUNT, threadId: 'lunch' });
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 's', threadId: 'lunch', receivedAt: 3 })], '3');
-    expect(plain(await summarizeThread({ db, summarize, model: 'p/m' }, { accountId: ACCOUNT, threadId: 'lunch' }))).toMatchObject({
-      newestId: 's',
-      summary: 'Second.',
-    });
-  });
-
-  it('records a failed call and refuses, and refuses a conversation it holds no text of without calling', async () => {
-    const db = await conversation();
-    const failing: Summarizer = async () => ({ failed: 'timed out', usage });
-    await expect(summarizeThread({ db, summarize: failing, model: 'p/m' }, { accountId: ACCOUNT, threadId: 'lunch' })).rejects.toThrow('timed out');
-    expect(await raw(db).all('SELECT error, summary, cost_usd FROM mail_summaries')).toEqual([{ error: 'timed out', summary: null, cost_usd: 0.01 }]);
-
-    const never: Summarizer = async () => {
-      throw new Error('called');
-    };
-    await expect(summarizeThread({ db, summarize: never, model: 'p/m' }, { accountId: ACCOUNT, threadId: 'nothing' })).rejects.toThrow('none of this');
   });
 });

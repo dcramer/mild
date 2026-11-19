@@ -7,7 +7,6 @@ import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
 import { useMailPress } from '@/components/mail.tsx';
 import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
-import { Summary, SummaryEvent } from '@/components/summary.tsx';
 import { useAction } from '@/lib/action.ts';
 import { type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, useLoaded } from '@/lib/api.ts';
 import { type Writing, closeReply, useCompose, writing } from '@/lib/compose.ts';
@@ -142,8 +141,8 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
   );
 }
 
-/** What happened to a message, oldest first: what Sift decided, what changed in Gmail (each with Undo), what was summarized. */
-function History({ detail, conversation, onUndone }: { detail: MessageDetail; conversation: MailConversation | null; onUndone: () => void }) {
+/** What happened to a message, oldest first: what Sift decided and what changed in Gmail, each with Undo. */
+function History({ detail, onUndone }: { detail: MessageDetail; onUndone: () => void }) {
   const undo = useAction();
   const toast = useToast();
   const history = [
@@ -166,11 +165,6 @@ function History({ detail, conversation, onUndone }: { detail: MessageDetail; co
         />
       ),
     })),
-    ...(conversation?.summaries ?? []).map((summary) => ({
-      at: summary.at,
-      order: 2,
-      node: <SummaryEvent key={`s${summary.at}/${summary.newestId}`} summary={summary} />,
-    })),
   ].toSorted((x, y) => x.at - y.at || x.order - y.order);
   if (history.length === 0) return null;
   return (
@@ -181,8 +175,7 @@ function History({ detail, conversation, onUndone }: { detail: MessageDetail; co
   );
 }
 
-const historyCount = (detail: MessageDetail, conversation: MailConversation | null) =>
-  detail.decisions.length + detail.actions.length + (conversation?.summaries.length ?? 0);
+const historyCount = (detail: MessageDetail) => detail.decisions.length + detail.actions.length;
 
 const people = (list: MessageDetail['to']) => list.map((p) => reveal(p.address));
 
@@ -423,7 +416,7 @@ function OpenedMessage({
 
   // Inbox reads mail; everywhere else the job is what Sift said, so what it said about the message sits beside it.
   const inInbox = conversation !== null;
-  const history = historyCount(detail, conversation) > 0;
+  const history = historyCount(detail) > 0;
   const said = current ? (
     <p>
       {current.answer ? 'Your answer. Sift said: ' : null}
@@ -447,7 +440,7 @@ function OpenedMessage({
             </Button>
           </div>
         ) : null}
-        {inInbox ? <History detail={detail} conversation={conversation} onUndone={onUndone} /> : null}
+        {inInbox ? <History detail={detail} onUndone={onUndone} /> : null}
       </>
     ) : null;
   // A reply answers the newest in the inbox, or another message of its conversation.
@@ -510,15 +503,14 @@ function OpenedMessage({
             ) : null}
             {/* After "Also waiting" has loaded, which would otherwise push it down from under the pointer. */}
             {history && !waiting.loading ? (
-              <Disclosure summary={`History · ${historyCount(detail, conversation)}`}>
-                <History detail={detail} conversation={conversation} onUndone={onUndone} />
+              <Disclosure summary={`History · ${historyCount(detail)}`}>
+                <History detail={detail} onUndone={onUndone} />
               </Disclosure>
             ) : null}
           </>
         )
       }
     >
-      {conversation ? <Summary conversation={conversation} newest={detail} /> : null}
       <Messages conversation={conversation} newest={detail} answered={written && written.kind !== 'new' ? answered : null} onAnswer={reply} onRead={onRead} />
       {written && written.kind !== 'new' ? (
         <Answering

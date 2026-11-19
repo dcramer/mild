@@ -137,10 +137,6 @@ beforeEach(async () => {
     proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal: seal(goal), drafts: [], at: 0 }),
     draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), seal({ match: { from: ['x@example.com'] }, disposition: 'archive' as const })),
     askMail: async (_db, { accountId }) => (calls.push(`ask ${accountId}`), seal({ cannot: 'No.' })),
-    summarize: async (_db, { accountId, threadId }) => (
-      calls.push(`summarize ${accountId} ${threadId}`),
-      { newestId: 'm', at: 1, model: 'p/m', inputTokens: 0, outputTokens: 0, costUsd: 0, summary: null, failed: false }
-    ),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     send: async (_db, { accountId, threadId }) => (calls.push(`send ${accountId} ${threadId}`), { id: 's', threadId: threadId ?? 's' }),
@@ -337,8 +333,6 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/mail/send', { ...mail(ALPHA), subject: 'Hi' }, { ...mail(NOBODY), subject: 'Hi' }],
       // From their own mailbox, answering someone else's message.
       ['/api/mail/send', { ...mail(BRAVO), replyTo: { messageId: `m-${MARK[ALPHA]}` } }, { ...mail(BRAVO), replyTo: { messageId: 'm-nobody' } }],
-
-      ['/api/mail/summary', { accountId: ALPHA, threadId: 't1' }, { accountId: NOBODY, threadId: 't1' }],
     ];
     for (const [path, body, nobody] of writes) {
       const answer = await call('POST', path, BRAVO, body);
@@ -383,7 +377,6 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/digest', { hour: 6, timeZone: 'Europe/Berlin' }],
       // Inbox is on now: Ask looks up only their own senders, under their own mailbox.
       ['/api/mail/ask', { words: 'from alpha', today: '2026-11-19' }],
-      ['/api/mail/summary', { accountId: BRAVO, threadId: 't1' }],
     ] as const)
       expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
     expect(calls.filter((c) => c !== 'check')).toEqual([
@@ -392,7 +385,6 @@ describe("nobody sees or changes another person's mail", () => {
       `key openai ${bravo}`,
       `signout openai ${bravo}`,
       `ask ${BRAVO}`,
-      `summarize ${BRAVO} t1`,
     ]);
     expect(await preferences(await dbOf(BRAVO))).toMatchObject({
       active: true,
