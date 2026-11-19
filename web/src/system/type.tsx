@@ -13,7 +13,7 @@ export function Highlight({ children, className }: { children: ReactNode; classN
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   return (
     <span className={cn('wordmark', size === 'lg' && 'large')}>
-      <span className="hl mx-0 px-[0.35em] py-[0.08em]">sift</span>
+      <span className="hl mx-0 px-[0.35em] py-[0.08em]">Sift</span>
     </span>
   );
 }

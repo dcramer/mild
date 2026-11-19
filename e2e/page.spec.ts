@@ -15,6 +15,21 @@ test("the page cannot be framed by another site, sends no referrer, and holds no
   await expect(page.getByRole('navigation').first()).toBeVisible();
 });
 
+test('every screen calls it Sift', async ({ page }) => {
+  for (const [path, heading] of [
+    ['/', 'For review'],
+    ['/activity', 'Activity'],
+    ['/labels', 'Labels'],
+    ['/rules', 'Rules'],
+  ] as const) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+    // A word of its own: a command, a path or a Gmail label (`sift/digest`) keeps its spelling.
+    await expect(page.locator('body'), path).not.toContainText(/(?<![\w/.@~$-])sift(?![\w/.@-])/);
+    await expect(page.locator('[aria-label="sift"]'), path).toHaveCount(0);
+  }
+});
+
 test('each screen is an address of its own, and anything else is missing', async ({ page }) => {
   const { request } = page;
   for (const path of [

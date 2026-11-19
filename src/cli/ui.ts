@@ -53,10 +53,10 @@ const SYMBOL = { ok: pc.dim('✓'), skip: pc.dim('–'), warn: pc.yellow('!'), f
 const PAD = '  ';
 const TEXT = '    ';
 
-/** `sift` in highlighter, then what this screen is. */
+/** The name in highlighter, then what this screen is. */
 function heading(title: string, detail?: string): void {
   line();
-  line(`${PAD}${paint.mark(' sift ')} ${pc.bold(title)}${detail ? `  ${pc.dim(detail)}` : ''}`);
+  line(`${PAD}${paint.mark(' Sift ')} ${pc.bold(title)}${detail ? `  ${pc.dim(detail)}` : ''}`);
   line();
 }
 

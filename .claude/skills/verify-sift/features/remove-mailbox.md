@@ -1,6 +1,6 @@
 # Remove a mailbox, delete the account
 
-A person removes one of their mailboxes, or deletes their whole account, from Settings. Either is confirmed by typing the address. sift revokes its Gmail access at Google, then deletes everything it recorded about that mail. The person's labels and rules stay for their other mailboxes, and the Gmail filters it wrote and its labels on mail stay in Gmail; the confirm says both.
+A person removes one of their mailboxes, or deletes their whole account, from Settings. Either is confirmed by typing the address. Sift revokes its Gmail access at Google, then deletes everything it recorded about that mail. The person's labels and rules stay for their other mailboxes, and the Gmail filters it wrote and its labels on mail stay in Gmail; the confirm says both.
 
 ## Sub-features
 

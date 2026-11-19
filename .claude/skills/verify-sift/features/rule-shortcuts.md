@@ -1,6 +1,6 @@
 # Rules from a shortcut
 
-Wherever sift offers to make a rule outside the Rules screen, the press opens the rule dialog in place, started on everything that place knows, so the user sees and can change the rule before adding it. It opens on `What should it do?` with that rule already said in words; `Write it yourself` shows the form, filled in the same. Nothing else makes a rule in one press: a standing does, since it is only an address or domain and what happens to their mail. Closing the dialog changes nothing.
+Wherever Sift offers to make a rule outside the Rules screen, the press opens the rule dialog in place, started on everything that place knows, so the user sees and can change the rule before adding it. It opens on `What should it do?` with that rule already said in words; `Write it yourself` shows the form, filled in the same. Nothing else makes a rule in one press: a standing does, since it is only an address or domain and what happens to their mail. Closing the dialog changes nothing.
 
 ## Sub-features
 
@@ -14,7 +14,7 @@ Wherever sift offers to make a rule outside the Rules screen, the press opens th
 ## How to get to it (user POV)
 
 - For review, the line above the list.
-- Any message, `Make a rule…` at the top of the panel or `Rule…` beside what sift saw.
+- Any message, `Make a rule…` at the top of the panel or `Rule…` beside what Sift saw.
 - A sender's name anywhere, then `Where <their name> stands` on their page; or the domain linked from it.
 
 ## Driving it with verify.sh
