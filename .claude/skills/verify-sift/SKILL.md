@@ -86,7 +86,7 @@ Write everything into `$RUN/evidence/`; `down` keeps it. For each feature proved
 1. A snapshot or screenshot before the action and after it (`$V ab "$RUN" screenshot "$RUN/evidence/<feature>-after.png"`, `$V ab "$RUN" snapshot > "$RUN/evidence/<feature>-after.txt"`).
 2. `$V ab "$RUN" console` and `$V ab "$RUN" errors`, both empty. A hydration mismatch appears only here, never in the build.
 3. The stored side effect, from `sql`, and a second view that reads it back (the Rules screen after an answer, the Labels screen after a label edit). For a Gmail filter, also `$RUN/gmail.json` and its `filter` or `unfilter` row in `actions`.
-4. `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is still `0`. Sift is off here; a row there means something tried to change a mailbox. Filter rows are the seed's and any the run made.
+4. `SELECT count(*) AS n FROM actions WHERE type NOT IN ('filter', 'unfilter')` is still `0`. Sift is off here; a row there means something tried to change a mailbox. Filter rows are the seed's and any the run made; with `--inbox`, so are the reader's own presses (`archive`, `read`, `unread`) and `send`.
 
 Do the action the way a user does: press the control, not a POST with curl. The API is the page's private contract; calling it directly proves the server, not the screen. Seeding is the only place internals are used, and it uses the real pass (`runWork`, src/work/run.ts).
 
