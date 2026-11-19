@@ -421,6 +421,13 @@
       "when": 1795078924004,
       "tag": "0059_mailboxes_say_whether_they_send",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1795079087010,
+      "tag": "0060_mail_is_sent_through_the_log",
+      "breakpoints": true
     }
   ]
 }

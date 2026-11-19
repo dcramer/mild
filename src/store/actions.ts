@@ -21,6 +21,8 @@ export interface ActionPayload extends LabelChange {
   filter?: { ruleId: string; id?: string; criteria?: Record<string, unknown>; action?: Record<string, unknown> };
   /** For `digest` actions, which put a message Sift wrote into the mailbox: the digest. */
   digest?: number;
+  /** For `send` actions, which change no message: the mail sent, by its Message-ID, and to whom. */
+  send?: { messageId: string; to: string[]; cc: string[]; subject: string };
 }
 
 export interface ActionRecord {
@@ -168,11 +170,11 @@ export async function lastUnsubscribeFailure(db: Sql, accountId: string, sender:
   return row!.at;
 }
 
-/** The tries at putting a digest into its mailbox whose outcome was never confirmed. */
-export async function openDigestPuts(db: Sql, digestId: number): Promise<number[]> {
+/** Tries at putting in a digest or sending mail whose outcome was never confirmed, of the one `which` picks out. */
+export async function openTries(db: Sql, type: 'digest' | 'send', which: (payload: ActionPayload) => boolean): Promise<number[]> {
   const rows = await db
     .select({ id: actions.id, accountId: actions.accountId, payload: actions.payload })
     .from(actions)
-    .where(and(eq(actions.type, 'digest'), inArray(actions.status, ['pending', 'unknown'])));
-  return rows.filter((r) => openPayload(db, r.accountId, r.payload).digest === digestId).map((r) => r.id);
+    .where(and(eq(actions.type, type), inArray(actions.status, ['pending', 'unknown'])));
+  return rows.filter((r) => which(openPayload(db, r.accountId, r.payload))).map((r) => r.id);
 }

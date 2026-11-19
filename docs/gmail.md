@@ -13,6 +13,7 @@ What Sift can use directly, and what it has to do itself. From Google's document
 | Who took part in a thread | `users.threads.get` | `format=minimal` gives each message's id and labels; one the owner sent carries `SENT`. Asked only for a reply the model is about to judge. 40 units (120 for `full`). |
 | Archive, mark spam, mark read, label | `users.messages.modify` | Add or remove label ids: `INBOX`, `SPAM`, `UNREAD`, `STARRED`, `IMPORTANT`, the `CATEGORY_*` tabs and user labels can all be applied. 5 units. |
 | Put a message in the mailbox | `users.messages.insert` | A digest, into the inbox. Works with `gmail.modify` and "does not send a message", so it reaches no one but the owner. 25 units. |
+| Send | `users.messages.send` | With `gmail.send`. Mail a person wrote in the composer, as RFC 2822 text, into a thread when it answers one. 100 units. Sift gives it a Message-ID of its own, so a try whose answer was lost is looked for (`rfc822msgid:`) before sending again. |
 | Let Sift send | OAuth, `include_granted_scopes` | `/auth/login?grant=send&mailbox=<address>` asks Google for `gmail.send` alone, hinting the mailbox; with `include_granted_scopes` the new refresh token holds what was granted before as well, and every sign-in asks with it, so signing in again keeps sending. Which scopes a token holds is its `scope` (`mailboxes.can_send`). Google's account picker can return another account, which is refused. |
 | Many at once | `users.messages.batchModify` | Up to 1,000 ids, 50 units. Not used yet: Sift changes one message at a time so each has its own audit row. |
 | Labels | `users.labels.*` | Nested names (`sift/newsletters`) are ordinary labels with a slash. Names are compared without case: once the person renames `sift` to `Sift` in Gmail, creating `sift/newsletters` is refused as `409 Label name exists or conflicts`, so Sift matches names the same way. `users.labels.get` on `INBOX` counts what is in the inbox (`messagesTotal`) for 1 unit, which is how going through it is priced before a message is read. |
@@ -37,6 +38,7 @@ Quotas (projects created since 2026-05-01; older ones keep their old quotas):
 - Whether a filter's `from: @example.com` leaves out subdomains, as Sift's domain rules do.
 - Whether Gmail hands a filter back exactly as it was created. Sift compares against what Gmail returned at creation, not what it sent, so a rewrite at creation is harmless; a later rewrite would show as "changed".
 - How a snoozed message appears in history. If snoozing takes `INBOX` off and waking puts it back, Sift reads each as the user moving the message, and records two answers for it.
+- Whether Gmail keeps the Message-ID Sift gives mail it sends. If it puts its own in, a try whose answer was lost is not found, and is sent again.
 - Whether editing a filter in Gmail's settings keeps its id (seen by Sift as "changed") or replaces it (seen as "gone").
 
 ## Not in the API: Sift does it itself, or cannot
@@ -44,7 +46,7 @@ Quotas (projects created since 2026-05-01; older ones keep their old quotas):
 | Feature | Status |
 | --- | --- |
 | **Block a sender** | Gmail's blocked-senders list is not exposed. Sift's block is its own: the message is marked spam and a rule makes that sender's later mail spam without a model. A Gmail filter cannot stand in for it unless filters can add `SPAM`, which is not documented. |
-| **Unsubscribe** | No API. Sift makes the sender's one-click request itself (RFC 8058) when the user asks; see `src/actions/unsubscribe.ts`. Lists that need an email sent cannot be left: Sift cannot send. |
+| **Unsubscribe** | No API. Sift makes the sender's one-click request itself (RFC 8058) when the user asks; see `src/actions/unsubscribe.ts`. Lists that need an email sent cannot be left: Sift sends only what a person writes. |
 | **Report spam or phishing** | No API beyond applying the `SPAM` label. |
 | **Mute, snooze** | Not in the API. |
 | **Contacts, "people I have emailed"** | Not in the Gmail API. Sift searches sent mail for an address instead and caches the answer. |

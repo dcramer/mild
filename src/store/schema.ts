@@ -38,8 +38,8 @@ import { DECIDED, DISPOSITIONS, LEAVE_IN_INBOX, STAGE_NAMES, SUBSCRIPTION_ACTION
 
 export const CREDENTIAL_KINDS = ['gmail', 'model'] as const;
 export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'] as const;
-/** `digest`: a digest put into the mailbox, which changes no message Sift recorded. */
-export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter', 'digest'] as const;
+/** `digest`: a digest put into the mailbox, which changes no message Sift recorded. `send`: mail the person sent through Sift. */
+export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter', 'digest', 'send'] as const;
 export const ACTION_STATUSES = ['pending', 'done', 'failed', 'unknown', 'undone'] as const;
 /** `learned`: sift made it (blocking a sender). */
 export const RULE_SOURCES = ['user', 'learned', 'correction'] as const;

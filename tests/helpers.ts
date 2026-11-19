@@ -243,8 +243,23 @@ export class FakeMailbox implements Mailbox {
     return { id, labelIds: [...labelIds] };
   }
 
+  /** Mail sent, by id, as the raw text and the thread it went into. */
+  sent = new Map<string, { raw: string; threadId?: string }>();
+  /** `before`: fail without sending. `after`: send, then fail (a lost response). */
+  failSend: 'before' | 'after' | null = null;
+
+  async send(message: { raw: string; threadId?: string }) {
+    if (this.failSend === 'before') throw new Error('network down');
+    const id = `sent-${this.sent.size + 1}`;
+    this.sent.set(id, message);
+    this.labels.set(id, ['SENT']);
+    if (this.failSend === 'after') throw new Error('timeout');
+    return { id, labelIds: ['SENT'] };
+  }
+
   async findByMessageId(messageId: string) {
-    return [...this.inserted].find(([, raw]) => raw.includes(`\r\nMessage-ID: ${messageId}\r\n`))?.[0] ?? null;
+    const written = [...this.inserted, ...[...this.sent].map(([id, { raw }]) => [id, raw] as const)];
+    return written.find(([, raw]) => raw.includes(`\r\nMessage-ID: ${messageId}\r\n`))?.[0] ?? null;
   }
 }
 
