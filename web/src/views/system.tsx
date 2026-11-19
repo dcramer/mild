@@ -67,6 +67,7 @@ import {
   RowActions,
   Section,
   Select,
+  SomeOf,
   Share,
   SettingRow,
   SettingsGroup,
@@ -1024,6 +1025,17 @@ export function SystemView() {
 
         <Section title="Failure" meta="under the press that failed">
           <Failure>Could not save the label: that name is taken.</Failure>
+        </Section>
+
+        <Section title="SomeOf" meta="a list said in a line, folded past a few">
+          <div className="grid gap-6 text-sm text-muted-foreground sm:grid-cols-2">
+            <p>
+              To <SomeOf items={['ada@example.org', 'grace@example.net', 'me@example.org', 'alan@example.com']} />
+            </p>
+            <p>
+              Cc <SomeOf items={Array.from({ length: 40 }, (_, i) => `member${i + 1}@list.example.org`)} />
+            </p>
+          </div>
         </Section>
 
         <Section title="Copyable and disclosure">

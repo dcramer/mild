@@ -26,6 +26,7 @@ import {
   Note,
   Panel,
   Section,
+  SomeOf,
   Table,
   Td,
   TextLink,
@@ -323,13 +324,26 @@ function Body({
   );
 }
 
-const people = (list: MessageDetail['to']) => list.map((p) => reveal(p.address)).join(', ');
+const people = (list: MessageDetail['to']) => list.map((p) => reveal(p.address));
 
-/** Who a message went to, unless that was the account alone, which says nothing. */
-function addressedTo(detail: MessageDetail): string | null {
+/** Who a message went to, unless that was the account alone, which says nothing. A long list folds, so the panel's header never fills the screen. */
+function AddressedTo({ detail }: { detail: MessageDetail }) {
   if (detail.cc.length === 0 && detail.to.every((p) => reveal(p.address) === detail.accountId)) return null;
-  const to = detail.to.length > 0 ? `To ${people(detail.to)}` : '';
-  return detail.cc.length > 0 ? `${to}${to ? ', cc ' : 'Cc '}${people(detail.cc)}` : to;
+  return (
+    <span className="mt-0.5 block">
+      {detail.to.length > 0 ? (
+        <>
+          To <SomeOf items={people(detail.to)} />
+        </>
+      ) : null}
+      {detail.cc.length > 0 ? (
+        <>
+          {detail.to.length > 0 ? ', cc ' : 'Cc '}
+          <SomeOf items={people(detail.cc)} />
+        </>
+      ) : null}
+    </span>
+  );
 }
 
 /**
@@ -385,7 +399,7 @@ export function MessagePanel({
               </span>
               <span className="tabular-nums max-sm:basis-full">{dateTime(data.receivedAt)}</span>
             </span>
-            {addressedTo(data) ? <span className="mt-0.5 block">{addressedTo(data)}</span> : null}
+            <AddressedTo detail={data} />
           </>
         ) : (
           // Holds the line the sender and date will take, so the message does not drop when they arrive.

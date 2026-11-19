@@ -86,7 +86,10 @@ const inbox = [
   ),
   mail('CI <builds@ci.example.org>', 'Build failed on main', 'The build failed at step 3.'),
   mail('Ada Lovelace <ada@example.org>', 'Lunch on Thursday?', 'Are you free for lunch on Thursday?', [{ name: 'In-Reply-To', value: '<lunch@example.org>' }]),
-  mail('Grace Hopper <grace@example.net>', 'Notes from the review', 'Attached are my notes.'),
+  // To everyone at the review, so the panel's Cc folds.
+  mail('Grace Hopper <grace@example.net>', 'Notes from the review', 'Attached are my notes.', [
+    { name: 'Cc', value: Array.from({ length: 12 }, (_, i) => `reviewer${i + 1}@example.net`).join(', ') },
+  ]),
   // The one the stand-in model places, as Marketing.
   mail('Store <sale@store.example.com>', 'Winter sale starts now', 'Up to half off.', list('store.example.com'), ['CATEGORY_PROMOTIONS']),
   // The stand-in model fails on these every time, so after three passes they are out of the queue and not judged.
