@@ -346,11 +346,11 @@ function Body({
 
 /**
  * A conversation, oldest first: each message folded to who sent it, its first line and when, but the one open, at
- * reading size, which starts as the newest. Pressing a folded one opens it in its place. Opening the conversation
- * marks it read.
+ * reading size, which starts as the newest, the reader's own reply included. Pressing a folded one opens it in its
+ * place. Opening the conversation marks it read. `newest` is the newest in the inbox, which the side column is about.
  */
 function Conversation({ conversation, newest }: { conversation: MailConversation; newest: MessageDetail }) {
-  const [openId, setOpenId] = useState(newest.messageId);
+  const [openId, setOpenId] = useState(conversation.messages.at(-1)?.messageId ?? newest.messageId);
   const other = openId === newest.messageId ? null : openId;
   const opened = useLoaded(
     `message/${conversation.accountId}/${other ?? ''}`,

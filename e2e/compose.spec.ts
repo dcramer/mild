@@ -148,6 +148,15 @@ test.describe('with Inbox on', () => {
     // Back on the reader, not on its first link, whose card would open over the conversation.
     await expect(open).toBeFocused();
     expect(readSent(sift.sent()[0]!.raw).headers).toMatchObject({ 'In-Reply-To': '<thursday@example.org>' });
+
+    // Opened again, the reply is the newest, so it is the one open and Ada's is folded above it.
+    await page.keyboard.press('Escape');
+    await expect(open).toHaveCount(0);
+    // The row is the conversation's newest message now: the reply.
+    await inboxRow(page, 'Re: Lunch on Thursday?').getByRole('cell').nth(2).click();
+    await expect(reader(page).getByText('Thursday works.')).toBeVisible();
+    await expect(reader(page).getByRole('row').filter({ hasText: 'Thursday works.' })).toHaveCount(0);
+    await expect(reader(page).getByRole('row').filter({ hasText: 'Ada' })).toHaveCount(1);
   });
 
   test('Forward quotes the message under what is written, and sends it as new mail', async ({ page, sift }) => {
