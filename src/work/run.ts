@@ -38,6 +38,8 @@ export interface RunOptions {
   /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
   unsubscribe?: (db: Sql, accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   log: (line: string) => void;
+  /** Where the dashboard is reached from the person's own devices, for links in what Sift puts in their Gmail. */
+  dashboard?: string;
   now?: () => number;
 }
 
@@ -197,6 +199,7 @@ async function digests(store: Store, db: Sql, person: number, options: RunOption
     },
     highlight: tier?.highlight ? { highlight: tier.highlight, model: tier.model } : null,
     until,
+    ...(options.dashboard ? { dashboard: options.dashboard } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
   if (sent > 0) options.log(`${primary}: put ${sent} digest${sent === 1 ? '' : 's'} in the inbox`);

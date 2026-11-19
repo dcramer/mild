@@ -69,6 +69,8 @@ export interface DigestDeps {
   mailbox: (accountId: string) => Promise<Mailbox>;
   /** The person's model, to pick what is worth a look; without it a digest goes without. */
   highlight?: { highlight: Highlighter; model: string } | null;
+  /** Sift's dashboard, linked from each digest. */
+  dashboard?: string;
   now?: () => number;
   until?: number;
 }
@@ -155,13 +157,14 @@ async function finish(deps: DigestDeps, record: DigestRecord, zone: string, list
   }
   const label = await labelOfDigest(db, record.labelId);
   const mail = writeDigest({
-    label: { name: label.name, gmailLabel: label.gmailLabel },
+    label: { id: label.id, name: label.name, gmailLabel: label.gmailLabel },
     mailbox: record.accountId,
     since: record.since,
     until: record.until,
     entries: items.map((i) => ({ mailbox: i.accountId, id: i.messageId, from: i.from, subject: i.subject, receivedAt: i.receivedAt })),
     highlights: record.highlights ?? [],
     timeZone: zone,
+    ...(deps.dashboard ? { dashboard: deps.dashboard } : {}),
   });
   const raw = toRfc822(mail, { from: record.accountId, to: record.accountId, date: now(), messageId: record.messageId });
   const gmailId = await putDigest({ db, mailbox: await deps.mailbox(record.accountId), now }, record, raw);

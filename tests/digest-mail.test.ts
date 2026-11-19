@@ -18,7 +18,7 @@ const entry = (
 });
 
 const digest = (over: Partial<Digest> = {}): Digest => ({
-  label: { name: 'Notifications', gmailLabel: 'sift/notifications' },
+  label: { id: 'notifications', name: 'Notifications', gmailLabel: 'sift/notifications' },
   mailbox: 'me@example.org',
   since: until - 24 * HOUR,
   until,
@@ -46,7 +46,27 @@ describe('writeDigest', () => {
     const { text } = writeDigest(digest());
     expect(text.indexOf('Run failed')).toBeLessThan(text.indexOf('Run passed again'));
     expect(text.indexOf('Run passed again')).toBeLessThan(text.indexOf('Run passed\n'));
-    expect(text).toContain('6:00 AM  Builds');
+    expect(text).toContain('Builds (3)\n  6:00 AM  Run failed');
+  });
+
+  it('puts the sender with the most mail first, and the same subject on one line', () => {
+    const news = { name: 'News', address: 'news@example.com' };
+    const { text } = writeDigest(
+      digest({
+        entries: [entry('n1', 0.5, 'Morning edition', news), entry('a1', 1, 'Run failed'), entry('a2', 2, 'Run failed'), entry('a3', 3, 'Run passed')],
+      }),
+    );
+    expect(text.indexOf('Builds (3)')).toBeLessThan(text.indexOf('News (1)'));
+    expect(text).toContain('6:00 AM  Run failed\u00a0×2\n  https://mail.google.com/mail/u/me%40example.org/#all/a1');
+    expect(text).not.toContain('#all/a2');
+  });
+
+  it('lists what is worth a look only there', () => {
+    const { text } = writeDigest(digest({ highlights: [{ id: 'a2', why: 'The only failure.' }] }));
+    expect(text.match(/Run failed/g)).toHaveLength(1);
+    expect(text).toMatch(/EVERYTHING ELSE\n\nBuilds \(2\)/);
+    const alone = writeDigest(digest({ entries: [entry('a2', 1, 'Run failed')], highlights: [{ id: 'a2', why: 'The only failure.' }] }));
+    expect(alone.text).not.toContain('EVERYTHING ELSE');
   });
 
   it('says what Sift did and since when, and counts what is worth a look in the subject', () => {
@@ -92,10 +112,9 @@ describe('writeDigest', () => {
     expect(writeDigest(digest({ entries: [other] })).text).toContain('https://mail.google.com/mail/u/work%40example.com/#all/b1');
   });
 
-  it('heads each day only when the mail spans more than one', () => {
-    expect(writeDigest(digest()).text).not.toContain('Wednesday, November 18');
-    const spanning = writeDigest(digest({ entries: [entry('c1', 1, 'Today'), entry('c2', 20, 'Yesterday')] }));
-    expect(spanning.text).toMatch(/Wednesday, November 18[\s\S]*Today[\s\S]*Tuesday, November 17[\s\S]*Yesterday/);
+  it('dates each message instead of timing it when the digest waited longer than a day', () => {
+    expect(writeDigest(digest({ entries: [entry('c1', 20, 'Yesterday')] })).text).toContain('  11:00 AM  Yesterday');
+    expect(writeDigest(digest({ since: until - 72 * HOUR, entries: [entry('c1', 50, 'Days ago')] })).text).toContain('  Nov 16  Days ago');
   });
 
   it('lists the newest and links to the label for the rest', () => {
@@ -108,15 +127,20 @@ describe('writeDigest', () => {
     expect(text).toContain('https://mail.google.com/mail/u/me%40example.org/#label/sift%2Fnotifications');
   });
 
-  it('links to where the digest is changed only when Sift knows its address', () => {
-    expect(writeDigest(digest()).html).not.toContain('Change or stop this digest');
-    expect(writeDigest(digest({ dashboard: 'https://sift.example.com' })).text).toContain('Change or stop this digest: https://sift.example.com/labels');
+  it('links back to Sift only when it knows its address', () => {
+    const { html } = writeDigest(digest());
+    expect(html).not.toContain('See them in Sift');
+    expect(html).not.toContain('Change or stop this digest');
+    const linked = writeDigest(digest({ dashboard: 'https://sift.example.com' }));
+    expect(linked.html).toContain('<a href="https://sift.example.com" style');
+    expect(linked.text).toContain('See them in Sift: https://sift.example.com/activity?label=notifications');
+    expect(linked.text).toContain('Change or stop this digest: https://sift.example.com/labels');
   });
 });
 
 describe('toRfc822', () => {
   it('carries both parts and a subject in any script', () => {
-    const mail = writeDigest(digest({ entries: [entry('d1', 1, 'Résumé — 日本語')], label: { name: 'Reçus', gmailLabel: 'sift/recus' } }));
+    const mail = writeDigest(digest({ entries: [entry('d1', 1, 'Résumé — 日本語')], label: { id: 'recus', name: 'Reçus', gmailLabel: 'sift/recus' } }));
     const raw = toRfc822(mail, { from: 'me@example.org', to: 'me@example.org', date: until, messageId: '<digest-1@sift.invalid>' });
     expect(raw).toContain('From: Sift <me@example.org>\r\n');
     expect(raw).toContain('Message-ID: <digest-1@sift.invalid>\r\n');
