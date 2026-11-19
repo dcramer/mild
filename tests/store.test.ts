@@ -490,6 +490,34 @@ describe('the database in the home directory', () => {
   });
 });
 
+describe("a person's handle", () => {
+  it('sends what holds a statement to its person with BEGIN, so it costs no round trip of its own', async () => {
+    const driver = pglite(await superuser());
+    const openings: string[] = [];
+    const sent: string[] = [];
+    const store = storeOn(
+      {
+        ...driver,
+        transaction: (opening, work) => {
+          openings.push(opening);
+          return driver.transaction(opening, (c) => work({ query: (text, params, array) => (sent.push(text), c.query(text, params, array)) }));
+        },
+      },
+      loadKeyring({}),
+    );
+    const person = await connectAccount(store, 'one@example.com', '1', 0);
+    const other = await connectAccount(store, 'two@example.com', '1', 0);
+    const db = await store.user(person);
+    await (await store.user(other)).transaction(async (tx) => await tx.update(labels).set({ name: 'Theirs' }));
+    openings.length = sent.length = 0;
+
+    expect((await listLabels(db)).map((l) => l.name)).toEqual(['Leave in inbox']);
+    expect(openings).toEqual([`SET LOCAL ROLE sift_app; SELECT set_config('sift.user', '${person}', true)`]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatch(/^select /);
+  });
+});
+
 describe('the role sift connects to a server as', () => {
   it('is named when it could pass row-level security', async () => {
     const pg = await superuser();

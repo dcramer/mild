@@ -23,10 +23,7 @@ const unguarded = async (): Promise<Driver> => {
   const driver = pglite(await superuser());
   return {
     ...driver,
-    transaction: (work) =>
-      driver.transaction((c) =>
-        work({ ...c, query: async (text, params, array) => (text.startsWith('SET LOCAL ROLE') ? { rows: [], count: 0 } : await c.query(text, params, array)) }),
-      ),
+    transaction: (opening, work) => driver.transaction(opening.replace('SET LOCAL ROLE sift_app', 'SELECT 1'), work),
   };
 };
 

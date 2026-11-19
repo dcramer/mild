@@ -28,7 +28,8 @@ interface Connection {
 
 /** What a database driver does: run statements in one transaction on one connection. */
 export interface Driver {
-  transaction<T>(work: (connection: Connection) => Promise<T>): Promise<T>;
+  /** `opening` (statements without parameters) runs first, sent with `BEGIN` where the database is across a network. */
+  transaction<T>(opening: string, work: (connection: Connection) => Promise<T>): Promise<T>;
   close(): Promise<void>;
   /** For whoever runs sift: the role it connects as is not held by row-level security (`openDatabase`). */
   readonly warning?: string;
@@ -50,16 +51,11 @@ const inside = new AsyncLocalStorage<true>();
  * then show and accept only their rows. With `person` null nobody's rows are visible.
  */
 export function handle(driver: Driver, person: number | null, keys: Keyring): Sql {
-  const begin = async ({ query }: Connection) => {
-    await query('SET LOCAL ROLE sift_app', []);
-    if (person !== null) await query(`SELECT set_config('sift.user', $1, true)`, [String(person)]);
-  };
+  // Written into the text, not passed as a parameter, so it goes with `BEGIN` in one round trip: a number's text holds no quote.
+  const opening = `SET LOCAL ROLE sift_app${person === null ? '' : `; SELECT set_config('sift.user', '${person}', true)`}`;
   const once = async <T>(work: (connection: Connection) => Promise<T>): Promise<T> => {
     if (inside.getStore()) throw new Error('This ran on the database while a transaction it is part of was open; use the transaction’s handle.');
-    return await driver.transaction(async (connection) => {
-      await begin(connection);
-      return await inside.run(true, () => work(connection));
-    });
+    return await driver.transaction(opening, (connection) => inside.run(true, () => work(connection)));
   };
   const builder = (query: Connection['query']) =>
     owned(
