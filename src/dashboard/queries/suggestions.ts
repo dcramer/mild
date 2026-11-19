@@ -52,7 +52,8 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   const waitingNow = (await pendingSuggestions(db, { accounts: scope.accounts, ...(options.fact ? { facts: FACT_FILTERS[options.fact] } : {}) })).filter(
     (s) => options.includeKept || s.disposition !== 'keep',
   );
-  const shown = waitingNow.slice(0, MAX_ITEMS);
+  // Newest mail first, as a mail app lists it, whenever Sift decided it.
+  const shown = waitingNow.toSorted((a, b) => b.receivedAt - a.receivedAt || b.decisionId - a.decisionId).slice(0, MAX_ITEMS);
   // What each sender's mail has been labelled, by its current decision, to offer as other likely labels.
   const senders = new Map(
     shown.map((s) => {

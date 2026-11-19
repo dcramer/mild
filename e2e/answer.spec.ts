@@ -82,51 +82,51 @@ test.describe('Answering mail', () => {
 
   test('an answer is for one message: the panel moves on to the sender’s other one, still unanswered', async ({ page }) => {
     await page.goto('/');
-    const open = await openMessage(page, 'Replica lag on db-3');
+    const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
 
     const said = toast(page, 'Archive as Notifications');
     await expect(said.getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
 
     await open.getByRole('button', { name: 'Close' }).click();
     await expect(open).toHaveCount(0);
-    await expect(row(page, 'Disk 91% full on db-2')).toBeVisible();
-    await expect(row(page, 'Replica lag on db-3')).toHaveCount(0);
+    await expect(row(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(row(page, 'Disk 91% full on db-2')).toHaveCount(0);
     await seededRulesOnly(page);
   });
 
   test('“Same for 1 more” in the panel answers the message on show, which then says so', async ({ page }) => {
     await page.goto('/');
-    const open = await openMessage(page, 'Replica lag on db-3');
+    const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
 
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
     await putAway(page);
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Notifications');
   });
 
   test('“Same for 1 more” leaves the panel where the reader has since stepped to', async ({ page }) => {
     await page.goto('/');
-    const open = await openMessage(page, 'Replica lag on db-3');
+    const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
     await open.getByRole('button', { name: 'Next' }).click();
-    await expect(panelHeading(page, 'Re: Fix the release script (#412)')).toBeVisible();
+    await expect(panelHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
 
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
-    await expect(panelHeading(page, 'Re: Fix the release script (#412)')).toBeVisible();
-    await param(page, 'message').toBe('m21');
+    await expect(panelHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
+    await param(page, 'message').toBe('m14');
   });
 
   test('“Same for 1 more” after the panel closed leaves a panel opened since open', async ({ page }) => {
     await page.goto('/?q=db-');
-    await choose(await openMessage(page, 'Disk 91% full on db-2'), 'Notifications');
+    await choose(await openMessage(page, 'Replica lag on db-3'), 'Notifications');
     await expect(panel(page)).toHaveCount(0);
 
     await reviewSearch(page).fill('');
@@ -139,16 +139,16 @@ test.describe('Answering mail', () => {
 
   test('“Same for 1 more” in the panel takes the message off the list behind it', async ({ page }) => {
     await page.goto('/');
-    const open = await openMessage(page, 'Replica lag on db-3');
+    const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
 
     await open.getByRole('button', { name: 'Close' }).click();
     await expect(open).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 10');
-    await expect(row(page, 'Disk 91% full on db-2')).toHaveCount(0);
+    await expect(row(page, 'Replica lag on db-3')).toHaveCount(0);
   });
 
   test('“Same for 1 more” answers the sender’s other waiting message', async ({ page }) => {
@@ -283,6 +283,8 @@ test.describe('An answer on its way', () => {
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
     await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    // The row is low on the screen, where the toast comes up, and a toast pointed at waits.
+    await page.mouse.move(0, 0);
     await page.clock.runFor(8000);
     await page.clock.resume();
     await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
@@ -346,15 +348,15 @@ test.describe('An answer on its way', () => {
   refused('from the panel moves on at once, and a failure puts it back in the list', async ({ page }) => {
     const release = await holdAnswers(page);
     await page.goto('/');
-    const open = await openMessage(page, 'Replica lag on db-3');
+    const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
     await putAway(page);
 
     release({ status: 409, json: { error: 'That message has changed.' } });
     await expect(failureToast(page, 'Could not save your answer')).toBeVisible();
     await open.getByRole('button', { name: 'Close' }).click();
     await expect(open).toHaveCount(0);
-    await expect(row(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(row(page, 'Disk 91% full on db-2')).toBeVisible();
   });
 });

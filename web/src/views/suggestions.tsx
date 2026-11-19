@@ -7,9 +7,9 @@ import { MatchWords, SenderCell } from '@/components/sender.tsx';
 import { messageKey, proposalKey, useParam } from '@/lib/params.ts';
 import { type SuggestionItem, type Suggestions, api, useLoaded } from '@/lib/api.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
-import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, duration, factFilterName, outcomeName, plural, sureness } from '@/lib/format.ts';
+import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, duration, factFilterName, outcomeName, period, plural, sureness } from '@/lib/format.ts';
 import {
-  Ago,
+  Arrived,
   Heads,
   AnswerPicker,
   Button,
@@ -29,6 +29,8 @@ import {
   Td,
   Th,
   Tr,
+  TrGroup,
+  useNow,
 } from '@/system';
 import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
@@ -128,14 +130,24 @@ function SuggestionRow({
 
   return (
     <Tr onOpen={onOpen} holds={[item, ...rest].map(messageKey)}>
-      {/* On a phone the row reads like a mail app's: who and what sift thinks, the subject, a line of the text. It opens to answer. */}
+      {/* On a phone the row reads like a mail app's: who and when, the subject, a line of the text and what Sift thinks it is. It opens to answer. */}
       <SenderCell
         address={reveal(item.sender)}
         name={reveal(item.senderName)}
         contact={item.contact}
         aside={
-          <span className="shrink-0 text-sm md:hidden">
-            <span className="inline-flex items-baseline gap-2 text-muted-foreground">
+          <span className="shrink-0 text-sm text-muted-foreground tabular-nums md:hidden">
+            <Arrived at={item.receivedAt} />
+          </span>
+        }
+      >
+        <OnPhone>
+          <span className="w-full truncate text-base text-foreground">
+            {folded ? plural(rest.length + 1, 'message') : reveal(item.subject) || '(no subject)'}
+          </span>
+          <span className="flex w-full items-baseline gap-3">
+            <span className="min-w-0 flex-1 truncate">{folded ? subjects : item.preview ? reveal(item.preview) : null}</span>
+            <span className="inline-flex shrink-0 items-baseline gap-2">
               {item.labelId !== null ? (
                 <>
                   <Meter level={sureness(item)} />
@@ -146,13 +158,6 @@ function SuggestionRow({
               )}
             </span>
           </span>
-        }
-      >
-        <OnPhone>
-          <span className="w-full truncate text-base text-foreground">
-            {folded ? plural(rest.length + 1, 'message') : reveal(item.subject) || '(no subject)'}
-          </span>
-          {folded ? <span className="w-full truncate">{subjects}</span> : item.preview ? <span className="w-full truncate">{reveal(item.preview)}</span> : null}
         </OnPhone>
       </SenderCell>
       {/* What it is about, and as much of what it says as fits: enough to answer without opening it. */}
@@ -170,7 +175,7 @@ function SuggestionRow({
         )}
       </Td>
       <Td phone="hide" num quiet>
-        <Ago at={item.receivedAt} />
+        <Arrived at={item.receivedAt} />
       </Td>
       <RowActions>
         <AnswerPicker
@@ -227,6 +232,15 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
   // Nothing at all is waiting: there is nothing to search or narrow.
   const nothing = data !== null && !loading && items.length === 0 && proposals.length === 0 && !data.importing && !narrowed;
   const rows = fold(shown);
+  // Newest first, under the part of the past each falls in.
+  const now = useNow();
+  const periods: { title: string | null; rows: typeof rows }[] = [];
+  for (const row of rows) {
+    const title = now === null ? null : period(row.item.receivedAt, now);
+    const last = periods.at(-1);
+    if (last?.title === title) last.rows.push(row);
+    else periods.push({ title, rows: [row] });
+  }
   // The panel steps through the messages as the list draws them: a folded row's together.
   const order = rows.flatMap(({ item, rest }) => [item, ...rest]);
   const refs = order.map((i) => ({ accountId: i.accountId, messageId: i.messageId, subject: i.subject }));
@@ -332,18 +346,21 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
             <Th phone="hide">Received</Th>
             <Th>Label</Th>
           </Heads>
-          <tbody>
-            {rows.map(({ item, rest }) => (
-              <SuggestionRow
-                key={`${item.accountId}/${item.messageId}`}
-                item={item}
-                rest={rest}
-                labels={data?.labels ?? []}
-                waiting={answerable}
-                onOpen={() => onOpen(refs, order.indexOf(item))}
-              />
-            ))}
-          </tbody>
+          {periods.map(({ title, rows }) => (
+            <tbody key={title ?? ''}>
+              {title ? <TrGroup title={title} span={4} /> : null}
+              {rows.map(({ item, rest }) => (
+                <SuggestionRow
+                  key={`${item.accountId}/${item.messageId}`}
+                  item={item}
+                  rest={rest}
+                  labels={data?.labels ?? []}
+                  waiting={answerable}
+                  onOpen={() => onOpen(refs, order.indexOf(item))}
+                />
+              ))}
+            </tbody>
+          ))}
         </Table>
       )}
     </ListView>

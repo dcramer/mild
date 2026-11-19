@@ -69,14 +69,14 @@ test.describe('Working through For review', () => {
     await page.goto('/');
     await expect(reviewRows(page)).toHaveCount(9);
     await page.keyboard.press('j');
-    await expect(row(page, 'Replica lag on db-3')).toBeFocused();
+    await expect(row(page, '48 hours only: 30% off')).toBeFocused();
     await page.keyboard.press('j');
-    await expect(row(page, 'Disk 91% full on db-2')).toBeFocused();
+    await expect(row(page, 'Lunch on Thursday?')).toBeFocused();
     await page.keyboard.press('k');
-    await expect(row(page, 'Replica lag on db-3')).toBeFocused();
+    await expect(row(page, '48 hours only: 30% off')).toBeFocused();
 
     await page.keyboard.press('Enter');
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(panelHeading(page, '48 hours only: 30% off')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
 
@@ -90,22 +90,22 @@ test.describe('Working through For review', () => {
     await page.goto('/');
     await expect(reviewRows(page)).toHaveCount(9);
     await page.keyboard.press('ArrowDown');
-    await expect(row(page, 'Replica lag on db-3')).toBeFocused();
+    await expect(row(page, '48 hours only: 30% off')).toBeFocused();
     await page.keyboard.press('ArrowDown');
-    await expect(row(page, 'Disk 91% full on db-2')).toBeFocused();
+    await expect(row(page, 'Lunch on Thursday?')).toBeFocused();
     await page.keyboard.press('ArrowUp');
-    await expect(row(page, 'Replica lag on db-3')).toBeFocused();
+    await expect(row(page, '48 hours only: 30% off')).toBeFocused();
 
     await page.keyboard.press('Enter');
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(panelHeading(page, '48 hours only: 30% off')).toBeVisible();
     await page.keyboard.press('ArrowRight');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     // Up and down are the message's, to scroll it.
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowUp');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await page.keyboard.press('ArrowLeft');
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(panelHeading(page, '48 hours only: 30% off')).toBeVisible();
 
     await page.keyboard.press('?');
     const keys = page.getByRole('dialog', { name: 'Keys' });
@@ -114,28 +114,28 @@ test.describe('Working through For review', () => {
 
   test('the panel steps through the list, by its buttons and by J and K', async ({ page }) => {
     await page.goto('/');
-    const open = await openMessage(page, 'Replica lag on db-3');
+    const open = await openMessage(page, '48 hours only: 30% off');
     await expect(open.getByText('1 of 12')).toBeVisible();
     await expect(open.getByRole('button', { name: 'Previous' })).toBeDisabled();
 
     await open.getByRole('button', { name: 'Next' }).click();
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await expect(open.getByText('2 of 12')).toBeVisible();
     await page.keyboard.press('j');
-    await expect(panelHeading(page, 'Re: Fix the release script (#412)')).toBeVisible();
+    await expect(panelHeading(page, 'Notes from the review')).toBeVisible();
     await page.keyboard.press('k');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await open.getByRole('button', { name: 'Previous' }).click();
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
-    await param(page, 'message').toBe('m10');
+    await expect(panelHeading(page, '48 hours only: 30% off')).toBeVisible();
+    await param(page, 'message').toBe('m4');
   });
 
   test('Escape after stepping closes the panel and leaves no message in the address', async ({ page }) => {
     await page.goto('/');
-    const open = await openMessage(page, 'Replica lag on db-3');
+    const open = await openMessage(page, '48 hours only: 30% off');
     await open.getByRole('button', { name: 'Next' }).click();
     await open.getByRole('button', { name: 'Next' }).click();
-    await expect(panelHeading(page, 'Re: Fix the release script (#412)')).toBeVisible();
+    await expect(panelHeading(page, 'Notes from the review')).toBeVisible();
 
     await page.keyboard.press('Escape');
     await expect(open).toHaveCount(0);
@@ -151,37 +151,37 @@ test.describe('Working through For review', () => {
     await expect(reviewRows(page)).toHaveCount(9);
     await page.keyboard.press('j');
     await page.keyboard.press('Enter');
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(panelHeading(page, '48 hours only: 30% off')).toBeVisible();
     await page.keyboard.press('j');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
-    await expect(row(page, 'Disk 91% full on db-2')).toBeFocused();
+    await expect(row(page, 'Lunch on Thursday?')).toBeFocused();
     await page.keyboard.press('j');
-    await expect(row(page, 'Re: Fix the release script (#412)')).toBeFocused();
+    await expect(row(page, 'Notes from the review')).toBeFocused();
     await page.keyboard.press('k');
     await page.keyboard.press('Enter');
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
   });
 
   test('closing the panel on a folded row’s later message leaves the list on that row', async ({ page }) => {
     await page.goto('/');
-    await (await openMessage(page, 'Bump zod from 4.0.0 to 4.0.2')).getByRole('button', { name: 'Previous' }).click();
-    await expect(panelHeading(page, 'Run failed: CI on main')).toBeVisible();
+    await (await openMessage(page, 'Run failed: CI on main')).getByRole('button', { name: 'Previous' }).click();
+    await expect(panelHeading(page, 'Bump zod from 4.0.0 to 4.0.2')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
-    await expect(row(page, 'Run failed: Deploy on main')).toBeFocused();
+    await expect(row(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeFocused();
   });
 
   test('a row pressed while the panel is still sliding away opens', async ({ page }) => {
     await page.goto('/');
-    const disk = await boxOf(page.getByRole('cell', { name: 'Disk 91% full on db-2' }));
-    await page.getByRole('cell', { name: 'Replica lag on db-3' }).click();
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    const lunch = await boxOf(page.getByRole('cell', { name: 'Lunch on Thursday?' }));
+    await page.getByRole('cell', { name: '48 hours only: 30% off' }).click();
+    await expect(panelHeading(page, '48 hours only: 30% off')).toBeVisible();
     await page.keyboard.press('Escape');
     // At once, where the row is: a locator's click would wait for the panel to be gone.
-    await page.mouse.click(disk.x + 10, disk.y + disk.height / 2);
-    await expect(panelHeading(page, 'Disk 91% full on db-2')).toBeVisible();
+    await page.mouse.click(lunch.x + 10, lunch.y + lunch.height / 2);
+    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
     // Closing it goes back to the list, not to the message closed before.
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
@@ -190,17 +190,19 @@ test.describe('Working through For review', () => {
 
   test('the panel steps through a folded row’s messages together, as the list shows them', async ({ page }) => {
     await page.goto('/');
-    const open = await openMessage(page, 'Run failed: Deploy on main');
+    const open = await openMessage(page, 'Bump lodash from 4.17.20 to 4.17.21');
     await open.getByRole('button', { name: 'Next' }).click();
-    await expect(panelHeading(page, 'Run failed: CI on main')).toBeVisible();
+    await expect(panelHeading(page, 'Bump vite from 6.0.1 to 6.0.3')).toBeVisible();
     await open.getByRole('button', { name: 'Next' }).click();
     await expect(panelHeading(page, 'Bump zod from 4.0.0 to 4.0.2')).toBeVisible();
+    await open.getByRole('button', { name: 'Next' }).click();
+    await expect(panelHeading(page, 'Run failed: CI on main')).toBeVisible();
   });
 
   test('closing the panel keeps the search, and nothing else, in the address', async ({ page }) => {
     await page.goto('/?q=Ada');
     await page.getByRole('cell', { name: 'Lunch on Thursday?' }).click();
-    await expect(panel(page).getByText('2 of 2')).toBeVisible();
+    await expect(panel(page).getByText('1 of 2')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
     await query(page).toBe('?q=Ada');
