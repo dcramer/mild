@@ -14,9 +14,10 @@ export const TEMPLATES = 'SIFT_E2E_TEMPLATE';
 export const HELD = 'SIFT_E2E_HELD';
 /**
  * `full` is verify-sift's seed (its SKILL.md says what is in it); `bare` leaves the work mailbox without labels, so the page is the setting-up steps;
- * `on` has had a pass with Sift on (`--on` in the seed); `chatgpt` reaches its model through a ChatGPT plan.
+ * `on` has had a pass with Sift on (`--on` in the seed); `chatgpt` reaches its model through a ChatGPT plan; `inbox` has Inbox on, with the
+ * text of the inbox's mail, and a fake Gmail that holds the seed's mail (`--inbox`).
  */
-export type Variant = 'full' | 'bare' | 'on' | 'chatgpt';
+export type Variant = 'full' | 'bare' | 'on' | 'chatgpt' | 'inbox';
 
 const freePort = () =>
   new Promise<number>((done, fail) => {
@@ -366,3 +367,19 @@ export function mailboxesAsked(page: Page, path: string) {
   });
   return asked;
 }
+
+/** Inbox among the sections, there only while it is on. */
+export const inboxLink = (page: Page) => page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Inbox' });
+
+/** Settings' Inbox section. */
+export const settingsInbox = (page: Page) => section(settings(page), 'Inbox');
+
+/** Inbox's rows, each a conversation with a check to select it. Not on a phone, which has no checks. */
+export const inboxRows = (page: Page) => page.getByRole('row').filter({ has: page.getByRole('checkbox', { name: /^Select / }) });
+
+/** The conversation in Inbox whose newest subject this is. */
+export const inboxRow = (page: Page, subject: string) =>
+  page.getByRole('row').filter({ has: page.getByRole('checkbox', { name: `Select ${subject}`, exact: true }) });
+
+/** The conversation open in the message panel, by its Archive in the panel's footer. */
+export const reader = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('button', { name: 'Mark unread', exact: true }) });

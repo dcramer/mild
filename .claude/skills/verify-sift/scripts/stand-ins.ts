@@ -3,8 +3,8 @@
  * offers the app stand-ins for what Sift reaches outside this machine for (`StandIns`, src/sift/sift.ts). Everything
  * else is the real app on the seeded home.
  *
- * - Gmail: nothing has happened since the seed's last pass, and each mailbox's filters are a fake mailbox's,
- *   starting from those the seed left in the file `SIFT_STAND_INS` names and written back there as they change.
+ * - Gmail: nothing has happened since the seed's last pass, and each mailbox's filters and messages' labels are a fake
+ *   mailbox's, starting from those the seed left in the file `SIFT_STAND_INS` names and written back there as they change.
  *   A search of the inbox finds nothing, or with `SIFT_STAND_INS_LISTING` set is still being listed for good, so
  *   applying a rule stays under way until it is stopped.
  * - The model that suggests labels and drafts rules, a stand-in. Drafting looks up the second line of its prompt
@@ -28,10 +28,15 @@ import { seal } from '../../../../src/plain.ts';
 
 const file = process.env['SIFT_STAND_INS'];
 if (!file) throw new Error('SIFT_STAND_INS names no file of filters');
-const saved = JSON.parse(readFileSync(file, 'utf8')) as Record<string, ExistingFilter[]>;
+const saved = JSON.parse(readFileSync(file, 'utf8')) as { filters: Record<string, ExistingFilter[]>; labels: Record<string, Record<string, string[]>> };
 
-/** A mailbox whose filters are written back to the file each time they change. */
+/** A mailbox whose filters and labels are written back to the file each time they change. */
 class SavedMailbox extends FakeMailbox {
+  override async modifyLabels(...args: Parameters<FakeMailbox['modifyLabels']>) {
+    const after = await super.modifyLabels(...args);
+    save();
+    return after;
+  }
   override async createFilter(...args: Parameters<FakeMailbox['createFilter']>) {
     const made = await super.createFilter(...args);
     save();
@@ -43,12 +48,24 @@ class SavedMailbox extends FakeMailbox {
   }
 }
 const mailboxes = new Map<string, SavedMailbox>();
-const save = () => writeFileSync(file, JSON.stringify(Object.fromEntries([...mailboxes].map(([id, m]) => [id, m.filters])), null, 1));
+const save = () =>
+  writeFileSync(
+    file,
+    JSON.stringify(
+      {
+        filters: Object.fromEntries([...mailboxes].map(([id, m]) => [id, m.filters])),
+        labels: Object.fromEntries([...mailboxes].map(([id, m]) => [id, Object.fromEntries(m.labels)])),
+      },
+      null,
+      1,
+    ),
+  );
 const mailboxOf = (address: string) => {
   let mailbox = mailboxes.get(address);
   if (!mailbox) {
     mailbox = new SavedMailbox();
-    mailbox.filters = saved[address] ?? [];
+    mailbox.filters = saved.filters[address] ?? [];
+    mailbox.labels = new Map(Object.entries(saved.labels[address] ?? {}));
     mailboxes.set(address, mailbox);
   }
   return mailbox;

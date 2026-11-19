@@ -2,7 +2,7 @@
 /**
  * Verification scaffolding: fills an empty sift home with synthetic mail and prints a session cookie for it.
  *
- *   node .claude/skills/verify-sift/scripts/seed.ts <home> <gmail.json> [--bare | --on | --chatgpt]
+ *   node .claude/skills/verify-sift/scripts/seed.ts <home> <gmail.json> [--bare | --on | --chatgpt | --inbox]
  *
  * The mail goes through the real pass (`workDue`, with sift off), so decisions, labels, suggestion
  * bodies and proposals are what sift itself would record. Only Gmail is faked, at the `GmailApi` and
@@ -13,6 +13,8 @@
  * for the user with sift's Gmail label; the Store's last-day sale, archived as Marketing and then undone; and a third
  * widgets newsletter, archived as Newsletters by its rule, which stands.
  * `--chatgpt` has the model reached through a ChatGPT plan instead of an API key.
+ * `--inbox` has Inbox on before the passes, so they keep the text of the inbox's mail, and hands the fake Gmail each
+ * message's labels, so the reader's own presses there change it; elsewhere the fake Gmail holds none of the seed's mail.
  */
 import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -27,7 +29,7 @@ import { credentials } from '../../../../src/store/credentials.ts';
 import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount } from '../../../../src/store/accounts.ts';
 import { listLabels, removeLabel } from '../../../../src/store/labels.ts';
-import { setActive, setModel } from '../../../../src/store/preferences.ts';
+import { setActive, setMail, setModel } from '../../../../src/store/preferences.ts';
 import { lastStandingChange } from '../../../../src/store/actions.ts';
 import { undo } from '../../../../src/actions/executor.ts';
 import { listProposals } from '../../../../src/store/proposals.ts';
@@ -43,7 +45,7 @@ const WORK = 'me@work.example.org';
 const OTHER = 'bravo@example.net';
 
 const [home, gmailFile, variant] = process.argv.slice(2);
-if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json> [--bare | --on | --chatgpt]');
+if (!home || !gmailFile) throw new Error('usage: seed.ts <home> <gmail.json> [--bare | --on | --chatgpt | --inbox]');
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
@@ -96,9 +98,12 @@ const inbox = [
   mail('Ops <alerts@ops.example.com>', 'Disk 91% full on db-2', 'Free space is running low.'),
   mail('Ops <alerts@ops.example.com>', 'Replica lag on db-3', 'The replica is 40 seconds behind.'),
   // Kept below as Receipts, which that label archives, as moving them back to the inbox in Gmail answers; so Sift proposes keeping them.
-  mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.'),
-  mail('Utility <billing@utility.example.net>', 'Your April bill', 'Your bill is ready.'),
-  mail('Utility <billing@utility.example.net>', 'Your May bill', 'Your bill is ready.'),
+  // One conversation, so Inbox has one to fold.
+  ...[
+    mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.'),
+    mail('Utility <billing@utility.example.net>', 'Your April bill', 'Your bill is ready.'),
+    mail('Utility <billing@utility.example.net>', 'Your May bill', 'Your bill is ready.'),
+  ].map((bill) => ({ ...bill, raw: { ...bill.raw, threadId: 'bills' } })),
   // One address under several names, which the stand-in model places by name, so For review folds them by name and
   // gives the address's page a list of names.
   ...(
@@ -198,6 +203,7 @@ const standIn = async () => ({
             : { label: 'notification', reason: 'synthetic: an automated notice', confidence: 0.95 }
           : { label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 },
 });
+if (variant === '--inbox') await setMail(db, true);
 // Four passes: three use up the Ops alerts' tries with the model, and the fourth leaves them to the user.
 const ephemeral = memoryEphemeral();
 for (let pass = 0; pass < 4; pass++) {
@@ -271,7 +277,10 @@ if (variant === '--chatgpt') {
   await setModel(db, 'anthropic/claude-haiku-4-5');
 }
 await store.close();
-writeFileSync(gmailFile, JSON.stringify({ [ACCOUNT]: mailbox.filters }, null, 1));
+writeFileSync(
+  gmailFile,
+  JSON.stringify({ filters: { [ACCOUNT]: mailbox.filters }, labels: variant === '--inbox' ? { [ACCOUNT]: Object.fromEntries(mailbox.labels) } : {} }, null, 1),
+);
 
 // The same cookie `/auth/callback` sets (`signSession` in src/dashboard/server.ts), signed with this home's key.
 const secret = randomBytes(32).toString('base64url');
