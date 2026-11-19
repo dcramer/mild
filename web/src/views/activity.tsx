@@ -60,9 +60,11 @@ function Saved({ saved, days }: { saved: Summary['saved']; days: Days }) {
     <div className="flex flex-col gap-8 pb-10">
       <Figures>
         <Figure label="Time saved" value={duration(saved.seconds)} tone="look" note={`${count(saved.messages)} kept out of your inbox`} />
-        {saved.unsubscribed.senders > 0 ? (
-          <Figure label="Unsubscribed" value={count(saved.unsubscribed.senders)} note={`they sent ${count(saved.unsubscribed.monthly)} a month`} />
-        ) : null}
+        <Figure
+          label="Unsubscribed"
+          value={count(saved.unsubscribed.senders)}
+          note={saved.unsubscribed.senders > 0 ? `they sent ${count(saved.unsubscribed.monthly)} a month` : undefined}
+        />
       </Figures>
       {saved.byLabel.length > 0 ? (
         <dl className="grid max-w-xl grid-cols-[minmax(0,10rem)_minmax(0,1fr)_4.5rem] items-center gap-x-4 gap-y-2 text-sm">

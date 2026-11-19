@@ -44,6 +44,7 @@ test.describe('Activity, after a pass with Sift on', () => {
     await page.goto('/activity');
     await expect(page.getByText('Time saved', { exact: true })).toBeVisible();
     await expect(page.getByText('1 kept out of your inbox', { exact: true })).toBeVisible();
+    await expect(fact(page.getByRole('main'), 'Unsubscribed')).toHaveText('0');
     await page.getByRole('term').getByRole('link', { name: 'Newsletters' }).click();
     await param(page, 'label').toBe('newsletter');
     await expect(row(page, 'Widgets, part three')).toBeVisible();
