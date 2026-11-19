@@ -126,6 +126,7 @@ export const mailboxes = pgTable(
     lastSyncedAt: time('last_synced_at'),
     filtersCheckedAt: time('filters_checked_at'),
     aliases: jsonb('aliases').$type<string[]>().notNull().default([]), // Gmail send-as addresses besides the id, as of the last sync that could read them
+    canSend: boolean('can_send').notNull().default(false), // Google granted `gmail.send` to the sign-in Sift holds for it
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),

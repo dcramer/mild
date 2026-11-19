@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { lastSyncedAt, listAccounts } from '../../../../store/accounts.ts';
+import { canSend, lastSyncedAt, listAccounts } from '../../../../store/accounts.ts';
 import { inboxProgress } from '../../../../store/inbox.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
 import { waitingCount } from '../../../../learn/feedback.ts';
@@ -26,7 +26,13 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
       expired: activity.expired.filter((email) => accounts.some((a) => a.email === email)),
     },
     accounts: await Promise.all(
-      accounts.map(async (a) => ({ id: a.id, email: a.email, lastSyncedAt: await lastSyncedAt(db, a.id), primary: a.id === person?.primary })),
+      accounts.map(async (a) => ({
+        id: a.id,
+        email: a.email,
+        lastSyncedAt: await lastSyncedAt(db, a.id),
+        primary: a.id === person?.primary,
+        canSend: await canSend(db, a.id),
+      })),
     ),
     labels: await listLabelSummaries(db, scope),
     labelLimit: MAX_LABELS,

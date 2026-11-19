@@ -658,7 +658,8 @@ export const ManageState = z.object({
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
   }),
   activity: z.object({ running: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
-  accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable(), primary: z.boolean() })),
+  /** `canSend`: Google let Sift send from it (`/auth/login?grant=send&mailbox=…` asks). */
+  accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable(), primary: z.boolean(), canSend: z.boolean() })),
   /** In order. */
   labels: z.array(LabelSummary),
   /** How many labels a person may have. */

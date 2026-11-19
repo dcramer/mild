@@ -87,15 +87,19 @@ interface Activity {
  */
 export interface SignIn {
   hasClient(): boolean;
-  /** Google's sign-in address for a browser that should come back to `redirectUri`. */
-  url(redirectUri: string, state: string, challenge: string): string;
+  /**
+   * Google's sign-in address for a browser that should come back to `redirectUri`. `send`: a mailbox already connected,
+   * for which Google is asked only to let Sift send.
+   */
+  url(redirectUri: string, state: string, challenge: string, send: string | null): string;
   /**
    * Finish a sign-in. Who may is Google's to say: the client's test users, or anyone once it is published.
    * An account sift does not know is connected as another mailbox of `addTo` (the address of whoever is
-   * signed in and asked to add it), or else as a new person's. Resolves with the account's address;
-   * rejects with a message for the user.
+   * signed in and asked to add it), or else as a new person's. With `send`, it must be that mailbox, whose
+   * sign-in is replaced and which then may send if Google granted it. Records whether each mailbox may send.
+   * Resolves with the account's address; rejects with a message for the user.
    */
-  complete(redirectUri: string, code: string, verifier: string, addTo: string | null): Promise<string>;
+  complete(redirectUri: string, code: string, verifier: string, addTo: string | null, send: string | null): Promise<string>;
 }
 
 interface ModelSignIns {

@@ -108,7 +108,7 @@ Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
 ## Gmail
 
-- **Scopes:** `gmail.modify` and `gmail.settings.basic` (`src/gmail/scopes.ts`). Both are restricted scopes, so each user brings their own Google Cloud project with a Web application OAuth client; sign-in is the authorisation-code flow with PKCE, started from the dashboard. Left in "Testing", Google limits sign-in to listed test users and ends it every 7 days.
+- **Scopes:** `gmail.modify` and `gmail.settings.basic` (`src/gmail/scopes.ts`), and `gmail.send` for a mailbox only once its person lets Sift send from it ([inbox.md](inbox.md)). The first two are restricted scopes, so each user brings their own Google Cloud project with a Web application OAuth client; sign-in is the authorisation-code flow with PKCE, started from the dashboard. Left in "Testing", Google limits sign-in to listed test users and ends it every 7 days.
 - **Tokens:** each mailbox's refresh token is kept in its person's own database (`credentials`), encrypted when a key is set and bound to that person and mailbox ([secrets.md](secrets.md)). Only `src/gmail/` uses it; the process that starts Sift reads it and hands it over.
 - **First connect:** Sift records the current history id and handles mail from then on. It never sweeps the existing inbox unasked.
 - **Sync is separate from triage:** a sync pass records message metadata and then advances the cursor; triage works from recorded messages that have no decision yet. Messages are recorded 50 at a time as they are fetched and the cursor moves with the last, so a failed fetch leaves the cursor in place and the next pass reads the same history but fetches only what is not yet recorded.

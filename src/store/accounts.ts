@@ -175,6 +175,16 @@ export async function listAccounts(db: Sql): Promise<Account[]> {
   return rows.map((r) => ({ id: r.id, number: r.number, email: r.id, historyId: r.historyId }));
 }
 
+/** Whether the sign-in Sift holds for this mailbox lets it send. */
+export async function canSend(db: Sql, accountId: string): Promise<boolean> {
+  const [row] = await db.select({ canSend: mailboxes.canSend }).from(mailboxes).where(eq(mailboxes.id, accountId));
+  return row?.canSend ?? false;
+}
+
+export async function setCanSend(db: Sql, accountId: string, can: boolean): Promise<void> {
+  await db.update(mailboxes).set({ canSend: can }).where(eq(mailboxes.id, accountId));
+}
+
 /** The mailbox's other addresses in Gmail, as its last sync found them. */
 export async function mailboxAliases(db: Sql, accountId: string): Promise<string[]> {
   const [row] = await db.select({ aliases: mailboxes.aliases }).from(mailboxes).where(eq(mailboxes.id, accountId));

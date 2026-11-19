@@ -774,9 +774,10 @@ describe('signing in with Google', () => {
   let hasClient: boolean;
   const signIn: SignIn = {
     hasClient: () => hasClient,
-    url: (redirectUri, state, challenge) => `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}`,
-    complete: async (redirectUri, code, _verifier, addTo) => {
-      completed.push(`${redirectUri} ${code} addTo=${addTo}`);
+    url: (redirectUri, state, challenge, send) =>
+      `https://accounts.example/auth?redirect=${encodeURIComponent(redirectUri)}&state=${state}&challenge=${challenge}${send ? `&send=${send}` : ''}`,
+    complete: async (redirectUri, code, _verifier, addTo, send) => {
+      completed.push(`${redirectUri} ${code} addTo=${addTo}${send ? ` send=${send}` : ''}`);
       if (code === 'refused') throw new Error('invalid_grant');
       if (code === 'second') {
         await connectAccount(store, 'work@example.com', '1', 0, 1);
@@ -911,6 +912,23 @@ describe('signing in with Google', () => {
       cookie: `${cookie.cookie}; ${cookieFrom(asked.headers)}`,
     });
     expect(denied.headers['location']).toBe('/?settings=1&signin=Google%20did%20not%20grant%20access.');
+  });
+
+  it('asks Google to let Sift send only for a mailbox of whoever is signed in, and only they finish it', async () => {
+    const { call } = await startWithSignIn();
+    expect((await call('GET', `/auth/login?grant=send&mailbox=${ACCOUNT}`)).headers['location']).toBe('/');
+    const cookie = { cookie: cookieFrom((await callback(call, await call('GET', '/auth/login'), 'abc')).headers) };
+    expect((await call('GET', '/auth/login?grant=send&mailbox=bravo@example.net', undefined, cookie)).headers['location']).toBe('/');
+
+    const grant = await call('GET', `/auth/login?grant=send&mailbox=${ACCOUNT}&to=/inbox`, undefined, cookie);
+    expect(String(grant.headers['location'])).toContain(`&send=${ACCOUNT}`);
+    // Signed out before Google came back.
+    expect(String((await callback(call, grant, 'abc')).headers['location'])).toContain('let%20Sift%20send');
+    const again = await call('GET', `/auth/login?grant=send&mailbox=${ACCOUNT}&to=/inbox`, undefined, cookie);
+    const back = await callback(call, again, 'abc', cookie);
+    expect(completed.at(-1)).toContain(`addTo=null send=${ACCOUNT}`);
+    expect(back.headers['location']).toBe('/inbox');
+    expect(String(back.headers['set-cookie'])).not.toContain('sift_session');
   });
 
   it('completes a sign-in only in the browser that started it', async () => {

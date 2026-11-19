@@ -414,6 +414,13 @@
       "when": 1795078533546,
       "tag": "0058_mail_bodies_row_security",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795078924004,
+      "tag": "0059_mailboxes_say_whether_they_send",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,8 @@ const FRAME_HEADERS = {
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 /** Answered here rather than by a route module. */
 const SIGN_IN_PATHS = new Set(['/auth/login', '/auth/callback', '/api/session', '/api/signout']);
+/** A sign-in in flight: the PKCE verifier, whose mailbox it adds or lets send, and where to return to. */
+type PendingSignIn = { verifier: string; redirectUri: string; addTo: string | null; send: string | null; to: string; expires: number };
 
 // Data, fetched by the page: a policy or a referrer policy would govern nothing.
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
@@ -263,26 +265,30 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       });
     }
     if (signIn && method === 'GET' && url.pathname === '/auth/login') {
-      if (!signIn.hasClient() || !googleCanReturnHere) return redirect('/');
+      // Letting Sift send is for a mailbox of whoever is signed in.
+      const send = query.get('grant') === 'send' ? (query.get('mailbox') ?? '') : null;
+      if (!signIn.hasClient() || !googleCanReturnHere || (send !== null && !person?.accounts.includes(send))) return redirect('/');
       const state = randomBytes(16).toString('hex');
       const verifier = randomBytes(32).toString('base64url');
       const redirectUri = `${origin}/auth/callback`;
       // Adding a second account is only for someone already signed in. `to` is where the browser started, and only
       // ever a path on this site: anything else would make the sign-in a way to send someone elsewhere.
       const to = query.get('to') ?? '';
-      await ephemeral!.set(
-        pendingKey(state),
-        { verifier, redirectUri, addTo: query.get('add') === '1' ? session : null, to: LOCAL_PATH.test(to) ? to : '/', expires: now() + SIGN_IN_MS },
-        SIGN_IN_MS,
-      );
-      return redirect(signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url')), signInCookie(state, SIGN_IN_MS / 1000));
+      const pending: PendingSignIn = {
+        verifier,
+        redirectUri,
+        addTo: query.get('add') === '1' && send === null ? session : null,
+        send,
+        to: LOCAL_PATH.test(to) ? to : '/',
+        expires: now() + SIGN_IN_MS,
+      };
+      await ephemeral!.set(pendingKey(state), pending, SIGN_IN_MS);
+      return redirect(signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url'), send), signInCookie(state, SIGN_IN_MS / 1000));
     }
     if (signIn && method === 'GET' && url.pathname === '/auth/callback') {
       const state = query.get('state') ?? '';
       // Taken, so it completes once.
-      const entry = state
-        ? await ephemeral!.take<{ verifier: string; redirectUri: string; addTo: string | null; to: string; expires: number }>(pendingKey(state))
-        : null;
+      const entry = state ? await ephemeral!.take<PendingSignIn>(pendingKey(state)) : null;
       // Someone still signed in was adding a mailbox or signing in again, so it is said in Settings, where mailboxes are; the sign-in page is only for someone signed out.
       const fail = (message: string) => redirect(`/?${session ? 'settings=1&' : ''}signin=${encodeURIComponent(message)}`, signInCookie('', 0));
       const code = query.get('code');
@@ -290,9 +296,11 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       if (!same(cookie(request, 'sift_signin') ?? '', state)) return fail('That sign-in was started in another browser. Start it again here.');
       // A mailbox joins whoever started adding it, so that person must still be the one signed in here.
       if (entry.addTo !== null && session !== entry.addTo) return fail('Sign in again, then add the mailbox.');
+      if (entry.send !== null && !person?.accounts.includes(entry.send)) return fail('Sign in again, then let Sift send.');
       if (!code) return fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
       try {
-        const email = await signIn.complete(entry.redirectUri, code, entry.verifier, entry.addTo);
+        const email = await signIn.complete(entry.redirectUri, code, entry.verifier, entry.addTo, entry.send);
+        if (entry.send !== null) return redirect(entry.to, signInCookie('', 0));
         const who = await people.signedIn(email);
         if (!who) return fail('Google did not complete the sign-in.');
         // A mailbox added joins whoever is signed in, who stays signed in as themselves, back in Settings where they added it.
@@ -301,6 +309,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
           return who.id === person?.id ? redirect('/?settings=1', signInCookie('', 0)) : fail(`${email} is already connected to Sift by someone else.`);
         return redirect(entry.to, sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
       } catch (error) {
+        if (error instanceof Refusal) return fail(error.message);
         report(request, error);
         return fail('Google did not complete the sign-in.');
       }

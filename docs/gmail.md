@@ -1,6 +1,6 @@
 # What Gmail's API gives Sift
 
-What Sift can use directly, and what it has to do itself. From Google's documentation as read on 2026-11-15; re-check before relying on a limit. Sift holds two scopes, `gmail.modify` and `gmail.settings.basic`, both of which Google classes as restricted.
+What Sift can use directly, and what it has to do itself. From Google's documentation as read on 2026-11-15; re-check before relying on a limit. Sift holds two scopes, `gmail.modify` and `gmail.settings.basic`, both of which Google classes as restricted, and a third, `gmail.send` (sensitive), for a mailbox whose person lets it send.
 
 ## Used directly
 
@@ -13,6 +13,7 @@ What Sift can use directly, and what it has to do itself. From Google's document
 | Who took part in a thread | `users.threads.get` | `format=minimal` gives each message's id and labels; one the owner sent carries `SENT`. Asked only for a reply the model is about to judge. 40 units (120 for `full`). |
 | Archive, mark spam, mark read, label | `users.messages.modify` | Add or remove label ids: `INBOX`, `SPAM`, `UNREAD`, `STARRED`, `IMPORTANT`, the `CATEGORY_*` tabs and user labels can all be applied. 5 units. |
 | Put a message in the mailbox | `users.messages.insert` | A digest, into the inbox. Works with `gmail.modify` and "does not send a message", so it reaches no one but the owner. 25 units. |
+| Let Sift send | OAuth, `include_granted_scopes` | `/auth/login?grant=send&mailbox=<address>` asks Google for `gmail.send` alone, hinting the mailbox; with `include_granted_scopes` the new refresh token holds what was granted before as well, and every sign-in asks with it, so signing in again keeps sending. Which scopes a token holds is its `scope` (`mailboxes.can_send`). Google's account picker can return another account, which is refused. |
 | Many at once | `users.messages.batchModify` | Up to 1,000 ids, 50 units. Not used yet: Sift changes one message at a time so each has its own audit row. |
 | Labels | `users.labels.*` | Nested names (`sift/newsletters`) are ordinary labels with a slash. Names are compared without case: once the person renames `sift` to `Sift` in Gmail, creating `sift/newsletters` is refused as `409 Label name exists or conflicts`, so Sift matches names the same way. `users.labels.get` on `INBOX` counts what is in the inbox (`messagesTotal`) for 1 unit, which is how going through it is priced before a message is read. |
 | Copy a rule to Gmail | `users.settings.filters` | With `gmail.settings.basic`, which Sift already asks for. A filter matches on from, to, subject, a Gmail search query, attachment and size, and can add or remove labels: archive (`INBOX` off), mark read (`UNREAD` off), star, mark important, one user label, never-spam. Up to 1,000 filters; no update, only create, delete, get and list; creating a duplicate is refused. The documentation does not say a filter can add `SPAM`, so Sift never writes one. Filters apply to a message, not its thread, and only to mail that arrives afterwards. `to` matches Cc and Bcc as well as To. |
@@ -47,5 +48,5 @@ Quotas (projects created since 2026-05-01; older ones keep their old quotas):
 | **Report spam or phishing** | No API beyond applying the `SPAM` label. |
 | **Mute, snooze** | Not in the API. |
 | **Contacts, "people I have emailed"** | Not in the Gmail API. Sift searches sent mail for an address instead and caches the answer. |
-| **Send, forward** | Possible with other scopes (`gmail.send`; forwarding needs a verified address). Sift does not ask for them. |
+| **Forward** | Needs a verified forwarding address. Sift does not forward. |
 | **Delete** | Trash is possible with `gmail.modify`; permanent deletion needs full mail access. Sift does neither. |

@@ -32,7 +32,7 @@ The project's production domain is your Sift's address: `https://<project>.verce
 2. [Enable the Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com).
 3. [Set up the consent screen](https://console.cloud.google.com/auth/overview): app name `sift`, audience External, your own address for support and contact.
 4. [Create a client](https://console.cloud.google.com/auth/clients): type Web application, authorised redirect URI `https://<your domain>/auth/callback`. Keep its id and secret.
-5. [Data Access](https://console.cloud.google.com/auth/scopes): add `https://www.googleapis.com/auth/gmail.modify` and `https://www.googleapis.com/auth/gmail.settings.basic`.
+5. [Data Access](https://console.cloud.google.com/auth/scopes): add `https://www.googleapis.com/auth/gmail.modify`, `https://www.googleapis.com/auth/gmail.settings.basic` and `https://www.googleapis.com/auth/gmail.send`, which is asked for only when someone lets Sift send from a mailbox.
 6. [Audience](https://console.cloud.google.com/auth/audience): add each Gmail address Sift will read as a test user. They are the only accounts that can sign in to your Sift. While the app is in Testing, Google ends each sign-in after 7 days and you sign in again; publishing it ends that, and may need Google's verification.
 
 ## 3. The environment
