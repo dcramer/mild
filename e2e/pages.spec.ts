@@ -203,6 +203,8 @@ test.describe('A sender', () => {
     await page.goto(SENDER);
     await standing(page, 'notifications@code.example.com', 'Block').click();
     const said = toast(page, 'Mail from notifications@code.example.com: send it to spam');
+    // On the page before it is measured: it slides up as it comes, and a slow answer to the press leaves nothing moving yet to wait for.
+    await expect(said).toBeVisible();
     const box = await boxOf(said);
     const words = await boxOf(said.getByText('Mail from notifications@code.example.com: send it to spam', { exact: true }));
     const undo = await boxOf(said.getByRole('button', { name: 'Undo' }));
