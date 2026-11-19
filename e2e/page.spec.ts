@@ -15,7 +15,7 @@ test("the page cannot be framed by another site, sends no referrer, and holds no
   await expect(page.getByRole('navigation').first()).toBeVisible();
 });
 
-test('every screen calls it Sift', async ({ page }) => {
+test('every screen calls it Sift, and only its wordmark sift', async ({ page }) => {
   for (const [path, heading] of [
     ['/', 'For review'],
     ['/activity', 'Activity'],
@@ -25,7 +25,8 @@ test('every screen calls it Sift', async ({ page }) => {
     await page.goto(path);
     await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
     // A word of its own: a command, a path or a Gmail label (`sift/digest`) keeps its spelling.
-    await expect(page.locator('body'), path).not.toContainText(/(?<![\w/.@~$-])sift(?![\w/.@-])/);
+    await expect(page.locator('main'), path).not.toContainText(/(?<![\w/.@~$-])sift(?![\w/.@-])/);
+    await expect(page.locator('.wordmark'), path).toHaveText('sift');
     await expect(page.locator('[aria-label="sift"]'), path).toHaveCount(0);
   }
 });

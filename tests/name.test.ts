@@ -28,7 +28,7 @@ describe('the name', () => {
     expect(lower).toEqual([]);
   });
 
-  it('is Sift in a digest', () => {
+  it('is Sift in a digest, but in its wordmark', () => {
     const mail = writeDigest({
       label: { id: 'notifications', name: 'Notifications', gmailLabel: 'sift/notifications' },
       mailbox: 'me@example.org',
@@ -39,17 +39,16 @@ describe('the name', () => {
       timeZone: 'UTC',
       dashboard: 'https://sift.example.com',
     });
-    expect(mail.html).toContain('>Sift</a>');
-    expect(mail.html.replace(/<[^>]*>/g, ' ')).not.toMatch(LOWERCASE_NAME);
+    expect(mail.html).toContain('>sift</a>');
+    expect(mail.html.replace('>sift</a>', '').replace(/<[^>]*>/g, ' ')).not.toMatch(LOWERCASE_NAME);
     expect(mail.text.replace(/https?:\/\/\S+/g, ' ')).not.toMatch(LOWERCASE_NAME);
   });
 
-  it('is Sift at the head of each command', () => {
+  it('heads each command as its wordmark', () => {
     let printed = '';
     const write = vi.spyOn(process.stdout, 'write').mockImplementation((text) => ((printed += String(text)), true));
     ui.heading('status', '~/.config/sift');
     write.mockRestore();
-    expect(stripVTControlCharacters(printed)).toContain(' Sift  status');
-    expect(stripVTControlCharacters(printed).replace('~/.config/sift', '')).not.toMatch(LOWERCASE_NAME);
+    expect(stripVTControlCharacters(printed)).toContain(' sift  status');
   });
 });

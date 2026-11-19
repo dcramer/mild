@@ -134,8 +134,8 @@ export function writeDigest(digest: Digest): DigestMail {
     row(
       `<td style="padding:0 0 20px;">${
         digest.dashboard
-          ? `<a href="${escape(digest.dashboard)}" style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;text-decoration:none;">Sift</a>`
-          : `<span style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;">Sift</span>`
+          ? `<a href="${escape(digest.dashboard)}" style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;text-decoration:none;">sift</a>`
+          : `<span style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;">sift</span>`
       }</td>`,
     ),
     row(`<td style="font:700 28px/1.15 ${FONT};color:${INK};letter-spacing:-0.03em;">${escape(digest.label.name)}</td>`),
