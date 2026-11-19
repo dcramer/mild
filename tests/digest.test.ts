@@ -147,6 +147,13 @@ describe('a daily digest', () => {
     expect(delivered()[1]!.text).not.toContain('Run 1');
   });
 
+  it('links back to the dashboard where the host says it is reached', async () => {
+    await arrive(ACCOUNT, ['b1', 'Run 1 passed']);
+    clock = SEVEN + 6 * 60_000;
+    await runWork(store, DIGEST, { ...options(), dashboard: 'https://sift.example.com' }, clock + 60_000);
+    expect(delivered()[0]!.text).toContain('See them in Sift: https://sift.example.com/activity?label=notification');
+  });
+
   it('is due at the hour of the person’s own day, five minutes on, and only with something in it', async () => {
     await raw(db).run("UPDATE preferences SET digest_hour = 6, time_zone = 'America/Los_Angeles'");
     clock = Date.UTC(2026, 10, 18, 9);

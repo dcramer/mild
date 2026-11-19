@@ -17,7 +17,7 @@ interface Highlight {
 
 /** One label's mail that Sift took out of the inbox since the last digest. */
 export interface Digest {
-  label: { name: string; gmailLabel: string };
+  label: { id: string; name: string; gmailLabel: string };
   /** The mailbox the digest is put in. */
   mailbox: string;
   since: number;
@@ -27,7 +27,7 @@ export interface Digest {
   highlights: Highlight[];
   /** The person's, so times read as their clock does. */
   timeZone: string;
-  /** Where the person changes the digest. */
+  /** Sift's dashboard, for links back to it. */
   dashboard?: string;
 }
 
@@ -65,11 +65,36 @@ const labelLink = (digest: Digest) => gmail(digest.mailbox, `label/${encodeURICo
 const sender = (entry: DigestEntry) => entry.from.name?.trim() || entry.from.address;
 const subjectOf = (entry: DigestEntry) => entry.subject.trim() || '(no subject)';
 
+/** One line of a sender's mail: messages with the same subject are one line, linked to the newest. */
+interface Line {
+  newest: DigestEntry;
+  count: number;
+}
+
+/** A sender's mail in the digest, newest first. */
+interface Group {
+  from: DigestEntry;
+  count: number;
+  lines: Line[];
+}
+
+/** Each sender's mail, the senders with the most first, then the most recent. `entries` is newest first. */
+function bySender(entries: readonly DigestEntry[]): Group[] {
+  const groups = new Map<string, Group>();
+  for (const entry of entries) {
+    const key = entry.from.address.toLowerCase();
+    const group = groups.get(key) ?? { from: entry, count: 0, lines: [] };
+    groups.set(key, group);
+    group.count++;
+    const line = group.lines.find((l) => subjectOf(l.newest) === subjectOf(entry));
+    if (line) line.count++;
+    else group.lines.push({ newest: entry, count: 1 });
+  }
+  return [...groups.values()].toSorted((a, b) => b.count - a.count || b.from.receivedAt - a.from.receivedAt);
+}
+
 export function writeDigest(digest: Digest): DigestMail {
   const zone = { timeZone: digest.timeZone };
-  const clock = new Intl.DateTimeFormat('en-US', { ...zone, hour: 'numeric', minute: '2-digit' });
-  const dayName = new Intl.DateTimeFormat('en-US', { ...zone, weekday: 'long', month: 'long', day: 'numeric' });
-  const dayKey = new Intl.DateTimeFormat('en-CA', { ...zone, year: 'numeric', month: '2-digit', day: '2-digit' });
   const moment = new Intl.DateTimeFormat('en-US', { ...zone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   const date = new Intl.DateTimeFormat('en-US', { ...zone, weekday: 'short', month: 'short', day: 'numeric' });
   const dates = new Intl.DateTimeFormat('en-US', { ...zone, month: 'short', day: 'numeric' });
@@ -77,31 +102,42 @@ export function writeDigest(digest: Digest): DigestMail {
   const keepTogether = (time: string) => time.replace(/ (AM|PM)$/, '\u00a0$1');
 
   const entries = digest.entries.toSorted((a, b) => b.receivedAt - a.receivedAt);
-  const listed = entries.slice(0, LISTED);
   const byId = new Map(entries.map((e) => [e.id, e]));
   const highlights = digest.highlights.flatMap((h) => {
     const entry = byId.get(h.id);
     return entry ? [{ entry, why: h.why.trim() }] : [];
   });
-  const days = new Set(listed.map((e) => dayKey.format(e.receivedAt)));
-  const spansDays = days.size > 1;
+  const picked = new Set(highlights.map((h) => h.entry.id));
+  const groups = bySender(entries.slice(0, LISTED).filter((e) => !picked.has(e.id)));
 
-  // A window longer than a day (the first digest, or days Sift was off) names every day it holds.
-  const span = digest.until - digest.since <= ONE_DAY ? date.format(digest.until) : dates.formatRange(digest.since, digest.until);
+  // A window longer than a day (the first digest, or days Sift was off) names every day it holds, and each message its day.
+  const oneDay = digest.until - digest.since <= ONE_DAY;
+  const span = oneDay ? date.format(digest.until) : dates.formatRange(digest.since, digest.until);
+  const when = oneDay ? new Intl.DateTimeFormat('en-US', { ...zone, hour: 'numeric', minute: '2-digit' }) : dates;
+  const timeOf = (entry: DigestEntry) => keepTogether(when.format(entry.receivedAt));
   const subject = `${digest.label.name} digest for ${span}: ${plural(entries.length, 'message')}${highlights.length > 0 ? `, ${highlights.length} worth a look` : ''}`;
   const summary = `${plural(entries.length, 'message')} Sift archived since ${keepTogether(moment.format(digest.since))}`;
-  const senders = [...new Set(entries.map(sender))];
+  const senders = bySender(entries).map((g) => sender(g.from));
   const preheader =
     highlights.length > 0
       ? `Worth a look: ${highlights.map((h) => subjectOf(h.entry)).join(' · ')}`
       : senders.length <= 3
         ? senders.join(', ')
         : `${senders.slice(0, 3).join(', ')} and ${plural(senders.length - 3, 'other')}`;
-  const more = entries.length - listed.length;
+  const more = Math.max(0, entries.length - LISTED);
   const stayedOut = entries.length === 1 ? 'This one stayed out of your inbox.' : `These ${entries.length.toLocaleString('en-US')} stayed out of your inbox.`;
+  const inSift = digest.dashboard && `${digest.dashboard}/activity?${new URLSearchParams({ label: digest.label.id }).toString()}`;
+  // Held to the subject's last word, so a phone never leaves the count on a line alone.
+  const times = (count: number) => (count > 1 ? `\u00a0×${count}` : '');
 
   const html = page(subject, preheader, [
-    row(`<td style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;padding:0 0 20px;">sift</td>`),
+    row(
+      `<td style="padding:0 0 20px;">${
+        digest.dashboard
+          ? `<a href="${escape(digest.dashboard)}" style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;text-decoration:none;">sift</a>`
+          : `<span style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;">sift</span>`
+      }</td>`,
+    ),
     row(`<td style="font:700 28px/1.15 ${FONT};color:${INK};letter-spacing:-0.03em;">${escape(digest.label.name)}</td>`),
     row(`<td style="font:400 15px/1.5 ${FONT};color:${MUTED};padding:6px 0 28px;">${escape(summary)}</td>`),
     ...(highlights.length > 0
@@ -116,37 +152,46 @@ export function writeDigest(digest: Digest): DigestMail {
               }</td>`,
             ),
           ),
-          row(`<td style="padding:16px 0 0;"></td>`),
+          ...(groups.length > 0
+            ? [row(`<td style="font:700 12px/1 ${FONT};color:${MUTED};letter-spacing:0.06em;text-transform:uppercase;padding:36px 0 0;">Everything else</td>`)]
+            : []),
         ]
       : []),
-    row(
-      `<td style="font:700 12px/1 ${FONT};color:${MUTED};letter-spacing:0.06em;text-transform:uppercase;padding:16px 0 ${spansDays ? '0' : '4px'};">Everything</td>`,
-    ),
-    ...listed.flatMap((entry, i) => {
-      const day = dayKey.format(entry.receivedAt);
-      const opens = spansDays && (i === 0 || dayKey.format(listed[i - 1]!.receivedAt) !== day);
-      return [
-        ...(opens ? [row(`<td style="font:700 15px/1.3 ${FONT};color:${INK};padding:20px 0 2px;">${escape(dayName.format(entry.receivedAt))}</td>`)] : []),
+    ...groups.flatMap((group, i) => [
+      row(
+        `<td style="padding:${i === 0 ? 12 : 28}px 0 6px;border-bottom:1px solid ${RULE};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
+          `<td style="font:700 15px/1.3 ${FONT};color:${INK};">${escape(sender(group.from))}</td>` +
+          `<td align="right" style="font:400 13px/1.3 ${FONT};color:${MUTED};font-variant-numeric:tabular-nums;">${group.count.toLocaleString('en-US')}</td>` +
+          `</tr></table></td>`,
+      ),
+      ...group.lines.map(({ newest, count }) =>
         row(
-          `<td style="border-bottom:1px solid ${RULE};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
-            `<td width="76" valign="top" style="font:400 14px/1.5 ${FONT};color:${MUTED};padding:9px 0;white-space:nowrap;font-variant-numeric:tabular-nums;">${escape(clock.format(entry.receivedAt))}</td>` +
-            `<td valign="top" style="padding:9px 0;">${item(messageLink(entry), entry)}</td>` +
+          `<td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
+            `<td valign="top" style="font:400 15px/1.4 ${FONT};padding:8px 12px 0 0;"><a href="${escape(messageLink(newest))}" style="color:${INK};text-decoration:none;">${escape(subjectOf(newest))}</a>${
+              count > 1 ? `<span style="color:${MUTED};font-variant-numeric:tabular-nums;">${times(count)}</span>` : ''
+            }</td>` +
+            `<td valign="top" align="right" width="72" style="font:400 13px/1.6 ${FONT};color:${MUTED};padding:8px 0 0;white-space:nowrap;font-variant-numeric:tabular-nums;">${escape(timeOf(newest))}</td>` +
             `</tr></table></td>`,
         ),
-      ];
-    }),
+      ),
+    ]),
     ...(more > 0
       ? [
           row(
-            `<td style="font:400 15px/1.5 ${FONT};padding:14px 0 0;"><a href="${escape(labelLink(digest))}" style="color:${INK};">${escape(`${more.toLocaleString('en-US')} more in Gmail`)}</a></td>`,
+            `<td style="font:400 15px/1.5 ${FONT};padding:20px 0 0;"><a href="${escape(labelLink(digest))}" style="color:${INK};">${escape(`${more.toLocaleString('en-US')} more in Gmail`)}</a></td>`,
           ),
         ]
       : []),
-    row(`<td style="font:400 15px/1.5 ${FONT};color:${INK};padding:28px 0 0;">${escape(stayedOut)}</td>`),
+    row(`<td style="font:400 15px/1.5 ${FONT};color:${INK};padding:36px 0 0;">${escape(stayedOut)}</td>`),
     row(
       `<td style="font:400 13px/1.6 ${FONT};color:${MUTED};padding:16px 0 0;">` +
-        `<a href="${escape(labelLink(digest))}" style="color:${MUTED};">Open ${escape(digest.label.name)} in Gmail</a>` +
-        (digest.dashboard ? ` &nbsp;·&nbsp; <a href="${escape(`${digest.dashboard}/labels`)}" style="color:${MUTED};">Change or stop this digest</a>` : '') +
+        [
+          ...(inSift ? [`<a href="${escape(inSift)}" style="color:${MUTED};white-space:nowrap;">See them in Sift</a>`] : []),
+          `<a href="${escape(labelLink(digest))}" style="color:${MUTED};white-space:nowrap;">Open ${escape(digest.label.name)} in Gmail</a>`,
+          ...(digest.dashboard
+            ? [`<a href="${escape(`${digest.dashboard}/labels`)}" style="color:${MUTED};white-space:nowrap;">Change or stop this digest</a>`]
+            : []),
+        ].join(' &nbsp;·&nbsp; ') +
         `</td>`,
     ),
   ]);
@@ -159,25 +204,19 @@ export function writeDigest(digest: Digest): DigestMail {
           '',
           'WORTH A LOOK',
           ...highlights.flatMap(({ entry, why }) => ['', `${sender(entry)}: ${subjectOf(entry)}`, ...(why ? [`  ${why}`] : []), `  ${messageLink(entry)}`]),
+          ...(groups.length > 0 ? ['', '', 'EVERYTHING ELSE'] : []),
         ]
       : []),
-    '',
-    'EVERYTHING',
-    ...listed.flatMap((entry, i) => {
-      const day = dayKey.format(entry.receivedAt);
-      const opens = spansDays && (i === 0 || dayKey.format(listed[i - 1]!.receivedAt) !== day);
-      return [
-        ...(opens ? ['', dayName.format(entry.receivedAt)] : []),
-        '',
-        `${clock.format(entry.receivedAt)}  ${sender(entry)}`,
-        `  ${subjectOf(entry)}`,
-        `  ${messageLink(entry)}`,
-      ];
-    }),
+    ...groups.flatMap((group) => [
+      '',
+      `${sender(group.from)} (${group.count.toLocaleString('en-US')})`,
+      ...group.lines.flatMap(({ newest, count }) => [`  ${when.format(newest.receivedAt)}  ${subjectOf(newest)}${times(count)}`, `  ${messageLink(newest)}`]),
+    ]),
     ...(more > 0 ? ['', `${more.toLocaleString('en-US')} more in Gmail: ${labelLink(digest)}`] : []),
     '',
     stayedOut,
     '',
+    ...(inSift ? [`See them in Sift: ${inSift}`] : []),
     `Open in Gmail: ${labelLink(digest)}`,
     ...(digest.dashboard ? [`Change or stop this digest: ${digest.dashboard}/labels`] : []),
     '',
