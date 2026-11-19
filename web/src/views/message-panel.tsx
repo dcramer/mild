@@ -1,15 +1,16 @@
 'use client';
 import { messageKey } from '@/lib/params.ts';
 import { PlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
+import { useMailPress } from '@/components/mail.tsx';
 import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
-import { type Confidential, type MessageDetail, type RuleMatch, api, useLoaded } from '@/lib/api.ts';
+import { type Confidential, type MailConversation, type MessageDetail, type RuleMatch, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import {
@@ -27,6 +28,7 @@ import {
   Panel,
   Section,
   SomeOf,
+  Sub,
   Table,
   Td,
   TextLink,
@@ -47,12 +49,22 @@ export interface MessageRef {
   messageId: string;
   /** Null when the list it was opened from does not know it. */
   subject: Confidential | null;
+  /** Opened as a conversation (Inbox), whose newest message `messageId` is. */
+  threadId?: string;
 }
 
 type Decision = MessageDetail['decisions'][number];
 type Action = MessageDetail['actions'][number];
 
-const CHANGE: Record<string, string> = { archive: 'Archived', spam: 'Marked spam', label: 'Labelled', undo: 'Undid a change', unsubscribe: 'Unsubscribed' };
+const CHANGE: Record<string, string> = {
+  archive: 'Archived',
+  spam: 'Marked spam',
+  label: 'Labelled',
+  undo: 'Undid a change',
+  unsubscribe: 'Unsubscribed',
+  read: 'Marked read',
+  unread: 'Marked unread',
+};
 /** A change that never landed, as the lists say it ("Not archived"): it is tried again, so it is only history. */
 const NOT_DONE: Record<string, string> = {
   archive: 'Not archived',
@@ -60,6 +72,8 @@ const NOT_DONE: Record<string, string> = {
   label: 'Not labelled',
   undo: 'Not undone',
   unsubscribe: 'Not unsubscribed',
+  read: 'Not marked read',
+  unread: 'Not marked unread',
 };
 
 function DecisionEvent({ d }: { d: Decision }) {
@@ -140,11 +154,14 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
  */
 function Body({
   detail,
+  conversation,
   onPick,
   onAnswered,
   onUndone,
 }: {
   detail: MessageDetail;
+  /** Opened from Inbox: the conversation whose newest message `detail` is. */
+  conversation: MailConversation | null;
   /** Show another message from the same sender in this panel. */
   onPick: (message: Pick<MessageRef, 'accountId' | 'messageId'>) => void;
   onAnswered: () => void;
@@ -237,7 +254,7 @@ function Body({
     // rows' hover and its scrollbar sit where the page's would.
     <div className="flex flex-col gap-10 lg:grid lg:h-full lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-12 2xl:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex min-h-0 min-w-0 flex-col max-lg:order-2">
-        <MessageBody detail={detail} />
+        {conversation ? <Conversation conversation={conversation} newest={detail} /> : <MessageBody detail={detail} />}
       </div>
       <div className="max-lg:contents lg:-mt-1 lg:-mr-6 lg:-mb-6 lg:-ml-4 lg:flex lg:flex-col lg:gap-8 lg:overflow-x-hidden lg:overflow-y-auto lg:pt-1 lg:pr-6 lg:pb-6 lg:pl-4">
         <div className="flex min-w-0 flex-col gap-3 max-lg:order-1">
@@ -325,6 +342,79 @@ function Body({
   );
 }
 
+/**
+ * A conversation, oldest first: each message folded to who sent it, its first line and when, but the one open, at
+ * reading size, which starts as the newest. Pressing a folded one opens it in its place. Opening the conversation
+ * marks it read.
+ */
+function Conversation({ conversation, newest }: { conversation: MailConversation; newest: MessageDetail }) {
+  const [openId, setOpenId] = useState(newest.messageId);
+  const other = openId === newest.messageId ? null : openId;
+  const opened = useLoaded(
+    `message/${conversation.accountId}/${other ?? ''}`,
+    (signal) => (other ? api.message(other, signal, conversation.accountId) : Promise.resolve(null)),
+    30_000,
+    '',
+  );
+  const { press } = useMailPress();
+  const unread = conversation.messages.filter((m) => m.unread).map((m) => m.messageId);
+  // Read is a change in Gmail like any other, made once as it opens.
+  const marked = useRef(false);
+  useEffect(() => {
+    if (marked.current || unread.length === 0) return;
+    marked.current = true;
+    press([{ accountId: conversation.accountId, threadId: conversation.threadId, messageIds: unread, subject: newest.subject }], 'read');
+  });
+  const at = conversation.messages.findIndex((m) => m.messageId === openId);
+  const folded = (list: MailConversation['messages']) =>
+    list.length === 0 ? null : (
+      <div className="lg:max-h-[45%] lg:shrink-0 lg:overflow-y-auto">
+        <Table>
+          <Heads>
+            <Th>From</Th>
+            <Th num>Received</Th>
+          </Heads>
+          <tbody>
+            {list.map((m) => (
+              <Tr key={m.messageId} onOpen={() => setOpenId(m.messageId)}>
+                <Td className="w-full max-w-0">
+                  <span className={`block truncate ${m.unread ? 'font-semibold' : ''}`}>{reveal(m.fromName) ?? reveal(m.fromAddress)}</span>
+                  {m.preview ? <Sub>{reveal(m.preview)}</Sub> : null}
+                </Td>
+                <Td num quiet>
+                  <Ago at={m.receivedAt} />
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      </div>
+    );
+  const shown = other ? opened.data : newest;
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+      {folded(conversation.messages.slice(0, Math.max(at, 0)))}
+      {shown ? (
+        <>
+          {other ? (
+            <p className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
+              <SenderLink address={reveal(shown.fromAddress)} name={reveal(shown.fromName)} className="text-foreground">
+                {reveal(shown.fromName) ?? reveal(shown.fromAddress)}
+              </SenderLink>
+              <span aria-hidden>·</span>
+              <span className="tabular-nums">{dateTime(shown.receivedAt)}</span>
+            </p>
+          ) : null}
+          <MessageBody key={shown.messageId} detail={shown} />
+        </>
+      ) : (
+        <Loading rows={4} />
+      )}
+      {folded(conversation.messages.slice(at + 1))}
+    </div>
+  );
+}
+
 const people = (list: MessageDetail['to']) => list.map((p) => reveal(p.address));
 
 /** Who a message went to, unless that was the account alone, which says nothing. A long list folds, so the panel's header never fills the screen. */
@@ -380,7 +470,21 @@ export function MessagePanel({
     30_000,
     '',
   );
+  const threadId = picked ? undefined : item?.threadId;
+  const thread = useLoaded(
+    `thread/${item?.accountId ?? ''}/${threadId ?? ''}`,
+    (signal) => (threadId ? api.mailThread(threadId, signal, item?.accountId) : Promise.resolve(null)),
+    30_000,
+    '',
+  );
+  const { press } = useMailPress();
+  const next = () => (index < items.length - 1 ? onIndex(index + 1) : onClose());
   if (!item) return null;
+  const conversation = threadId ? thread.data : null;
+  const pressed =
+    conversation && data
+      ? { accountId: conversation.accountId, threadId: conversation.threadId, messageIds: conversation.messages.map((m) => m.messageId), subject: data.subject }
+      : null;
 
   return (
     <Panel
@@ -414,13 +518,27 @@ export function MessagePanel({
       position={items.length > 1 ? `${index + 1} of ${items.length}` : undefined}
       onPrevious={index > 0 ? () => onIndex(index - 1) : undefined}
       onNext={index < items.length - 1 ? () => onIndex(index + 1) : undefined}
+      // Reply, Reply all and Forward go first here, as what answers the conversation.
+      actions={
+        threadId ? (
+          <>
+            <Button disabled={!pressed} onClick={() => pressed && press([pressed], 'archive', next)}>
+              Archive
+            </Button>
+            <Button variant="quiet" disabled={!pressed} onClick={() => pressed && press([pressed], 'unread', onClose)}>
+              Mark unread
+            </Button>
+          </>
+        ) : undefined
+      }
     >
-      {loading ? (
+      {loading || (threadId && thread.loading) ? (
         <Loading rows={6} />
       ) : data ? (
         <Body
           key={`${data.accountId}/${data.messageId}`}
           detail={data}
+          conversation={conversation}
           onPick={setPicked}
           onUndone={reload}
           onAnswered={() => {
