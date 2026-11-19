@@ -5,11 +5,31 @@ import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { Thinks, useMailPress, whoWrote } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, useLoaded, usePages } from '@/lib/api.ts';
 import { useHidden } from '@/lib/action.ts';
+import { useCompose } from '@/lib/compose.ts';
 import { inboxFirst, period } from '@/lib/format.ts';
 import { messageKey, threadKey, useParam } from '@/lib/params.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
-import { Arrived, Callout, Check, Empty, FilterGroup, Heads, ListView, More, OnPhone, RowCheck, Sub, Table, Td, Th, Tr, TrGroup, useNow } from '@/system';
+import {
+  Arrived,
+  Button,
+  Callout,
+  Check,
+  Empty,
+  FilterGroup,
+  Heads,
+  ListView,
+  More,
+  OnPhone,
+  RowCheck,
+  Sub,
+  Table,
+  Td,
+  Th,
+  Tr,
+  TrGroup,
+  useNow,
+} from '@/system';
 
 const VIEWS = [
   ['all', 'Everything'],
@@ -65,6 +85,16 @@ function ThreadRow({ thread, selected, onSelect, onOpen }: { thread: MailThread;
       </Td>
     </Tr>
   );
+}
+
+/** Compose on a phone, which has no rail. Nothing while Inbox is off. */
+export function PhoneCompose() {
+  const compose = useCompose();
+  return compose ? (
+    <Button className="md:hidden" onClick={() => compose()}>
+      Compose
+    </Button>
+  ) : null;
 }
 
 /** Inbox: the conversations in the inbox, as a mail app lists them, with what Sift thinks of each. */
