@@ -13,6 +13,11 @@ const DAY_MS = 86_400_000;
  * next fetches only the rest. 50 metadata reads are 1,000 quota units.
  */
 const CHUNK = 50;
+/**
+ * How long before the last sync began a message history did not list as added may say it arrived and still be
+ * taken as new: Gmail's arrival time and its history are not in step. Older mail put back in the inbox is not new.
+ */
+const LATE = 60 * 60_000;
 
 export interface SyncReport {
   mode: PullResult['mode'];
@@ -44,31 +49,24 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
   }
   const pull = await mailOnly(db, account, await pullChanges(api, account.historyId));
   const byUser = await userChanges(db, account.id, pull.labelChanges, syncedAt ?? 0);
-  const known = new Set(
-    pull.messageIds.length === 0
-      ? []
-      : (
-          await db
-            .select({ id: messages.id })
-            .from(messages)
-            .where(and(eq(messages.accountId, account.id), inArray(messages.id, pull.messageIds)))
-        ).map((r) => r.id),
-  );
+  const known = await recorded(db, account.id, [...pull.messageIds, ...pull.strays]);
+  const since = (syncedAt ?? startedAt) - LATE;
   const added: MessageFacts[] = [];
   let unrecorded: MessageFacts[] = [];
   let skipped = 0;
 
-  for (const id of pull.messageIds) {
+  for (const [id, stray] of [...pull.messageIds.map((id) => [id, false] as const), ...pull.strays.map((id) => [id, true] as const)]) {
     if (known.has(id)) continue;
     if (now() >= until) {
       await recordSynced(db, account.id, unrecorded, startedAt);
       return { mode: pull.mode, added, skipped, corrections: 0, unfinished: true };
     }
     const raw = await api.getMetadata(id);
-    const facts = raw?.labelIds.includes('INBOX') ? toFacts(account.id, raw) : null;
+    const arrived = raw?.labelIds.includes('INBOX') && (!stray || raw.internalDate >= since);
+    const facts = raw && arrived ? toFacts(account.id, raw) : null;
     // A digest whose Gmail id Sift had not recorded yet when this read it.
     if (!facts || (await isOwnDigest(db, facts.headers))) {
-      skipped++;
+      if (!stray) skipped++;
       continue;
     }
     added.push(facts);
@@ -94,12 +92,28 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
 export async function syncWants(db: Sql, api: GmailApi, account: Account): Promise<boolean> {
   const pull = await mailOnly(db, account, await pullChanges(api, account.historyId));
   if (pull.mode !== 'incremental' || pull.messageIds.length > 0) return true;
+  if ((await recorded(db, account.id, pull.strays)).size < pull.strays.length) return true;
   return (await userChanges(db, account.id, pull.labelChanges, (await lastSyncedAt(db, account.id)) ?? 0)).length > 0;
+}
+
+/** Which of `ids` the record already holds. */
+async function recorded(db: Sql, accountId: string, ids: readonly string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), inArray(messages.id, [...ids])));
+  return new Set(rows.map((r) => r.id));
 }
 
 /** History without Sift's own digests: one arriving, or read, is nothing for a pass to do. */
 async function mailOnly(db: Sql, account: Account, pull: PullResult): Promise<PullResult> {
-  const digests = await knownDigests(db, account.id, [...new Set([...pull.messageIds, ...pull.labelChanges.map((c) => c.messageId)])]);
+  const digests = await knownDigests(db, account.id, [...new Set([...pull.messageIds, ...pull.strays, ...pull.labelChanges.map((c) => c.messageId)])]);
   if (digests.size === 0) return pull;
-  return { ...pull, messageIds: pull.messageIds.filter((id) => !digests.has(id)), labelChanges: pull.labelChanges.filter((c) => !digests.has(c.messageId)) };
+  return {
+    ...pull,
+    messageIds: pull.messageIds.filter((id) => !digests.has(id)),
+    strays: pull.strays.filter((id) => !digests.has(id)),
+    labelChanges: pull.labelChanges.filter((c) => !digests.has(c.messageId)),
+  };
 }

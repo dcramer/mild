@@ -57,6 +57,11 @@ export interface HistoryLabelChange {
 export interface HistoryPage {
   additions: HistoryAddition[];
   labelChanges?: HistoryLabelChange[];
+  /**
+   * Messages a record names without saying they were added, relabelled or deleted. Gmail has been seen to
+   * leave a new message out of `messagesAdded` and name it only here.
+   */
+  unexplained?: string[];
   /** The mailbox's current history id; the next cursor once the last page is read. */
   historyId: string;
   nextPageToken?: string;
@@ -123,15 +128,17 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
           client.users.history.list({
             userId,
             startHistoryId,
-            // Not narrowed to the inbox: mail the user takes out of the inbox or out of spam must show up too.
-            historyTypes: ['messageAdded', 'labelAdded', 'labelRemoved'],
+            // Not narrowed to the inbox: mail the user takes out of the inbox or out of spam must show up too. Nor
+            // to any type: a record that names a new message only in `messages` has none of them.
             maxResults: 500,
             ...(pageToken ? { pageToken } : {}),
           }),
         );
         const additions: HistoryAddition[] = [];
         const labelChanges: HistoryLabelChange[] = [];
+        const unexplained: string[] = [];
         for (const record of data.history ?? []) {
+          const named = new Set<string>();
           for (const added of record.messagesAdded ?? []) {
             if (added.message?.id) additions.push({ id: added.message.id, labelIds: added.message.labelIds ?? [] });
           }
@@ -141,8 +148,17 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
           for (const change of record.labelsRemoved ?? []) {
             if (change.message?.id) labelChanges.push({ messageId: change.message.id, added: [], removed: change.labelIds ?? [] });
           }
+          for (const typed of [record.messagesAdded, record.messagesDeleted, record.labelsAdded, record.labelsRemoved])
+            for (const entry of typed ?? []) if (entry.message?.id) named.add(entry.message.id);
+          for (const message of record.messages ?? []) if (message.id && !named.has(message.id)) unexplained.push(message.id);
         }
-        return { additions, labelChanges, historyId: data.historyId ?? startHistoryId, ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}) };
+        return {
+          additions,
+          labelChanges,
+          unexplained,
+          historyId: data.historyId ?? startHistoryId,
+          ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}),
+        };
       } catch (error) {
         if (isNotFound(error)) throw new HistoryExpiredError();
         throw error;

@@ -10,6 +10,12 @@ export interface PullResult {
    * changed while the cursor was expired cannot be read back.
    */
   labelChanges: HistoryLabelChange[];
+  /**
+   * Messages history named without listing them as added to the inbox, that may have been: named by a record
+   * without saying what happened to them, or put in the inbox. Sync records those that are new to it and arrived
+   * since it last looked.
+   */
+  strays: string[];
   /** Store this as the new cursor, in the same transaction that records the messages. */
   historyId: string;
   /** How the ids were found. `recovery` means the cursor had expired and a bounded search was used instead. */
@@ -28,12 +34,13 @@ const RECOVERY_DAYS = 7;
 export async function pullChanges(api: GmailApi, cursor: string | null): Promise<PullResult> {
   if (cursor === null) {
     const profile = await api.getProfile();
-    return { messageIds: [], labelChanges: [], historyId: profile.historyId, mode: 'start' };
+    return { messageIds: [], labelChanges: [], strays: [], historyId: profile.historyId, mode: 'start' };
   }
 
   try {
     const ids = new Set<string>();
     const labelChanges: HistoryLabelChange[] = [];
+    const strays = new Set<string>();
     let historyId = cursor;
     let pageToken: string | undefined;
     do {
@@ -41,10 +48,12 @@ export async function pullChanges(api: GmailApi, cursor: string | null): Promise
       // A message can be added outside the inbox (sent, filtered) and still appear; keep only inbox arrivals.
       for (const added of page.additions) if (added.labelIds.includes('INBOX')) ids.add(added.id);
       labelChanges.push(...(page.labelChanges ?? []));
+      for (const id of page.unexplained ?? []) strays.add(id);
+      for (const change of page.labelChanges ?? []) if (change.added.includes('INBOX')) strays.add(change.messageId);
       historyId = page.historyId;
       pageToken = page.nextPageToken;
     } while (pageToken);
-    return { messageIds: [...ids], labelChanges, historyId, mode: 'incremental' };
+    return { messageIds: [...ids], labelChanges, strays: [...strays].filter((id) => !ids.has(id)), historyId, mode: 'incremental' };
   } catch (error) {
     if (!(error instanceof HistoryExpiredError)) throw error;
   }
@@ -59,7 +68,7 @@ export async function pullChanges(api: GmailApi, cursor: string | null): Promise
     pageToken = page.nextPageToken;
   } while (pageToken);
   // Search returns newest first.
-  return { messageIds: [...ids].toReversed(), labelChanges: [], historyId: profile.historyId, mode: 'recovery' };
+  return { messageIds: [...ids].toReversed(), labelChanges: [], strays: [], historyId: profile.historyId, mode: 'recovery' };
 }
 
 /** Convert Gmail metadata to triage input. Null when there is no usable From address. */
