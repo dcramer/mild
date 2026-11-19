@@ -4,6 +4,7 @@ import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint } from '@/components/sender.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
+import { Mailbox } from '@/lib/narrowed.ts';
 import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
   Ago,
@@ -52,6 +53,7 @@ import {
   LoadingBar,
   MailFrame,
   Marked,
+  MailboxSwitch,
   Masthead,
   Menu,
   Meter,
@@ -181,6 +183,8 @@ export function SystemView() {
   const [shown, setShown] = useState('');
   const [made, setMade] = useState('');
   const [labelled, setLabelled] = useState('');
+  const [mailbox, setMailbox] = useState('');
+  const mailboxes = { mailboxes: ['ada@example.org', 'ada@work.example.org'], value: mailbox, onChange: setMailbox };
   const toast = useToast();
   const answer = () =>
     toast('Archive as Marketing', {
@@ -536,7 +540,7 @@ export function SystemView() {
           </div>
         </Section>
 
-        <Section title="Page header and section" meta="the top of every page, and the parts under it">
+        <Section title="Page header and section" meta="the top of every page, and the parts under it; the second narrowed to one mailbox">
           <Sheet className="gap-8 p-5">
             <PageHeader
               title="Rules"
@@ -547,6 +551,9 @@ export function SystemView() {
                 </Button>
               }
             />
+            <Mailbox value="ada@work.example.org">
+              <PageHeader title="For review" />
+            </Mailbox>
             <Section title="Proposed rules" meta="2" action={<TextLink href="/system">See all</TextLink>}>
               <p className="text-muted-foreground">A section’s content. No rule or box sets it apart, only space.</p>
             </Section>
@@ -913,14 +920,26 @@ export function SystemView() {
           </Table>
         </Section>
 
-        <Section title="Navigation" meta="the rail on a desktop, the masthead on a phone">
+        <Section title="Navigation" meta="the rail on a desktop, the masthead on a phone; the mailbox switch in each, for someone with more than one">
           <div className="hidden gap-6 md:flex">
-            <Sheet className="flex h-[34rem]">
-              <Rail current="system" items={NAV} aside={<SiftStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} stacked />} account={account} />
+            <Sheet className="flex h-[38rem]">
+              <Rail
+                current="system"
+                items={NAV}
+                aside={<SiftStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} stacked />}
+                mailbox={mailboxes}
+                account={account}
+              />
             </Sheet>
-            <Sheet className="flex h-[34rem]">
+            <Sheet className="flex h-[38rem]">
               <Rail current="" items={[]} />
             </Sheet>
+          </div>
+          <div className="flex flex-wrap items-end gap-6">
+            <MailboxSwitch {...mailboxes} compact />
+            <div className="w-72">
+              <MailboxSwitch {...mailboxes} />
+            </div>
           </div>
           <div className="flex flex-col gap-6 md:hidden">
             <Sheet className="px-4">
@@ -929,6 +948,7 @@ export function SystemView() {
                 items={NAV}
                 aside={<SiftStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} />}
                 detail={<UsageDetail usage={USAGE} plan={null} />}
+                mailbox={mailboxes}
                 account={account}
               />
             </Sheet>

@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Anchor } from './anchor.tsx';
+import { type MailboxChoice, MailboxSwitch } from './mailbox.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Wordmark } from './type.tsx';
 
@@ -17,19 +18,21 @@ export interface NavItem {
 
 /**
  * The sections down the left of every screen on a desktop: the name at the top, then each section as its icon over
- * its name, the current one's icon in the highlighter, then at the foot `aside` (Sift's line, stacked) and `account`
- * (who is signed in, behind their `Avatar`). No fill; a line sets it apart. As tall as the window, and never taller
+ * its name, the current one's icon in the highlighter, then at the foot `aside` (Sift's line, stacked), the
+ * `mailbox` the dashboard shows, beside whose they are, and `account` (who is signed in, behind their `Avatar`). No fill; a line sets it apart. As tall as the window, and never taller
  * than what holds it. Given no sections it is the name alone, as `Masthead` is.
  */
 export function Rail({
   items,
   current,
   aside,
+  mailbox,
   account,
 }: {
   items: readonly NavItem[];
   current: string;
   aside?: ReactNode;
+  mailbox?: MailboxChoice | undefined;
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   return (
@@ -69,6 +72,7 @@ export function Rail({
       {aside || account ? (
         <div className="mt-auto flex flex-col items-center gap-4 text-label text-muted-foreground">
           {aside}
+          {mailbox ? <MailboxSwitch {...mailbox} compact /> : null}
           {account ? (
             <Menu
               label={`Account, ${account.name}`}

@@ -5,6 +5,7 @@ import { type ReactNode, useContext, useState } from 'react';
 import { Anchor } from './anchor.tsx';
 import { Button } from './button.tsx';
 import { Cloud, FinePrint } from './fine-print.tsx';
+import { type MailboxChoice, MailboxSwitch } from './mailbox.tsx';
 import { Avatar, type MenuItem } from './menu.tsx';
 import type { NavItem } from './rail.tsx';
 import { Wordmark } from './type.tsx';
@@ -14,19 +15,22 @@ const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center just
 /**
  * The top of every screen on a phone, where `Rail` is not shown: the name, `aside` (Sift's line) and a menu button.
  * The sections and `account` move into a panel that covers the screen, the sections followed by `FinePrint` as a list,
- * with `detail` (what `aside`'s hover card says, which a touch screen never shows) framed above the account.
+ * with `detail` (what `aside`'s hover card says, which a touch screen never shows) framed above the account, and the
+ * `mailbox` the dashboard shows under whose they are.
  */
 export function Masthead({
   items,
   current,
   aside,
   detail,
+  mailbox,
   account,
 }: {
   items: readonly NavItem[];
   current: string;
   aside?: ReactNode;
   detail?: ReactNode;
+  mailbox?: MailboxChoice | undefined;
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   const [open, setOpen] = useState(false);
@@ -100,6 +104,15 @@ export function Masthead({
                   <Avatar name={account.name} />
                   <span className="min-w-0 break-all">{account.name}</span>
                 </p>
+                {mailbox ? (
+                  <MailboxSwitch
+                    {...mailbox}
+                    onChange={(chosen) => {
+                      setOpen(false);
+                      mailbox.onChange(chosen);
+                    }}
+                  />
+                ) : null}
                 <div className="grid auto-cols-fr grid-flow-col gap-2">
                   {account.items.map((item) => (
                     <Button

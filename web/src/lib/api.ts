@@ -1,5 +1,6 @@
 import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useQuery } from '@tanstack/react-query';
-import { useSyncExternalStore } from 'react';
+import { useContext, useSyncExternalStore } from 'react';
+import { Mailbox } from './narrowed.ts';
 import { traceHeaders } from './trace.ts';
 
 export type {
@@ -141,9 +142,14 @@ async function send(path: string, init: RequestInit, unreachable: string): Promi
   return response;
 }
 
+/** The mailbox a read is narrowed to, by the signal `useLoaded` gave it, so no read has to pass it along. */
+const narrowedBy = new WeakMap<AbortSignal, string>();
+
 async function get<T>(path: string, params: Record<string, string | number>, signal: AbortSignal): Promise<T> {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (value !== '') query.set(key, String(value));
+  const mailbox = narrowedBy.get(signal);
+  if (mailbox) query.set('mailbox', mailbox);
   const response = await send(`${path}?${query}`, { signal, headers: traceHeaders() }, 'Sift cannot be reached.');
   if (!response.ok) throw new Refused(response.status, await reason(response));
   return (await response.json()) as T;
@@ -348,11 +354,18 @@ export interface Loaded<T> {
  * Load `fetcher` now, again whenever `key` changes, every `refreshMs` while the tab is visible, when the
  * tab is returned to and when sift comes back after being unreachable. Views that share a `key` share
  * one request. A failed refresh keeps the last good data on screen and reports the error beside it.
+ * Narrowed to the `Mailbox` it is drawn under, or to `mailbox` (`''` for all of them), and loaded again for another.
  */
-export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>, refreshMs = 30_000): Loaded<T> {
+export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>, refreshMs = 30_000, mailbox?: string): Loaded<T> {
+  const under = useContext(Mailbox);
+  const narrowed = mailbox ?? under;
   const query = useQuery({
-    queryKey: [key],
-    queryFn: ({ signal }) => fetcher(signal),
+    // All mailboxes is the key alone, as the server draws it (`src/sift/page-data.ts`).
+    queryKey: narrowed ? [key, narrowed] : [key],
+    queryFn: ({ signal }) => {
+      if (narrowed) narrowedBy.set(signal, narrowed);
+      return fetcher(signal);
+    },
     refetchInterval: refreshMs,
     placeholderData: keepPreviousData,
   });

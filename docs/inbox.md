@@ -10,7 +10,7 @@ Sift's dashboard was built to answer what Sift could not decide. Inbox makes it 
 
 ## The frame
 
-On a desktop the sections move from the masthead to a slim column on the left (`Rail`, `web/src/system/rail.tsx`): the wordmark at its top, then one icon per section with its name under it (For review, Inbox, Activity, Labels, Rules), the current one marked in the highlighter. For review carries how many wait. At its foot: the mailbox switcher, Sift's line (sync and cost, opening the same card as before), and the avatar's menu. The page title sits at the top of the page, where the masthead was, and a `Notice` over it.
+On a desktop the sections move from the masthead to a slim column on the left (`Rail`, `web/src/system/rail.tsx`): the wordmark at its top, then one icon per section with its name under it (For review, Inbox, Activity, Labels, Rules), the current one marked in the highlighter. For review carries how many wait. At its foot: Sift's line (sync and cost, opening the same card as before), the mailbox switcher, and the avatar's menu: the switcher sits with the account whose mailboxes it chooses between, under the line, which stays for all of them. The page title sits at the top of the page, where the masthead was, and a `Notice` over it.
 
 On a phone nothing moves from the bar and menu, which gain Inbox and the switcher.
 

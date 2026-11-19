@@ -7,6 +7,8 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
+import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
+import { Mailbox } from '@/lib/narrowed.ts';
 import { OpenMessagesContext } from '@/lib/open-messages.ts';
 import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
 import { useHidden } from '@/lib/action.ts';
@@ -125,7 +127,11 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const open = messageId === '' ? null : listed === -1 ? { items: [{ accountId: '', messageId, subject: null }], index: 0 } : { items: list, index: listed };
   const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) => setParams({ message: item?.messageId ?? '' }, push);
   const online = useOnline();
+  // Drawn above the `Mailbox` it provides, so for all of them: whose mailboxes these are, and whose sign-in expired.
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const mailboxes = (manage.data?.accounts ?? []).map((a) => a.email);
+  const mailbox = useChosenMailbox(mailboxes);
+  const inMailbox = useLoaded('manage', (signal) => api.manage(signal), 60_000, mailbox);
   const expired = manage.data?.activity.expired ?? [];
   const here = useHere();
   // A list can be pressed while the last panel is still sliding away, its message still in the address. That
@@ -147,7 +153,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
   const plan = manage.data ? subscription(manage.data.model) : null;
   // An answer on its way has left the list, so it leaves the count with it until the count is read again.
-  const waiting = Math.max(0, (manage.data?.waiting ?? 0) - [...useHidden(manage.at)].filter(isMessageKey).length);
+  const waiting = Math.max(0, (inMailbox.data?.waiting ?? 0) - [...useHidden(inMailbox.at)].filter(isMessageKey).length);
 
   const going = useGoing();
   const fetching = useIsFetching(firstLoad);
@@ -174,40 +180,44 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
         ],
       }
     : undefined;
+  const choice = { mailboxes, value: mailbox, onChange: chooseMailbox };
 
   return (
     <OpenMessagesContext value={openMessages}>
-      <div className="md:flex">
-        <Rail current={section ?? ''} items={items} aside={status(true)} account={account} />
-        <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6 md:pt-6">
-          <LoadingBar on={going || fetching > 0} />
-          <Masthead
-            current={section ?? ''}
-            items={items}
-            aside={status(false)}
-            detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
-            account={account}
-          />
-          {notice ? <div className="flex flex-wrap gap-x-4 gap-y-1 pb-5">{notice}</div> : null}
-          <main className="pb-16">{children}</main>
-          <PageFoot />
+      <Mailbox value={mailbox}>
+        <div className="md:flex">
+          <Rail current={section ?? ''} items={items} aside={status(true)} mailbox={choice} account={account} />
+          <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6 md:pt-6">
+            <LoadingBar on={going || fetching > 0} />
+            <Masthead
+              current={section ?? ''}
+              items={items}
+              aside={status(false)}
+              detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
+              mailbox={choice}
+              account={account}
+            />
+            {notice ? <div className="flex flex-wrap gap-x-4 gap-y-1 pb-5">{notice}</div> : null}
+            <main className="pb-16">{children}</main>
+            <PageFoot />
+          </div>
+          {open ? (
+            <MessagePanel
+              key={opened}
+              items={open.items}
+              index={open.index}
+              onIndex={(index) => show(open.items[index])}
+              onClosing={() => (closing.current = true)}
+              // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
+              onClose={() => {
+                closing.current = false;
+                if (panelEntry()) window.history.back();
+                else show(undefined);
+              }}
+            />
+          ) : null}
         </div>
-        {open ? (
-          <MessagePanel
-            key={opened}
-            items={open.items}
-            index={open.index}
-            onIndex={(index) => show(open.items[index])}
-            onClosing={() => (closing.current = true)}
-            // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
-            onClose={() => {
-              closing.current = false;
-              if (panelEntry()) window.history.back();
-              else show(undefined);
-            }}
-          />
-        ) : null}
-      </div>
+      </Mailbox>
     </OpenMessagesContext>
   );
 }

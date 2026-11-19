@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { Narrowed } from './mailbox.tsx';
 import { Blank } from './state.tsx';
 
 /**
  * The top of a page: its name, and on the right the page's own action or one quiet line of numbers, the
  * two centred on each other. `badge` sits beside the title, for a stamp that says what the page's subject
  * is; `meta` is a line under it naming that subject (a sender's address), and `null` holds its room
- * until it is known. No count and no explanation. On a phone the action stays beside a title alone; a title
+ * until it is known. The mailbox the dashboard is narrowed to, if any, follows the title. No count and no explanation. On a phone the action stays beside a title alone; a title
  * with a line under it keeps its width, and the action goes under it.
  */
 export function PageHeader({ title, badge, meta, actions }: { title: ReactNode; badge?: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
@@ -16,6 +17,7 @@ export function PageHeader({ title, badge, meta, actions }: { title: ReactNode; 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="statement min-w-0 wrap-anywhere">{title}</h1>
           {badge}
+          <Narrowed />
         </div>
         {meta === undefined ? null : <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">{meta ?? <Blank />}</div>}
       </div>

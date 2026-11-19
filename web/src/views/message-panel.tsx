@@ -373,8 +373,12 @@ export function MessagePanel({
     setPicked(null);
   }
   const shown = picked ?? item;
-  const { data, error, loading, reload } = useLoaded(`message/${shown?.accountId ?? ''}/${shown?.messageId ?? ''}`, (signal) =>
-    shown ? api.message(shown.messageId, signal, shown.accountId) : Promise.reject(new Error('Nothing is open.')),
+  // Not narrowed: a message linked to may be in a mailbox the dashboard is not narrowed to.
+  const { data, error, loading, reload } = useLoaded(
+    `message/${shown?.accountId ?? ''}/${shown?.messageId ?? ''}`,
+    (signal) => (shown ? api.message(shown.messageId, signal, shown.accountId) : Promise.reject(new Error('Nothing is open.'))),
+    30_000,
+    '',
   );
   if (!item) return null;
 

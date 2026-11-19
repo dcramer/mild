@@ -60,7 +60,7 @@ The working list for sift. Remove an item when it lands; add what you find. What
 - [ ] On a phone a 600px HTML message scrolls sideways inside its frame; it cannot be scaled without script.
 - [ ] A rule's panel shows what it decided each day over 30 days and its mail still in the inbox; not yet every message it matched.
 - [ ] **Download your own data**, to keep or to build an eval set from: each message's record with what each tier and the model said and what the user answered, their labels and rules, and the mail text kept in `examples`. Most of it is sealed, so the server opens it for that person alone. To decide: the format (JSON Lines, a message a line with the answer beside the decisions, reads straight into an eval), whether mail text is in it by default, and how a large record streams out within a Vercel function's time limit.
-- [ ] **Mailboxes.** A mailbox switcher in the page (one, or all); a way to hand over or leave an install; try a second account end to end.
+- [ ] **Mailboxes.** A way to hand over or leave an install; try a second account end to end.
 - [ ] Removing a mailbox or deleting an account leaves the Gmail filters Sift wrote, and the confirm says so. Offer to remove them, which needs the mailbox's access before it is revoked. Say that backups keep data for their own retention.
 - [ ] Try a label's description, or a rule's "only when", on recent mail before saving it: what the model would now say about a few messages, beside what it said.
 - [ ] Use Tailscale's identity headers to skip the Google round trip for viewers on the tailnet.
