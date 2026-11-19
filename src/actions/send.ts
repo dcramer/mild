@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { canSend, mailboxAliases } from '../store/accounts.ts';
 import { finishAction, insertPendingAction, openTries } from '../store/actions.ts';
 import { preferences } from '../store/preferences.ts';
+import { recordSent } from '../store/sent.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
 import type { Mailbox } from './mailbox.ts';
@@ -96,18 +97,38 @@ export function buildMessage(mail: Outgoing, id: string, at: number): string {
   return `${headers.join('\r\n')}\r\n\r\n${body.replaceAll(/.{1,76}/g, '$&\r\n')}`;
 }
 
+/** A party as the record keeps it, for `envelopeOf` to read back: the name quoted, without the quotes and backslashes it cannot hold. */
+const recorded = ({ name, address: value }: Party) => (name ? `"${name.replaceAll(/["\\]/g, '')}" <${value}>` : value);
+
+/** The headers the record keeps of mail sent, as `messages.headers` keeps a synced message's: names lowercased. */
+function sentHeaders(mail: Outgoing, id: string, at: number): Record<string, string> {
+  return {
+    from: recorded(mail.from),
+    ...(mail.to.length > 0 ? { to: mail.to.map(recorded).join(', ') } : {}),
+    ...(mail.cc.length > 0 ? { cc: mail.cc.map(recorded).join(', ') } : {}),
+    subject: mail.subject,
+    date: dated(at),
+    'message-id': id,
+    ...(mail.inReplyTo ? { 'in-reply-to': mail.inReplyTo } : {}),
+    ...(mail.references?.length ? { references: mail.references.join(' ') } : {}),
+  };
+}
+
 /** A Message-ID for one press of Send, made before the first try and given again with every retry of it. */
 export const newMessageId = (from: string) => `<${randomBytes(16).toString('hex')}@${from.slice(from.lastIndexOf('@') + 1)}>`;
 
 type SendDeps = { db: Sql; mailbox: Mailbox; now?: () => number };
 
 /**
- * Send what the person wrote, as them, and return Gmail's id for it. Only for someone with Inbox on, from a mailbox Google
- * let Sift send from, as one of that mailbox's own addresses. Written to the audit log before the call and settled from
- * Gmail's answer. A try before this one whose answer never came is looked for by `id`, its Message-ID, so mail that went is
- * not sent twice.
+ * Send what the person wrote, as them, and return Gmail's id for it and its conversation. Only for someone with Inbox on,
+ * from a mailbox Google let Sift send from, as one of that mailbox's own addresses. Written to the audit log before the call
+ * and settled from Gmail's answer. A try before this one whose answer never came is looked for by `id`, its Message-ID, so
+ * mail that went is not sent twice. What went is kept in the record (`recordSent`), by whichever try finds it went.
  */
-export async function sendMail(deps: SendDeps, sending: { accountId: string; id: string; threadId?: string; mail: Outgoing }): Promise<string> {
+export async function sendMail(
+  deps: SendDeps,
+  sending: { accountId: string; id: string; threadId?: string; mail: Outgoing },
+): Promise<{ id: string; threadId: string }> {
   const { db, mailbox } = deps;
   const now = deps.now ?? Date.now;
   const { accountId, id, mail } = sending;
@@ -115,13 +136,18 @@ export async function sendMail(deps: SendDeps, sending: { accountId: string; id:
   if (!(await canSend(db, accountId))) throw new Refusal(`Google has not let Sift send from ${accountId}.`);
   const own = [accountId, ...(await mailboxAliases(db, accountId))];
   if (!own.includes(mail.from.address.toLowerCase())) throw new Refusal(`${mail.from.address} is not an address of ${accountId}.`);
-  const raw = buildMessage(mail, id, now());
+  const at = now();
+  const raw = buildMessage(mail, id, at);
+  const keep = async (sent: { id: string; threadId: string; labelIds: readonly string[] }) => {
+    await recordSent(db, accountId, { ...sent, headers: sentHeaders(mail, id, at), text: mail.text, at });
+    return { id: sent.id, threadId: sent.threadId };
+  };
 
   const earlier = await openTries(db, 'send', (payload) => payload.send?.messageId === id);
   if (earlier.length > 0) {
     const found = await mailbox.findByMessageId(id);
     for (const action of earlier) await finishAction(db, action, found ? 'done' : 'failed', null, found ? null : 'not in Gmail', now());
-    if (found) return found;
+    if (found) return await keep({ ...found, labelIds: ['SENT'] });
   }
   const actionId = await insertPendingAction(
     db,
@@ -134,13 +160,14 @@ export async function sendMail(deps: SendDeps, sending: { accountId: string; id:
     },
     now(),
   );
+  let sent;
   try {
-    const sent = await mailbox.send({ raw, ...(sending.threadId ? { threadId: sending.threadId } : {}) });
-    await finishAction(db, actionId, 'done', sent.labelIds, null, now());
-    return sent.id;
+    sent = await mailbox.send({ raw, ...(sending.threadId ? { threadId: sending.threadId } : {}) });
   } catch (error) {
     // It may have gone with its answer lost; the next try looks for it before sending again.
     await finishAction(db, actionId, 'unknown', null, error instanceof Error ? error.message : String(error), now());
     throw error;
   }
+  await finishAction(db, actionId, 'done', sent.labelIds, null, now());
+  return await keep(sent);
 }

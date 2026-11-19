@@ -122,7 +122,7 @@ describe('tracking', () => {
       listFilters: async () => [],
       insertMessage: async () => ({ id: 'i', labelIds: [] }),
       findByMessageId: async () => null,
-      send: async () => ({ id: 's', labelIds: [] }),
+      send: async () => ({ id: 's', threadId: 's', labelIds: [] }),
     };
     await execute({ db, mailbox, now: () => NOW }, ACCOUNT, 'a', { type: 'archive' }, 1);
     expect(await raw(db).get('SELECT decision_id, status FROM actions')).toEqual({ decision_id: 1, status: 'done' });

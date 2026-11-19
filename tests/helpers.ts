@@ -254,12 +254,16 @@ export class FakeMailbox implements Mailbox {
     this.sent.set(id, message);
     this.labels.set(id, ['SENT']);
     if (this.failSend === 'after') throw new Error('timeout');
-    return { id, labelIds: ['SENT'] };
+    return { id, threadId: message.threadId ?? id, labelIds: ['SENT'] };
   }
 
   async findByMessageId(messageId: string) {
-    const written = [...this.inserted, ...[...this.sent].map(([id, { raw }]) => [id, raw] as const)];
-    return written.find(([, raw]) => raw.includes(`\r\nMessage-ID: ${messageId}\r\n`))?.[0] ?? null;
+    const written = [
+      ...[...this.inserted].map(([id, raw]) => ({ id, threadId: id, raw })),
+      ...[...this.sent].map(([id, { raw, threadId }]) => ({ id, threadId: threadId ?? id, raw })),
+    ];
+    const found = written.find(({ raw }) => raw.includes(`\r\nMessage-ID: ${messageId}\r\n`));
+    return found ? { id: found.id, threadId: found.threadId } : null;
   }
 }
 

@@ -4,6 +4,7 @@ import { undo } from '../src/actions/executor.ts';
 import { type Outgoing, buildMessage, newMessageId, sendMail } from '../src/actions/send.ts';
 import { setCanSend, setMailboxAliases } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
+import { listUndecided, queuedMessage } from '../src/store/messages.ts';
 import { setMail } from '../src/store/preferences.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { openUserDb, raw } from './fixtures.ts';
@@ -105,7 +106,7 @@ describe('sending', () => {
     expect(await tries()).toEqual([]);
 
     await setMailboxAliases(db, ACCOUNT, ['me@work.example.com']);
-    expect(await send(ID, { from: { address: 'me@work.example.com' } })).toBe('sent-1');
+    expect(await send(ID, { from: { address: 'me@work.example.com' } })).toEqual({ id: 'sent-1', threadId: 't1' });
     expect(mailbox.sent.get('sent-1')).toMatchObject({ threadId: 't1' });
   });
 
@@ -116,7 +117,7 @@ describe('sending', () => {
     });
 
     it('is written to the audit log first, naming who it went to and its subject, and settled from Gmail’s answer', async () => {
-      expect(await send()).toBe('sent-1');
+      expect((await send()).id).toBe('sent-1');
       expect(await getAction(db, 1)).toMatchObject({
         type: 'send',
         status: 'done',
@@ -132,7 +133,7 @@ describe('sending', () => {
       await expect(send()).rejects.toThrow('timeout');
       expect(await tries()).toEqual([{ type: 'send', status: 'unknown', message_id: null }]);
       mailbox.failSend = null;
-      expect(await send()).toBe('sent-1');
+      expect((await send()).id).toBe('sent-1');
       expect(mailbox.sent.size).toBe(1);
       expect(await tries()).toEqual([{ type: 'send', status: 'done', message_id: null }]);
     });
@@ -141,13 +142,51 @@ describe('sending', () => {
       mailbox.failSend = 'before';
       await expect(send()).rejects.toThrow('network down');
       mailbox.failSend = null;
-      expect(await send()).toBe('sent-1');
+      expect((await send()).id).toBe('sent-1');
       expect(await tries()).toEqual([
         { type: 'send', status: 'failed', message_id: null },
         { type: 'send', status: 'done', message_id: null },
       ]);
       // Another press is mail of its own.
-      expect(await send(newMessageId(ACCOUNT))).toBe('sent-2');
+      expect((await send(newMessageId(ACCOUNT))).id).toBe('sent-2');
+    });
+
+    it('keeps what went in the record, as theirs and not mail to triage, with the text they wrote', async () => {
+      await send(ID, { cc: [{ address: 'bo@example.com' }], inReplyTo: '<x2@example.com>', references: ['<x2@example.com>'] });
+      expect(await queuedMessage(db, ACCOUNT, 'sent-1')).toMatchObject({
+        facts: {
+          threadId: 't1',
+          labelIds: ['SENT'],
+          from: { address: ACCOUNT, name: 'Me' },
+          to: [{ address: 'ada@example.com', name: 'Ada' }],
+          cc: [{ address: 'bo@example.com' }],
+          subject: 'Lunch',
+          receivedAt: AT,
+          headers: { 'message-id': ID, 'in-reply-to': '<x2@example.com>' },
+        },
+      });
+      expect(await listUndecided(db, ACCOUNT, 10)).toEqual([]);
+      const [body] = await raw(db).all<{ body_text: string }>('SELECT body_text FROM mail_bodies');
+      expect(body!.body_text).toBe('sift-plain:See you at noon.\nBring the plans.');
+    });
+
+    it('is kept by the try that finds it went, when the answer to the one that sent it was lost', async () => {
+      mailbox.failSend = 'after';
+      await expect(send()).rejects.toThrow('timeout');
+      expect(await queuedMessage(db, ACCOUNT, 'sent-1')).toBeNull();
+      mailbox.failSend = null;
+      await send();
+      expect(await queuedMessage(db, ACCOUNT, 'sent-1')).toMatchObject({ facts: { threadId: 't1' } });
+    });
+
+    it('is not kept once Inbox is off', async () => {
+      const sending = mailbox.send.bind(mailbox);
+      mailbox.send = async (message) => {
+        await setMail(db, false);
+        return await sending(message);
+      };
+      await send();
+      expect(await queuedMessage(db, ACCOUNT, 'sent-1')).toBeNull();
     });
 
     it('cannot be undone', async () => {

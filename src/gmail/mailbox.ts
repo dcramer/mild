@@ -99,8 +99,8 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
       const data = await call('users.messages.send', 100, () =>
         client.users.messages.send({ userId, requestBody: { raw: Buffer.from(raw).toString('base64url'), ...(threadId ? { threadId } : {}) } }),
       );
-      if (!data.id) throw new Error('Gmail did not return an id for the sent message');
-      return { id: data.id, labelIds: data.labelIds ?? [] };
+      if (!data.id || !data.threadId) throw new Error('Gmail did not return an id for the sent message');
+      return { id: data.id, threadId: data.threadId, labelIds: data.labelIds ?? [] };
     },
 
     async findByMessageId(messageId) {
@@ -109,7 +109,8 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
       const data = await call('users.messages.list', 5, () =>
         client.users.messages.list({ userId, q: `rfc822msgid:${messageId}`, includeSpamTrash: true, maxResults: 1 }),
       );
-      return data.messages?.[0]?.id ?? null;
+      const [found] = data.messages ?? [];
+      return found?.id && found.threadId ? { id: found.id, threadId: found.threadId } : null;
     },
 
     async listFilters() {
