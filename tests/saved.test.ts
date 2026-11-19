@@ -58,7 +58,7 @@ describe('attention saved', () => {
     await recordDecision(db, ACCOUNT, 'suggested', { ...base, disposition: 'archive' }, { now: NOW });
 
     const { saved } = await summarize(db, await everything(db), 7, NOW);
-    expect(saved).toMatchObject({ messages: 3, seconds: 12, unsubscribed: { senders: 0, monthly: 0 } });
+    expect(saved).toMatchObject({ messages: 3, seconds: 30, unsubscribed: { senders: 0, monthly: 0 } });
     expect(saved.byLabel.map((r) => [r.labelId, r.messages])).toEqual([
       ['marketing', 2],
       ['newsletter', 1],
@@ -72,8 +72,8 @@ describe('attention saved', () => {
     await digestInserted(db, digest.id, 'g1', NOW);
     expect((await summarize(db, await everything(db), 7, NOW)).saved).toMatchObject({ messages: 2, byLabel: [{ labelId: 'newsletter', messages: 2 }] });
     const { saved } = await usage(db, await everything(db), NOW);
-    expect(saved.month).toEqual({ messages: 2, seconds: 8 });
-    expect(saved.daily.at(-1)).toBe(8);
+    expect(saved.month).toEqual({ messages: 2, seconds: 20 });
+    expect(saved.daily.at(-1)).toBe(20);
   });
 
   it('says what it saved over a day, a week and 30 days, and what it would have while off', async () => {
@@ -87,12 +87,12 @@ describe('attention saved', () => {
     await recordDecision(db, ACCOUNT, 'corrected', { ...base, disposition: 'keep' }, { byUser: true, now: NOW });
 
     const { saved } = await usage(db, await everything(db), NOW);
-    expect(saved.day).toEqual({ messages: 1, seconds: 4 });
-    expect(saved.week).toEqual({ messages: 1, seconds: 4 });
-    expect(saved.month).toEqual({ messages: 2, seconds: 8 });
+    expect(saved.day).toEqual({ messages: 1, seconds: 10 });
+    expect(saved.week).toEqual({ messages: 1, seconds: 10 });
+    expect(saved.month).toEqual({ messages: 2, seconds: 20 });
     expect(saved.daily).toHaveLength(30);
-    expect(saved.daily.reduce((a, b) => a + b)).toBe(8);
-    expect(saved.wouldHave).toEqual({ messages: 2, seconds: 8 });
+    expect(saved.daily.reduce((a, b) => a + b)).toBe(20);
+    expect(saved.wouldHave).toEqual({ messages: 2, seconds: 20 });
   });
 
   it('counts the senders it unsubscribed from and what they sent the month before', async () => {

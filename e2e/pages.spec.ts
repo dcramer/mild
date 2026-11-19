@@ -53,10 +53,10 @@ test.describe('Activity, after a pass with Sift on', () => {
 
   test('a sender’s page and a rule’s panel say what Sift kept out of the inbox', async ({ page }) => {
     await page.goto(senderPage('digest@news.example.com'));
-    await expect(page.getByText('1 kept out of your inbox, about 4 s', { exact: true })).toBeVisible();
+    await expect(page.getByText('1 kept out of your inbox, about 10 s', { exact: true })).toBeVisible();
     await page.goto('/rules');
     await page.getByRole('cell', { name: 'anyone at news.example.com' }).click();
-    await expect(fact(rulePanel(page, 'anyone at news.example.com'), 'Saved, 30 days')).toHaveText('4 s');
+    await expect(fact(rulePanel(page, 'anyone at news.example.com'), 'Saved, 30 days')).toHaveText('10 s');
   });
 });
 

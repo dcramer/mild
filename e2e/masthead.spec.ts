@@ -138,6 +138,6 @@ test.describe("The masthead's line, after a pass with Sift on", () => {
     await pointAt(cost);
     await expect(page.getByText('Saved', { exact: true })).toBeVisible();
     await expect(page.getByText('Model', { exact: true })).toBeVisible();
-    await expect(page.getByRole('definition').filter({ hasText: /^4 s$/ })).toHaveCount(3);
+    await expect(page.getByRole('definition').filter({ hasText: /^10 s$/ })).toHaveCount(3);
   });
 });
