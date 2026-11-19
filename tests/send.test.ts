@@ -1,14 +1,18 @@
 import { globSync, readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
-import { type Outgoing, buildMessage, newMessageId, sendMail } from '../src/actions/send.ts';
-import { setCanSend, setMailboxAliases } from '../src/store/accounts.ts';
+import { type Outgoing, buildMessage, sendMail } from '../src/actions/send.ts';
+import type { Controls } from '../src/dashboard/controls.ts';
+import { replyTo } from '../src/dashboard/queries/reply.ts';
+import { recordSync, setCanSend, setMailboxAliases } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
 import { listUndecided, queuedMessage } from '../src/store/messages.ts';
 import { setMail } from '../src/store/preferences.ts';
+import { people } from '../src/store/people.ts';
 import type { Sql } from '../src/store/sql.ts';
-import { openUserDb, raw } from './fixtures.ts';
-import { ACCOUNT, FakeMailbox } from './helpers.ts';
+import type { Store } from '../src/store/store.ts';
+import { onePerson, openUserDb, raw, startDashboard } from './fixtures.ts';
+import { ACCOUNT, FakeMailbox, everything, facts } from './helpers.ts';
 
 const AT = Date.UTC(2026, 10, 19, 8, 30);
 const ID = '<a1b2@example.org>';
@@ -148,7 +152,7 @@ describe('sending', () => {
         { type: 'send', status: 'done', message_id: null },
       ]);
       // Another press is mail of its own.
-      expect((await send(newMessageId(ACCOUNT))).id).toBe('sent-2');
+      expect((await send('<a2@example.org>')).id).toBe('sent-2');
     });
 
     it('keeps what went in the record, as theirs and not mail to triage, with the text they wrote', async () => {
@@ -196,7 +200,97 @@ describe('sending', () => {
   });
 });
 
-it('reaches Gmail only through src/actions/send.ts, which the Gmail mailbox carries out', () => {
+describe('from the dashboard', () => {
+  let db: Sql;
+  let store: Store;
+  let mailbox: FakeMailbox;
+  const NEW = { accountId: ACCOUNT, id: ID, from: { address: ACCOUNT }, to: [{ address: 'ada@example.com' }], cc: [], text: 'Hello' };
+
+  beforeEach(async () => {
+    ({ store, db } = await onePerson(ACCOUNT));
+    mailbox = new FakeMailbox();
+  });
+
+  const start = async () => {
+    const controls = { send: async (target: Sql, sending: Parameters<Controls['send']>[1]) => await sendMail({ db: target, mailbox, now: () => AT }, sending) };
+    return (await startDashboard(people(store), { controls: controls as unknown as Controls })).call;
+  };
+  const sentHeaders = () => headersOf([...mailbox.sent.values()][0]!.raw);
+
+  it('says why it may not send, in words for the person', async () => {
+    const call = await start();
+    expect(await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi' })).toMatchObject({
+      status: 409,
+      body: { error: 'Turn Inbox on to send mail from Sift.' },
+    });
+    await setMail(db, true);
+    expect((await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi' })).body).toEqual({ error: `Google has not let Sift send from ${ACCOUNT}.` });
+    await setCanSend(db, ACCOUNT, true);
+    expect((await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi', to: [{ address: 'Ada <ada@example.com>' }] })).body).toEqual({
+      error: '"Ada <ada@example.com>" is not an address Sift can send to.',
+    });
+    expect((await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi', to: [] })).body).toEqual({ error: 'Say who the mail is to.' });
+    expect(mailbox.sent.size).toBe(0);
+    expect(await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi' })).toMatchObject({ status: 200, body: { id: 'sent-1', threadId: 'sent-1' } });
+    expect(sentHeaders()).toMatchObject({ Subject: 'Hi', To: 'ada@example.com' });
+  });
+
+  describe('a reply', () => {
+    beforeEach(async () => {
+      await setMail(db, true);
+      await setCanSend(db, ACCOUNT, true);
+      await recordSync(
+        db,
+        ACCOUNT,
+        [
+          facts({
+            messageId: 'm1',
+            threadId: 't9',
+            from: { address: 'ada@example.com', domain: 'example.com' },
+            subject: 'Lunch',
+            headers: { 'message-id': '<m1@example.com>', references: '<m0@example.com> not-an-id <bad id@example.com>' },
+          }),
+        ],
+        '2',
+      );
+    });
+
+    it('goes into the conversation, following the message it answers as the record has it, not as the page says', async () => {
+      const call = await start();
+      expect((await call('POST', '/api/mail/send', { ...NEW, replyTo: { messageId: 'm1' } })).body).toEqual({ id: 'sent-1', threadId: 't9' });
+      expect([...mailbox.sent.values()][0]!.threadId).toBe('t9');
+      expect(sentHeaders()).toMatchObject({ Subject: 'Re: Lunch', 'In-Reply-To': '<m1@example.com>', References: '<m0@example.com> <m1@example.com>' });
+      expect(await queuedMessage(db, ACCOUNT, 'sent-1')).toMatchObject({ facts: { threadId: 't9', subject: 'Re: Lunch' } });
+      // The page names the conversation by the message alone.
+      expect((await call('POST', '/api/mail/send', { ...NEW, replyTo: { messageId: 'm1' }, subject: 'Other' })).status).toBe(400);
+    });
+
+    it('keeps a subject that already says it answers, and names the first message and the newest before it in a long conversation', async () => {
+      const chain = Array.from({ length: 30 }, (_, i) => `<r${i}@example.com>`);
+      await recordSync(
+        db,
+        ACCOUNT,
+        [facts({ messageId: 'm2', threadId: 't9', subject: 'RE: Lunch', headers: { 'message-id': '<m2@example.com>', references: chain.join(' ') } })],
+        '3',
+      );
+      expect(await replyTo(db, await everything(db), ACCOUNT, 'm2')).toEqual({
+        threadId: 't9',
+        subject: 'RE: Lunch',
+        inReplyTo: '<m2@example.com>',
+        references: ['<r0@example.com>', ...chain.slice(-18), '<m2@example.com>'],
+      });
+    });
+
+    it("is refused for a message the mailbox has no record of, or one in another of the person's mailboxes", async () => {
+      const call = await start();
+      expect((await call('POST', '/api/mail/send', { ...NEW, replyTo: { messageId: 'nope' } })).status).toBe(400);
+      expect(await replyTo(db, await everything(db), 'other@example.org', 'm1')).toBeNull();
+      expect(mailbox.sent.size).toBe(0);
+    });
+  });
+});
+
+it('is sent only from the dashboard, through src/actions/send.ts, which the Gmail mailbox carries out', () => {
   const callers = globSync('src/**/*.ts').filter((file) => /\.send\(/.test(readFileSync(file, 'utf8')));
-  expect(callers.toSorted()).toEqual(['src/actions/send.ts', 'src/gmail/mailbox.ts']);
+  expect(callers.toSorted()).toEqual(['src/actions/send.ts', 'src/dashboard/api/routes/mail/send/post.ts', 'src/gmail/mailbox.ts']);
 });

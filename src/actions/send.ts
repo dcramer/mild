@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { canSend, mailboxAliases } from '../store/accounts.ts';
 import { finishAction, insertPendingAction, openTries } from '../store/actions.ts';
 import { preferences } from '../store/preferences.ts';
@@ -75,7 +74,7 @@ const dated = (at: number) => new Date(at).toUTCString().replace('GMT', '+0000')
 
 /**
  * The message as RFC 2822 text: plain text in UTF-8, every address checked and every header value refused if it could break
- * a line, names and a subject outside ASCII encoded (RFC 2047). `id` is its Message-ID (`newMessageId`).
+ * a line, names and a subject outside ASCII encoded (RFC 2047). `id` is its Message-ID, made by the page once for the press of Send.
  */
 export function buildMessage(mail: Outgoing, id: string, at: number): string {
   if (mail.to.length + mail.cc.length === 0) throw new Refusal('Say who the mail is to.');
@@ -113,9 +112,6 @@ function sentHeaders(mail: Outgoing, id: string, at: number): Record<string, str
     ...(mail.references?.length ? { references: mail.references.join(' ') } : {}),
   };
 }
-
-/** A Message-ID for one press of Send, made before the first try and given again with every retry of it. */
-export const newMessageId = (from: string) => `<${randomBytes(16).toString('hex')}@${from.slice(from.lastIndexOf('@') + 1)}>`;
 
 type SendDeps = { db: Sql; mailbox: Mailbox; now?: () => number };
 

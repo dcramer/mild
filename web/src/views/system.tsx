@@ -116,7 +116,7 @@ const USAGE = {
   },
 };
 const SYNCED = Date.now() - 20_000;
-const SPECIMEN_ACCOUNTS = [{ id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true, canSend: false }];
+const SPECIMEN_ACCOUNTS = [{ id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true, canSend: false, aliases: [] }];
 const NAV = [
   { to: 'system', label: 'For review', icon: ListChecksIcon, count: 12 },
   { to: 'system/activity', label: 'Activity', icon: ActivityIcon },

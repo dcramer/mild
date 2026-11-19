@@ -1,5 +1,6 @@
 import { press, undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
+import { sendMail } from '../actions/send.ts';
 import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
@@ -249,6 +250,7 @@ export async function buildControls(
       const token = await (await credentials(db, 'gmail')).read(email).catch(() => undefined);
       return token === null || (token !== undefined && (await revokeGrant(token)));
     },
+    send: async (db, sending) => await sendMail({ db, mailbox: (await gmail(db, sending.accountId)).mailbox }, sending),
     checkNow: passNow,
     activity: async (mailboxes) => ({ running: true, ...(await passStatus(live.ephemeral, mailboxes)) }),
   };

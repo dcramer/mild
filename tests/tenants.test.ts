@@ -75,6 +75,16 @@ async function seed(account: string): Promise<void> {
   ids[account] = { rule, action, proposal, run };
 }
 
+/** Mail written from one mailbox, as the page sends it. */
+const mail = (accountId: string) => ({
+  accountId,
+  id: '<a1@example.org>',
+  from: { address: accountId },
+  to: [{ address: 'x@example.com' }],
+  cc: [],
+  text: 'Hello',
+});
+
 const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: unknown) => {
   if (who) called.add(new URL(path, 'http://sift').pathname);
   return dashboard.call(method, path, body, who ? { cookie: cookies[who]! } : {});
@@ -123,6 +133,7 @@ beforeEach(async () => {
     draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), seal({ match: { from: ['x@example.com'] }, disposition: 'archive' as const })),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
+    send: async (_db, { accountId, threadId }) => (calls.push(`send ${accountId} ${threadId}`), { id: 's', threadId: threadId ?? 's' }),
     checkNow: async () => void calls.push('check'),
     activity: async () => ({
       running: true,
@@ -309,6 +320,10 @@ describe("nobody sees or changes another person's mail", () => {
         { accountId: ALPHA, messageIds: [`m-${MARK[ALPHA]}`], change: 'archive' },
         { accountId: NOBODY, messageIds: [`m-${MARK[ALPHA]}`], change: 'archive' },
       ],
+
+      ['/api/mail/send', { ...mail(ALPHA), subject: 'Hi' }, { ...mail(NOBODY), subject: 'Hi' }],
+      // From their own mailbox, answering someone else's message.
+      ['/api/mail/send', { ...mail(BRAVO), replyTo: { messageId: `m-${MARK[ALPHA]}` } }, { ...mail(BRAVO), replyTo: { messageId: 'm-nobody' } }],
     ];
     for (const [path, body, nobody] of writes) {
       const answer = await call('POST', path, BRAVO, body);
@@ -333,6 +348,10 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/undo', ALPHA_WORK, { id: theirs.action })).status).toBe(200);
     expect((await call('POST', '/api/mail/change', ALPHA_WORK, { accountId: ALPHA, messageIds: [`m-${MARK[ALPHA]}`], change: 'read' })).status).toBe(200);
     expect(calls.at(-1)).toBe(`read ${ALPHA} m-${MARK[ALPHA]}`);
+
+    calls = [];
+    expect((await call('POST', '/api/mail/send', ALPHA, { ...mail(ALPHA_WORK), replyTo: { messageId: `m-${MARK[ALPHA_WORK]}` } })).status).toBe(200);
+    expect(calls).toEqual([`send ${ALPHA_WORK} t1`]);
   });
 
   it('lets each person change their own mode, model and sign-ins, and only their own', async () => {

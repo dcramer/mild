@@ -560,6 +560,29 @@ export const FeedbackReply = z.object({
 });
 export type FeedbackReply = z.infer<typeof FeedbackReply>;
 
+const party = z.strictObject({ address: text(320), name: text().optional() });
+const sending = {
+  /** The mailbox that sends it. */
+  accountId: text(),
+  /** Its Message-ID, made by the page once for the press of Send and given again when that press is tried again, so it goes once. */
+  id: text(),
+  /** That mailbox's address or one of its aliases. */
+  from: party,
+  to: z.array(party).max(100),
+  cc: z.array(party).max(100),
+  text: z.string().max(200_000),
+};
+
+/**
+ * The body of POST /api/mail/send: what the person wrote. A reply names the message it answers, in the same mailbox; its
+ * subject, conversation and the Message-IDs it follows are read from the record, not sent.
+ */
+export const SendRequest = z.union([
+  z.strictObject({ ...sending, subject: z.string().max(900) }),
+  z.strictObject({ ...sending, replyTo: z.strictObject({ messageId: text() }) }),
+]);
+export type SendRequest = z.infer<typeof SendRequest>;
+
 /** A label: what mail is, and what sift does with it. */
 export const LabelSummary = z.object({
   id: z.string(),
@@ -719,8 +742,17 @@ export const ManageState = z.object({
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
   }),
   activity: z.object({ running: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
-  /** `canSend`: Google let Sift send from it (`/auth/login?grant=send&mailbox=…` asks). */
-  accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable(), primary: z.boolean(), canSend: z.boolean() })),
+  /** `canSend`: Google let Sift send from it (`/auth/login?grant=send&mailbox=…` asks). `aliases`: its other addresses in Gmail, which it may send as. */
+  accounts: z.array(
+    z.object({
+      id: z.string(),
+      email: z.string(),
+      lastSyncedAt: z.number().nullable(),
+      primary: z.boolean(),
+      canSend: z.boolean(),
+      aliases: z.array(z.string()),
+    }),
+  ),
   /** In order. */
   labels: z.array(LabelSummary),
   /** How many labels a person may have. */

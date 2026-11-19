@@ -71,10 +71,32 @@ export interface Controls {
    * reporting on it. Resolves false when Google could not be reached; the mailbox is removed anyway.
    */
   revokeGmail(db: Sql, email: string): Promise<boolean>;
+  /**
+   * Send what the person wrote, as them, from one of their mailboxes, into `threadId` when it answers a message there
+   * (`sendMail`, src/actions/send.ts). Resolves with Gmail's id for it and its conversation; rejects with a sentence for
+   * them when they may not send or Gmail refused.
+   */
+  send(db: Sql, sending: { accountId: string; id: string; threadId?: string; mail: Outgoing }): Promise<{ id: string; threadId: string }>;
   /** Pass this person's mailboxes now instead of at the next tick. */
   checkNow(db: Sql): Promise<void>;
   /** How the last passes over these mailboxes went. */
   activity(mailboxes: string[]): Promise<Activity>;
+}
+
+interface Party {
+  address: string;
+  name?: string;
+}
+
+/** Mail the person wrote, as `sendMail` takes it: plain text; a reply names the Message-IDs it follows. */
+interface Outgoing {
+  from: Party;
+  to: Party[];
+  cc: Party[];
+  subject: string;
+  text: string;
+  inReplyTo?: string;
+  references?: string[];
 }
 
 interface Activity {
