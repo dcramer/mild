@@ -130,6 +130,8 @@ test.describe('The reader, from Inbox', () => {
       await page.goto('/inbox');
       await page.getByRole('row').filter({ hasText: 'Your March bill' }).click();
       const open = reader(page);
+      // An open message's text arrives after the conversation, and is shorter than the rows standing in for it.
+      await expect(open.getByLabel('Loading')).toHaveCount(0);
       const title = await boxOf(readerHeading(page, 'Your March bill'));
       const answer = await boxOf(open.getByRole('combobox', { name: 'What this message is' }));
       const first = await boxOf(open.getByRole('article').first());
