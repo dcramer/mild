@@ -109,6 +109,25 @@ test.describe('A message as its HTML', () => {
   });
 });
 
+test.describe('Who a message went to', () => {
+  test('a long list folds, so the message fits under it on a phone, opens where it stands, and folds again', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await page.goto('/');
+    const open = await openMessage(page, 'Notes from the review');
+    await expect(open.getByText(/cc reviewer1@example\.net, reviewer2@example\.net, reviewer3@example\.net and 9 more$/)).toBeVisible();
+    await expect(open.getByText(/reviewer12@example\.net/)).toHaveCount(0);
+    await expect(open.getByText('Attached are my notes.')).toBeInViewport();
+
+    await open.getByRole('button', { name: '9 more' }).click();
+    const fewer = open.getByRole('button', { name: 'Fewer' });
+    await expect(fewer).toHaveAttribute('aria-expanded', 'true');
+    await expect(open.getByText(/reviewer12@example\.net Fewer$/)).toBeVisible();
+
+    await fewer.click();
+    await expect(open.getByRole('button', { name: '9 more' })).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
 test.describe('What Sift saw', () => {
   const seen = (page: Page) =>
     panel(page)

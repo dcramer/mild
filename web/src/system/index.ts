@@ -28,6 +28,7 @@ export { ListPage, PageHeader, Section } from './page.tsx';
 export { Panel } from './panel.tsx';
 export { Reserve } from './reserve.tsx';
 export { Select } from './select.tsx';
+export { SomeOf } from './some-of.tsx';
 export { Share } from './share.tsx';
 export { Spark } from './spark.tsx';
 export { SettingRow, SettingsGroup, Sheet } from './sheet.tsx';
