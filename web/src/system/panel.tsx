@@ -4,7 +4,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';
 import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer, useShortcut } from './keys.tsx';
-import { Backdrop, LayerBody, LayerFooter, LayerHeader, useLayerOpen } from './layer.tsx';
+import { Backdrop, LayerContent, LayerFooter, useLayerOpen } from './layer.tsx';
 import { rowHolding } from './table.tsx';
 
 /**
@@ -73,8 +73,9 @@ export function Panel({
           className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card [--surface:var(--card)] text-sm outline-none transition-transform duration-150 ease-out data-ending-style:pointer-events-none data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(max(75vw,66rem),80rem,100vw)]'}`}
         >
           <KeyLayer moves>
-            <LayerHeader title={title} subtitle={subtitle} />
-            <LayerBody>{children}</LayerBody>
+            <LayerContent title={title} subtitle={subtitle}>
+              {children}
+            </LayerContent>
             {actions ? <LayerFooter>{actions}</LayerFooter> : null}
             {stepping ? (
               <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
