@@ -211,17 +211,20 @@ export async function boxOf(target: Locator) {
   return box;
 }
 
-/** The open message panel. */
-export const panel = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
+/** The reader: a message, or a conversation, open in the list's place. */
+export const reader = (page: Page) => page.getByRole('region').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
 
-/** The open message panel's heading: the subject of the message it shows. */
-export const panelHeading = (page: Page, subject: string) => panel(page).getByRole('heading', { name: subject, level: 2 });
+/** The reader's heading: the subject of what it shows. */
+export const readerHeading = (page: Page, subject: string) => reader(page).getByRole('heading', { name: subject, level: 1 });
 
-/** Opens the message in the list by its subject, once the panel shows it. */
+/** The reader's Back, to the list it was opened from. */
+export const back = (page: Page) => reader(page).getByRole('button', { name: /^Back to / });
+
+/** Opens the message in the list by its subject, once the reader shows it. */
 export async function openMessage(page: Page, subject: string) {
   await page.getByRole('cell', { name: subject }).click();
-  await expect(panelHeading(page, subject)).toBeVisible();
-  return panel(page);
+  await expect(readerHeading(page, subject)).toBeVisible();
+  return reader(page);
 }
 
 /** What opens message `id` (`m6`) over a page, for after its `?` or `&`. */
@@ -384,11 +387,9 @@ export const inboxRows = (page: Page) => page.getByRole('row').filter({ has: pag
 export const inboxRow = (page: Page, subject: string) =>
   page.getByRole('row').filter({ has: page.getByRole('checkbox', { name: `Select ${subject}`, exact: true }) });
 
-/** The conversation open in the message panel, by its Mark unread in the panel's footer. */
-export const reader = (page: Page) => page.getByRole('dialog').filter({ has: page.getByRole('button', { name: /^Mark unread/ }) });
-
-/** The composer, by its title. */
-export const composer = (page: Page, title: 'New message' | 'Reply' | 'Reply to all' | 'Forward') => page.getByRole('dialog', { name: title, exact: true });
+/** The composer, by its title: new mail in a panel of its own, a reply or a forward in the reader. */
+export const composer = (page: Page, title: 'New message' | 'Reply' | 'Reply to all' | 'Forward') =>
+  page.getByRole(title === 'New message' ? 'dialog' : 'region', { name: title, exact: true });
 
 /** A message the stand-in Gmail was asked to send, its headers unfolded by name and its text decoded. */
 export function readSent(raw: string): { headers: Record<string, string>; text: string } {

@@ -32,13 +32,14 @@ test.describe('Inbox, with the model', () => {
     await page.goto('/inbox');
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
     const open = reader(page);
-    await expect(open.getByRole('heading', { name: 'Your March bill', level: 2 })).toBeVisible();
+    await expect(open.getByRole('heading', { name: 'Your March bill', level: 1 })).toBeVisible();
 
     await open.getByRole('button', { name: 'Summarize', exact: true }).click();
     const said = open.getByText('3 messages about Your March bill. Nothing is asked of you.');
     await expect(said).toBeVisible();
     await expect(open.getByRole('button', { name: 'Summarize', exact: true })).toHaveCount(0);
-    await open.getByText(/^History · \d+$/).click();
+    // In Inbox the history is under Why.
+    await open.getByRole('button', { name: 'Why' }).click();
     await expect(open.getByText('Summarized', { exact: true })).toBeVisible();
     await expect(open.getByText(/^faux\/stand-in, \d+ tokens, /)).toBeVisible();
 
@@ -51,7 +52,7 @@ test.describe('Inbox, with the model', () => {
     // A conversation of one short message has nothing to summarize.
     await page.keyboard.press('Escape');
     await inboxRow(page, 'This week in widgets').getByRole('cell').nth(2).click();
-    await expect(open.getByRole('heading', { name: 'This week in widgets', level: 2 })).toBeVisible();
+    await expect(open.getByRole('heading', { name: 'This week in widgets', level: 1 })).toBeVisible();
     await expect(open.getByText('Five stories about widgets.')).toBeVisible();
     await expect(open.getByRole('button', { name: 'Summarize', exact: true })).toHaveCount(0);
   });

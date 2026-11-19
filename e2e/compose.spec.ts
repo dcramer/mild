@@ -6,7 +6,7 @@ import {
   composer,
   expect,
   inboxRow,
-  panelHeading,
+  readerHeading,
   param,
   readSent,
   reader,
@@ -109,7 +109,9 @@ test.describe('with Inbox on', () => {
     await switchMailbox(page, WORK);
     await page.goto('/?message=m6&compose=reply');
     const writing = composer(page, 'Reply');
-    await expect(writing.getByText('Re: Lunch on Thursday?')).toBeVisible();
+    // Written in the reader, under the message it answers.
+    await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
+    await expect(reader(page).getByText('Are you free for lunch on Thursday?', { exact: true })).toBeVisible();
     await expect(writing.getByRole('combobox', { name: 'From' })).toContainText(ME);
     await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('Ada Lovelace <ada@example.org>');
     await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveCount(0);
@@ -118,8 +120,9 @@ test.describe('with Inbox on', () => {
     await writing.getByRole('button', { name: /^Send/ }).click();
 
     await expect(toast(page, 'Re: Lunch on Thursday?')).toContainText('Sent');
-    // The message it answers is still open under it.
-    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
+    await expect(writing).toHaveCount(0);
+    // The message it answers is still open.
+    await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
     const [sent] = sift.sent();
     expect(sent).toMatchObject({ mailbox: ME, threadId: 't6' });
     expect(readSent(sent!.raw).headers).toMatchObject({
@@ -141,6 +144,12 @@ test.describe('with Inbox on', () => {
     const writing = composer(page, 'Reply');
     await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('Ada Lovelace <ada@example.org>');
     await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    // Written in place under the conversation, which stays on the page above it.
+    const asked = open.getByText('Are you free for lunch on Thursday?', { exact: true });
+    await expect(asked).toBeInViewport();
+    expect((await boxOf(asked)).y).toBeLessThan((await boxOf(writing)).y);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await param(page, 'compose').toBe('reply');
     await page.keyboard.type('Thursday works.');
     await page.keyboard.press('Control+Enter');
 

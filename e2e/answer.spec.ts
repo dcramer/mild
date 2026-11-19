@@ -8,8 +8,9 @@ import {
   forReviewLink,
   messageQuery,
   openMessage,
-  panel,
-  panelHeading,
+  back,
+  reader,
+  readerHeading,
   param,
   putAway,
   query,
@@ -30,7 +31,7 @@ test.describe('Answering mail', () => {
     await expect(toast(page, 'Archive as Marketing')).toBeVisible();
     await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
-    await expect(panel(page)).toHaveCount(0);
+    await expect(reader(page)).toHaveCount(0);
     await query(page).toBe('');
 
     await seededRulesOnly(page);
@@ -44,7 +45,7 @@ test.describe('Answering mail', () => {
     await expect(toast(page, 'Archive as Notifications')).toBeVisible();
     await expect(store).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
-    await expect(panel(page)).toHaveCount(0);
+    await expect(reader(page)).toHaveCount(0);
   });
 
   test('picking Sift’s own label from the list answers it too', async ({ page }) => {
@@ -87,10 +88,10 @@ test.describe('Answering mail', () => {
 
     const said = toast(page, 'Archive as Notifications');
     await expect(said.getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
 
-    await open.getByRole('button', { name: 'Close' }).click();
+    await back(page).click();
     await expect(open).toHaveCount(0);
     await expect(row(page, 'Replica lag on db-3')).toBeVisible();
     await expect(row(page, 'Disk 91% full on db-2')).toHaveCount(0);
@@ -101,11 +102,11 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
 
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
     await putAway(page);
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Notifications');
   });
@@ -114,26 +115,26 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
     await open.getByRole('button', { name: 'Next' }).click();
-    await expect(panelHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
+    await expect(readerHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
 
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
-    await expect(panelHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
+    await expect(readerHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
     await param(page, 'message').toBe('m14');
   });
 
   test('“Same for 1 more” after the panel closed leaves a panel opened since open', async ({ page }) => {
     await page.goto('/?q=db-');
     await choose(await openMessage(page, 'Replica lag on db-3'), 'Notifications');
-    await expect(panel(page)).toHaveCount(0);
+    await expect(reader(page)).toHaveCount(0);
 
     await reviewSearch(page).fill('');
     await openMessage(page, 'Notes from the review');
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
-    await expect(panelHeading(page, 'Notes from the review')).toBeVisible();
+    await expect(readerHeading(page, 'Notes from the review')).toBeVisible();
     await param(page, 'message').toBe('m7');
   });
 
@@ -141,11 +142,11 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
     await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
 
-    await open.getByRole('button', { name: 'Close' }).click();
+    await back(page).click();
     await expect(open).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 10');
     await expect(row(page, 'Replica lag on db-3')).toHaveCount(0);
@@ -158,7 +159,7 @@ test.describe('Answering mail', () => {
     await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
     await expect(row(page, 'Disk 91% full on db-2')).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 10');
-    await expect(panel(page)).toHaveCount(0);
+    await expect(reader(page)).toHaveCount(0);
   });
 });
 
@@ -174,7 +175,7 @@ test.describe('A rule from For review', () => {
 
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
-    await expect(panelHeading(page, 'Lunch on Thursday?')).toBeVisible();
+    await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await param(page, 'message').toBe('m6');
 
     // The panel has the keys again: the next Escape closes it.
@@ -193,21 +194,21 @@ test.describe('A rule from For review', () => {
     await page.keyboard.press('k');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
-    await expect(panelHeading(page, 'Notes from the review')).toBeVisible();
+    await expect(readerHeading(page, 'Notes from the review')).toBeVisible();
     await param(page, 'message').toBe('m7');
   });
 
   test('closing the rule dialog over the panel leaves the panel on the same message', async ({ page }) => {
     await page.goto(`/?${messageQuery('m8')}`);
-    await expect(panelHeading(page, 'Winter sale starts now')).toBeVisible();
-    await panel(page).getByRole('button', { name: 'Keep as Marketing…' }).click();
+    await expect(readerHeading(page, 'Winter sale starts now')).toBeVisible();
+    await reader(page).getByRole('button', { name: 'Keep as Marketing…' }).click();
     const dialog = ruleDialog(page);
     await expect(dialog.getByRole('textbox', { name: 'What should it do?' })).toHaveValue(
       'Mail from sale@store.example.com, once it is Marketing: leave it in the inbox.',
     );
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(panelHeading(page, 'Winter sale starts now')).toBeVisible();
+    await expect(readerHeading(page, 'Winter sale starts now')).toBeVisible();
     await param(page, 'message').toBe('m8');
   });
 
@@ -218,12 +219,12 @@ test.describe('A rule from For review', () => {
     await expect(dialog.getByRole('textbox', { name: 'What should it do?' })).toHaveValue(
       'Mail from billing@utility.example.net, once it is Receipts: leave it in the inbox.',
     );
-    await expect(panel(page)).toHaveCount(0);
+    await expect(reader(page)).toHaveCount(0);
 
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await expect(proposal(page)).toBeVisible();
-    await expect(panel(page)).toHaveCount(0);
+    await expect(reader(page)).toHaveCount(0);
     await query(page).toBe('');
   });
 
@@ -350,12 +351,12 @@ test.describe('An answer on its way', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(panelHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
     await putAway(page);
 
     release({ status: 409, json: { error: 'That message has changed.' } });
     await expect(failureToast(page, 'Could not save your answer')).toBeVisible();
-    await open.getByRole('button', { name: 'Close' }).click();
+    await back(page).click();
     await expect(open).toHaveCount(0);
     await expect(row(page, 'Disk 91% full on db-2')).toBeVisible();
   });

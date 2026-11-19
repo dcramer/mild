@@ -122,7 +122,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | Only what floats has a surface; one shadow, the `--edge` | `tests/design-system.test.ts`, and the theme has no grey tokens to reach for |
 | Keys only where someone works through a list one item after another (For review, Activity, and the panel they open); no other list, form or step gets shortcuts or key hints | `Table` has none unless given `keys`; `tests/design-system.test.ts` |
 | `mark` and `ink` buttons are never down a list; one `mark` per screen | `tests/design-system.test.ts` (inside `Tr` / `RowActions` in the same file) |
-| The same thing looks the same on every page: a sender in a list is `SenderCell` (name, then address under it) | `tests/design-system.test.ts` (only `components/sender.tsx` and the message panel's header use `SenderLink`) |
+| The same thing looks the same on every page: a sender in a list is `SenderCell` (name, then address under it) | `tests/design-system.test.ts` (only `components/sender.tsx` and the reader's message heads use `SenderLink`) |
 | A list of mail shows when each message came, on a phone too, where a mail app does: newest first, at the top right, under Today, Yesterday, This week, Last week and the month | `e2e/for-review.spec.ts` ("On a phone"); other lists of mail are judgment |
 | A sender's name, a sender's address and a domain are links wherever they are shown, outside a link of their own: the name and address to the sender's page (the name to their mail under it), the domain to its page | Nothing: judgment. `SenderLink`, `DomainLink` and `MatchWords` (`web/src/components/sender.tsx`) are how |
 | Every part is on the specimen page | `tests/design-system.test.ts` |

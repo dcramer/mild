@@ -66,6 +66,13 @@ import {
   PageFoot,
   PageHeader,
   Panel,
+  AnswerRow,
+  MessageHead,
+  MessageStack,
+  Presses,
+  Reader,
+  ReaderBar,
+  ReplyBox,
   Rail,
   Reserve,
   Rope,
@@ -183,6 +190,7 @@ export function SystemView() {
   const [checked, setChecked] = useState(false);
   const [dialog, setDialog] = useState(false);
   const [panel, setPanel] = useState(false);
+  const [reading, setReading] = useState(false);
   const [search, setSearch] = useState('');
   const [shown, setShown] = useState('');
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
@@ -1114,7 +1122,17 @@ export function SystemView() {
           </div>
         </Section>
 
-        <Section title="Mail frame" meta="a message as its own HTML, in the message panel; this one has nothing to load">
+        <Section title="Reader" meta="a message opened from a list, in the list's place: its bar, Sift's row, the conversation and a reply in place">
+          {reading ? (
+            <SpecimenReader onBack={() => setReading(false)} />
+          ) : (
+            <div>
+              <Button onClick={() => setReading(true)}>Open a message</Button>
+            </div>
+          )}
+        </Section>
+
+        <Section title="Mail frame" meta="a message as its own HTML, in the reader; this one has nothing to load">
           <MailFrame title="An empty message" />
         </Section>
 
@@ -1195,15 +1213,10 @@ export function SystemView() {
         <Panel
           open={panel}
           onClose={() => setPanel(false)}
-          title="Five things to read"
-          subtitle="Example Weekly · Nov 13, 3:21 PM"
+          title="Mail from news@example.com"
+          subtitle="Archive as Newsletters"
           position="1 of 3"
           onNext={() => {}}
-          keys
-          presses={[
-            { label: 'Reply', key: 'r', onPress: () => toast('R was pressed') },
-            { label: 'Mark unread', key: 'Shift+u', quiet: true, onPress: () => toast('Shift+U was pressed') },
-          ]}
           actions={
             <>
               <Button>Change…</Button>
@@ -1216,11 +1229,131 @@ export function SystemView() {
           }
         >
           <p className="max-w-[68ch] text-reading leading-relaxed">
-            The message on the left; on the right what Sift said, the answer, the sender and the history.
+            One item of a list: a rule, a label, Settings. A message opens in the list’s place instead.
           </p>
         </Panel>
       </main>
     </Cloud>
+  );
+}
+
+const THREAD = [
+  { id: 'a', from: 'Ada Lovelace', preview: 'Are you free for lunch on Thursday?', at: 'Nov 12' },
+  { id: 'b', from: 'Me', preview: 'Thursday works. Noon at the usual place?', at: 'Nov 12' },
+  { id: 'c', from: 'Ada Lovelace', preview: 'Noon it is. I will bring the plans.', at: '9:41 AM' },
+];
+
+/** The reader as Inbox opens a conversation, or (For review) one message with what Sift said beside it. */
+function SpecimenReader({ onBack }: { onBack: () => void }) {
+  const toast = useToast();
+  const [from, setFrom] = useState<'inbox' | 'review'>('inbox');
+  const [open, setOpen] = useState('c');
+  const [replying, setReplying] = useState(false);
+  const inbox = from === 'inbox';
+  const shown = THREAD.find((m) => m.id === open) ?? THREAD[2];
+  return (
+    <div className="flex flex-col gap-6">
+      <ChoiceGroup
+        label="Opened from"
+        value={from}
+        options={[
+          ['inbox', 'Inbox'],
+          ['review', 'For review'],
+        ]}
+        onChange={(next) => next && setFrom(next)}
+      />
+      <Reader
+        bar={
+          <ReaderBar
+            back={inbox ? 'Inbox' : 'For review'}
+            onBack={onBack}
+            presses={
+              inbox
+                ? [
+                    { label: 'Archive', key: 'e', onPress: () => toast('Archived') },
+                    { label: 'Mark unread', key: 'Shift+u', quiet: true, onPress: () => toast('Marked unread') },
+                  ]
+                : []
+            }
+            position="2 of 3"
+            onPrevious={() => toast('The one before')}
+            onNext={() => toast('The one after')}
+          />
+        }
+        title="Lunch on Thursday?"
+        answer={
+          <AnswerRow
+            key={from}
+            picker={{
+              label: 'What this message is',
+              value: INBOX,
+              groups: [
+                LABELS.slice(0, 1).map(([id, name]) => ({ id, label: name, lead: <Meter level={2} /> })),
+                LABELS.slice(1).map(([id, name]) => ({ id, label: name })),
+              ],
+              empty: outcomeName('review'),
+              onSubmit: (id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`),
+            }}
+            why={<p>A reply in a thread you wrote in.</p>}
+            whyOpen={!inbox}
+          >
+            <Button variant="quiet" aria-label="Make a rule…" onClick={() => toast('Opens the rule dialog')}>
+              Rule…
+            </Button>
+          </AnswerRow>
+        }
+        side={
+          inbox ? undefined : (
+            <Section title="Sender">
+              <Facts>
+                <Fact term="Mail">14 messages since Oct 20, 2026</Fact>
+                <Fact term="You wrote">Last week</Fact>
+              </Facts>
+            </Section>
+          )
+        }
+      >
+        <MessageStack messages={inbox ? THREAD : []} open={inbox ? open : 'c'} onOpen={setOpen}>
+          <MessageHead
+            from={<TextLink href="/system">{shown.from}</TextLink>}
+            address="ada@example.org"
+            at={`Nov 12, 2026, ${shown.at}`}
+            to={
+              <>
+                To <SomeOf items={['me@example.org', 'grace@example.net']} />
+              </>
+            }
+          />
+          <p className="text-reading leading-relaxed">{shown.preview}</p>
+        </MessageStack>
+        {!inbox ? null : replying ? (
+          <ReplyBox
+            label="Reply"
+            actions={
+              <>
+                <Finish onClick={() => setReplying(false)}>Send</Finish>
+                <Button variant="quiet" onClick={() => setReplying(false)}>
+                  Discard
+                </Button>
+              </>
+            }
+          >
+            <Field inline label="To">
+              <Input aria-label="To" className="flex-1" defaultValue="Ada Lovelace <ada@example.org>" />
+            </Field>
+            <TextArea aria-label="Message" className="min-h-44" />
+          </ReplyBox>
+        ) : (
+          <Presses
+            presses={[
+              { label: 'Reply', key: 'r', onPress: () => setReplying(true) },
+              { label: 'Reply all', key: 'a', onPress: () => setReplying(true) },
+              { label: 'Forward', key: 'f', onPress: () => toast('Opens the reply box as a forward') },
+            ]}
+          />
+        )}
+      </Reader>
+    </div>
   );
 }
 

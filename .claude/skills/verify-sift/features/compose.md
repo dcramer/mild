@@ -1,6 +1,6 @@
 # Write and send mail
 
-With Inbox on, the person writes new mail, replies and forwards in a panel over whatever is open, from any of their addresses Google lets Sift send from, and Sift sends it as them. What they have written is kept in the browser until it goes or they discard it.
+With Inbox on, the person writes new mail in a panel over whatever is open, and replies and forwards in the reader under the conversation, from any of their addresses Google lets Sift send from, and Sift sends it as them. What they have written is kept in the browser until it goes or they discard it.
 
 ## Sub-features
 
@@ -15,7 +15,7 @@ With Inbox on, the person writes new mail, replies and forwards in a panel over 
 ## How to get to it (user POV)
 
 - Any screen, C, or `Compose` in the rail (desktop); on a phone, `Compose` in Inbox's header.
-- The reader's footer (Inbox, a conversation open): `Reply` (R), `Reply all` (A), `Forward` (F). The address alone opens one too: `?message=<id>&compose=reply` (or `all`, `forward`).
+- The reader (Inbox, a conversation open), under the conversation: `Reply` (R), `Reply all` (A), `Forward` (F), which open the reply in their place. The address alone opens one too: `?message=<id>&compose=reply` (or `all`, `forward`).
 
 ## Driving it with verify.sh
 
@@ -28,8 +28,8 @@ Preconditions:
 - **Draft.** Fill `Subject` and `Message`, `ab reload`: the same dialog with the same words (`?compose=new`).
 - **Send.** Click `Message`, `ab press Control+Enter`. The dialog goes, a toast says `Sent` over the subject. `cat "$RUN/sent.json"` holds it, `mailbox` `me@example.org`; `SELECT id, thread_id, label_ids, decided FROM messages WHERE id LIKE 'sent%'` is `sent-1`, `["SENT"]`, `true`, and `mail_bodies` has its text.
 - **Grant.** Switch the mailbox to `me@work.example.org`, `ab press c`: `Sift may not send from me@work.example.org yet` with `Let Sift send` (`/auth/login?grant=send&mailbox=…&to=/?compose=new`), `Send` disabled.
-- **Reply.** `ab open "$B/?message=m6&compose=reply"`: `Reply` over Ada's `Lunch on Thursday?`, `Re: Lunch on Thursday?` under it, From `me@example.org` whatever the switch shows, To `Ada Lovelace <ada@example.org>`, no Subject. Sent, `sent.json` has `threadId` `t6` and `In-Reply-To: <thursday@example.org>`.
-- **From the reader.** `ab open "$B/inbox?message=m6&thread=t6"`, wait for `Reply all`, `ab press r`, type, `ab press Control+Enter`: the reader stays, and under Ada's message a folded `me@example.org` row with what was typed; Inbox's row is `Ada, me 2`.
+- **Reply.** `ab open "$B/?message=m6&compose=reply"`: the reader on Ada's `Lunch on Thursday?`, and under her message the region `Reply`: From `me@example.org` whatever the switch shows, To `Ada Lovelace <ada@example.org>`, no Subject. Sent, `sent.json` has `threadId` `t6` and `In-Reply-To: <thursday@example.org>`.
+- **From the reader.** `ab open "$B/inbox?message=m6&thread=t6"`, wait for `Reply all`, `ab press r`, type (the conversation stays above the reply, and the address gains `&compose=reply` in place), `ab press Control+Enter`: the reader stays, and under Ada's message a folded `me@example.org` row with what was typed; Inbox's row is `Ada, me 2`.
 - **Forward.** In the same reader `ab press f`: `Forward`, To focused and empty, Subject `Fwd: Lunch on Thursday?`, Message starting with two empty lines then `---------- Forwarded message ---------`. Sent, `sent.json` has no `In-Reply-To` and its own `threadId`.
 
 ## Gotchas

@@ -210,8 +210,8 @@ test('whatever can be pressed shows the pointer', () => {
 });
 
 test('a sender in a list is a SenderCell, name over address, the same on every page', () => {
-  // The message panel names the sender in its header, not in a row.
-  const own = new Set(['components/sender.tsx', 'views/message-panel.tsx']);
+  // The reader names the sender over each message, not in a row.
+  const own = new Set(['components/sender.tsx', 'views/reader.tsx']);
   const failures = SCREENS.filter((path) => !own.has(relative(WEB, path)) && /<SenderLink\b/.test(readFileSync(path, 'utf8'))).map(
     (path) => `web/src/${relative(WEB, path)}: a row names its sender with SenderCell (web/src/components/sender.tsx).`,
   );

@@ -8,18 +8,19 @@ import { panelEntry, setParams } from './params.ts';
 export type Writing = { kind: 'new'; to?: string } | { kind: 'reply'; messageId: string; all: boolean } | { kind: 'forward'; messageId: string };
 
 /**
- * Open the composer. In the address, as a message is (`?compose=new`, with `to` for someone already, or `reply`, `all`
- * or `forward` with the message it answers, `?message=<id>`), so Back closes it; one opened from the reader leaves the reader under it.
+ * Open the composer. In the address, as a message is: `?compose=new` (with `to` for someone already, from their page) is
+ * a panel of its own, which Back closes; `reply`, `all` or `forward` with the message it answers (`?message=<id>`) is
+ * written in the reader under it, in the reader's own history entry, so Back goes to the list.
  */
 export function openComposer(what: Writing = { kind: 'new' }) {
-  setParams(
-    what.kind === 'new'
-      ? { compose: 'new', ...(what.to ? { to: what.to } : {}) }
-      : { compose: what.kind === 'forward' ? 'forward' : what.all ? 'all' : 'reply', message: what.messageId },
-    { state: { panel: true } },
-  );
+  if (what.kind === 'new') setParams({ compose: 'new', ...(what.to ? { to: what.to } : {}) }, { state: { panel: true } });
+  else setParams({ compose: what.kind === 'forward' ? 'forward' : what.all ? 'all' : 'reply', message: what.messageId });
 }
 
+/** Closes the composer written in the reader. */
+export const closeReply = () => setParams({ compose: '' });
+
+/** Closes the panel a new message is written in. */
 export function closeComposer() {
   if (panelEntry()) window.history.back();
   else setParams({ compose: '', to: '' });

@@ -1,4 +1,4 @@
-import { PHONE, expect, inboxLink, inboxRow, inboxRows, param, path, reader, settings, settingsInbox, test, toast } from './sift.ts';
+import { PHONE, back, expect, inboxLink, inboxRow, inboxRows, param, path, reader, settings, settingsInbox, test, toast } from './sift.ts';
 
 test.describe('Inbox, off', () => {
   test('is turned on in Settings, after saying what it keeps, and then is a section listing the inbox', async ({ page }) => {
@@ -51,18 +51,21 @@ test.describe('Inbox', () => {
     await page.keyboard.press('k');
     await expect(inboxRows(page).first()).toBeFocused();
     await page.keyboard.press('o');
-    await expect(reader(page).getByRole('heading', { name: 'This week in widgets', level: 2 })).toBeVisible();
+    await expect(reader(page).getByRole('heading', { name: 'This week in widgets', level: 1 })).toBeVisible();
     await expect(reader(page).getByText('Five stories about widgets.')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(reader(page)).toHaveCount(0);
 
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
     const open = reader(page);
-    await expect(open.getByRole('heading', { name: 'Your March bill', level: 2 })).toBeVisible();
+    await expect(open.getByRole('heading', { name: 'Your March bill', level: 1 })).toBeVisible();
     const folded = open.getByRole('cell', { name: /^Utility/ });
     await expect(folded).toHaveCount(2);
     // Answered as Receipts, as its row says, though Sift could not place it.
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toContainText('Receipts');
+    // In Inbox, Sift's reason waits for Why.
+    await expect(open.getByText(/^Your answer\. Sift said: /)).toHaveCount(0);
+    await open.getByRole('button', { name: 'Why' }).click();
     await expect(open.getByText(/^Your answer\. Sift said: /)).toBeVisible();
     // When it came, as the list says it, not how long ago.
     await expect(
@@ -74,7 +77,7 @@ test.describe('Inbox', () => {
     await expect(open.getByText('Your bill is ready.', { exact: true }).last()).toBeVisible();
     await folded.first().click();
     await expect(folded).toHaveCount(2);
-    await expect(open.getByRole('link', { name: 'Utility' }).nth(1)).toBeVisible();
+    await expect(open.getByRole('link', { name: 'Utility', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(open).toHaveCount(0);
 
@@ -92,7 +95,7 @@ test.describe('Inbox', () => {
     await expect(open.getByRole('button', { name: /^Archive/ })).toBeEnabled();
     await page.keyboard.press('e');
     await expect(toast(page, 'This week in widgets')).toBeVisible();
-    await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 2 })).toBeVisible();
+    await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 1 })).toBeVisible();
     await page.keyboard.press('Shift+U');
     // Closed once Gmail has it.
     await expect(open).toHaveCount(0);
@@ -130,11 +133,11 @@ test.describe('Inbox', () => {
       await expect(widgets).toContainText('Newsletters');
       await widgets.click();
       const open = reader(page);
-      await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 2 })).toBeVisible();
+      await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 1 })).toBeVisible();
       await open.getByRole('button', { name: 'Archive', exact: true }).click();
-      await expect(open.getByRole('heading', { name: 'Your order has shipped', level: 2 })).toBeVisible();
+      await expect(open.getByRole('heading', { name: 'Your order has shipped', level: 1 })).toBeVisible();
       await expect(toast(page, 'Widgets, part two')).toBeVisible();
-      await page.getByRole('button', { name: 'Close' }).click();
+      await back(page).click();
       await expect(page.getByRole('row').filter({ hasText: 'Widgets, part two' })).toHaveCount(0);
     });
   });

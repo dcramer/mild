@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { standing } from './rule.ts';
-import { PHONE, boxOf, composer, domainPage, expect, panel, param, path, row, section, senderPage, sideScroll, test, toast } from './sift.ts';
+import { PHONE, boxOf, composer, domainPage, expect, reader, param, path, row, section, senderPage, sideScroll, test, toast } from './sift.ts';
 
 /** The directory's rows, not its column heads. */
 const contacts = (page: Page) =>
@@ -104,7 +104,7 @@ test.describe('Contacts', () => {
     await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Write to them' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Answer 1 waiting' }).click();
-    await expect(panel(page)).toContainText('Lunch on Thursday?');
+    await expect(reader(page)).toContainText('Lunch on Thursday?');
   });
 
   test.describe('with Inbox on', () => {

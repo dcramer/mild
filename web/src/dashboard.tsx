@@ -3,38 +3,44 @@ import { type DehydratedState, HydrationBoundary, useIsFetching } from '@tanstac
 import { ActivityIcon, ContactRoundIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
-import { ComposeContext, closeComposer, openComposer, writing } from '@/lib/compose.ts';
+import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
-import { OpenMessagesContext } from '@/lib/open-messages.ts';
+import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
 import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
 import { useHidden } from '@/lib/action.ts';
 import { subscription } from '@/lib/prices.ts';
 import { startTelemetry } from '@/lib/telemetry.ts';
-import { Cloud, LoadingBar, Masthead, Notice, PageFoot, Rail, useGoing } from '@/system';
+import { Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, rowHolding, useGoing } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
-import type { MessageRef } from '@/views/message-panel.tsx';
 
-// What opens over a screen is fetched when first needed and, once the page is idle, ahead of need.
+// What opens over a screen, or in its place, is fetched when first needed and, once the page is idle, ahead of need.
 const loadSettings = () => import('@/views/settings.tsx');
-const loadMessage = () => import('@/views/message-panel.tsx');
+const loadReader = () => import('@/views/reader.tsx');
 const loadComposer = () => import('@/views/composer.tsx');
-// Opened together from the address (`?message=…&settings=1`), each waits for all, so they open in the order they are
+// Opened together from the address (`?compose=new&settings=1`), each waits for both, so they open in the order they are
 // drawn, the last on top, whichever arrived first.
-const loadPanels = () => Promise.all([loadSettings(), loadMessage(), loadComposer()]);
+const loadPanels = () => Promise.all([loadSettings(), loadComposer()]);
 const SettingsPanel = dynamic(() => loadPanels().then(([m]) => m.SettingsPanel), { ssr: false });
-const MessagePanel = dynamic(() => loadPanels().then(([, m]) => m.MessagePanel), { ssr: false });
-const Composer = dynamic(() => loadPanels().then(([, , m]) => m.Composer), { ssr: false });
+const Composer = dynamic(() => loadPanels().then(([, m]) => m.Composer), { ssr: false });
+const MessageReader = dynamic(() => loadReader().then((m) => m.MessageReader), { ssr: false, loading: () => <Loading rows={6} /> });
+
+/** What the reader's Back says, by the section a list is in; a sender's or a domain's page by its address. */
+const LISTS: Record<string, string> = { '': 'For review', inbox: 'Inbox', activity: 'Activity', rules: 'Rules', labels: 'Labels' };
+const listName = (path: string) => {
+  const [, section = '', item = ''] = path.split('/');
+  return LISTS[section] ?? (decodeURIComponent(item) || 'Back');
+};
 
 function usePanelsAhead() {
   useEffect(() => {
     const ahead = () => {
-      for (const load of [loadSettings, loadMessage, loadComposer]) void load().catch(() => {});
+      for (const load of [loadSettings, loadReader, loadComposer]) void load().catch(() => {});
     };
     if ('requestIdleCallback' in window) {
       const id = window.requestIdleCallback(ahead, { timeout: 4000 });
@@ -122,11 +128,12 @@ const firstLoad = { predicate: (query: { state: { data: unknown } }) => query.st
 
 function Frame({ signedInAs, children }: { signedInAs: string | null; children: ReactNode }) {
   usePanelsAhead();
-  const [, page] = usePathname().split('/');
+  const pathname = usePathname();
+  const [, page] = pathname.split('/');
   // A sender's and a domain's page are a contact's.
   const section = page === 'sender' || page === 'domain' ? 'contacts' : page;
-  // The message panel. Which message is open is in the address, so it can be linked to and Back closes
-  // it; the list it was opened from, for previous and next, is only known when it was opened from one here.
+  // The reader, in the screen's place. Which message is open is in the address, so it can be linked to and Back
+  // returns to the list; the list it was opened from, for previous and next, is only known when it was opened from one here.
   const [list, setList] = useState<MessageRef[]>([]);
   // The address names the message alone: the server finds which mailbox holds it.
   const [messageId] = useParam('message');
@@ -151,19 +158,30 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const inMailbox = useLoaded('manage', (signal) => api.manage(signal), 60_000, mailbox);
   const expired = manage.data?.activity.expired ?? [];
   const here = useHere();
-  // A list can be pressed while the last panel is still sliding away, its message still in the address. That
-  // press gets a panel of its own, since the closing one would only finish closing and then go Back; and it
-  // takes over the closing one's history entry, or closing it would go Back to the message just closed.
-  // A message opened over one still open (from a rule made from it) gets an entry of its own, so Back returns there.
+  // Each opening is a reader of its own, with a history entry of its own, so Back returns to the list.
   const [opened, setOpened] = useState(0);
-  const closing = useRef(false);
+  // Where the list was, and the row of the message last shown, for Back to return to.
+  const place = useRef<{ y: number; row: string | null }>({ y: 0, row: null });
   const openMessages = (items: MessageRef[], index: number) => {
-    const takeOver = closing.current;
-    closing.current = false;
+    place.current = { y: window.scrollY, row: null };
     setList(items);
     setOpened((n) => n + 1);
-    show(items[index], takeOver ? undefined : { state: { panel: true } });
+    show(items[index], { state: { panel: true } });
   };
+  const reading = open !== null;
+  useLayoutEffect(() => {
+    if (reading) return;
+    const { y, row } = place.current;
+    if (!row) return;
+    place.current = { y: 0, row: null };
+    window.scrollTo(0, y);
+    const to = rowHolding(row);
+    to?.focus({ preventScroll: true });
+    to?.scrollIntoView({ block: 'nearest' });
+  }, [reading]);
+  const shown = useCallback((row: string) => {
+    place.current.row = row;
+  }, []);
   const accounts = manage.data?.accounts ?? [];
   // Who they are, not which mailbox they happened to sign in with.
   const name = accounts.find((a) => a.primary)?.email ?? signedInAs;
@@ -201,7 +219,8 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const choice = { mailboxes, value: mailbox, onChange: chooseMailbox };
   // Writing mail is offered only with Inbox on.
   const composer = manage.data?.mail ? openComposer : null;
-  const written = composer ? writing(compose, messageId, to) : null;
+  // A reply and a forward are written in the reader.
+  const writingNew = composer !== null && compose === 'new';
 
   return (
     <OpenMessagesContext value={openMessages}>
@@ -227,25 +246,28 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
                 account={account}
               />
               {notice ? <div className="flex flex-wrap gap-x-4 gap-y-1 pb-5">{notice}</div> : null}
-              <main className="pb-16">{children}</main>
+              <main className="pb-16">
+                {/* Kept while the reader is open, as it was, and deaf: its keys and effects stop until it shows again. */}
+                <Activity mode={open ? 'hidden' : 'visible'}>{children}</Activity>
+                {open ? (
+                  <MessageReader
+                    key={opened}
+                    items={open.items}
+                    index={open.index}
+                    back={listName(pathname)}
+                    onIndex={(index) => show(open.items[index])}
+                    onShown={shown}
+                    // Opened from a list here, the entry before this one is that list: go back to it, so Back here and the browser's agree.
+                    onBack={() => {
+                      if (panelEntry()) window.history.back();
+                      else show(undefined);
+                    }}
+                  />
+                ) : null}
+              </main>
               <PageFoot />
             </div>
-            {open ? (
-              <MessagePanel
-                key={opened}
-                items={open.items}
-                index={open.index}
-                onIndex={(index) => show(open.items[index])}
-                onClosing={() => (closing.current = true)}
-                // Opened from a list here, the entry before this one is that list: go back to it, so Back and Close agree.
-                onClose={() => {
-                  closing.current = false;
-                  if (panelEntry()) window.history.back();
-                  else show(undefined);
-                }}
-              />
-            ) : null}
-            {written ? <Composer key={`${compose}/${messageId}/${to}`} what={written} onClose={closeComposer} /> : null}
+            {writingNew ? <Composer key={to} to={to} onClose={closeComposer} /> : null}
           </div>
         </Mailbox>
       </ComposeContext>
