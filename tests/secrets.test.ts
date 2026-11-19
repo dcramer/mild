@@ -25,7 +25,7 @@ import { finishLabelProposal, latestLabelProposal, startLabelProposal } from '..
 import { listProposals } from '../src/store/proposals.ts';
 import { rekeyStore } from '../src/store/rekey.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
-import { suggestionBodies } from '../src/store/query.ts';
+import { mailBodies, suggestionBodies } from '../src/store/query.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { cachedCorrespondent, domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
@@ -210,17 +210,17 @@ describe('mail', () => {
       '2',
       0,
     );
-    const hold = async (db: Sql, messageId: string, text: string, html: string | null) =>
-      await db.insert(suggestionBodies).values({
+    const hold = async (db: Sql, messageId: string, text: string, html: string | null, table: typeof suggestionBodies | typeof mailBodies = suggestionBodies) =>
+      await db.insert(table).values({
         accountId: 'alpha@example.org',
         messageId,
         bodyText: sealPart(db, 'alpha@example.org', messageId, 'text', text)!,
         bodyHtml: sealPart(db, 'alpha@example.org', messageId, 'html', html),
         fetchedAt: 0,
       });
-    const stored = async () =>
+    const stored = async (table: 'suggestion_bodies' | 'mail_bodies' = 'suggestion_bodies') =>
       await raw(plain).all<{ message_id: string; body_text: string; body_html: string | null }>(
-        'SELECT message_id, body_text, body_html FROM suggestion_bodies ORDER BY message_id',
+        `SELECT message_id, body_text, body_html FROM ${table} ORDER BY message_id`,
       );
     return { as, hold, stored };
   }
@@ -492,6 +492,18 @@ describe('mail', () => {
     for (const row of await stored()) expect(row.body_text).toMatch(/^sift-secret:v1:/);
     for (const row of await raw(await as(B)).all<{ headers: string }>('SELECT headers FROM messages')) expect(row.headers).toMatch(/^sift-secret:v1:/);
     expect(await messageDetail(await as(B), await everything(await as(B)), 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
+  });
+
+  it('brings the text Inbox keeps under the current key too', async () => {
+    const { as, hold, stored } = await alpha();
+    await hold(await as(NONE), 'm1', 'Hello', '<p>Hello</p>', mailBodies);
+    await hold(await as(A), 'm2', 'Plain', null, mailBodies);
+    expect(await rekeyContent(await as(B_AFTER_A))).toBe(2);
+    expect(await rekeyContent(await as(B))).toBe(0);
+    const [m1, m2] = await stored('mail_bodies');
+    expect(m1).toMatchObject({ body_text: expect.stringMatching(/^sift-secret:v1:/), body_html: expect.stringMatching(/^sift-secret:v1:/) });
+    expect(m2).toMatchObject({ body_text: expect.stringMatching(/^sift-secret:v1:/), body_html: null });
+    expect(openPart(await as(B), 'alpha@example.org', 'm1', 'html', m1!.body_html)).toBe('<p>Hello</p>');
   });
 });
 

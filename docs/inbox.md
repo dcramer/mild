@@ -47,3 +47,12 @@ A panel of its own, from C or the rail's Compose, or under the message in the re
 ## Turning it on
 
 Settings has Inbox, off by default. Turning it on says what it changes (Sift keeps all inbox mail, and can send as you), then sends the person through Google once more to give Sift `gmail.send` and leave to read full messages. Turning it off deletes what Sift kept for it, and Sift stops sending.
+
+## Data
+
+Inbox is off until the person turns it on (`preferences.mail`, `POST /api/mail/on`, `mail` in `/api/manage`).
+
+| | Where | While |
+| --- | --- | --- |
+| What is in the inbox now, and what is unread | `messages.label_ids`, kept from Gmail's history by every sync (`followLabels`, `src/store/messages.ts`); `messages_inbox` lists it newest first, `messages_thread` finds a thread | Always, for everyone. Stale for what changed while the history cursor had expired |
+| The whole text and HTML of inbox mail | `mail_bodies`, sealed like `suggestion_bodies` (`src/store/content.ts`) | Inbox is on. Turning it off deletes every row in the same write |

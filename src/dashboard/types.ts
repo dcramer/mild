@@ -647,6 +647,8 @@ export const ManageState = z.object({
   owner: z.boolean(),
   /** Whether sift is on for the viewer. Off, it only suggests for their mail; on, it carries its decisions out in Gmail. */
   active: z.boolean(),
+  /** Whether Inbox is on for the viewer: Sift keeps the text of their inbox mail, and may send as them. */
+  mail: z.boolean(),
   /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
   model: z.object({
     chosen: z.string().nullable(),

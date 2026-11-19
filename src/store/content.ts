@@ -17,6 +17,7 @@ import {
   gt,
   inArray,
   labelProposals,
+  mailBodies,
   messages,
   notLike,
   or,
@@ -373,7 +374,7 @@ async function rekeyLog(db: Sql, prefix: string, write: boolean): Promise<void> 
   }
 }
 
-/** Mail records, bodies and correspondents. Returns how many messages had something to bring under the key. */
+/** Mail records, the text kept of them and correspondents. Returns how many messages had something to bring under the key. */
 async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<number> {
   const touched = new Set<string>();
   const bodies = [
@@ -416,6 +417,42 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
           .set({ bodyText: text, bodyHtml: html })
           .where(and(eq(table.accountId, row.accountId), eq(table.messageId, row.messageId)));
     });
+
+  // Inbox keeps the text of a whole inbox, so it is read in batches, as mail records are.
+  for (let after: { accountId: string; messageId: string } | null = null; ;) {
+    const rows = await db
+      .select({ accountId: mailBodies.accountId, messageId: mailBodies.messageId, text: mailBodies.bodyText, html: mailBodies.bodyHtml })
+      .from(mailBodies)
+      .where(
+        and(
+          or(notLike(mailBodies.bodyText, `${prefix}%`), notLike(mailBodies.bodyHtml, `${prefix}%`)),
+          after
+            ? or(gt(mailBodies.accountId, after.accountId), and(eq(mailBodies.accountId, after.accountId), gt(mailBodies.messageId, after.messageId)))
+            : undefined,
+        ),
+      )
+      .orderBy(asc(mailBodies.accountId), asc(mailBodies.messageId))
+      .limit(BATCH);
+    if (rows.length === 0) break;
+    const resealed = rows
+      .filter((r) => stale(db, r.text) || stale(db, r.html))
+      .map((r) => ({
+        ...r,
+        text: sealPart(db, r.accountId, r.messageId, 'text', forRekey(db, r.accountId, r.messageId, 'text', r.text))!,
+        html: sealPart(db, r.accountId, r.messageId, 'html', forRekey(db, r.accountId, r.messageId, 'html', r.html)),
+      }));
+    for (const r of resealed) touched.add(`${r.accountId}\n${r.messageId}`);
+    if (write)
+      await db.transaction(async (tx) => {
+        for (const r of resealed)
+          await tx
+            .update(mailBodies)
+            .set({ bodyText: r.text, bodyHtml: r.html })
+            .where(and(eq(mailBodies.accountId, r.accountId), eq(mailBodies.messageId, r.messageId)));
+      });
+    const last: { accountId: string; messageId: string } = rows.at(-1)!;
+    after = { accountId: last.accountId, messageId: last.messageId };
+  }
 
   // A record's hashes are made with the key its headers are encrypted with, so the headers say whether both are current.
   let after: { accountId: string; id: string } | null = null;

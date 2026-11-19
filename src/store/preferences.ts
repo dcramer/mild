@@ -1,10 +1,12 @@
-import { isNull, preferences as preferenceRows } from './query.ts';
+import { isNull, mailBodies, preferences as preferenceRows } from './query.ts';
 import type { Reasoning } from '../model/reasoning.ts';
 import type { Sql } from './sql.ts';
 
 export interface Preferences {
   /** Whether sift is on for them. Off: what sift decides for their mail stays a suggestion. On: it is carried out in Gmail. */
   active: boolean;
+  /** Whether Inbox is on for them: Sift keeps the text of their inbox mail, and may send as them from a mailbox that lets it. */
+  mail: boolean;
   /** `provider/model-id`, or null for no model: mail no rule covers is then left for them. */
   model: string | null;
   /** How hard their model thinks before it answers. */
@@ -19,17 +21,26 @@ export async function preferences(db: Sql): Promise<Preferences> {
   const [row] = await db
     .select({
       active: preferenceRows.active,
+      mail: preferenceRows.mail,
       model: preferenceRows.model,
       reasoning: preferenceRows.reasoning,
       digestHour: preferenceRows.digestHour,
       timeZone: preferenceRows.timeZone,
     })
     .from(preferenceRows);
-  return { active: row!.active, model: row!.model, reasoning: row!.reasoning, digestHour: row!.digestHour, timeZone: row!.timeZone };
+  return { active: row!.active, mail: row!.mail, model: row!.model, reasoning: row!.reasoning, digestHour: row!.digestHour, timeZone: row!.timeZone };
 }
 
 export async function setActive(db: Sql, active: boolean): Promise<void> {
   await db.update(preferenceRows).set({ active });
+}
+
+/** Off, the text Sift kept of their inbox mail goes in the same write. */
+export async function setMail(db: Sql, on: boolean): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.update(preferenceRows).set({ mail: on });
+    if (!on) await tx.delete(mailBodies);
+  });
 }
 
 export async function setModel(db: Sql, model: string | null): Promise<void> {

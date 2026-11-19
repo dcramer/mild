@@ -21,6 +21,7 @@ import labelsWrite from './routes/labels/post.ts';
 import labelsProposalRead from './routes/labels/proposal/get.ts';
 import labelsProposeWrite from './routes/labels/propose/post.ts';
 import labelsRemoveWrite from './routes/labels/remove/post.ts';
+import mailOnWrite from './routes/mail/on/post.ts';
 import mailboxPrimaryWrite from './routes/mailbox/primary/post.ts';
 import mailboxRemoveWrite from './routes/mailbox/remove/post.ts';
 import manageRead from './routes/manage/get.ts';
@@ -94,6 +95,7 @@ export const WRITES: readonly Write[] = [
   labelsAcceptWrite,
   labelsProposeWrite,
   labelsRemoveWrite,
+  mailOnWrite,
   mailboxPrimaryWrite,
   mailboxRemoveWrite,
   modelWrite,

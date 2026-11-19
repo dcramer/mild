@@ -17,6 +17,7 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
   return {
     owner: scope.owner,
     active: own.active,
+    mail: own.mail,
     model: { chosen: own.model, reasoning: own.reasoning, ...(controls ? await controls.modelSignIns(db) : { choices: [], signedIn: [], pending: null }) },
     activity: {
       ...activity,

@@ -55,6 +55,7 @@ describe('pruneOld', () => {
   it('forgets an old message with its decisions, changes and model runs', async () => {
     await acted('gone');
     await modelRun(db, { messageId: 'gone', model: 'p/m', at: OLD });
+    await raw(db).run(`INSERT INTO mail_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, 'gone', 'Text.', ?)`, ACCOUNT, OLD);
     await acted('fresh');
     await message('new', RECENT);
     await recordDecision(db, ACCOUNT, 'new', archive, { carryOut: true, now: RECENT });
@@ -65,6 +66,7 @@ describe('pruneOld', () => {
     expect(await left('decisions')).toEqual(['fresh', 'new']);
     expect(await left('actions')).toEqual(['fresh']);
     expect(await left('model_runs')).toEqual([]);
+    expect(await left('mail_bodies')).toEqual([]);
     expect(await pruneOld(db, NOW)).toBe(0);
   });
 

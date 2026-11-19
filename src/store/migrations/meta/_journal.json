@@ -400,6 +400,20 @@
       "when": 1795078431907,
       "tag": "0056_messages_follow_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1795078533071,
+      "tag": "0057_inbox_keeps_mail",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1795078533546,
+      "tag": "0058_mail_bodies_row_security",
+      "breakpoints": true
     }
   ]
 }

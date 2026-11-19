@@ -145,6 +145,8 @@ export const preferences = pgTable(
     userId: userId().primaryKey(),
     // false (off): their decisions are only suggestions. true (on): sift carries them out in their mailboxes.
     active: boolean('active').notNull().default(false),
+    // Inbox: Sift keeps the text of all their inbox mail (`mail_bodies`), and may send as them where a mailbox lets it.
+    mail: boolean('mail').notNull().default(false),
     model: text('model'),
     reasoning: text('reasoning', { enum: REASONING }).notNull().default('low'),
     digestHour: integer('digest_hour').notNull().default(7), // the hour of their day a label's digest arrives
@@ -563,6 +565,23 @@ export const suggestionBodies = pgTable(
     accountId: text('account_id').notNull(),
     messageId: text('message_id').notNull(),
     bodyText: text('body_text').notNull(), // as the model is shown it: plain text, truncated
+    bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
+    fetchedAt: time('fetched_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.messageId] }), mailbox(t), message(t), own()],
+).enableRLS();
+
+/**
+ * The text of mail in the inbox, all of it, for Inbox to show: held only while the person has Inbox on, and deleted with
+ * the rest when they turn it off. Mail that left the inbox keeps its text while its record stays.
+ */
+export const mailBodies = pgTable(
+  'mail_bodies',
+  {
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    messageId: text('message_id').notNull(),
+    bodyText: text('body_text').notNull(), // all of its readable text, up to `MAX_MAIL_CHARS` (src/gmail/body.ts)
     bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
     fetchedAt: time('fetched_at').notNull(),
   },
