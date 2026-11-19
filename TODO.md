@@ -6,6 +6,7 @@ The working list for sift. Remove an item when it lands; add what you find. What
 
 - [ ] **Rules in the user's words.** A label rule can carry a condition in the user's words, which the model applies. Let one name an action without a label (today it needs one, if only Leave in inbox); propose a plain rule when the condition always holds.
 - [ ] **A sender's page says the kinds of rule in Sift's words**, not the user's.
+- [ ] **Rule precedence.** David wants the most specific rule to win; today a rule that keeps all its mail beats any other, however specific (docs/architecture.md, Rules). Decide whether a keep rule wins only a tie.
 - [ ] **Standing.** The server counts a label rule whose label archives as Unwanted (`src/store/senders.ts` gives the rule its label's action), while the sender page lights a standing only for an action rule for exactly them; make them agree. Add standing that is earned (answers that keep agreeing) beside the one given, and a list of all senders and domains to browse by standing.
 - [ ] **Use whether the user reads a sender's mail** (`messages.read_at`; not known for mail from before Sift was connected): in their standing, and to propose unsubscribing from a sender whose mail goes unopened and is never moved back. Suggested labels unsubscribe only where the sender never had permission, so lists the user was added to stay subscribed today.
 - [ ] **Unsubscribe.** Lists that need an email sent or a page opened are skipped: show their link for the user to open. Show on Labels and Rules how many senders each has unsubscribed from. Say plainly, before Sift is turned on, which labels will start unsubscribing. Mail moved by applying a rule, or by an answer carried out later, does not unsubscribe even when the rule says to; only the sender's next message does.
@@ -103,6 +104,7 @@ Sift has run on the owner's inbox while off. Nothing that changes the mailbox ha
   - **Setup in the browser.** No `sift init`: the Google client and settings entered in the dashboard, with the first visitor claiming the install safely.
   - **A public address.** Sign-in is the only gate there; review the session and write protections with that in mind.
 - [ ] **Fewer Gmail calls.** Each pass fetches a new Google access token for each mailbox (`clientFor`); keeping it until it expires needs it encrypted in `Ephemeral`. The minute look at an idle mailbox (`passWanted`) still lists its waiting suggestions and their text to see whether any is to be fetched or let go, and opens the model sign-in while mail waits undecided; each could be one count in SQL.
+- [ ] **Two costs missing from [docs/runtime.md](docs/runtime.md#what-it-costs):** reading the messages history names without saying what happened to them (20 units each, and any pass they begin), and every model call now thinking at low instead of not at all.
 - [ ] **Passes for changes sync ignores.** Any change the person makes in Gmail begins a pass (`syncWants`), though sync reads only moves, Sift's labels and mail opened; mail marked unread, and Gmail's own importance and category marks if history shows them, begin one that finds nothing. Narrowing it means one test of a change shared with `learnFromGmail`.
 - [ ] **A lost key has no way back** short of a new database: the rekey pass refuses to start while any sealed row does not open. Let the owner drop what does not open (sign-ins, sealed mail and rule text) and start ([docs/secrets.md](docs/secrets.md#losing-the-key)).
 - [ ] Restrict the core container's egress to Google and the model providers. The unsubscribe request is the one call to an arbitrary host and needs a relay container of its own first; the plan is in [docs/deploy.md](docs/deploy.md).
@@ -111,3 +113,10 @@ Sift has run on the owner's inbox while off. Nothing that changes the mailbox ha
 - [ ] A run that never ends is only logged and reported (`STUCK_MS`, `src/sift/sift.ts`); its piece is not begun again until someone cancels it with Workflow's CLI. Decide whether Sift should cancel it.
 - [ ] Optional Pub/Sub push for lower latency, keeping polling as the fallback. It needs a Google Cloud topic, so it is a lot of setup for a self-hosted tool.
 - [ ] **An agent you talk to** ("why did you archive that", "clean up my rules"), if ever built, gets its own sandbox container: shell and files, no credentials, a read-only snapshot of the database, no network except a tool channel to the core. Decide how it reaches its model without holding the key: a proxy in the core that adds it, or the core making the calls for it.
+
+## Working on Sift
+
+- [ ] **`boxOf` measures too early** (`e2e/sift.ts`): it waits for motion to stop before its target is on the page, so a toast still sliding in measured short. Wait for the target to be visible first, then drop the toast test's own wait.
+- [ ] **`tests/docs.test.ts` fails in a fresh worktree**: `BUILT` takes only `.gitignore` entries without a slash, so a doc naming `app/.well-known/workflow/` fails until a build makes it. Take ignored paths with a slash too.
+- [ ] **oxfmt rewrites a doc's tables** when given a Markdown file. Have it ignore Markdown, so `oxfmt <file>` on a doc does nothing.
+- [ ] **A test that no route needs a mailbox**: each `/api/` read answers without `?mailbox=`, from all the person's mailboxes (AGENTS.md's rule says so; nothing enforces it).
