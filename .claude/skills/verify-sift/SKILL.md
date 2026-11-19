@@ -1,6 +1,6 @@
 ---
 name: verify-sift
-description: Launch a disposable, signed-in Sift dashboard seeded with synthetic mail, and drive it in a headless browser to prove a change works the way a user meets it. Use after changing the dashboard, its API, rules, labels, answers or triage output, for AGENTS.md's "looked at the page in a browser with the console open", or whenever a test passing is not proof enough.
+description: Use before opening a pull request that touches web/ or app/, and whenever asked to look at the page, take a screenshot, check it at phone width, or see a dashboard change working. Launches a disposable, signed-in Sift dashboard seeded with synthetic mail and drives it in a headless browser, for AGENTS.md's "you looked at the page". Also after changing the dashboard's API, rules, labels, answers or triage output, or whenever a test passing is not proof enough.
 ---
 
 # Verify Sift
