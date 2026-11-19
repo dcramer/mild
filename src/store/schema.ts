@@ -182,7 +182,8 @@ export const messages = pgTable(
     receivedAt: time('received_at').notNull(),
     // The headers Gmail was asked for (METADATA_HEADERS), sender, recipients and subject among them, as encrypted JSON (src/store/content.ts).
     headers: text('headers').notNull(),
-    labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]), // when synced; a snapshot, not current state
+    // As the last sync read them from Gmail's history; stale for what changed while its cursor had expired (`recovery`).
+    labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]),
     syncedAt: time('synced_at').notNull(),
     suggestOnly: boolean('suggest_only').notNull().default(false), // first recorded by an inbox run that only suggests: a pass never carries it out
     applyRule: text('apply_rule'), // pulled in by "Apply to inbox" on this rule: what it decides here is carried out, Sift on or off
@@ -197,6 +198,11 @@ export const messages = pgTable(
     index('messages_sender').on(t.accountId, t.senderHash),
     index('messages_domain').on(t.accountId, t.domainHash),
     index('messages_received').on(t.accountId, t.receivedAt),
+    index('messages_thread').on(t.userId, t.accountId, t.threadId),
+    // What is in the inbox now, newest first: what Inbox lists and what a pass keeps the text of while it is on.
+    index('messages_inbox')
+      .on(t.accountId, t.receivedAt)
+      .where(sql`${t.labelIds} @> '["INBOX"]'::jsonb`),
     index('messages_undecided')
       .on(t.accountId, t.receivedAt)
       .where(sql`NOT ${t.decided}`),

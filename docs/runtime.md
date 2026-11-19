@@ -97,6 +97,8 @@ The rule is in [AGENTS.md](../AGENTS.md#cheap-to-run): cost follows mail, not ti
 
 The pass and look counts are a month of minute ticks simulated under the gap, counting arrivals only, with mail arriving at random times (spread out) or 50 within 5 minutes six times a day (bursts). Spread-out mail comes about every 5 minutes, so the gap stays at a minute and each message gets its pass; bursts wait for the first look after a quiet spell (3.8 minutes on average, 7 at most) and arrive in one batch.
 
+Keeping each recorded message's labels current reads nothing more from Gmail: they come from the history every sync reads already, and are written only for messages Sift has a row for.
+
 What still follows time: the tick itself, and the filter check while a rule is a filter. "Idle" means no mail and no change by the person. Mail read, moved or labelled in Gmail begins a pass too: while mail keeps coming the gap is a minute, so about one for each, which can double the spread-out figures; changes made while the mailbox is quiet wait for the gap and share one. Whether sending a draft, or Gmail's own importance and category marks, show in history as label changes, which would begin passes too, is not yet checked ([TODO.md](../TODO.md)). Not yet measured against a real mailbox.
 
 ## Code

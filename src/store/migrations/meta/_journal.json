@@ -393,6 +393,13 @@
       "when": 1795076308358,
       "tag": "0055_model_reasoning_level",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1795078431907,
+      "tag": "0056_messages_follow_labels",
+      "breakpoints": true
     }
   ]
 }

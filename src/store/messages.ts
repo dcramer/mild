@@ -1,4 +1,4 @@
-import { type SQL, and, asc, decisions, desc, eq, lt, lte, max, messages, notExists, or, sql, suggestionBodies } from './query.ts';
+import { type SQL, and, asc, decisions, desc, eq, inArray, lt, lte, max, messages, notExists, or, sql, suggestionBodies } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
@@ -138,6 +138,38 @@ export async function latestArrival(db: Sql, accountId: string, now: number): Pr
     .from(messages)
     .where(and(eq(messages.accountId, accountId), lte(messages.receivedAt, now)));
   return row!.at;
+}
+
+/** Message ids are asked for this many at a time: one history can name thousands, such as a whole inbox archived in Gmail. */
+const IDS_AT_ONCE = 1000;
+
+/**
+ * Bring recorded messages' labels to what Gmail's history says, each change in history's order, so the last change to a
+ * label stands. Reading the same history again leaves the same labels, so a sync that fails before its cursor moves can.
+ */
+export async function followLabels(db: Sql, accountId: string, history: readonly { messageId: string; added: string[]; removed: string[] }[]): Promise<void> {
+  const byMessage = Map.groupBy(history, (change) => change.messageId);
+  const ids = [...byMessage.keys()];
+  for (let at = 0; at < ids.length; at += IDS_AT_ONCE) {
+    await db.transaction(async (tx) => {
+      const rows = await tx
+        .select({ id: messages.id, labelIds: messages.labelIds })
+        .from(messages)
+        .where(and(eq(messages.accountId, accountId), inArray(messages.id, ids.slice(at, at + IDS_AT_ONCE))));
+      for (const row of rows) {
+        const labels = new Set(row.labelIds);
+        for (const change of byMessage.get(row.id)!) {
+          for (const label of change.added) labels.add(label);
+          for (const label of change.removed) labels.delete(label);
+        }
+        if (labels.size === row.labelIds.length && row.labelIds.every((label) => labels.has(label))) continue;
+        await tx
+          .update(messages)
+          .set({ labelIds: [...labels] })
+          .where(and(eq(messages.accountId, accountId), eq(messages.id, row.id)));
+      }
+    });
+  }
 }
 
 /** Delete the text of waiting mail fetched before `cutoff`, every mailbox's. Returns how many went. */

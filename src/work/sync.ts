@@ -5,6 +5,7 @@ import { type PullResult, pullChanges, toFacts } from '../gmail/sync.ts';
 import { learnFromGmail, userChanges } from '../learn/gmail.ts';
 import { type Account, lastSyncedAt, recordSync, recordSynced, setMailboxAliases } from '../store/accounts.ts';
 import { isOwnDigest, knownDigests } from '../store/digests.ts';
+import { followLabels } from '../store/messages.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 const DAY_MS = 86_400_000;
@@ -80,6 +81,8 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
   // Before the cursor moves: a failure here means the same history is read again, which this tolerates.
   const corrections = await learnFromGmail(db, account.id, byUser, api, startedAt);
   const read = byUser.filter((c) => c.removed.includes('UNREAD')).map((c) => c.messageId);
+  // Sift's own changes too: the labels are where the mail is now. Not this sync's new mail, whose labels were read after this history.
+  await followLabels(db, account.id, pull.labelChanges);
   await recordSync(db, account.id, unrecorded, pull.historyId, startedAt, read);
   return { mode: pull.mode, added, skipped, corrections };
 }
