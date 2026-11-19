@@ -134,6 +134,14 @@ export const count = (n: number) => (n >= 10_000 ? compact.format(n) : int.forma
 export const roughly = (n: number) => count(n < 100 ? n : Number(n.toPrecision(2)));
 export const percent = (part: number, whole: number) => (whole === 0 ? '–' : `${Math.round((part / whole) * 100)}%`);
 export const money = (usd: number) => (usd === 0 ? '$0' : usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`);
+/** Time saved, to the minute: "40 s", "40 min", "3 h 30 min". */
+export function duration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const rest = minutes % 60;
+  return rest === 0 ? `${Math.floor(minutes / 60)} h` : `${Math.floor(minutes / 60)} h ${rest} min`;
+}
 /** A round amount on an axis, which may be under a cent: $0.025. */
 export const moneyTick = (usd: number) => (usd === 0 ? '$0' : `$${usd >= 0.1 ? usd.toFixed(2) : Number(usd.toPrecision(2))}`);
 

@@ -1,12 +1,25 @@
 'use client';
 import { useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog } from '@/components/mail-log.tsx';
-import { type Days, type DecisionRow, api, useLoaded } from '@/lib/api.ts';
+import { type Days, type DecisionRow, type Summary, api, useLoaded } from '@/lib/api.ts';
 import { paramNow, setParams, useParam } from '@/lib/params.ts';
-import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, count, inboxFirst, labelSeries, factFilterName, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
-import { Button, Empty, FilterGroup, ListView, Reserve, Select, StackedBars, useToast } from '@/system';
+import {
+  FACT_FILTER_OPTIONS,
+  HANDLED,
+  PERIODS,
+  count,
+  duration,
+  inboxFirst,
+  labelSeries,
+  factFilterName,
+  longDay,
+  money,
+  moneyTick,
+  shortDay,
+} from '@/lib/format.ts';
+import { Button, Empty, Figure, Figures, FilterGroup, ListView, Reserve, Select, Share, StackedBars, TextLink, useToast } from '@/system';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { usePlan } from '@/components/model-connect.tsx';
 import { costName } from '@/lib/prices.ts';
@@ -37,6 +50,42 @@ export function ActivityPeriod() {
       options={PERIODS}
       onChange={(value) => narrow('days')(value === '7' ? '' : value)}
     />
+  );
+}
+
+/** What Sift took out of the inbox in the period, and from which labels; and who it unsubscribed from. Nothing when it did neither. */
+function Saved({ saved, days }: { saved: Summary['saved']; days: Days }) {
+  if (saved.messages === 0 && saved.unsubscribed.senders === 0) return null;
+  return (
+    <div className="flex flex-col gap-8 pb-10">
+      <Figures>
+        <Figure label="Time saved" value={duration(saved.seconds)} tone="look" note={`${count(saved.messages)} kept out of your inbox`} />
+        {saved.unsubscribed.senders > 0 ? (
+          <Figure label="Unsubscribed" value={count(saved.unsubscribed.senders)} note={`they sent ${count(saved.unsubscribed.monthly)} a month`} />
+        ) : null}
+      </Figures>
+      {saved.byLabel.length > 0 ? (
+        <dl className="grid max-w-xl grid-cols-[minmax(0,10rem)_minmax(0,1fr)_4.5rem] items-center gap-x-4 gap-y-2 text-sm">
+          {saved.byLabel.map((row) => (
+            <Fragment key={row.labelId ?? ''}>
+              <dt className="truncate">
+                {row.labelId === null ? (
+                  'No label'
+                ) : (
+                  <TextLink href={`/activity?${new URLSearchParams({ ...(days === 7 ? {} : { days: String(days) }), label: row.labelId })}`}>
+                    {row.labelName}
+                  </TextLink>
+                )}
+              </dt>
+              <dd>
+                <Share part={row.messages} whole={saved.messages} />
+              </dd>
+              <dd className="text-right text-muted-foreground tabular-nums">{count(row.messages)}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      ) : null}
+    </div>
   );
 }
 
@@ -107,9 +156,12 @@ export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
         ),
       }}
       intro={
-        // The chart arrives after the list is drawn, and would push it down.
-        <Reserve id="activity-intro" ready={summary.data !== null} room="min-h-[200px]">
-          <div className="flex flex-col gap-6">
+        // What was saved and the chart arrive after the list is drawn, and would push it down. Either may be empty: no gap between them, so an empty one takes no room.
+        <div>
+          <Reserve id="activity-saved" ready={summary.data !== null} room="min-h-[260px]">
+            {summary.data ? <Saved saved={summary.data.saved} days={days} /> : null}
+          </Reserve>
+          <Reserve id="activity-intro" ready={summary.data !== null} room="min-h-[200px]">
             {charted ? (
               <StackedBars
                 series={label === '' ? HANDLED : labelSeries(labels.get(label) ?? label)}
@@ -129,8 +181,8 @@ export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
                 line={{ name: costName(plan), values: daily.map((day) => day.costUsd), format: money, tick: moneyTick }}
               />
             ) : null}
-          </div>
-        </Reserve>
+          </Reserve>
+        </div>
       }
     >
       {error ? <ErrorNote message={error} /> : null}

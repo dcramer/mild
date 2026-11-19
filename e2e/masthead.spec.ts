@@ -127,3 +127,17 @@ test.describe('While the reader waits', () => {
     await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
   });
 });
+
+test.describe("The masthead's line, after a pass with Sift on", () => {
+  test.use({ variant: 'on' });
+
+  test('the cost previews what Sift saved over each window, above what the model cost', async ({ page }) => {
+    await page.goto('/');
+    const cost = page.getByRole('banner').getByRole('link', { name: /30D$/ }).filter({ visible: true });
+    await expect(cost).toHaveText('$0 30D');
+    await pointAt(cost);
+    await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+    await expect(page.getByText('Model', { exact: true })).toBeVisible();
+    await expect(page.getByRole('definition').filter({ hasText: /^4 s$/ })).toHaveCount(3);
+  });
+});

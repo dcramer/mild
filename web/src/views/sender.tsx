@@ -5,7 +5,7 @@ import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, DomainLink, NameCell, SenderCell } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
-import { INBOX, count, dateTime, describeMatch, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
+import { INBOX, count, dateTime, describeMatch, doesName, duration, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { nextMail } from '@/lib/next-mail.ts';
 import { messageKey, setParams, useParam } from '@/lib/params.ts';
@@ -106,6 +106,11 @@ function NextMail({ data, rule, labels, more }: { data: SenderPage; rule: Rule |
           </li>
         )}
         {more ? <li>{more}</li> : null}
+        {data.profile.saved.messages > 0 ? (
+          <li>
+            {count(data.profile.saved.messages)} kept out of your inbox, about {duration(data.profile.saved.seconds)}
+          </li>
+        ) : null}
       </ul>
     </div>
   );

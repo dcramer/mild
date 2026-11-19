@@ -82,7 +82,7 @@ describe('readContent', () => {
     expect(content).toEqual({
       text: 'Shop the sale',
       html: CAMPAIGN,
-      facts: { hasAttachments: false, trackingPixel: true, linkHosts: 2, trackedLinks: true, linksOffDomain: true },
+      facts: { hasAttachments: false, words: 3, trackingPixel: true, linkHosts: 2, trackedLinks: true, linksOffDomain: true },
     });
   });
 
@@ -92,7 +92,13 @@ describe('readContent', () => {
   });
 
   it('leaves the HTML facts out for mail with no HTML part', () => {
-    expect(readContent({ mimeType: 'text/plain', body: { data: b64('hi') } })).toEqual({ text: 'hi', html: null, facts: { hasAttachments: false } });
+    expect(readContent({ mimeType: 'text/plain', body: { data: b64('hi') } })).toEqual({ text: 'hi', html: null, facts: { hasAttachments: false, words: 1 } });
+  });
+
+  it('counts the words of the whole text, past where the model’s copy is cut', () => {
+    const content = readContent({ mimeType: 'text/plain', body: { data: b64('word '.repeat(2_000)) } });
+    expect(content.text.endsWith('[truncated]')).toBe(true);
+    expect(content.facts.words).toBe(2_000);
   });
 });
 

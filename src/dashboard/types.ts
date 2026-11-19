@@ -127,6 +127,10 @@ export type Contact = z.infer<typeof Contact>;
 const ListedDecision = DecisionRow.extend({ contact: Contact });
 export type ListedDecision = z.infer<typeof ListedDecision>;
 
+/** Mail Sift took out of the inbox, and the seconds that saved the reader (`saved`, src/dashboard/queries/saved.ts). */
+export const Saved = z.object({ messages: z.number(), seconds: z.number() });
+export type Saved = z.infer<typeof Saved>;
+
 export const Summary = z.object({
   days: z.number(),
   accounts: z.array(z.object({ email: z.string(), lastSyncedAt: z.number().nullable() })),
@@ -158,6 +162,14 @@ export const Summary = z.object({
     }),
   ),
   topSenders: z.array(z.object({ address: held, messages: z.number(), lastDisposition: z.string().nullable() })),
+  /**
+   * What Sift took out of the inbox in the window, less the digests it put back, by the label it gave, most first;
+   * and the senders it unsubscribed from, with what they sent in the month before.
+   */
+  saved: Saved.extend({
+    byLabel: z.array(z.object({ labelId: z.string().nullable(), labelName: z.string().nullable(), messages: z.number() })),
+    unsubscribed: z.object({ senders: z.number(), monthly: z.number() }),
+  }),
   /** The ten latest decisions in the window. */
   recent: z.array(ListedDecision),
   /**
@@ -178,7 +190,14 @@ export const Summary = z.object({
 export type Summary = z.infer<typeof Summary>;
 
 /** GET /api/usage: what the model cost, in dollars, over the last day, week and 30 days; `daily` is those 30 days, oldest first. */
-export const Usage = z.object({ day: z.number(), week: z.number(), month: z.number(), daily: z.array(z.number()) });
+export const Usage = z.object({
+  day: z.number(),
+  week: z.number(),
+  month: z.number(),
+  daily: z.array(z.number()),
+  /** What Sift took out of the inbox over the same windows; `daily` in seconds. `wouldHave`: 30 days of what it would have, had it been on. */
+  saved: z.object({ day: Saved, week: Saved, month: Saved, daily: z.array(z.number()), wouldHave: Saved }),
+});
 export type Usage = z.infer<typeof Usage>;
 
 /** GET /api/decisions: a page of decisions, and how many match in all. */
@@ -229,6 +248,8 @@ export const SenderProfile = z.object({
   lastSeenAt: z.number().nullable(),
   /** Messages in the last 30 days. */
   recent: z.number(),
+  /** Their mail Sift took out of the inbox, ever. */
+  saved: Saved,
   /** For a domain: how many addresses have written from it. */
   senders: z.number(),
   /** The owner's answers about their mail. */
@@ -432,6 +453,8 @@ export type RuleWaiting = z.infer<typeof RuleWaiting>;
  */
 export const RuleUsage = z.object({
   daily: z.array(z.object({ day: z.string(), changed: z.number(), left: z.number(), costUsd: z.number() })),
+  /** Of what it decided in those 30 days, what it took out of the inbox. */
+  saved: Saved,
 });
 export type RuleUsage = z.infer<typeof RuleUsage>;
 

@@ -98,6 +98,7 @@ export function writeDigest(digest: Digest): DigestMail {
         ? senders.join(', ')
         : `${senders.slice(0, 3).join(', ')} and ${plural(senders.length - 3, 'other')}`;
   const more = entries.length - listed.length;
+  const stayedOut = entries.length === 1 ? 'This one stayed out of your inbox.' : `These ${entries.length.toLocaleString('en-US')} stayed out of your inbox.`;
 
   const html = page(subject, preheader, [
     row(`<td style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;padding:0 0 20px;">sift</td>`),
@@ -141,8 +142,9 @@ export function writeDigest(digest: Digest): DigestMail {
           ),
         ]
       : []),
+    row(`<td style="font:400 15px/1.5 ${FONT};color:${INK};padding:28px 0 0;">${escape(stayedOut)}</td>`),
     row(
-      `<td style="font:400 13px/1.6 ${FONT};color:${MUTED};padding:32px 0 0;">` +
+      `<td style="font:400 13px/1.6 ${FONT};color:${MUTED};padding:16px 0 0;">` +
         `<a href="${escape(labelLink(digest))}" style="color:${MUTED};">Open ${escape(digest.label.name)} in Gmail</a>` +
         (digest.dashboard ? ` &nbsp;·&nbsp; <a href="${escape(`${digest.dashboard}/labels`)}" style="color:${MUTED};">Change or stop this digest</a>` : '') +
         `</td>`,
@@ -173,6 +175,8 @@ export function writeDigest(digest: Digest): DigestMail {
       ];
     }),
     ...(more > 0 ? ['', `${more.toLocaleString('en-US')} more in Gmail: ${labelLink(digest)}`] : []),
+    '',
+    stayedOut,
     '',
     `Open in Gmail: ${labelLink(digest)}`,
     ...(digest.dashboard ? [`Change or stop this digest: ${digest.dashboard}/labels`] : []),

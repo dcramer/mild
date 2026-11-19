@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { ruleDialog, standing } from './rule.ts';
+import { fact, ruleDialog, rulePanel, standing } from './rule.ts';
 import {
   boxOf,
   domainPage,
@@ -39,6 +39,24 @@ test.describe('Activity, after a pass with Sift on', () => {
       'line-through',
     );
   });
+
+  test('says the time Sift saved and which labels it came from, each narrowing the list to its label', async ({ page }) => {
+    await page.goto('/activity');
+    await expect(page.getByText('Time saved', { exact: true })).toBeVisible();
+    await expect(page.getByText('1 kept out of your inbox', { exact: true })).toBeVisible();
+    await page.getByRole('term').getByRole('link', { name: 'Newsletters' }).click();
+    await param(page, 'label').toBe('newsletter');
+    await expect(row(page, 'Widgets, part three')).toBeVisible();
+    await expect(row(page, 'Quick question')).toHaveCount(0);
+  });
+
+  test('a sender’s page and a rule’s panel say what Sift kept out of the inbox', async ({ page }) => {
+    await page.goto(senderPage('digest@news.example.com'));
+    await expect(page.getByText('1 kept out of your inbox, about 4 s', { exact: true })).toBeVisible();
+    await page.goto('/rules');
+    await page.getByRole('cell', { name: 'anyone at news.example.com' }).click();
+    await expect(fact(rulePanel(page, 'anyone at news.example.com'), 'Saved, 30 days')).toHaveText('4 s');
+  });
 });
 
 test.describe('Activity', () => {
@@ -46,6 +64,7 @@ test.describe('Activity', () => {
     await page.goto('/activity');
     await expect(page.getByRole('radio', { name: 'Changed' })).toBeChecked();
     await expect(page.getByText('Sift has changed nothing in Gmail in this period.')).toBeVisible();
+    await expect(page.getByText('Time saved', { exact: true })).toHaveCount(0);
 
     await page.getByRole('radio', { name: 'Everything' }).click();
     await param(page, 'show').toBe('all');

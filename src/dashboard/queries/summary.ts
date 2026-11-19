@@ -26,6 +26,8 @@ import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DayChanges, STAGES, type StageKey, type Summary } from '../types.ts';
 import { DAY_MS, labelIs, listDecisions } from './decisions.ts';
+import { keptOutLessDigests, net, saved, unsubscribed } from './saved.ts';
+import { labelNames } from '../../store/labels.ts';
 
 const first = alias(decisions, 'first');
 
@@ -147,6 +149,12 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
   }
 
   const answered = await accuracy(db, since, scope.accounts);
+  const byLabel = Map.groupBy(await keptOutLessDigests(db, scope, since), (row) => row.labelId);
+  const names = await labelNames(db);
+  const kept = [...byLabel]
+    .map(([labelId, rows]) => ({ labelId, labelName: labelId === null ? null : (names.get(labelId) ?? labelId), messages: net(rows) }))
+    .filter((row) => row.messages > 0)
+    .toSorted((a, b) => b.messages - a.messages);
   const sent = alias(messages, 'sent');
 
   return {
@@ -200,6 +208,11 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
         .limit(10)
     ).map((r) => ({ address: openNewest(db, r.newest).fromAddress, messages: r.n, lastDisposition: r.last })),
     recent: (await listDecisions(db, scope, { days, limit: 10 }, now)).rows,
+    saved: {
+      ...saved(kept.reduce((sum, row) => sum + row.messages, 0)),
+      byLabel: kept,
+      unsubscribed: await unsubscribed(db, scope, since),
+    },
     accuracy: { ...answered, byStage: STAGES.map((stage) => answered.byStage.find((r) => r.stage === stage) ?? { stage, reviewed: 0, right: 0 }) },
   };
 }
