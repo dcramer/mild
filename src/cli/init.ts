@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { type Config, type Variable, readSettings } from '../config.ts';
 import { type Ui, paint } from './ui.ts';
+import { signInAddresses } from './network.ts';
 
 /** Who may sign in to the user's Google app. Decides the last tasks of the Google setup. */
 type Access = 'test' | 'publish';
@@ -36,11 +37,8 @@ export interface InitDeps {
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** Where the user opens the dashboard: the Tailscale HTTPS name on a server, localhost otherwise. */
-function dashboardAddress(deps: InitDeps): string {
-  const name = deps.setupState().location === 'remote' ? deps.tailscaleName() : null;
-  return name ? `https://${name}` : `http://localhost:${deps.config.settings.dashboardPort}`;
-}
+/** Where the user opens the dashboard. */
+const dashboardAddress = (deps: InitDeps) => deps.config.settings.url ?? `http://localhost:${deps.config.settings.dashboardPort}`;
 
 interface Step {
   title: string;
@@ -195,10 +193,11 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
     { label: 'On this machine', value: false },
     { label: 'From another machine', hint: 'Sift runs on a server', value: true },
   ]);
-  // Tailscale serves the dashboard from localhost, so it listens nowhere else.
-  deps.saveSetting('SIFT_DASHBOARD_HOST', undefined);
   deps.saveSetupState({ ...deps.setupState(), location: remote ? 'remote' : 'local' });
-  if (!remote) return ui.ok(`Dashboard at ${paint.bold(dashboardAddress(deps))}`);
+  if (!remote) {
+    deps.saveSetting('SIFT_URL', undefined);
+    return ui.ok(`Dashboard at ${paint.bold(dashboardAddress(deps))}`);
+  }
 
   const name = deps.tailscaleName();
   if (!name) {
@@ -207,6 +206,7 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
     return;
   }
   ui.info('Google only signs people in over HTTPS, which Tailscale provides for your own devices.');
+  deps.saveSetting('SIFT_URL', `https://${name}`);
   const serve = `tailscale serve --bg ${config.settings.dashboardPort}`;
   if (
     await ui.select(`Run ${paint.cmd(serve)} now?`, [
@@ -236,10 +236,8 @@ interface Task {
 }
 
 /** The addresses Google must be told it may send a signed-in browser back to. */
-function redirectUris(deps: InitDeps): string[] {
-  const name = deps.tailscaleName();
-  return [`http://localhost:${deps.config.settings.dashboardPort}/auth/callback`, ...(name ? [`https://${name}/auth/callback`] : [])];
-}
+const redirectUris = (deps: InitDeps) =>
+  signInAddresses(deps.config.settings.dashboardPort, deps.config.settings.url).map((address) => `${address}/auth/callback`);
 
 /** Creating the Google client, one page at a time. Google renames these screens now and then; the links go straight to each. */
 const googleTasks = (deps: InitDeps): Task[] => [

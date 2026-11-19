@@ -21,9 +21,9 @@ From a checkout, `pnpm sift <command>` runs it from source.
 | Option | Effect |
 | --- | --- |
 | `--port <port>` | The dashboard's port for this run. |
-| `--host <address>` | Listen on this address instead of the one `SIFT_DASHBOARD_HOST` gives. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
+| `--host <address>` | Listen on this address instead of `localhost`. A container uses `0.0.0.0` and lets its port mapping decide who can reach it. |
 
-`run` migrates the database and brings every stored secret under the current key, then builds the page from a checkout (seconds, with Next.js's cache) and starts Next.js on one address: `localhost`, or the one `SIFT_DASHBOARD_HOST` names (`all` for every interface). Another address on the same machine is not served then, `localhost` included; over Tailscale, leave it unset and use `tailscale serve`, the only way off this machine that Google signs someone in at. Next.js also reads the checkout's own `.env` files, as it does for any app.
+`run` migrates the database and brings every stored secret under the current key, then builds the page from a checkout (seconds, with Next.js's cache) and starts Next.js on `localhost`. From another machine it is reached through `tailscale serve`, the only way off this machine that Google signs someone in at, with `SIFT_URL` set to the Tailscale address (`sift init` does both). Next.js also reads the checkout's own `.env` files, as it does for any app.
 
 Each minute Sift reads its record for every mailbox, and Gmail once the mailbox's gap has passed (a minute while mail keeps coming, up to 10 when it is quiet), and passes over the ones with something to do, each person's mailboxes changed in Gmail only if that person turned Sift on under Settings in the dashboard. A change there applies from the next pass, without a restart; a change to a setting needs one.
 
@@ -44,7 +44,7 @@ Nothing needs an environment variable. Everything Sift keeps is in one directory
 
 | File | What it is |
 | --- | --- |
-| `.env` | Settings, as variables: the dashboard's port and address (`SIFT_DASHBOARD_PORT`, `SIFT_DASHBOARD_HOST`), a Postgres server and the role that migrates it (`DATABASE_URL`, `DATABASE_MIGRATION_URL`), a Redis server (`REDIS_URL`), `SIFT_CHATGPT_SIGN_IN`, `SENTRY_DSN` (set from `sift init` once setup is finished), and `SIFT_CLOUD`, `true` on a Sift run for other people, which gives it terms, a privacy policy and a security page. The environment wins over it. Whether Sift is on is each person's, under Settings in the dashboard. |
+| `.env` | Settings, as variables: the dashboard's port and where people open it (`SIFT_DASHBOARD_PORT`, `SIFT_URL`, which digests link to), a Postgres server and the role that migrates it (`DATABASE_URL`, `DATABASE_MIGRATION_URL`), a Redis server (`REDIS_URL`), `SIFT_CHATGPT_SIGN_IN`, `SENTRY_DSN` (set from `sift init` once setup is finished), and `SIFT_CLOUD`, `true` on a Sift run for other people, which gives it terms, a privacy policy and a security page. The environment wins over it. Whether Sift is on is each person's, under Settings in the dashboard. |
 | `database/` | The database (PGlite), unless `DATABASE_URL` names a Postgres server: who has which mailbox, and for each person their sign-ins (encrypted), model, labels, rules, the record of every message, decision and change, and the full content of mail they answered for. |
 | `database.lock` | Which process has the database open. |
 | `workflow/` | Workflow's runs: each piece of work Sift has begun, and the key that lets only this install deliver them. |

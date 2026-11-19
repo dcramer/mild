@@ -39,6 +39,8 @@ export interface Host {
   sessionSecret: string;
   /** Names besides localhost the dashboard answers to. */
   allowedHosts: readonly string[];
+  /** Where people open the dashboard, for links in what Sift puts in their Gmail. */
+  url?: string;
   /** Addresses Google can sign someone in at, suggested when the dashboard is opened at one it cannot. */
   signInAddresses: readonly string[];
   /**
@@ -106,12 +108,10 @@ export async function createSift(host: Host): Promise<Sift> {
   };
   // Why each person's model could not be reached, so a log says it once rather than every pass. Only the log forgets it.
   const unreachable = new Map<number, string>();
-  // The last is the one reached from other devices: Tailscale's name after localhost, Vercel's production domain alone.
-  const reachedAt = host.signInAddresses.at(-1);
   const options: RunOptions = {
     ephemeral,
     log,
-    ...(reachedAt ? { dashboard: reachedAt } : {}),
+    ...(host.url ? { dashboard: host.url } : {}),
     ...(standIns
       ? {}
       : {

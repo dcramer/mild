@@ -10,10 +10,10 @@ import { type Keyring, loadKeyring } from './secrets.ts';
 export interface Settings {
   dashboardPort: number;
   /**
-   * Where the dashboard listens besides localhost, when sift runs on a server: one of this machine's
-   * addresses or names, or `all` for every network it is on. Unset: this machine only.
+   * Where people open the dashboard (`https://sift.example.com`): what a digest links to, and a name the dashboard
+   * answers to. Unset: `http://localhost` and the port; on Vercel, the project's production domain.
    */
-  dashboardHost?: string;
+  url?: string;
   /** A Postgres server's address. Unset: PGlite, in the home directory. */
   databaseUrl?: string;
   /**
@@ -49,7 +49,7 @@ export interface Settings {
 /** Each setting's variable, and what its text must be. Hosts that run sift for you (Vercel) configure it only this way. */
 const ENVIRONMENT = {
   SIFT_DASHBOARD_PORT: 'dashboardPort',
-  SIFT_DASHBOARD_HOST: 'dashboardHost',
+  SIFT_URL: 'url',
   DATABASE_URL: 'databaseUrl',
   DATABASE_MIGRATION_URL: 'databaseMigrationUrl',
   REDIS_URL: 'redisUrl',
@@ -155,10 +155,14 @@ export function readSettings(env: Env): Settings {
         settings.dashboardPort = port;
         break;
       }
-      case 'SIFT_DASHBOARD_HOST':
-        if (!/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(text)) throw bad(variable, 'a hostname or IP address');
-        settings.dashboardHost = text === '0.0.0.0' ? 'all' : text;
+      case 'SIFT_URL': {
+        const url = URL.parse(text);
+        if (!url || !['https:', 'http:'].includes(url.protocol) || url.username || url.password || `${url.pathname}${url.search}${url.hash}` !== '/') {
+          throw bad(variable, 'an address starting https:// or http://, with no path');
+        }
+        settings.url = url.origin;
         break;
+      }
       case 'DATABASE_URL':
       case 'DATABASE_MIGRATION_URL':
         if (!/^postgres(ql)?:\/\//.test(text)) throw bad(variable, 'an address starting postgres://');

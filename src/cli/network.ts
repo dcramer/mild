@@ -1,27 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import { hostname, networkInterfaces } from 'node:os';
-import type { Settings } from '../config.ts';
-
-/**
- * The address on this machine that `host` (a name or an IP) refers to, or null if it does not point
- * here. The dashboard only listens on addresses this machine actually has.
- */
-export async function resolveHere(host: string): Promise<string | null> {
-  let address = host;
-  if (isIP(host) === 0) {
-    try {
-      address = (await lookup(host, { family: 4 })).address;
-    } catch {
-      return null;
-    }
-  }
-  const mine = Object.values(networkInterfaces())
-    .flatMap((addresses) => addresses ?? [])
-    .some((entry) => entry.address === address);
-  return mine ? address : null;
-}
 
 let tailscale: string | null | undefined;
 
@@ -57,25 +35,8 @@ export function machineNames(): string[] {
   return [...new Set([...addresses, host, short, `${short}.local`, ...(name ? [name] : [])])];
 }
 
-/**
- * The one address the dashboard listens on, from `SIFT_DASHBOARD_HOST`: Next.js's server takes one. Loopback unless
- * it says otherwise, which is also what lets `sift run` believe a scheme forwarded by `tailscale serve` (`Host.forwarded`).
- */
-export async function listenAddress(settings: Settings): Promise<string> {
-  const { dashboardHost } = settings;
-  if (dashboardHost === undefined) return '127.0.0.1';
-  // `::` takes IPv4 as well. A name such as a Tailscale one can resolve to IPv6 first, so IPv4 alone is not enough.
-  if (dashboardHost === 'all') return '::';
-  const address = await resolveHere(dashboardHost);
-  if (!address) throw new Error(`SIFT_DASHBOARD_HOST is ${dashboardHost}, which does not point at this machine.`);
-  return address;
-}
-
-/** Addresses Google can sign someone in at: this machine, and its Tailscale name over HTTPS. */
-export function signInAddresses(port: number): string[] {
-  const name = tailscaleName();
-  return [`http://localhost:${port}`, ...(name ? [`https://${name}`] : [])];
-}
+/** Where Google can sign someone in: this machine, and SIFT_URL. */
+export const signInAddresses = (port: number, url: string | undefined): string[] => [...new Set([`http://localhost:${port}`, ...(url ? [url] : [])])];
 
 /** The listener at `address`, as this machine reaches it: a wildcard at its own family's loopback, since `::` may take no IPv4. */
 export function fromHere(address: string, port: number): string {
