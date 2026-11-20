@@ -1,10 +1,45 @@
 'use client';
-import { CheckIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
-import { type ReactNode, useState, useRef } from 'react';
+import { CheckIcon, ChevronDownIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
+import { type ReactNode, createContext, useContext, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { count } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
 import { useShortcut } from './keys.tsx';
+import { Menu } from './menu.tsx';
+import { Narrowed } from './mailbox.tsx';
+import { BarSlot, ToBar } from './nav.tsx';
+
+/** Where a list's views go on a phone, in place of its name, and the name to draw there. */
+const Views = createContext<{ at: HTMLElement | null; title: string }>({ at: null, title: '' });
+
+/** Draws the list's views in its head on a phone, given the page's name. */
+function ToViews({ children }: { children: (title: string) => ReactNode }) {
+  const { at, title } = useContext(Views);
+  return at ? createPortal(children(title), at) : null;
+}
+
+/**
+ * A `ListPage`'s head: its name, the mailbox it is narrowed to, and the page's own action on the right. On a phone it
+ * is one line under the top bar, the name at a section heading's size, and a list with views makes the name a menu of
+ * them.
+ */
+export function ListHead({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+  const [at, setAt] = useState<HTMLElement | null>(null);
+  return (
+    <section className="flex flex-col gap-6 phone:gap-3">
+      <header className="flex flex-wrap items-center gap-x-6 gap-y-3 phone:min-h-11 phone:flex-nowrap phone:gap-x-2">
+        <div className="flex min-w-0 flex-1 basis-40 flex-wrap items-center gap-x-3 gap-y-1">
+          <span ref={setAt} className="peer flex min-w-0 empty:hidden md:hidden" />
+          <h1 className="statement list-title min-w-0 wrap-anywhere phone:peer-[:not(:empty)]:sr-only">{title}</h1>
+          <Narrowed />
+        </div>
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      </header>
+      <Views value={{ at, title }}>{children}</Views>
+    </section>
+  );
+}
 
 interface ActiveFilter {
   /** What is being narrowed and to what: "Label: Newsletters". */
@@ -22,6 +57,9 @@ interface ActiveFilter {
  * The filter button opens a panel on the right that pushes the list left; closing it puts the list
  * back. While closed, the button shows how many filters are on and each is listed under the search
  * box with a way to clear it, so a narrowed list never looks like the whole of it.
+ *
+ * On a phone the search and the filter button are the top bar (`ToBar`), and the views a menu on the list's name
+ * (`ListHead`), so the rows start under one line.
  */
 export function ListView({
   intro,
@@ -46,15 +84,78 @@ export function ListView({
   const searchBox = useRef<HTMLInputElement>(null);
   const slash = useShortcut('/', 'Search', () => searchBox.current?.focus(), { enabled: search !== undefined && !(selected && selected.count > 0) });
   const on = filters?.active.length ?? 0;
+  const bar = useContext(BarSlot);
   return (
     <>
+      {view ? (
+        <ToViews>
+          {(title) => (
+            <Menu
+              label={view.label}
+              trigger={
+                <span className="-ml-2 flex h-11 min-w-0 items-center gap-2 px-2">
+                  <span className="heading">{title}</span>
+                  {view.value === view.options[0]?.[0] ? null : (
+                    <span className="truncate text-base font-semibold text-muted-foreground">{view.options.find(([key]) => key === view.value)?.[1]}</span>
+                  )}
+                  <ChevronDownIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                </span>
+              }
+              items={view.options.map(([key, text]) => ({ label: text, on: key === view.value, onSelect: () => view.onChange(key) }))}
+            />
+          )}
+        </ToViews>
+      ) : null}
       {intro}
+      {/* On a phone the search is the top bar. */}
+      {search ? (
+        <ToBar>
+          <label className="flex h-full min-w-0 flex-1 items-center gap-2.5 pr-1">
+            <input
+              type="search"
+              className="focus-within-shown min-w-0 flex-1 bg-transparent text-base placeholder:text-muted-foreground"
+              aria-label={search.placeholder}
+              placeholder={search.placeholder}
+              value={search.value}
+              onChange={(event) => search.onChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && search.ask && search.value.trim() !== '' && !search.ask.busy) search.ask.onAsk();
+              }}
+            />
+            {search.ask && search.value.trim() !== '' ? (
+              <Button variant="quiet" busy={search.ask.busy} onClick={search.ask.onAsk}>
+                Ask
+              </Button>
+            ) : null}
+          </label>
+          {filters ? (
+            <button
+              type="button"
+              aria-label={on > 0 ? `Filters, ${on} on` : 'Filters'}
+              aria-expanded={open}
+              className={cn(
+                'press relative flex size-11 shrink-0 cursor-pointer items-center justify-center',
+                open ? 'bg-(--fill-strong)' : 'text-muted-foreground',
+              )}
+              onClick={() => setOpen(!open)}
+            >
+              <SlidersHorizontalIcon aria-hidden className="size-5" />
+              {on > 0 ? <span className="hl absolute top-1 right-1 mx-0 px-1 py-0 text-label tabular-nums">{on}</span> : null}
+            </button>
+          ) : null}
+        </ToBar>
+      ) : null}
 
       <div className="flex flex-col gap-3">
         {search || filters || view ? (
           <div className="flex flex-col gap-2">
-            {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. On a phone the view takes a row of its own under the search. */}
-            <div className="flex flex-wrap items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 md:flex-nowrap">
+            {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. On a phone they are the top bar. */}
+            <div
+              className={cn(
+                'flex flex-wrap items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 md:flex-nowrap',
+                search && bar !== undefined && 'phone:hidden',
+              )}
+            >
               {selected && selected.count > 0 ? (
                 <div role="toolbar" aria-label="Selected rows" className="flex h-9 min-w-0 flex-1 items-center gap-1 pr-1 pl-3">
                   <span className="mr-2 text-sm font-semibold tabular-nums">{selected.count} selected</span>
@@ -96,11 +197,7 @@ export function ListView({
                 <span className="h-9 flex-1" />
               )}
               {view ? (
-                <div
-                  role="radiogroup"
-                  aria-label={view.label}
-                  className="order-last flex h-9 w-full border-t border-(--frame) md:order-none md:w-auto md:shrink-0 md:border-t-0 md:border-l"
-                >
+                <div role="radiogroup" aria-label={view.label} className="hidden h-9 shrink-0 border-l border-(--frame) md:flex">
                   {view.options.map(([key, text]) => (
                     <button
                       key={key}

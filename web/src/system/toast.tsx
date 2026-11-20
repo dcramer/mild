@@ -67,14 +67,19 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
       swipeDirection={['down', 'right']}
       className={cn(
         'sheet pointer-events-auto flex w-full flex-col bg-popover md:w-[26rem]',
+        // On a phone a receipt is one line, its kind and then its words, with its presses at the end, so it covers as little of the list as it can.
+        !failed && 'phone:flex-row phone:items-center',
         'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none',
         failed && 'border-destructive bg-destructive text-background',
       )}
     >
-      <div className={cn('flex items-start gap-2 py-3 pl-4', failed ? 'pr-1.5' : 'pr-4')}>
-        <div className="flex min-w-0 grow flex-col gap-0.5 pt-0.5">
-          <Base.Title render={<span />} className={cn('text-base leading-snug font-medium', failed && 'font-semibold')} />
-          <Base.Description render={<span />} className={cn('text-sm', kind && 'order-first', failed ? 'text-background/75' : 'text-muted-foreground')} />
+      <div className={cn('flex min-w-0 items-start gap-2 py-3 pl-4', failed ? 'pr-1.5' : 'pr-4 phone:grow phone:pr-2')}>
+        <div className={cn('flex min-w-0 grow flex-col gap-0.5 pt-0.5', !failed && 'phone:flex-row phone:items-baseline phone:gap-2')}>
+          <Base.Title render={<span />} className={cn('text-base leading-snug font-medium', failed ? 'font-semibold' : 'phone:min-w-0 phone:truncate')} />
+          <Base.Description
+            render={<span />}
+            className={cn('text-sm', kind && 'order-first', failed ? 'text-background/75' : 'text-muted-foreground phone:shrink-0')}
+          />
         </div>
         {failed ? (
           <Base.Close aria-label="Dismiss" className={cn(PRESS, ON_RED, 'w-(--control) justify-center px-0')}>
@@ -83,7 +88,7 @@ function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: b
         ) : null}
       </div>
       {undo || action ? (
-        <div className="flex items-center justify-end gap-1 border-t border-(--rule) p-1.5">
+        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-(--rule) p-1.5 phone:border-t-0 phone:pl-0">
           {action ? (
             <button type="button" className={cn(PRESS, 'text-foreground/75 hover:text-foreground')} onClick={action.onPress}>
               {action.label}

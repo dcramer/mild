@@ -392,11 +392,11 @@ function SenderView({ who }: { who: Who }) {
         {profile.contact ? (
           <>
             {naming.length > 0 ? (
-              <span aria-hidden className="max-md:hidden">
+              <span aria-hidden className="phone:hidden">
                 ·
               </span>
             ) : null}
-            <span className="max-md:basis-full">
+            <span className="phone:basis-full">
               <ContactHint contact={profile.contact} said />
             </span>
           </>

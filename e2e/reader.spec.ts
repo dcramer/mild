@@ -186,9 +186,9 @@ test.describe('A long conversation', () => {
     await page.goto('/system');
     await page.getByRole('button', { name: 'Open a message' }).click();
     const conversation = page.getByRole('region', { name: 'Lunch on Thursday?' });
-    await expect(conversation.getByRole('row', { name: /^(Ada|Me|Grace)/ })).toHaveCount(2);
+    await expect(conversation.getByRole('row', { name: /^(Ada|me|Grace)/ })).toHaveCount(2);
     await conversation.getByRole('row', { name: '4 more' }).click();
-    await expect(conversation.getByRole('row', { name: /^(Ada|Me|Grace)/ })).toHaveCount(6);
+    await expect(conversation.getByRole('row', { name: /^(Ada|me|Grace)/ })).toHaveCount(6);
     await expect(conversation.getByRole('article')).toHaveCount(1);
   });
 });

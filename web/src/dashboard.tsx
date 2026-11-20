@@ -15,7 +15,7 @@ import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/pa
 import { useHidden } from '@/lib/action.ts';
 import { subscription } from '@/lib/prices.ts';
 import { startTelemetry } from '@/lib/telemetry.ts';
-import { Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, rowHolding, useGoing } from '@/system';
+import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, rowHolding, useGoing } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 
@@ -190,6 +190,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   // An answer on its way has left the list, so it leaves the count with it until the count is read again.
   const waiting = Math.max(0, (inMailbox.data?.waiting ?? 0) - [...useHidden(inMailbox.at)].filter(isMessageKey).length);
 
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const going = useGoing();
   const fetching = useIsFetching(firstLoad);
   // Inbox is a section only while it is on.
@@ -237,34 +238,42 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
             />
             <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6 md:pt-6">
               <LoadingBar on={going || fetching > 0} />
-              <Masthead
-                current={section ?? ''}
-                items={items}
-                aside={status(false)}
-                detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
-                mailbox={choice}
-                account={account}
-              />
+              {/* An open message is read without it: the reader's bar is the top of the screen, and Back the way out. */}
+              {open ? (
+                <div className="h-3 md:hidden" />
+              ) : (
+                <Masthead
+                  current={section ?? ''}
+                  items={items}
+                  aside={status(false)}
+                  detail={usage.data ? <UsageDetail usage={usage.data} plan={plan} /> : null}
+                  mailbox={choice}
+                  account={account}
+                  slot={setSlot}
+                />
+              )}
               {notice ? <div className="flex flex-wrap gap-x-4 gap-y-1 pb-5">{notice}</div> : null}
-              <main className="pb-16">
-                {/* Kept while the reader is open, as it was, and deaf: its keys and effects stop until it shows again. */}
-                <Activity mode={open ? 'hidden' : 'visible'}>{children}</Activity>
-                {open ? (
-                  <MessageReader
-                    key={opened}
-                    items={open.items}
-                    index={open.index}
-                    back={listName(pathname)}
-                    onIndex={(index) => show(open.items[index])}
-                    onShown={shown}
-                    // Opened from a list here, the entry before this one is that list: go back to it, so Back here and the browser's agree.
-                    onBack={() => {
-                      if (panelEntry()) window.history.back();
-                      else show(undefined);
-                    }}
-                  />
-                ) : null}
-              </main>
+              <BarSlot value={slot}>
+                <main className="pb-16">
+                  {/* Kept while the reader is open, as it was, and deaf: its keys and effects stop until it shows again. */}
+                  <Activity mode={open ? 'hidden' : 'visible'}>{children}</Activity>
+                  {open ? (
+                    <MessageReader
+                      key={opened}
+                      items={open.items}
+                      index={open.index}
+                      back={listName(pathname)}
+                      onIndex={(index) => show(open.items[index])}
+                      onShown={shown}
+                      // Opened from a list here, the entry before this one is that list: go back to it, so Back here and the browser's agree.
+                      onBack={() => {
+                        if (panelEntry()) window.history.back();
+                        else show(undefined);
+                      }}
+                    />
+                  ) : null}
+                </main>
+              </BarSlot>
               <PageFoot />
             </div>
             {writingNew ? <Composer key={to} to={to} onClose={closeComposer} /> : null}

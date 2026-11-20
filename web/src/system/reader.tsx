@@ -44,8 +44,8 @@ export function Reader({
   return (
     <section ref={own} tabIndex={-1} aria-labelledby={heading} className="flex flex-col gap-4 outline-none">
       <div className={READING}>{bar}</div>
-      <div className={cn('flex flex-col gap-3', READING)}>
-        <h1 id={heading} className="statement wrap-anywhere">
+      <div className={cn('flex flex-col gap-3 phone:gap-2', READING)}>
+        <h1 id={heading} className="statement subject wrap-anywhere">
           {title}
         </h1>
         {answer}
@@ -104,14 +104,22 @@ export function ReaderBar({
 }) {
   const stepping = onPrevious !== undefined || onNext !== undefined;
   return (
-    <div className="flex items-center gap-x-3 gap-y-2 max-md:flex-wrap">
-      <Button variant="quiet" className="-ml-3" aria-label={`Back to ${back}`} shortcut={{ key: 'Escape', label: 'Back to the list' }} onClick={onBack}>
+    <div className="flex items-center gap-x-3 phone:gap-x-1.5">
+      <Button
+        variant="quiet"
+        className="-ml-3 phone:w-11 phone:justify-center phone:px-0"
+        aria-label={`Back to ${back}`}
+        shortcut={{ key: 'Escape', label: 'Back to the list' }}
+        onClick={onBack}
+      >
         <ArrowLeftIcon aria-hidden />
-        {back}
+        <span className="phone:hidden">{back}</span>
       </Button>
-      <div className={cn('flex min-w-0 items-center gap-1.5 md:ml-auto', presses.length > 0 ? 'max-md:basis-full' : 'max-md:ml-auto')}>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
         {presses.length > 0 ? <Presses presses={presses} /> : null}
-        {position ? <span className="px-2 text-sm whitespace-nowrap text-muted-foreground tabular-nums max-md:ml-auto">{position}</span> : null}
+        {position ? <span className="ml-auto px-2 text-sm whitespace-nowrap text-muted-foreground tabular-nums phone:hidden">{position}</span> : null}
+        {stepping && !position ? <span className="ml-auto" /> : null}
+        {stepping && position ? <span className="ml-auto md:hidden" /> : null}
         {stepping ? (
           <>
             <Step label="Previous" keys={['k', 'ArrowLeft']} onPress={onPrevious} icon={<ChevronUpIcon aria-hidden />} />
@@ -155,7 +163,7 @@ export function AnswerRow({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex min-w-0 items-center gap-1">
-        <AnswerPicker {...picker} className={cn('min-w-0 max-md:flex-1 md:w-72', picker.className)} />
+        <AnswerPicker {...picker} className={cn('min-w-0 phone:flex-1 md:w-72', picker.className)} />
         {why ? (
           <Button variant="quiet" className="ml-1" aria-expanded={open} aria-controls={said} onClick={() => setOpen(!open)}>
             Why

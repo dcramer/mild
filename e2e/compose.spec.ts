@@ -157,7 +157,8 @@ test.describe('with Inbox on', () => {
     await expect(writing).toHaveCount(0);
     // The newest in the conversation now, open under Ada's.
     await expect(open.getByRole('article').last()).toContainText('Thursday works.');
-    await expect(open.getByRole('article').last()).toContainText(ME);
+    // From the account, said as a mail app says it.
+    await expect(open.getByRole('article').last().getByText('me', { exact: true })).toBeVisible();
     // Back on the reader, not on its first link, whose card would open over the conversation.
     await expect(open).toBeFocused();
     expect(readSent(sift.sent()[0]!.raw).headers).toMatchObject({ 'In-Reply-To': '<thursday@example.org>' });

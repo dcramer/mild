@@ -21,6 +21,7 @@ import {
 } from '@/lib/format.ts';
 import { Empty, Figure, Figures, FilterGroup, ListView, Pager, Reserve, Select, Share, StackedBars, TextLink, useToast } from '@/system';
 import { useOpenMessages } from '@/lib/open-messages.ts';
+import { PhoneSiftStatus } from '@/components/status.tsx';
 import { usePlan } from '@/components/model-connect.tsx';
 import { costName } from '@/lib/prices.ts';
 
@@ -160,6 +161,7 @@ export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
       intro={
         // What was saved and the chart arrive after the list is drawn, and would push it down. Either may be empty: no gap between them, so an empty one takes no room.
         <div>
+          <PhoneSiftStatus />
           <Reserve id="activity-saved" ready={summary.data !== null} room="min-h-[260px]">
             {summary.data ? <Saved saved={summary.data.saved} days={days} /> : null}
           </Reserve>

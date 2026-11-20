@@ -1,8 +1,8 @@
 'use client';
 import { RefreshCwIcon } from 'lucide-react';
 import { useCallback, useSyncExternalStore } from 'react';
-import type { ManageState, Usage } from '@/lib/api.ts';
-import { approx, atApiPrices } from '@/lib/prices.ts';
+import { type ManageState, type Usage, api, useLoaded } from '@/lib/api.ts';
+import { approx, atApiPrices, subscription } from '@/lib/prices.ts';
 import { dateTime, duration, money } from '@/lib/format.ts';
 import { Ago, Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';
 
@@ -95,5 +95,16 @@ export function SiftStatus({ accounts, usage, plan, stacked = false }: { account
         </>
       ) : null}
     </span>
+  );
+}
+
+/** Sift's line on Activity, where what it counts is, on a phone, whose bar has no room for it. Its room is held while it loads. */
+export function PhoneSiftStatus() {
+  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
+  return (
+    <p className="mb-4 flex h-5 items-center text-sm text-muted-foreground md:hidden">
+      {manage.data ? <SiftStatus accounts={manage.data.accounts} usage={usage.data} plan={subscription(manage.data.model)} /> : null}
+    </p>
   );
 }

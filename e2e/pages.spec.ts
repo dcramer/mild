@@ -351,13 +351,18 @@ test.describe('A domain', () => {
 test.describe('On a phone', () => {
   test.use({ viewport: PHONE });
 
-  test("a rule's toast says Rule added above the rule, where after it the two would wrap apart", async ({ page }) => {
+  test("a rule's toast is one line: Rule added, then the rule, cut short before Undo", async ({ page }) => {
     await page.goto(SENDER);
     await standing(page, 'notifications@code.example.com', 'Block').click();
     const said = toast(page, 'Mail from notifications@code.example.com: send it to spam');
     const kind = await boxOf(said.getByText('Rule added', { exact: true }));
     const rule = await boxOf(said.getByText('Mail from notifications@code.example.com: send it to spam', { exact: true }));
-    expect(kind.y + kind.height / 2).toBeLessThan(rule.y);
+    const undo = await boxOf(said.getByRole('button', { name: /^Undo/ }));
+    expect(kind.x + kind.width).toBeLessThan(rule.x);
+    expect(rule.x + rule.width).toBeLessThanOrEqual(undo.x);
+    // One line: each is beside the other, not under it.
+    expect(kind.y).toBeLessThan(rule.y + rule.height);
+    expect(rule.y).toBeLessThan(kind.y + kind.height);
   });
 
   test('a For review row opens its message in the list’s place, the width of the screen in its gutters, and Back returns to the list', async ({ page }) => {
