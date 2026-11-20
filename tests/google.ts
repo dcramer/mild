@@ -12,7 +12,6 @@
 import type { gmail_v1 } from '@googleapis/gmail';
 import { http, HttpResponse } from 'msw/http';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll } from 'vitest';
 import type { clientFor } from '../src/gmail/auth.ts';
 import { GMAIL_SCOPES, SEND_SCOPE } from '../src/gmail/scopes.ts';
 
@@ -328,6 +327,34 @@ export class FakeGmail {
   constructor(address: string) {
     this.address = address;
     for (const id of SYSTEM_LABELS) this.labels.set(id, { id, name: id, type: 'system' });
+  }
+
+  /** All it holds, to be put back by `restore` in another process (the browser tests' server). */
+  save() {
+    return {
+      address: this.address,
+      sendAs: this.sendAs,
+      labels: [...this.labels.values()],
+      filters: this.filters,
+      messages: [...this.messages.values()].map(({ payload: _, ...m }) => m),
+      history: this.history,
+      historyId: this.historyId,
+      oldestHistory: this.oldestHistory,
+      made: this.made,
+    };
+  }
+
+  static restore(saved: ReturnType<FakeGmail['save']>): FakeGmail {
+    const gmail = new FakeGmail(saved.address);
+    gmail.sendAs = saved.sendAs;
+    for (const label of saved.labels) gmail.labels.set(label.id, label);
+    gmail.filters = saved.filters;
+    for (const m of saved.messages) gmail.messages.set(m.id, { ...m, payload: parsePart(m.raw) });
+    gmail.history.push(...saved.history);
+    gmail.historyId = saved.historyId;
+    gmail.oldestHistory = saved.oldestHistory;
+    gmail.made = saved.made;
+    return gmail;
   }
 
   /** Mail arriving: in the mailbox, and in its history unless `quietly` (mail from before Sift, found only by a search). */
@@ -696,6 +723,19 @@ export class FakeGoogle {
     return this.grants.has(refreshToken);
   }
 
+  /** All it holds, to be put back by `restore` in another process (the browser tests' server). */
+  save() {
+    return { mailboxes: [...this.mailboxes.values()].map((m) => m.save()), grants: [...this.grants], issued: this.issued };
+  }
+
+  static restore(saved: ReturnType<FakeGoogle['save']>): FakeGoogle {
+    const google = new FakeGoogle();
+    for (const m of saved.mailboxes) google.mailboxes.set(m.address, FakeGmail.restore(m));
+    for (const [token, grant] of saved.grants) google.grants.set(token, grant);
+    google.issued = saved.issued;
+    return google;
+  }
+
   private tokens(grant: { address: string; scopes: string[] }, refresh: string) {
     const access = `ya29.access-${++this.issued}`;
     this.access.set(access, refresh);
@@ -762,26 +802,21 @@ export class FakeGoogle {
 }
 
 /**
- * Google, in memory, for every test in the file that calls this: each test starts with no mailboxes and no sign-ins, and
- * a request to Google the fake does not answer fails the test rather than reaching the network.
+ * Answers Google's addresses from `google` in this process, as long as the server returned is listening. A request to a
+ * Google address the fake does not answer is an error, never the network; any other address is left alone.
  */
-export function fakeGoogle(): { readonly google: FakeGoogle } {
-  const holder = { google: new FakeGoogle() };
-  const server = setupServer(...holder.google.handlers());
-  const reset = () => {
-    holder.google = new FakeGoogle();
-    server.resetHandlers(...holder.google.handlers());
+export function serveGoogle(google: () => FakeGoogle) {
+  const server = setupServer(...google().handlers());
+  return {
+    listen: () =>
+      server.listen({
+        onUnhandledFrame: ({ frame, defaults }) => {
+          const { request } = frame.data as { request?: Request };
+          if (request && /(^|\.)google(apis)?\.com$/.test(new URL(request.url).hostname)) defaults.error();
+        },
+      }),
+    /** Answer from `google()` again, after it was replaced. */
+    reset: () => server.resetHandlers(...google().handlers()),
+    close: () => server.close(),
   };
-  beforeAll(() =>
-    server.listen({
-      // Only Google's own addresses: the dashboard a test starts is on this machine and answers for itself.
-      onUnhandledFrame: ({ frame, defaults }) => {
-        const { request } = frame.data as { request?: Request };
-        if (request && /(^|\.)google(apis)?\.com$/.test(new URL(request.url).hostname)) defaults.error();
-      },
-    }),
-  );
-  afterEach(reset);
-  afterAll(() => server.close());
-  return holder;
 }

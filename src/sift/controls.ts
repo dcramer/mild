@@ -116,7 +116,7 @@ export async function buildControls(
     await live.ephemeral.set(key, value, COUNT_MS);
     return value;
   };
-  const gmail = async (db: Sql, email: string) => standIns?.gmail(email) ?? (await gmailFor(config, live.ephemeral, db, email));
+  const gmail = async (db: Sql, email: string) => await gmailFor(config, live.ephemeral, db, email);
   const chosen = async (db: Sql) => standIns?.model ?? (await openModel(config, live.ephemeral, db));
   /** The size of the person's own calls lately, in tokens, which is their mail and their labels more than the model; undefined for a typical call's. */
   const usualCall = async (db: Sql) => {

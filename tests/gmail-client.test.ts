@@ -4,7 +4,8 @@ import { clientFor, completeBrowserSignIn, revokeGrant } from '../src/gmail/auth
 import { createGmailMailbox } from '../src/gmail/mailbox.ts';
 import { copyQuery } from '../src/work/copy.ts';
 import { inboxQuery } from '../src/work/apply.ts';
-import { SECRETS, fakeGoogle } from './google.ts';
+import { fakeGoogle } from './fixtures.ts';
+import { SECRETS } from './google.ts';
 
 const ME = 'me@example.org';
 const DAY = 86_400_000;
