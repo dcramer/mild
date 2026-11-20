@@ -182,16 +182,35 @@ describe('changing mail', () => {
     expect(box.message(b)!.labelIds).toContain('INBOX');
   });
 
-  it('counts a change whose answer was lost as missed, and the record catches up with Gmail at the next pass', async () => {
+  it('offers Undo for a change whose answer was lost, which takes it back once Gmail shows it landed', async () => {
     const { sift, box, me } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com' });
     await arrives(sift, me);
     box.fail('users.messages.modify', 'lost');
 
-    expect((await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' })).body).toEqual({ actions: [], missed: 1 });
+    const changed = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' });
+    const { actions } = changed.body as { actions: number[] };
+    expect(changed.body).toEqual({ actions: [expect.any(Number)], missed: 0 });
     expect(box.message(id)!.labelIds).not.toContain('INBOX');
+
+    expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
+    expect(box.message(id)!.labelIds).toContain('INBOX');
     await arrives(sift, me);
-    expect(threadsOf(await me.call('GET', '/api/mail/threads'))).toEqual([]);
+    expect(threadsOf(await me.call('GET', '/api/mail/threads'))).toHaveLength(1);
+  });
+
+  it('offers Undo for a change Gmail never got, which then has nothing to take back', async () => {
+    const { sift, box, me } = await withInbox();
+    const id = box.deliver({ from: 'ada@example.com' });
+    await arrives(sift, me);
+    box.fail('users.messages.modify', 'network');
+
+    const { actions } = (await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' })).body as { actions: number[] };
+    expect(actions).toHaveLength(1);
+    expect(box.message(id)!.labelIds).toContain('INBOX');
+    expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
+    expect(box.asked('users.messages.modify')).toHaveLength(1);
+    expect(box.message(id)!.labelIds).toContain('INBOX');
   });
 
   it('refuses an Undo Gmail refuses, leaving the change in place to be undone again', async () => {

@@ -197,7 +197,8 @@ export async function buildControls(
         try {
           const { outcome, labels } = await press(deps, accountId, messageId, change);
           if (labels) await recordLabels(db, accountId, messageId, labels);
-          if (outcome.status === 'done') landed.push(outcome.actionId);
+          // A change whose answer was lost may have landed: Undo is offered, and settles it from Gmail first.
+          if (outcome.status === 'done' || outcome.status === 'unknown') landed.push(outcome.actionId);
           else if (outcome.status !== 'skipped') missed++;
         } catch (error) {
           reportError(error);
