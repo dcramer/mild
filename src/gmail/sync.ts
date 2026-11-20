@@ -21,6 +21,8 @@ export interface PullResult {
    * phone, what a filter moved past the inbox. Not Spam, Trash, drafts or chats (`NOT_MAIL`). Inbox records it.
    */
   elsewhere: string[];
+  /** Messages deleted for good since the cursor. */
+  deleted: string[];
   /** Store this as the new cursor, in the same transaction that records the messages. */
   historyId: string;
   /** How the ids were found. `recovery` means the cursor had expired and a bounded search was used instead. */
@@ -43,7 +45,7 @@ const RECOVERY_DAYS = 7;
 export async function pullChanges(api: GmailApi, cursor: string | null): Promise<PullResult> {
   if (cursor === null) {
     const profile = await api.getProfile();
-    return { messageIds: [], labelChanges: [], strays: [], elsewhere: [], historyId: profile.historyId, mode: 'start' };
+    return { messageIds: [], labelChanges: [], strays: [], elsewhere: [], deleted: [], historyId: profile.historyId, mode: 'start' };
   }
 
   try {
@@ -51,6 +53,7 @@ export async function pullChanges(api: GmailApi, cursor: string | null): Promise
     const labelChanges: HistoryLabelChange[] = [];
     const strays = new Set<string>();
     const elsewhere = new Set<string>();
+    const deleted = new Set<string>();
     let historyId = cursor;
     let pageToken: string | undefined;
     do {
@@ -62,6 +65,7 @@ export async function pullChanges(api: GmailApi, cursor: string | null): Promise
       }
       labelChanges.push(...(page.labelChanges ?? []));
       for (const id of page.unexplained ?? []) strays.add(id);
+      for (const id of page.deleted ?? []) deleted.add(id);
       for (const change of page.labelChanges ?? []) {
         if (change.added.includes('INBOX')) strays.add(change.messageId);
         if (change.added.includes('SENT')) elsewhere.add(change.messageId);
@@ -74,6 +78,7 @@ export async function pullChanges(api: GmailApi, cursor: string | null): Promise
       labelChanges,
       strays: [...strays].filter((id) => !ids.has(id)),
       elsewhere: [...elsewhere].filter((id) => !ids.has(id) && !strays.has(id)),
+      deleted: [...deleted],
       historyId,
       mode: 'incremental',
     };
@@ -91,7 +96,7 @@ export async function pullChanges(api: GmailApi, cursor: string | null): Promise
     pageToken = page.nextPageToken;
   } while (pageToken);
   // Search returns newest first.
-  return { messageIds: [...ids].toReversed(), labelChanges: [], strays: [], elsewhere: [], historyId: profile.historyId, mode: 'recovery' };
+  return { messageIds: [...ids].toReversed(), labelChanges: [], strays: [], elsewhere: [], deleted: [], historyId: profile.historyId, mode: 'recovery' };
 }
 
 /** Convert Gmail metadata to triage input. Null when there is no usable From address. */

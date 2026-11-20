@@ -42,6 +42,8 @@ let inbox: RawMessage[];
 let logs: string[];
 let cursor: number;
 let bodies: Map<string, string>;
+/** Messages deleted for good, for the next history read. */
+let deleted: string[];
 
 /** A Gmail with whatever is in `inbox`; each history read hands the messages over once. */
 function api(): GmailApi {
@@ -49,7 +51,7 @@ function api(): GmailApi {
     getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(cursor) }),
     listHistory: async () => {
       const additions = inbox.map((m) => ({ id: m.id, labelIds: m.labelIds }));
-      return { additions, labelChanges: mailbox.history.splice(0), historyId: String(++cursor) };
+      return { additions, labelChanges: mailbox.history.splice(0), deleted: deleted.splice(0), historyId: String(++cursor) };
     },
     searchInbox: async () => ({ ids: [] }),
     inboxSize: async () => inbox.length,
@@ -88,6 +90,7 @@ beforeEach(async () => {
   logs = [];
   cursor = 1;
   bodies = new Map();
+  deleted = [];
   inbox = [message('news', 'News <news@example.com>'), message('ada', 'Ada <ada@example.org>')];
   for (const m of inbox) mailbox.labels.set(m.id, [...m.labelIds]);
 });
@@ -509,6 +512,7 @@ describe('teaching from Gmail', () => {
 
     mailbox.byUser('news', { add: ['INBOX'] });
     mailbox.labels.delete('news');
+    deleted.push('news');
     expect(await pass(true)).toBe(0);
     expect(await feedback()).toEqual([]);
   });

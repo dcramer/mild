@@ -76,7 +76,7 @@ function fakeApi(fake: Fake): GmailApi & { calls: string[] } {
 describe('pullChanges', () => {
   it('only records the current position on first run', async () => {
     const api = fakeApi({ historyId: '500' });
-    expect(await pullChanges(api, null)).toEqual({ messageIds: [], labelChanges: [], strays: [], elsewhere: [], historyId: '500', mode: 'start' });
+    expect(await pullChanges(api, null)).toEqual({ messageIds: [], labelChanges: [], strays: [], elsewhere: [], deleted: [], historyId: '500', mode: 'start' });
     expect(api.calls).toEqual(['profile']);
   });
 
@@ -96,6 +96,7 @@ describe('pullChanges', () => {
             { id: 'a', labelIds: ['INBOX'] },
             { id: 'b', labelIds: ['INBOX', 'UNREAD'] },
           ],
+          deleted: ['old'],
           historyId: '520',
         },
       },
@@ -105,6 +106,7 @@ describe('pullChanges', () => {
       labelChanges: [],
       strays: [],
       elsewhere: ['sent'],
+      deleted: ['old'],
       historyId: '520',
       mode: 'incremental',
     });
@@ -123,6 +125,7 @@ describe('pullChanges', () => {
       labelChanges,
       strays: ['quiet', 'back'],
       elsewhere: [],
+      deleted: [],
       historyId: '510',
       mode: 'incremental',
     });
@@ -135,6 +138,7 @@ describe('pullChanges', () => {
       labelChanges: [],
       strays: [],
       elsewhere: [],
+      deleted: [],
       historyId: '900',
       mode: 'recovery',
     });
@@ -172,6 +176,7 @@ describe('pullChanges', () => {
       labelChanges: [],
       strays: [],
       elsewhere: [],
+      deleted: [],
       historyId: '900',
       mode: 'recovery',
     });

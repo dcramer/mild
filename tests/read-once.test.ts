@@ -3,6 +3,7 @@ import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { people } from '../src/store/people.ts';
+import { setActive } from '../src/store/preferences.ts';
 import type { Judge } from '../src/triage/stages/model.ts';
 import { type RunOptions, runOnce } from '../src/work/run.ts';
 import { ACCOUNT, FakeMailbox, onceGmail, rawMessage, testModel } from './helpers.ts';
@@ -83,5 +84,22 @@ describe('with Inbox off, each message is read from Gmail once', () => {
 
     expect(gmail.again).toEqual([]);
     expect(gmail.reads.toSorted()).toEqual(['meta:flaky', 'meta:kept', 'thread:started', 'whole:flaky', 'whole:kept']);
+  });
+
+  it('learns a correction made in Gmail from history and the record', async () => {
+    await setActive(db, true);
+    gmail.deliver(mail('news', 'News <news@example.com>'));
+    await runOnce(
+      db,
+      options(async () => ({ label: 'newsletter', reason: 'a newsletter', confidence: 0.95 })),
+    );
+    expect(mailbox.labels.get('news')).not.toContain('INBOX');
+
+    mailbox.byUser('news', { add: ['INBOX'] });
+    await runOnce(db, options());
+    expect(await raw(db).all('SELECT via, disposition FROM feedback')).toEqual([{ via: 'gmail', disposition: 'keep' }]);
+
+    expect(gmail.again).toEqual([]);
+    expect(gmail.reads).toEqual(['meta:news', 'whole:news']);
   });
 });

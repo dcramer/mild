@@ -98,11 +98,17 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
       if (await recordKept(db, account.id, { facts, text: textOf(whole!.content) }, startedAt)) kept++;
     }
 
-  // Before the cursor moves: a failure here means the same history is read again, which this tolerates.
-  const corrections = await learnFromGmail(db, account.id, byUser, api, startedAt);
-  const read = byUser.filter((c) => c.removed.includes('UNREAD')).map((c) => c.messageId);
-  // Sift's own changes too: the labels are where the mail is now. Not this sync's new mail, whose labels were read after this history.
+  // Sift's own changes too: the labels are where the mail is now, which is what learning reads.
   await followLabels(db, account.id, pull.labelChanges);
+  // Before the cursor moves: a failure here means the same history is read again, which both tolerate.
+  const corrections = await learnFromGmail(
+    db,
+    account.id,
+    byUser.filter((c) => !pull.deleted.includes(c.messageId)),
+    api,
+    startedAt,
+  );
+  const read = byUser.filter((c) => c.removed.includes('UNREAD')).map((c) => c.messageId);
   await recordSync(db, account.id, unrecorded, pull.historyId, startedAt, read);
   return { mode: pull.mode, added, skipped, kept, corrections };
 }

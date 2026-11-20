@@ -62,6 +62,8 @@ export interface HistoryPage {
    * leave a new message out of `messagesAdded` and name it only here.
    */
   unexplained?: string[];
+  /** Messages deleted for good. */
+  deleted?: string[];
   /** The mailbox's current history id; the next cursor once the last page is read. */
   historyId: string;
   nextPageToken?: string;
@@ -153,6 +155,7 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
         const additions: HistoryAddition[] = [];
         const labelChanges: HistoryLabelChange[] = [];
         const unexplained: string[] = [];
+        const deleted: string[] = [];
         for (const record of data.history ?? []) {
           const named = new Set<string>();
           for (const added of record.messagesAdded ?? []) {
@@ -164,6 +167,7 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
           for (const change of record.labelsRemoved ?? []) {
             if (change.message?.id) labelChanges.push({ messageId: change.message.id, added: [], removed: change.labelIds ?? [] });
           }
+          for (const gone of record.messagesDeleted ?? []) if (gone.message?.id) deleted.push(gone.message.id);
           for (const typed of [record.messagesAdded, record.messagesDeleted, record.labelsAdded, record.labelsRemoved])
             for (const entry of typed ?? []) if (entry.message?.id) named.add(entry.message.id);
           for (const message of record.messages ?? []) if (message.id && !named.has(message.id)) unexplained.push(message.id);
@@ -172,6 +176,7 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
           additions,
           labelChanges,
           unexplained,
+          deleted,
           historyId: data.historyId ?? startHistoryId,
           ...(data.nextPageToken ? { nextPageToken: data.nextPageToken } : {}),
         };
