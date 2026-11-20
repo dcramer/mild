@@ -22,7 +22,7 @@ Package manager is **pnpm**. Node 26 (`.nvmrc`). Node runs the server's `.ts` so
 | `pnpm check:fast` | All of it but the tests. |
 | `pnpm vitest run tests/foo.test.ts` | One test file. Add `-t "name"` for one test. |
 | `pnpm coverage` | The unit tests with line and branch coverage, written to `coverage/`. The browser tests, and the Workflow tests' build of `src/`, are not in it. |
-| `pnpm e2e` | The browser tests in `e2e/`: Playwright against the real app per test (verify-sift's `serve.ts`), on a copy of verify-sift's seed, with stand-ins for Gmail and the model. `pnpm e2e e2e/foo.spec.ts`, `-g "name"` for one, `--headed` to watch. The first time on a machine, `pnpm exec playwright install chromium`. |
+| `pnpm e2e` | The browser tests in `e2e/`: Playwright against the real app per test (verify-sift's `serve.ts`), on a copy of verify-sift's seed, reaching the fake Google the unit tests use (`tests/google.ts`) and a stand-in model. `pnpm e2e e2e/foo.spec.ts`, `-g "name"` for one, `--headed` to watch. The first time on a machine, `pnpm exec playwright install chromium`. |
 | `pnpm format` | `oxlint --fix` then `oxfmt`. |
 | `pnpm sift <command>` | Run the CLI from source. `pnpm start` is `pnpm sift run`. |
 | `pnpm build:web` | Build the app with Next.js, into `.next`. `sift run` and `pnpm e2e` build it each time from a checkout, and Next.js's cache makes that seconds; restart Sift to pick up a new build. |

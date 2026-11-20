@@ -324,6 +324,8 @@ export class FakeGmail {
   lagSearch = false;
   /** What a search guesses for how many it found (`resultSizeEstimate`), which in Gmail can be well off: by default, exactly. */
   estimate: (found: number) => number = (found) => found;
+  /** When set, a search asked for any page after its first never answers: Gmail still listing a long search. */
+  holdPages = false;
   now: () => number = () => Date.now();
 
   private readonly messages = new Map<string, Stored>();
@@ -611,6 +613,7 @@ export class FakeGmail {
         return HttpResponse.json({ ...(history.length > 0 ? { history } : {}), historyId: String(this.historyId), ...(next ? { nextPageToken: next } : {}) });
       }
       case 'users.messages.list': {
+        if (this.holdPages && q.get('pageToken')) return new Promise<never>(() => {});
         let matches: (m: Stored) => boolean;
         try {
           matches = searchOf(q.get('q') ?? '', this);
@@ -748,6 +751,8 @@ export class FakeGoogle {
   private readonly access = new Map<string, string>();
   private readonly codes = new Map<string, { address: string; scopes: string[] }>();
   private issued = 0;
+  /** Called after each request that changed what it holds, or may have: a sign-in, a revoke, any Gmail request but a read. */
+  onChange: () => void = () => {};
 
   /** The mailbox at `address`, made empty the first time it is asked for. */
   mailbox(address: string): FakeGmail {
@@ -834,6 +839,7 @@ export class FakeGoogle {
           if (!consented) return HttpResponse.json({ error: 'invalid_grant', error_description: 'Malformed auth code.' }, { status: 400 });
           const refresh = `1//refresh-${++this.issued}-${consented.address}`;
           this.grants.set(refresh, consented);
+          this.onChange();
           return HttpResponse.json({ ...this.tokens(consented, refresh), refresh_token: refresh });
         }
         return HttpResponse.json({ error: 'unsupported_grant_type' }, { status: 400 });
@@ -843,6 +849,7 @@ export class FakeGoogle {
         const refresh = this.grants.has(token) ? token : this.access.get(token);
         if (!refresh || !this.grants.has(refresh)) return HttpResponse.json({ error: 'invalid_token' }, { status: 400 });
         this.grants.delete(refresh);
+        this.onChange();
         return new HttpResponse(null, { status: 200 });
       }),
       ...ROUTES.map(([method, verb, path]) =>
@@ -852,7 +859,7 @@ export class FakeGoogle {
           const q = new URL(request.url).searchParams;
           const id = typeof params['id'] === 'string' ? params['id'] : undefined;
           const body = verb === 'post' ? ((await request.json().catch(() => ({}))) as Record<string, unknown>) : {};
-          return await mailbox.answer(
+          const answered = await mailbox.answer(
             method,
             {
               ...(id ? { id } : {}),
@@ -863,6 +870,8 @@ export class FakeGoogle {
             },
             () => mailbox.respond(method, request, id ? { id } : {}, body),
           );
+          if (verb !== 'get') this.onChange();
+          return answered;
         }),
       ),
     ];
