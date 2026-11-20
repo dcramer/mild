@@ -23,7 +23,6 @@ import {
   ListView,
   More,
   Note,
-  OnPhone,
   RowCheck,
   Sub,
   Table,
@@ -62,28 +61,33 @@ function ThreadRow({ thread, selected, onSelect, onOpen }: { thread: MailThread;
   return (
     <Tr onOpen={onOpen} holds={thread.messageIds.map((messageId) => messageKey({ accountId: thread.accountId, messageId }))}>
       <RowCheck checked={selected} onChange={onSelect} label={`Select ${subject}`} />
-      <Td className="max-w-0 md:w-[22%] md:min-w-48">
-        <span className="flex items-baseline gap-3">
-          <span className={`flex min-w-0 flex-1 items-baseline gap-1.5 ${thread.unread ? 'name' : ''}`}>
-            <span className="truncate">{who}</span>
-            {many}
-          </span>
-          <span className="shrink-0 text-sm text-muted-foreground tabular-nums md:hidden">
-            <Arrived at={thread.newestAt} />
-          </span>
+      <Td className="max-w-0 phone:py-2 md:w-[22%] md:min-w-48">
+        <span className={`flex min-w-0 items-baseline gap-1.5 phone:hidden ${thread.unread ? 'name' : ''}`}>
+          <span className="truncate">{who}</span>
+          {many}
         </span>
-        <OnPhone>
-          <span className={`w-full truncate text-base ${strong || 'text-foreground'}`}>
+        {/* On a phone, a mail app's three lines set close: who and when, the subject, the start of the text with what Sift thinks. Unread is bold and bright, read is plain. */}
+        <span className="flex flex-col leading-snug md:hidden">
+          <span className="flex items-baseline gap-3">
+            <span className={`flex min-w-0 flex-1 items-baseline gap-1.5 ${thread.unread ? 'name leading-snug' : 'text-foreground/85'}`}>
+              <span className="truncate">{who}</span>
+              {many}
+            </span>
+            <span className={`shrink-0 text-sm tabular-nums ${thread.unread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+              <Arrived at={thread.newestAt} />
+            </span>
+          </span>
+          <span className={`truncate ${thread.unread ? 'font-semibold text-foreground' : 'text-foreground/85'}`}>
             <Place thread={thread} />
             {subject}
           </span>
-          <span className="flex w-full items-baseline gap-3">
+          <span className="flex items-baseline gap-3 text-muted-foreground">
             <span className="min-w-0 flex-1 truncate">{thread.preview ? reveal(thread.preview) : null}</span>
-            <span className="shrink-0">
+            <span className="shrink-0 text-sm">
               <Thinks thinks={thread.thinks} />
             </span>
           </span>
-        </OnPhone>
+        </span>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-full">
         <span className={`block truncate ${strong}`}>

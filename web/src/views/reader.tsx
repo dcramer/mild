@@ -29,6 +29,7 @@ import {
   Disclosure,
   Failure,
   Heads,
+  Heard,
   Loading,
   MessageHead,
   MessageStack,
@@ -177,7 +178,8 @@ function History({ detail, onUndone }: { detail: MessageDetail; onUndone: () => 
 
 const historyCount = (detail: MessageDetail) => detail.decisions.length + detail.actions.length;
 
-const people = (list: MessageDetail['to']) => list.map((p) => reveal(p.address));
+/** Each address, the account's own as "me", as a mail app says it. */
+const people = (list: MessageDetail['to'], account: string) => list.map((p) => (reveal(p.address) === account ? 'me' : reveal(p.address)));
 
 /** Who a message went to, unless that was the account alone, which says nothing. A long list folds. */
 function AddressedTo({ detail }: { detail: MessageDetail }) {
@@ -186,13 +188,13 @@ function AddressedTo({ detail }: { detail: MessageDetail }) {
     <>
       {detail.to.length > 0 ? (
         <>
-          To <SomeOf items={people(detail.to)} />
+          To <SomeOf items={people(detail.to, detail.accountId)} />
         </>
       ) : null}
       {detail.cc.length > 0 ? (
         <>
           {detail.to.length > 0 ? ', cc ' : 'Cc '}
-          <SomeOf items={people(detail.cc)} />
+          <SomeOf items={people(detail.cc, detail.accountId)} />
         </>
       ) : null}
     </>
@@ -206,19 +208,24 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
   const address = reveal(detail.fromAddress);
   const name = reveal(detail.fromName);
   const id = detail.messageId;
+  const mine = address === detail.accountId;
   return (
     <>
       <MessageHead
         from={
-          <>
-            <SenderLink address={address} name={name}>
-              {name ?? address}
-            </SenderLink>
-            <ContactHint contact={detail.sender.contact} />
-          </>
+          mine ? (
+            'me'
+          ) : (
+            <>
+              <SenderLink address={address} name={name}>
+                {name ?? address}
+              </SenderLink>
+              <ContactHint contact={detail.sender.contact} />
+            </>
+          )
         }
-        {...(name ? { address: <SenderLink address={address} /> } : {})}
-        at={dateTime(detail.receivedAt)}
+        {...(name && !mine ? { address: <SenderLink address={address} /> } : {})}
+        at={<Heard at={detail.receivedAt} />}
         to={<AddressedTo detail={detail} />}
         {...(onAnswer
           ? {
@@ -293,9 +300,9 @@ function Messages({
   const messages = conversation
     ? conversation.messages.map((m) => ({
         id: m.messageId,
-        from: reveal(m.fromName) ?? reveal(m.fromAddress),
+        from: reveal(m.fromAddress) === conversation.accountId ? 'me' : (reveal(m.fromName) ?? reveal(m.fromAddress)),
         preview: m.preview ? reveal(m.preview) : null,
-        at: <Arrived at={m.receivedAt} />,
+        at: <Heard at={m.receivedAt} />,
       }))
     : [{ id: newest.messageId, from: reveal(newest.fromName) ?? reveal(newest.fromAddress), preview: null, at: <Arrived at={newest.receivedAt} /> }];
   const toggle = (id: string) => {

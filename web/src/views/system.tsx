@@ -9,6 +9,8 @@ import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, mon
 import {
   Ago,
   Arrived,
+  BarSlot,
+  Heard,
   Heads,
   Blank,
   Does,
@@ -198,6 +200,8 @@ export function SystemView() {
   const [labelled, setLabelled] = useState('');
   const [offset, setOffset] = useState(0);
   const [mailbox, setMailbox] = useState('');
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  const [view, setView] = useState('all');
   const mailboxes = { mailboxes: ['ada@example.org', 'ada@work.example.org'], value: mailbox, onChange: setMailbox };
   const toast = useToast();
   const answer = () =>
@@ -294,6 +298,15 @@ export function SystemView() {
                 <Arrived at={SYNCED} />
                 <Arrived at={SYNCED - 3 * 86_400_000} />
                 <Arrived at={SYNCED - 20 * 86_400_000} />
+              </p>
+            </Row>
+            <Row
+              label="Heard"
+              note="When a message in a conversation came, in its head: the time today, then the day and the time, the year only when it is not this one."
+            >
+              <p className="flex gap-4">
+                <Heard at={SYNCED} />
+                <Heard at={SYNCED - 3 * 86_400_000} />
               </p>
             </Row>
             <Row label="Sift does" note="Its icon and its word, the same whether suggested, done or a setting. Never what comes with it.">
@@ -942,6 +955,15 @@ export function SystemView() {
                   { label: 'Disabled', note: 'With the reason under it.', disabled: true, onSelect: () => {} },
                 ]}
               />
+              <Menu
+                label="Show"
+                trigger={<span className="flex h-(--control) items-center px-2 font-semibold">Views, the one showing ticked</span>}
+                items={[
+                  ['all', 'Everything'],
+                  ['needs', 'Needs you'],
+                  ['sorted', 'Sorted'],
+                ].map(([key, text]) => ({ label: text, on: key === view, onSelect: () => setView(key) }))}
+              />
               <Notice>Sift cannot be reached</Notice>
               <Notice tone="look" href="/system" action="Reconnect">
                 Google sign-in expired
@@ -1042,7 +1064,14 @@ export function SystemView() {
                 detail={<UsageDetail usage={USAGE} plan={null} />}
                 mailbox={mailboxes}
                 account={account}
+                slot={setBar}
               />
+              {/* A list's search goes up into the bar. */}
+              <BarSlot value={bar}>
+                <ListView search={{ value: search, onChange: setSearch, placeholder: 'Search mail' }} filters={{ active: [], panel: null }}>
+                  {null}
+                </ListView>
+              </BarSlot>
             </Sheet>
             <Sheet className="px-4">
               <Masthead current="" items={[]} />
@@ -1239,11 +1268,11 @@ export function SystemView() {
 
 const THREAD = [
   { id: 'a', from: 'Ada Lovelace', address: 'ada@example.org', preview: 'Are you free for lunch on Thursday?', at: 'Nov 10' },
-  { id: 'b', from: 'Me', address: 'me@example.org', preview: 'Thursday works. Noon at the usual place?', at: 'Nov 10' },
+  { id: 'b', from: 'me', address: 'me@example.org', preview: 'Thursday works. Noon at the usual place?', at: 'Nov 10' },
   { id: 'c', from: 'Ada Lovelace', address: 'ada@example.org', preview: 'Can Grace come too?', at: 'Nov 11' },
-  { id: 'd', from: 'Me', address: 'me@example.org', preview: 'Of course.', at: 'Nov 11' },
+  { id: 'd', from: 'me', address: 'me@example.org', preview: 'Of course.', at: 'Nov 11' },
   { id: 'e', from: 'Grace Hopper', address: 'grace@example.net', preview: 'Count me in. I will bring the notes from the review.', at: 'Nov 11' },
-  { id: 'f', from: 'Me', address: 'me@example.org', preview: 'See you both there.', at: 'Nov 12' },
+  { id: 'f', from: 'me', address: 'me@example.org', preview: 'See you both there.', at: 'Nov 12' },
   { id: 'g', from: 'Ada Lovelace', address: 'ada@example.org', preview: 'Noon it is. I will bring the plans.', at: '9:41 AM' },
 ];
 const NEWEST = THREAD[THREAD.length - 1];
@@ -1332,12 +1361,12 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             return (
               <>
                 <MessageHead
-                  from={<TextLink href="/system">{m.from}</TextLink>}
-                  address={m.address}
-                  at={m.at.includes(':') ? `Nov 12, 2026, ${m.at}` : `${m.at}, 2026`}
+                  from={m.from === 'me' ? 'me' : <TextLink href="/system">{m.from}</TextLink>}
+                  {...(m.from === 'me' ? {} : { address: m.address })}
+                  at={m.at.includes(':') ? m.at : `${m.at}, 9:41 AM`}
                   to={
                     <>
-                      To <SomeOf items={['me@example.org', 'grace@example.net']} />
+                      To <SomeOf items={['me', 'grace@example.net']} />
                     </>
                   }
                   {...(inbox

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Narrowed } from './mailbox.tsx';
 import { Blank } from './state.tsx';
+import { ListHead } from './list-view.tsx';
 
 /**
  * The top of a page: its name, and on the right the page's own action or one quiet line of numbers, the
@@ -32,10 +33,9 @@ export function PageHeader({ title, badge, meta, actions }: { title: ReactNode; 
  */
 export function ListPage({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-6">
-      <PageHeader title={title} actions={actions} />
+    <ListHead title={title} actions={actions}>
       {children}
-    </section>
+    </ListHead>
   );
 }
 

@@ -1,4 +1,4 @@
-export { Ago, Arrived, useNow } from './ago.tsx';
+export { Ago, Arrived, Heard, useNow } from './ago.tsx';
 export { AnswerPicker, type Pick } from './answer-picker.tsx';
 export { Button, Finish } from './button.tsx';
 export { StackedBars, Swatch } from './chart.tsx';
@@ -21,7 +21,7 @@ export { MailFrame } from './mail-frame.tsx';
 export { MailboxSwitch } from './mailbox.tsx';
 export { Avatar, Menu } from './menu.tsx';
 export { Meter } from './meter.tsx';
-export { Masthead } from './nav.tsx';
+export { BarSlot, Masthead } from './nav.tsx';
 export { Failure, Note } from './note.tsx';
 export { Callout, CalloutKey } from './callout.tsx';
 export { Notice } from './notice.tsx';

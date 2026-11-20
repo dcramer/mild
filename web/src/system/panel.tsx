@@ -97,7 +97,7 @@ export function Panel({
                   iconAfter
                   disabled={!onNext}
                   onClick={() => onNext?.()}
-                  className="max-md:order-3"
+                  className="phone:order-3"
                 />
               </ControlBar>
             ) : null}

@@ -188,6 +188,15 @@ export function arrived(ms: number, now: number): string {
   );
 }
 
+/** When a message in a conversation came: the time today, then the day and time, the year only when it is not this one. */
+export function heard(ms: number, now: number): string {
+  const at = new Date(ms);
+  const time = at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (daysBack(ms, now) <= 0) return time;
+  if (at.getFullYear() !== new Date(now).getFullYear()) return at.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
 export function ago(ms: number): string {
   const minutes = Math.round((Date.now() - ms) / 60_000);
   if (minutes < 1) return 'just now';

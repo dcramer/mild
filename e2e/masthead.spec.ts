@@ -46,11 +46,12 @@ test.describe("Sift's line", () => {
     await expect(page.getByText('Today', { exact: true }).and(page.locator(':not(th)'))).toBeVisible();
   });
 
-  test('on a phone, the bar is the name, the line and the menu, and the menu shows the costs above the account', async ({ page }) => {
+  test("on a phone, the bar is the menu and the list's search, and the menu shows the line and the costs above the account", async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto('/');
     const banner = page.getByRole('banner');
-    await expect(banner.getByRole('link', { name: /30D$/ }).filter({ visible: true })).toBeVisible();
+    await expect(banner.getByRole('searchbox', { name: 'Search senders and subjects' })).toBeVisible();
+    await expect(banner.getByRole('link', { name: /30D$/ })).toHaveCount(0);
     // The page's title says where you are, right under the bar.
     await expect(banner.getByText('For review').filter({ visible: true })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
@@ -58,6 +59,7 @@ test.describe("Sift's line", () => {
 
     await page.getByRole('button', { name: 'Menu' }).click();
     const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu.getByRole('link', { name: /30D$/ })).toHaveText('$0 30D');
     for (const window of ['24H', '7D', '30D']) await expect(menu.getByRole('term').filter({ hasText: window })).toBeVisible();
     await expect(menu.getByText('me@example.org')).toBeVisible();
     await expect(menu.getByRole('button', { name: 'Sign out' })).toBeVisible();
