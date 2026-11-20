@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { HistoryExpiredError, createGmailApi } from '../src/gmail/api.ts';
 import { clientFor, completeBrowserSignIn, revokeGrant } from '../src/gmail/auth.ts';
-import { createGmailMailbox } from '../src/gmail/mailbox.ts';
 import { copyQuery } from '../src/work/copy.ts';
 import { inboxQuery } from '../src/work/apply.ts';
-import { fakeGoogle } from './fixtures.ts';
+import { connectGmail, fakeGoogle } from './fixtures.ts';
 import { SECRETS } from './google.ts';
 
 const ME = 'me@example.org';
@@ -13,12 +12,7 @@ const AT = Date.UTC(2026, 10, 1, 12);
 
 const fake = fakeGoogle();
 
-/** Sift's own Gmail client for the mailbox, signed in as a sign-in that granted it would be. */
-function gmail(address = ME, { send = false } = {}) {
-  const client = clientFor(SECRETS, fake.google.grant(address, { send }));
-  const pace = async () => {};
-  return { api: createGmailApi(client, pace), mailbox: createGmailMailbox(client, pace), gmail: fake.google.mailbox(address) };
-}
+const gmail = (address = ME, how: { send?: boolean } = {}) => connectGmail(fake.google, address, how);
 
 describe('reading', () => {
   it('names the mailbox lowercased, with where its history is now', async () => {

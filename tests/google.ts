@@ -56,10 +56,16 @@ interface HistoryRecord {
   messagesDeleted?: Change[];
   labelsAdded?: (Change & { added: string[] })[];
   labelsRemoved?: (Change & { removed: string[] })[];
+  /** Named in the record's `messages` alone, with nothing saying what happened to it. */
+  mentioned?: Change[];
 }
 
-/** A call made to fail: with an HTTP status Gmail answers, or `lost`, where it is carried out and its answer never comes. */
-export type Failure = { status: number; reason?: string } | 'network' | 'lost';
+/**
+ * A call made to fail: with an HTTP status Gmail answers, `lost`, where it is carried out and its answer never comes, or
+ * `unchanged`, answered as a success with the change not taken: a modify with the message as it was, a filter made or
+ * removed with the filters as they were (`users.messages.modify` and `users.settings.filters.*` only).
+ */
+export type Failure = { status: number; reason?: string } | 'network' | 'lost' | 'unchanged';
 
 /** One request Sift made of Gmail, as the API's name for its method and what it asked for. */
 export interface Asked {
@@ -68,6 +74,8 @@ export interface Asked {
   format?: string;
   q?: string;
   pageToken?: string;
+  /** The labels a search was narrowed to. */
+  labelIds?: string[];
 }
 
 const SYSTEM_LABELS = [
@@ -314,13 +322,18 @@ export class FakeGmail {
   readonly requests: Asked[] = [];
   /** When set, mail sent or put in is not found by a search until `index()`: Gmail's search lags what it takes. */
   lagSearch = false;
+  /** What a search guesses for how many it found (`resultSizeEstimate`), which in Gmail can be well off: by default, exactly. */
+  estimate: (found: number) => number = (found) => found;
   now: () => number = () => Date.now();
 
   private readonly messages = new Map<string, Stored>();
   private readonly history: HistoryRecord[] = [];
   private historyId = 1000;
   private oldestHistory = 1000;
-  private readonly failures = new Map<string, Failure[]>();
+  /** Each method's next calls in turn: a failure, or `null` for one answered as usual. */
+  private readonly failures = new Map<string, (Failure | null)[]>();
+  private readonly meanwhiles = new Map<string, (() => void)[]>();
+  private readonly arrivals = new Map<string, (() => unknown)[]>();
   private readonly unindexed = new Set<string>();
   private made = 0;
 
@@ -391,6 +404,11 @@ export class FakeGmail {
     return id;
   }
 
+  /** Where its history is now, as `users.getProfile` answers: the cursor a sync that just ran leaves. */
+  cursor(): string {
+    return String(this.historyId);
+  }
+
   /** The id of the label with this name. */
   labelId(name: string): string | undefined {
     return [...this.labels.values()].find((l) => l.name.toLowerCase() === name.toLowerCase())?.id;
@@ -424,6 +442,26 @@ export class FakeGmail {
   /** The next calls of `method` (Gmail's name for it, `users.messages.send`) fail, one each. */
   fail(method: string, ...failures: Failure[]): void {
     this.failures.set(method, [...(this.failures.get(method) ?? []), ...failures]);
+  }
+
+  /** The calls of `method` after the next `answered` fail, one each: Gmail refusing part-way through Sift's work. */
+  failLater(method: string, answered: number, ...failures: Failure[]): void {
+    this.failures.set(method, [...(this.failures.get(method) ?? []), ...Array<null>(answered).fill(null), ...failures]);
+  }
+
+  /** `change` happens in Gmail right after the next call of `method` is answered, before Sift asks again: mail arriving while Sift pages. */
+  meanwhile(method: string, change: () => void): void {
+    this.meanwhiles.set(method, [...(this.meanwhiles.get(method) ?? []), change]);
+  }
+
+  /** `happening` is awaited when the next call of `method` reaches Gmail, before it is carried out: what goes on while Sift waits on it. */
+  whileAsked(method: string, happening: () => unknown): void {
+    this.arrivals.set(method, [...(this.arrivals.get(method) ?? []), happening]);
+  }
+
+  /** Gmail names a message in a history record without saying what happened to it, as it has been seen to for new mail. */
+  mention(id: string): void {
+    this.record({ mentioned: [{ id, labelIds: [...this.must(id).labelIds] }] });
   }
 
   /** Mail sent or put in while `lagSearch` was on is found by a search from now. */
@@ -505,12 +543,30 @@ export class FakeGmail {
   /** Answers one request to `method`, or the failure queued for it. */
   async answer(method: string, asked: Omit<Asked, 'method'>, run: () => Response | Promise<Response>): Promise<Response> {
     this.requests.push({ method, ...asked });
+    await this.arrivals.get(method)?.shift()?.();
+    const response = await this.answerOnce(method, asked, run);
+    this.meanwhiles.get(method)?.shift()?.();
+    return response;
+  }
+
+  private async answerOnce(method: string, asked: Omit<Asked, 'method'>, run: () => Response | Promise<Response>): Promise<Response> {
     const failure = this.failures.get(method)?.shift();
-    if (failure === undefined) return await run();
+    if (failure === undefined || failure === null) return await run();
     if (failure === 'network') return HttpResponse.error();
     if (failure === 'lost') {
       await run();
       return HttpResponse.error();
+    }
+    if (failure === 'unchanged' && (method === 'users.settings.filters.create' || method === 'users.settings.filters.delete')) {
+      const filters = [...this.filters];
+      const response = await run();
+      this.filters = filters;
+      return response;
+    }
+    if (failure === 'unchanged') {
+      if (method !== 'users.messages.modify') throw new Error(`The fake Gmail does not answer ${method} unchanged`);
+      const m = this.must(asked.id!);
+      return HttpResponse.json({ id: m.id, threadId: m.threadId, labelIds: [...m.labelIds] });
     }
     return refused(failure.status, failure.reason ?? 'Refused by the test', failure.reason ?? 'backendError');
   }
@@ -537,7 +593,13 @@ export class FakeGmail {
           changes?.map((c) => ({ message: { id: c.id, threadId: this.messages.get(c.id)?.threadId ?? c.id, labelIds: c.labelIds } }));
         const history = items.map((r) => ({
           id: String(r.id),
-          messages: [...(r.messagesAdded ?? []), ...(r.messagesDeleted ?? []), ...(r.labelsAdded ?? []), ...(r.labelsRemoved ?? [])].map((c) => ({
+          messages: [
+            ...(r.messagesAdded ?? []),
+            ...(r.messagesDeleted ?? []),
+            ...(r.labelsAdded ?? []),
+            ...(r.labelsRemoved ?? []),
+            ...(r.mentioned ?? []),
+          ].map((c) => ({
             id: c.id,
             threadId: this.messages.get(c.id)?.threadId ?? c.id,
           })),
@@ -569,7 +631,7 @@ export class FakeGmail {
         return HttpResponse.json({
           ...(items.length > 0 ? { messages: items.map((m) => ({ id: m.id, threadId: m.threadId })) } : {}),
           ...(next ? { nextPageToken: next } : {}),
-          resultSizeEstimate: found.length,
+          resultSizeEstimate: this.estimate(found.length),
         });
       }
       case 'users.messages.get': {
@@ -797,6 +859,7 @@ export class FakeGoogle {
               ...(q.get('format') ? { format: q.get('format')! } : {}),
               ...(q.get('q') !== null ? { q: q.get('q')! } : {}),
               ...(q.get('pageToken') ? { pageToken: q.get('pageToken')! } : {}),
+              ...(q.getAll('labelIds').length > 0 ? { labelIds: q.getAll('labelIds') } : {}),
             },
             () => mailbox.respond(method, request, id ? { id } : {}, body),
           );

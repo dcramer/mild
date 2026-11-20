@@ -25,7 +25,9 @@ import type { Decision } from '../src/triage/types.ts';
 import { ACCOUNT, tempDir, withSampleLabels } from './helpers.ts';
 import { FakeGoogle, SECRETS, serveGoogle } from './google.ts';
 import { loadConfig } from '../src/config.ts';
-import { installClient } from '../src/gmail/auth.ts';
+import { clientFor, installClient } from '../src/gmail/auth.ts';
+import { createGmailApi } from '../src/gmail/api.ts';
+import { createGmailMailbox } from '../src/gmail/mailbox.ts';
 import type { ChosenModel } from '../src/model/models.ts';
 import { type Sift, createSift } from '../src/sift/sift.ts';
 import type { Work } from '../src/work/run.ts';
@@ -364,6 +366,17 @@ export function fakeGoogle(): { readonly google: FakeGoogle } {
   });
   afterAll(() => server.close());
   return holder;
+}
+
+/**
+ * Sift's own Gmail client for `address` in `google`, signed in as a sign-in that granted it would be (`send`: with
+ * `gmail.send`), unpaced; and the mailbox it reaches. `token`: signed in with that sign-in instead, given earlier by
+ * `google.grant`, for a test that ends it (`google.expire`).
+ */
+export function connectGmail(google: FakeGoogle, address = ACCOUNT, { send = false, token }: { send?: boolean; token?: string } = {}) {
+  const client = clientFor(SECRETS, token ?? google.grant(address, { send }));
+  const pace = async () => {};
+  return { api: createGmailApi(client, pace), mailbox: createGmailMailbox(client, pace), gmail: google.mailbox(address) };
 }
 
 const SITE = 'http://localhost:3000';
