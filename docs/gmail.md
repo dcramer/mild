@@ -26,6 +26,18 @@ Quotas (projects created since 2026-05-01; older ones keep their old quotas):
 | Project, minute | 1,200,000 | Per install. |
 | Project, day | 80,000,000 | Not raisable; Google plans to bill above it. A 200-messages-a-day mailbox uses ~33,000. |
 
+## Signing in
+
+From Google's OAuth documentation as read on 2026-11-20. Which of these an install is under is set in its Google Cloud project, which Sift cannot read.
+
+- **Testing** (audience External, publishing status Testing). A refresh token ends 7 days after the person agreed on Google's consent screen. Only a client asking for nothing beyond name, email and profile is spared, so Gmail's scopes always bring it. Using the token does not extend it. Signing in again starts a new 7 days, since Sift asks for consent each time and so gets a new token. Then Google refuses to refresh it with `invalid_grant`, which Sift reads as an expired sign-in (`passWanted`, `src/work/run.ts`). At most 100 test users, and only they can sign in. Nothing in Google's answer says when the token ends: `refresh_token_expires_in` is documented only for time-based access (not checked against a Testing client).
+- **In production, unverified.** No 7-day end. Each person clicks through Google's unverified-app screen, and the project may take 100 people over its whole life, a cap that cannot be reset.
+- **In production, verified.** Neither limit, but Gmail's restricted scopes need Google's verification (TODO.md).
+- **Internal.** Only accounts in the project's own Workspace organisation, so never a `@gmail.com` address.
+- **Personal.** Only the Google account that created the project. No 7-day end, no unverified-app screen, no verification. It is chosen once, when the client is first configured, and an External or Internal project cannot switch to it. Google does not say whether it allows Gmail's scopes (not tried).
+
+Whatever the mode, a refresh token also ends when the person revokes it, after six months unused, when the account's password changes (for one with Gmail scopes), or when one account has more than 100 live tokens on one client, which ends the oldest without warning. Each sign-in makes one; Sift keeps only the newest.
+
 ## Available, not used yet
 
 - **Push** (`users.watch`). Gmail publishes to a Google Cloud Pub/Sub topic, usually within seconds, and says only the address and its new history id: the changes still come from `history.list`. The watch is renewed at least every 7 days (Google suggests daily). A mailbox gets at most one notification a second, the rest are dropped, and any may be late or lost, so a slow poll stays as the fallback. Google recommends polling only for apps on the person's own device (installed, mobile, a browser); a server can take push, which would read history as mail arrives instead of on the look gap ([runtime.md](runtime.md#the-core)). Pub/Sub pushes only to a public HTTPS address, so `sift run` on localhost or Tailscale would pull from a subscription instead.
