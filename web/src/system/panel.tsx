@@ -6,6 +6,7 @@ import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer, useShortcut } from './keys.tsx';
 import { Backdrop, LayerContent, LayerFooter, useLayerOpen } from './layer.tsx';
 import { rowHolding } from './table.tsx';
+import { AboveToasts } from './toast.tsx';
 
 /**
  * One thing from a list, opened beside the list: it slides over from the right, as wide as three
@@ -76,25 +77,27 @@ export function Panel({
             <LayerContent title={title} subtitle={subtitle}>
               {children}
             </LayerContent>
-            {actions ? <LayerFooter>{actions}</LayerFooter> : null}
-            {stepping ? (
-              <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
-                <Step
-                  label="Previous"
-                  shortcut={keys ? ['k', 'ArrowLeft'] : undefined}
-                  onPress={onPrevious}
-                  icon={<ChevronLeftIcon aria-hidden className="size-4" />}
-                />
-                <Step
-                  label="Next"
-                  shortcut={keys ? ['j', 'ArrowRight'] : undefined}
-                  onPress={onNext}
-                  icon={<ChevronRightIcon aria-hidden className="size-4" />}
-                  iconAfter
-                  className="max-md:order-3"
-                />
-              </ControlBar>
-            ) : null}
+            <AboveToasts>
+              {actions ? <LayerFooter>{actions}</LayerFooter> : null}
+              {stepping ? (
+                <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
+                  <Step
+                    label="Previous"
+                    shortcut={keys ? ['k', 'ArrowLeft'] : undefined}
+                    onPress={onPrevious}
+                    icon={<ChevronLeftIcon aria-hidden className="size-4" />}
+                  />
+                  <Step
+                    label="Next"
+                    shortcut={keys ? ['j', 'ArrowRight'] : undefined}
+                    onPress={onNext}
+                    icon={<ChevronRightIcon aria-hidden className="size-4" />}
+                    iconAfter
+                    className="max-md:order-3"
+                  />
+                </ControlBar>
+              ) : null}
+            </AboveToasts>
           </KeyLayer>
         </Base.Popup>
       </Base.Portal>

@@ -1,7 +1,7 @@
 'use client';
 import { Toast as Base } from '@base-ui/react/toast';
 import { XIcon } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
+import { type FocusEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useShortcut } from './keys.tsx';
 
@@ -10,6 +10,8 @@ const TIMEOUT = [5000, 8000] as const;
 
 /** What a receipt holds besides its words. */
 interface Own {
+  /** How long it stays, in milliseconds; a failure has none and stays until dismissed. */
+  lasts?: number;
   /** The description is what kind of thing the title is ("Rule added"), so it heads the toast. */
   kind?: boolean;
   undo?: () => void;
@@ -23,20 +25,48 @@ interface Own {
  * the other however long the words. A new one replaces the last, so Undo (and Z, Gmail's key for it) always
  * takes back the latest. It floats as a menu does, framed with the one shadow, and Undo is in the
  * highlighter: it is the one thing on it waiting on the reader. On a wide screen it sits in the bottom right,
- * clear of what is read in the middle and above a panel's footer, so Previous and Next stay pressable. A
- * failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in
+ * and on a phone across the bottom, at the edge; while a panel or dialog is open it rises above its footer
+ * (`AboveToasts`), so Previous, Next and Save stay pressable. Each has a close button. A failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in
  * `Toaster` once; call `useToast()` where something is done.
  */
 export function Toaster({ children }: { children: ReactNode }) {
   return (
-    <Base.Provider limit={3}>
+    <Base.Provider limit={3} timeout={0}>
       {children}
       <Base.Portal>
-        <Base.Viewport className="pointer-events-none fixed inset-x-4 bottom-20 z-[60] mb-[env(safe-area-inset-bottom)] flex flex-col-reverse items-center gap-2 outline-none md:inset-x-auto md:right-6 md:bottom-16 md:items-end">
+        <Base.Viewport className="pointer-events-none fixed inset-x-4 bottom-[calc(var(--toasts-above,0px)+1rem)] z-[60] mb-[env(safe-area-inset-bottom)] flex flex-col-reverse items-center gap-2 outline-none md:inset-x-auto md:right-6 md:bottom-[calc(var(--toasts-above,0px)+1.5rem)] md:items-end">
           <Receipts />
         </Base.Viewport>
       </Base.Portal>
     </Base.Provider>
+  );
+}
+
+const FOOT = 'data-toasts-above';
+
+/** Lifts toasts by the tallest footer open, read again whenever one opens, closes or changes size. */
+function liftToasts() {
+  const tallest = Math.max(0, ...[...document.querySelectorAll<HTMLElement>(`[${FOOT}]`)].map((foot) => foot.offsetHeight));
+  document.documentElement.style.setProperty('--toasts-above', `${tallest}px`);
+}
+
+/** A layer's footer, which toasts sit above while it is open. */
+export function AboveToasts({ children }: { children: ReactNode }) {
+  const foot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = foot.current;
+    if (!element) return;
+    const observer = new ResizeObserver(liftToasts);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      liftToasts();
+    };
+  }, []);
+  return (
+    <div ref={foot} {...{ [FOOT]: '' }} className="shrink-0">
+      {children}
+    </div>
   );
 }
 
@@ -50,37 +80,71 @@ function Receipts() {
   }, [close]);
   // Only the newest that can be undone answers to Z, so it undoes the last thing done.
   const front = toasts.find((t) => t.transitionStatus !== 'ending' && !t.limited && t.data?.undo)?.id;
-  return toasts.map((toast) => <Receipt key={toast.id} toast={toast} front={toast.id === front} />);
+  return toasts.map((toast) => <Receipt key={toast.id} toast={toast} front={toast.id === front} close={close} />);
+}
+
+/**
+ * Closes the toast once it has been on screen for `lasts` while nothing held it: a mouse pointing at it, or
+ * keyboard focus in it. Said again, it starts over, even in the place of one still fading out, whose countdown it
+ * would otherwise inherit (each saying is new `data`). Base UI's own timer is off because it also stops whenever
+ * the window loses focus, and reading a message (an iframe) or another window takes it, so a toast stayed up
+ * until the reader came back to the page.
+ */
+function useLifetime(toast: Base.Root.ToastObject<Own>, close: (id: string) => void) {
+  const lasts = toast.transitionStatus === 'ending' ? undefined : toast.data?.lasts;
+  const said = toast.data;
+  const [pointing, setPointing] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const left = useRef({ said, ms: lasts ?? 0 });
+  useEffect(() => {
+    if (lasts === undefined || pointing || focused) return;
+    if (left.current.said !== said) left.current = { said, ms: lasts };
+    const from = Date.now();
+    const timer = setTimeout(() => close(toast.id), left.current.ms);
+    return () => {
+      clearTimeout(timer);
+      left.current.ms -= Date.now() - from;
+    };
+  }, [lasts, said, pointing, focused, close, toast.id]);
+  return {
+    onPointerEnter: (event: PointerEvent) => event.pointerType === 'mouse' && setPointing(true),
+    onPointerLeave: () => setPointing(false),
+    onFocus: (event: FocusEvent) => event.target.matches(':focus-visible') && setFocused(true),
+    onBlur: (event: FocusEvent) => !event.currentTarget.contains(event.relatedTarget) && setFocused(false),
+  };
 }
 
 const PRESS = 'press inline-flex h-(--control) shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-sm font-semibold whitespace-nowrap hover:bg-(--fill)';
 /** On red, as on the highlighter, words are dark, and so is the focus ring: the yellow one would not show. */
 const ON_RED = 'text-background/75 hover:bg-background/10 hover:text-background focus-visible:outline-background!';
 
-function Receipt({ toast, front }: { toast: Base.Root.ToastObject<Own>; front: boolean }) {
+function Receipt({ toast, front, close }: { toast: Base.Root.ToastObject<Own>; front: boolean; close: (id: string) => void }) {
   const { kind, undo, action } = toast.data ?? {};
   const failed = toast.type === 'failure';
+  const hold = useLifetime(toast, close);
   const key = useShortcut('z', 'Undo', () => undo?.(), { enabled: front && undo !== undefined, everywhere: true });
   return (
     <Base.Root
       toast={toast}
       swipeDirection={['down', 'right']}
+      {...hold}
       className={cn(
         'sheet pointer-events-auto flex w-full flex-col bg-popover md:w-[26rem]',
         'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none',
         failed && 'border-destructive bg-destructive text-background',
       )}
     >
-      <div className={cn('flex items-start gap-2 py-3 pl-4', failed ? 'pr-1.5' : 'pr-4')}>
+      <div className="flex items-start gap-2 py-3 pr-1.5 pl-4">
         <div className="flex min-w-0 grow flex-col gap-0.5 pt-0.5">
           <Base.Title render={<span />} className={cn('text-base leading-snug font-medium', failed && 'font-semibold')} />
           <Base.Description render={<span />} className={cn('text-sm', kind && 'order-first', failed ? 'text-background/75' : 'text-muted-foreground')} />
         </div>
-        {failed ? (
-          <Base.Close aria-label="Dismiss" className={cn(PRESS, ON_RED, 'w-(--control) justify-center px-0')}>
-            <XIcon className="size-4" />
-          </Base.Close>
-        ) : null}
+        <Base.Close
+          aria-label="Dismiss"
+          className={cn(PRESS, 'w-(--control) justify-center px-0', failed ? ON_RED : 'text-muted-foreground hover:text-foreground')}
+        >
+          <XIcon className="size-4" />
+        </Base.Close>
       </div>
       {undo || action ? (
         <div className="flex items-center justify-end gap-1 border-t border-(--rule) p-1.5">
@@ -148,8 +212,9 @@ export function useToast(): (title: string, options?: ToastOptions) => void {
       title,
       onClose: gone,
       ...(description || kind ? { description: kind ?? description } : {}),
-      ...(failed ? { type: 'failure', priority: 'high' as const, timeout: 0 } : { timeout: TIMEOUT[undo || action ? 1 : 0] }),
+      ...(failed ? { type: 'failure', priority: 'high' as const } : {}),
       data: {
+        ...(failed ? {} : { lasts: TIMEOUT[undo || action ? 1 : 0] }),
         ...(kind ? { kind: true } : {}),
         ...(undo
           ? {
