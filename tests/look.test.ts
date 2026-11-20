@@ -15,6 +15,7 @@ import { type RunOptions, type Work, dueWork } from '../src/work/run.ts';
 import { FILTER_CHECK_MINUTES } from '../src/work/filters.ts';
 import { passStatus, recordPassStatus } from '../src/work/status.ts';
 import type { Decision } from '../src/triage/types.ts';
+import { signInEnds, signedIn } from '../src/store/accounts.ts';
 import { onePerson, raw } from './fixtures.ts';
 import { ACCOUNT, DAY, FakeMailbox, rawMessage, storeExample, testModel, workDue } from './helpers.ts';
 
@@ -138,6 +139,26 @@ describe('the timed tick', () => {
     expect(await timedTickPasses()).toBe(false);
     failing = false;
     expect(await timedTickPasses()).toBe(true);
+  });
+
+  it('learns from a sign-in Google ended a week after it was given that the next ends a week on too, and forgets it once one outlives the week', async () => {
+    failing = true;
+    await signedIn(db, ACCOUNT, clock - 3 * DAY);
+    // Ended sooner: revoked, or its password changed, which says nothing about the next.
+    await timedTickPasses();
+    expect(await signInEnds(db)).toEqual(new Map());
+
+    await signedIn(db, ACCOUNT, clock);
+    clock += 7 * DAY;
+    await timedTickPasses();
+    await signedIn(db, ACCOUNT, clock);
+    expect(await signInEnds(db)).toEqual(new Map([[ACCOUNT, clock + 7 * DAY]]));
+
+    // Published since: Gmail still answers a day past the week.
+    failing = false;
+    clock += 8 * DAY;
+    await timedTickPasses();
+    expect(await signInEnds(db)).toEqual(new Map());
   });
 
   it('begins one when Gmail cannot be reached to look, which the pass then reports', async () => {
