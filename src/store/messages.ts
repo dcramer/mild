@@ -111,6 +111,15 @@ export async function recordFacts(db: Sql, accountId: string, messageId: string,
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 
+/** The recorded messages of a thread, oldest first, with their labels: what Gmail's `threads.get` would say of those Sift has. */
+export async function recordedThread(db: Sql, accountId: string, threadId: string): Promise<{ id: string; labelIds: string[] }[]> {
+  return await db
+    .select({ id: messages.id, labelIds: messages.labelIds })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.threadId, threadId)))
+    .orderBy(asc(messages.receivedAt), asc(messages.id));
+}
+
 /** The user applied `ruleId` to their inbox: once a model has said what this message is, what that rule decides is carried out. */
 export async function markApplying(db: Sql, accountId: string, messageId: string, ruleId: string): Promise<void> {
   await db

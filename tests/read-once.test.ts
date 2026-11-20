@@ -3,9 +3,10 @@ import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { people } from '../src/store/people.ts';
-import { setActive } from '../src/store/preferences.ts';
+import { setActive, setMail } from '../src/store/preferences.ts';
 import type { Judge } from '../src/triage/stages/model.ts';
 import { type RunOptions, runOnce } from '../src/work/run.ts';
+import { copyMail } from '../src/work/copy.ts';
 import { ACCOUNT, FakeMailbox, onceGmail, rawMessage, testModel } from './helpers.ts';
 import { onePerson, raw, startDashboard } from './fixtures.ts';
 
@@ -101,5 +102,36 @@ describe('with Inbox off, each message is read from Gmail once', () => {
 
     expect(gmail.again).toEqual([]);
     expect(gmail.reads).toEqual(['meta:news', 'whole:news']);
+  });
+});
+
+describe('with Inbox on, a message is read once, whole', () => {
+  it('as it arrives, for the model and for Inbox alike, and its conversation is shown from the record', async () => {
+    gmail.deliver(mail('asked', 'Me <me@example.org>', { hoursAgo: 30, labels: ['SENT'] }));
+    gmail.deliver(mail('answer', 'Ada <ada@example.org>', { hoursAgo: 20, thread: 't-asked' }), { quietly: true });
+    await setMail(db, true, { now: NOW, window: 'year' });
+    expect(await copyMail({ db, api: gmail.api, now: () => NOW }, ACCOUNT)).toBe(2);
+
+    gmail.deliver(mail('again', 'Ada <ada@example.org>', { thread: 't-asked' }));
+    await runOnce(
+      db,
+      options(async () => ({ label: 'personal', reason: 'from a person', confidence: 0.95 })),
+    );
+    expect(await decided()).toEqual([{ message_id: 'again', label_id: 'personal' }]);
+    expect(await raw(db).get(`SELECT facts->>'earlierInThread' AS earlier, facts->>'ownerInThread' AS owner FROM messages WHERE id = 'again'`)).toEqual({
+      earlier: '2',
+      owner: 'true',
+    });
+    const read = gmail.reads.length;
+
+    const { call } = await startDashboard(people(store));
+    const shown = await call('GET', '/api/mail/thread?thread=t-asked');
+    expect(shown.status).toBe(200);
+    expect((shown.body as { messages: { messageId: string }[] }).messages.map((m) => m.messageId)).toEqual(['asked', 'answer', 'again']);
+    expect((await call('GET', '/api/message?id=again')).body).toMatchObject({ body: 'Text of again.' });
+
+    expect(gmail.again).toEqual([]);
+    expect(gmail.reads.length).toBe(read);
+    expect(gmail.reads.filter((r) => r !== 'search')).toEqual(['whole:answer', 'whole:asked', 'whole:again']);
   });
 });

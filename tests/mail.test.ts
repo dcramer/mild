@@ -29,7 +29,11 @@ const gmail = (): GmailApi => ({
   inboxSize: async () => 0,
   searchMail: async () => ({ ids: [] }),
   mailboxSize: async () => 0,
-  getMessage: async () => null,
+  getMessage: async (id) => {
+    read.push(id);
+    const raw = known.find((m) => m.id === id);
+    return raw ? { raw, content: readContent({ mimeType: 'text/plain', body: { data: b64(textOf(id)) } }) } : null;
+  },
   getMetadata: async (id) => known.find((m) => m.id === id) ?? null,
   getLabelIds: async () => null,
   listLabels: async () => [],
@@ -110,7 +114,7 @@ describe('the text Inbox keeps', () => {
     expect(await kept()).toEqual([]);
   });
 
-  it('shares the pass’s one read of a message with the model', async () => {
+  it('reads new mail once, whole, for the model and for Inbox alike', async () => {
     await setMail(db, true);
     await runOnce(db, options({ model: async () => testModel() }));
     expect(read.toSorted()).toEqual(['a', 'b']);

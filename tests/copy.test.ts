@@ -184,14 +184,15 @@ describe('sync while Inbox is on', () => {
   ];
   const mail = () => added().map((a) => rawMessage(a.id, { labelIds: a.labelIds, internalDate: NOW, ...(a.id === 'sent' ? { from: ACCOUNT } : {}) }));
 
-  it('records what arrived elsewhere and what the person sent, with its text, and triages only the inbox’s', async () => {
+  it('records what arrived elsewhere and what the person sent, and the inbox’s, each with its text from one read, and triages only the inbox’s', async () => {
     await setMail(db, true, { now: NOW });
     const api = gmailOf(mail(), added());
     expect(await syncWants(db, gmailOf(mail(), added()), await firstAccount(db))).toBe(true);
     const report = await syncAccount(db, api, await firstAccount(db), () => NOW);
     expect(report.kept).toBe(2);
     expect(await ids('messages', 'id')).toEqual(['filtered', 'new', 'sent']);
-    expect(await ids('mail_bodies')).toEqual(['filtered', 'sent']);
+    expect(await ids('mail_bodies')).toEqual(['filtered', 'new', 'sent']);
+    expect(api.calls.toSorted()).toEqual(['whole:filtered', 'whole:new', 'whole:sent']);
     expect((await listUndecided(db, ACCOUNT, 10)).map((m) => m.facts.messageId)).toEqual(['new']);
   });
 

@@ -172,6 +172,14 @@ const arrive = (mail: typeof inbox) => {
 };
 arrive(inbox);
 const find = (id: string) => inbox.find((m) => m.raw.id === id);
+// What a model's read of the whole message adds: Grace's notes come with a file, and the Deals mail is tracked.
+function contentOf(id: string) {
+  const m = find(id);
+  if (!m) return null;
+  const html = id === 'm4' ? { trackingPixel: true, trackedLinks: true, linkHosts: 2, linksOffDomain: true } : {};
+  return { text: m.body, html: HTML[id] ?? null, facts: { hasAttachments: id === 'm7', ...html } };
+}
+
 const api: GmailApi = {
   getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(history) }),
   listHistory: async (start) => ({
@@ -182,17 +190,16 @@ const api: GmailApi = {
   inboxSize: async () => inbox.length,
   searchMail: async () => ({ ids: [] }),
   mailboxSize: async () => 0,
-  getMessage: async () => null,
+  // With Inbox on, sync reads new mail whole once.
+  getMessage: async (id) => {
+    const m = find(id);
+    const read = contentOf(id);
+    return m && read ? { raw: m.raw, content: read } : null;
+  },
   getMetadata: async (id) => find(id)?.raw ?? null,
   getLabelIds: async (id) => mailbox.labels.get(id) ?? null,
   listLabels: async () => [],
-  // What a model's read of the whole message adds: Grace's notes come with a file, and the Deals mail is tracked.
-  getContent: async (id) => {
-    const m = find(id);
-    if (!m) return null;
-    const html = id === 'm4' ? { trackingPixel: true, trackedLinks: true, linkHosts: 2, linksOffDomain: true } : {};
-    return { text: m.body, html: HTML[id] ?? null, facts: { hasAttachments: id === 'm7', ...html } };
-  },
+  getContent: async (id) => contentOf(id),
   getThread: async () => null,
   listSendAs: async () => [ACCOUNT],
 };

@@ -40,6 +40,15 @@ export async function goingCopies(db: Sql): Promise<MailCopy[]> {
   return await db.select(COLUMNS).from(mailCopies).where(isNull(mailCopies.finishedAt));
 }
 
+/** Whether Inbox holds all of this mailbox's mail in its window: it is on, and its copy has reached the start of the window. */
+export async function copied(db: Sql, accountId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ one: sql`1` })
+    .from(mailCopies)
+    .where(and(eq(mailCopies.accountId, accountId), not(isNull(mailCopies.finishedAt))));
+  return row !== undefined;
+}
+
 export async function goingCopy(db: Sql, accountId: string): Promise<MailCopy | null> {
   const [row] = await db
     .select(COLUMNS)
