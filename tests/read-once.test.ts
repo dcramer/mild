@@ -11,8 +11,11 @@ import { ruleInbox } from '../src/work/apply.ts';
 import { continueRuleRun } from '../src/work/inbox.ts';
 import { goingInboxRuns, startInboxRuns } from '../src/store/inbox.ts';
 import { addRule } from '../src/store/rules.ts';
-import { ACCOUNT, FakeMailbox, onceGmail, rawMessage, testModel } from './helpers.ts';
+import { ACCOUNT, FakeMailbox, onceGmail, rawMessage, tempDir, testModel } from './helpers.ts';
 import { onePerson, raw, startDashboard } from './fixtures.ts';
+import { buildControls } from '../src/sift/controls.ts';
+import type { StandIns } from '../src/sift/sift.ts';
+import { loadConfig } from '../src/config.ts';
 
 const NOW = Date.UTC(2026, 10, 19, 12);
 const HOUR = 3_600_000;
@@ -164,5 +167,25 @@ describe('with Inbox on, a message is read once, whole', () => {
     expect(gmail.again).toEqual([]);
     expect(gmail.reads.length).toBe(read);
     expect(gmail.reads.filter((r) => r !== 'search')).toEqual(['whole:answer', 'whole:asked', 'whole:again']);
+  });
+});
+
+describe('counts only Gmail knows', () => {
+  it('are asked of it once in five minutes, however often a page opens on them', async () => {
+    gmail.deliver(mail('news', 'News <news@example.com>'));
+    const rule = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    const controls = await buildControls(loadConfig({ SIFT_HOME: tempDir() }), {
+      ephemeral: memoryEphemeral(),
+      deviceId: 'device',
+      kick: async () => {},
+      standIns: { gmail: () => ({ api: gmail.api, mailbox }) } as Partial<StandIns> as StandIns,
+    });
+    for (let look = 0; look < 2; look++) {
+      expect(await controls.inboxEstimate(db, [ACCOUNT], 'inbox')).toMatchObject({ messages: 1 });
+      expect(await controls.mailReach(db, [ACCOUNT])).toMatchObject({ all: { messages: 1 } });
+      expect(await controls.ruleInbox(db, rule)).toMatchObject({ messages: 1 });
+    }
+    expect(gmail.reads.filter((r) => r === 'count' || r === 'search')).toEqual(['count', 'count', 'search']);
+    expect(gmail.again).toEqual([]);
   });
 });

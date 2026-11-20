@@ -30,6 +30,7 @@ import { createMailAsker } from '../model/ask.ts';
 import { type ChosenModel, modelChoices, offerModel, openModels, priceOf, resolveModel, saveApiKey, shortlistModels } from '../model/models.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
+import { hashOf } from '../store/content.ts';
 import { credentials } from '../store/credentials.ts';
 import { recordLabels } from '../store/messages.ts';
 import { preferences } from '../store/preferences.ts';
@@ -43,6 +44,11 @@ const DAY_MS = 86_400_000;
 const ESTIMATE_DAYS = 30;
 /** What a message's text and HTML take to keep, in bytes, for someone whose own mail does not say yet: a guess. */
 const KEPT_GUESS = 30_000;
+/**
+ * How long a count only Gmail knows is kept: the settings, a rule's look at the inbox and setting up open with one, so a reload
+ * or a second look asks Gmail nothing for a while.
+ */
+const COUNT_MS = 5 * 60_000;
 
 /** A Gmail client for one of the person's mailboxes, with the sign-in kept in their database. */
 async function gmailClient(config: Config, db: Sql, email: string) {
@@ -101,6 +107,14 @@ export async function buildControls(
   /** Begin what is due for the person now, not at the next tick. */
   const passNow = async (db: Sql) => live.kick(await personOf(db));
   const { standIns } = live;
+  /** A count only Gmail knows, kept in `Ephemeral` for `COUNT_MS` under `key`, which names a mailbox by its number. */
+  const counted = async <T>(key: string, ask: () => Promise<T>): Promise<T> => {
+    const kept = await live.ephemeral.get<T>(key);
+    if (kept !== null) return kept;
+    const value = await ask();
+    await live.ephemeral.set(key, value, COUNT_MS);
+    return value;
+  };
   const gmail = async (db: Sql, email: string) => standIns?.gmail(email) ?? (await gmailFor(config, live.ephemeral, db, email));
   const chosen = async (db: Sql) => standIns?.model ?? (await openModel(config, live.ephemeral, db));
   /** The size of the person's own calls lately, in tokens, which is their mail and their labels more than the model; undefined for a typical call's. */
@@ -191,7 +205,8 @@ export async function buildControls(
       let messages = 0;
       for (const account of await listAccounts(db)) {
         if (!mailboxes.includes(account.id) || !(await hasOwnLabels(db))) continue;
-        messages += Math.min(await (await gmail(db, account.id)).api.inboxSize(), REACH[reach]);
+        const size = await counted(`count:inbox:${account.number}`, async () => await (await gmail(db, account.id)).api.inboxSize());
+        messages += Math.min(size, REACH[reach]);
       }
       // As much of it as went to the model lately; with nothing to go by, all of it.
       const model = Math.round(messages * ((await modelShare(db, Date.now() - ESTIMATE_DAYS * DAY_MS)) ?? 1));
@@ -207,7 +222,7 @@ export async function buildControls(
       const each = (await keptSize(db)) ?? KEPT_GUESS;
       for (const account of await listAccounts(db)) {
         if (!mailboxes.includes(account.id) || !(await hasOwnLabels(db))) continue;
-        const mailbox = await reachOf((await gmail(db, account.id)).api, Date.now());
+        const mailbox = await counted(`count:reach:${account.number}`, async () => await reachOf((await gmail(db, account.id)).api, Date.now()));
         for (const window of MAIL_WINDOWS) {
           reach[window].messages += mailbox[window].messages;
           reach[window].bytes += Math.round(mailbox[window].messages * each);
@@ -259,7 +274,11 @@ export async function buildControls(
     ruleInbox: async (db, ruleId) => {
       const samples = [];
       for (const account of await listAccounts(db)) {
-        const sample = await ruleInbox(db, (await gmail(db, account.id)).api, account.id, ruleId);
+        const { api } = await gmail(db, account.id);
+        // The search is the look's one call to Gmail once what it found is recorded; the query names senders, so its key is a keyed hash.
+        const searchInbox: typeof api.searchInbox = async (query) =>
+          await counted(`count:rule:${account.number}:${hashOf(db, query)}`, () => api.searchInbox(query));
+        const sample = await ruleInbox(db, { ...api, searchInbox }, account.id, ruleId);
         samples.push({ ...sample, examples: sample.examples.map((m) => ({ accountId: account.id, ...m, subject: seal(m.subject) })) });
       }
       const capped = samples.some((s) => s.most !== null);

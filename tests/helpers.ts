@@ -434,7 +434,7 @@ export function gmailOf(mail: HeldMail[], added: { id: string; labelIds: string[
  * may be read once and its whole (60) once, and nothing again, as docs/runtime.md expects. `deliver` puts mail in it and in
  * the next page of history, with the mailbox's own label changes since. `again` lists each read that was not the first of its
  * kind (`meta:<id>`, `whole:<id>`, `labels:<id>`); `reads` every read of a message or thread, in order, with each search of the
- * inbox (`search`).
+ * inbox (`search`) and count (`count`).
  */
 export function onceGmail(mailbox: FakeMailbox) {
   const mail = new Map<string, HeldMail>();
@@ -473,8 +473,8 @@ export function onceGmail(mailbox: FakeMailbox) {
       return { ids: newest(true), estimate: newest(true).length };
     },
     searchMail: async () => ({ ids: newest(false), estimate: mail.size }),
-    mailboxSize: async () => mail.size,
-    inboxSize: async () => newest(true).length,
+    mailboxSize: async () => (reads.push('count'), mail.size),
+    inboxSize: async () => (reads.push('count'), newest(true).length),
     getMetadata: async (id) => {
       const m = read('meta', id);
       return m ? raw(m) : null;
