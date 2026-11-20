@@ -881,6 +881,29 @@ describe('signing in with Google', () => {
     expect(completed).toHaveLength(1);
   });
 
+  it('issues the session again once it is a day old, as the page asks who is signed in, so using Sift within the month never signs anyone out', async () => {
+    let now = 1000;
+    const { call } = await startDashboard(people(store), { controls, signIn, sessionSecret: SECRET, now: () => now });
+    const first = { cookie: cookieFrom((await callback(call, await call('GET', '/auth/login'), 'abc')).headers) };
+    expect((await call('GET', '/api/session', undefined, first)).headers['set-cookie']).toBeUndefined();
+
+    now += 29 * 86_400_000;
+    const renewed = await call('GET', '/api/session', undefined, first);
+    expect(renewed.body).toMatchObject({ email: ACCOUNT });
+    expect(String(renewed.headers['set-cookie'])).toMatch(/^sift_session=[^;]+; Path=\/; Max-Age=2592000; HttpOnly; SameSite=Lax$/);
+    const second = { cookie: cookieFrom(renewed.headers) };
+
+    now += 2 * 86_400_000;
+    expect((await call('GET', '/api/manage', undefined, first)).status).toBe(401);
+    expect((await call('GET', '/api/manage', undefined, second)).status).toBe(200);
+  });
+
+  it('says which build of the page it came with, signed in or not', async () => {
+    const built = await startDashboard(people(store), { signIn, sessionSecret: SECRET, build: 'build-2' });
+    expect((await built.call('GET', '/api/session')).body).toMatchObject({ build: 'build-2' });
+    expect((await (await startDashboard(people(store), { build: 'build-2' })).call('GET', '/api/session')).body).toMatchObject({ build: 'build-2' });
+  });
+
   it('comes back to where the browser started signing in, and only ever to a page of its own', async () => {
     const { call } = await startWithSignIn();
     const from = async (to: string) => (await callback(call, await call('GET', `/auth/login?to=${encodeURIComponent(to)}`), 'abc')).headers['location'];

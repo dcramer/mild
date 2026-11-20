@@ -13,20 +13,17 @@
  * `--root` measures another checkout (its seed, its server and its build),
  * so two can be run side by side. `--shots` also saves `/` and `/rules` once their rows show, at each profile's width.
  */
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { parseArgs, promisify } from 'node:util';
+import { parseArgs } from 'node:util';
 import { type Browser, type BrowserContext, chromium, type Page } from '@playwright/test';
+import { serveSeed } from './seeded.ts';
 
 const { values } = parseArgs({
   options: { runs: { type: 'string', default: '5' }, root: { type: 'string' }, out: { type: 'string' }, shots: { type: 'string' } },
 });
 const RUNS = Number(values.runs);
 const ROOT = resolve(values.root ?? join(import.meta.dirname, '..'));
-const SCRIPTS = join(ROOT, '.claude/skills/verify-sift/scripts');
 
 const PAGES = [
   { name: '/', path: '/', heading: 'For review' },
@@ -38,51 +35,6 @@ const PROFILES = [
   { name: 'desktop, CPU ÷4', viewport: { width: 1440, height: 900 }, cpu: 4 },
   { name: 'phone', viewport: { width: 390, height: 844 }, cpu: 1 },
 ] as const;
-
-const freePort = () =>
-  new Promise<number>((done, fail) => {
-    const server = createServer().listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      server.close(() => (typeof address === 'object' && address ? done(address.port) : fail(new Error('no port'))));
-    });
-  });
-
-async function serve(): Promise<{ url: string; cookie: string; stop: () => Promise<void> }> {
-  const dir = mkdtempSync(join(tmpdir(), 'sift-measure-'));
-  const { stdout } = await promisify(execFile)(
-    'node',
-    ['--disable-warning=ExperimentalWarning', join(SCRIPTS, 'seed.ts'), join(dir, 'home'), join(dir, 'gmail.json')],
-    {
-      cwd: ROOT,
-    },
-  );
-  const port = await freePort();
-  const child: ChildProcess = spawn(
-    'node',
-    ['--disable-warning=ExperimentalWarning', join(SCRIPTS, 'serve.ts'), join(dir, 'home'), String(port), join(dir, 'gmail.json')],
-    { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, SIFT_CLOUD: 'false' } },
-  );
-  let log = '';
-  await new Promise<void>((ready, fail) => {
-    const read = (chunk: Buffer) => {
-      log += chunk.toString();
-      if (log.includes('Sift is running on the seeded home')) ready();
-    };
-    child.stdout?.on('data', read);
-    child.stderr?.on('data', read);
-    child.once('exit', (code) => fail(new Error(`serve.ts exited ${code}:\n${log}`)));
-  });
-  return {
-    url: `http://127.0.0.1:${port}`,
-    cookie: stdout.trim(),
-    stop: async () => {
-      const exited = new Promise((done) => child.once('exit', done));
-      child.kill();
-      await exited;
-      rmSync(dir, { recursive: true, force: true });
-    },
-  };
-}
 
 /**
  * Runs in the page before its own scripts. `heading` is the first frame where the main heading reads `want` (any, for
@@ -253,7 +205,7 @@ const ms = (xs: number[]) => `${Math.round(median(xs))} (${Math.round(Math.min(.
 const kb = (xs: number[]) => `${Math.round(median(xs) / 1024)}`;
 const shift = (xs: number[]) => `${median(xs).toFixed(3)} (max ${Math.max(...xs).toFixed(3)})`;
 
-const sift = await serve();
+const sift = await serveSeed(ROOT);
 const browser = await chromium.launch();
 const results: Record<string, Sample[]> = {};
 try {

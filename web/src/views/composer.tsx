@@ -159,11 +159,12 @@ function Writer({
   about?: ReactNode;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(() => keptDraft(what) ?? start);
+  const who = useLoaded('session', (signal) => api.session(signal), 300_000, '').data?.email ?? '';
+  const [draft, setDraft] = useState(() => keptDraft(who, what) ?? start);
   const change = (next: Partial<Draft>) => {
     const changed = { ...draft, ...next };
     setDraft(changed);
-    keepDraft(what, changed);
+    keepDraft(who, what, changed);
   };
   // A field the reader is in is checked only up to the address they are typing; one they have left, or a press of Send, all of it.
   const [typing, setTyping] = useState<'to' | 'cc' | null>(null);
@@ -200,18 +201,18 @@ function Writer({
     run(
       () => api.send(what.kind === 'reply' ? { ...mail, replyTo: { messageId: what.messageId } } : { ...mail, subject: draft.subject }),
       () => {
-        keepDraft(what, null);
+        keepDraft(who, what, null);
         toast(said, { kind: 'Sent' });
         onClose();
       },
     );
   };
   const discard = () => {
-    keepDraft(what, null);
+    keepDraft(who, what, null);
     toast(said, {
       kind: 'Draft discarded',
       undo: () => {
-        keepDraft(what, draft);
+        keepDraft(who, what, draft);
         compose?.(what);
       },
     });

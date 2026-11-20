@@ -3,6 +3,7 @@ import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
 import { type ReactNode, createContext, useContext, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { handOver, useBackCloses } from '@/lib/params.ts';
 import { Anchor } from './anchor.tsx';
 import { Button } from './button.tsx';
 import { Cloud, FinePrint } from './fine-print.tsx';
@@ -26,8 +27,8 @@ export function ToBar({ children }: { children: ReactNode }) {
 
 /**
  * Whether the bar is out of the way: going down the page, past its top, until the reader scrolls back up. It keeps
- * `--bar` at the bar's height while it shows and at nothing while it does not, so what sticks under it (a day's
- * heading) follows it.
+ * `--bar` at the bar's height while it shows and at the status bar's while it does not, so what sticks under it (a
+ * day's heading) follows it.
  */
 function useAway(): [boolean, (bar: HTMLElement | null) => void] {
   const [away, setAway] = useState(false);
@@ -46,7 +47,7 @@ function useAway(): [boolean, (bar: HTMLElement | null) => void] {
   useEffect(() => {
     if (!bar) return;
     const root = document.documentElement.style;
-    const measured = new ResizeObserver(() => root.setProperty('--bar', away ? '0px' : `${bar.offsetHeight}px`));
+    const measured = new ResizeObserver(() => root.setProperty('--bar', away ? 'var(--safe-top)' : `${bar.offsetHeight}px`));
     measured.observe(bar, { box: 'border-box' });
     return () => {
       measured.disconnect();
@@ -63,7 +64,7 @@ const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center just
  * a list's search (`ToBar`) or the name. `aside` (Sift's line) is in the menu, not the bar.
  * The sections and `account` move into a panel that covers the screen, the sections followed by `FinePrint` as a list,
  * with `detail` (what `aside`'s hover card says, which a touch screen never shows) framed above the account, and the
- * `mailbox` the dashboard shows under whose they are.
+ * `mailbox` the dashboard shows under whose they are. Back closes it; where a press in it goes takes its place in history.
  */
 export function Masthead({
   items,
@@ -83,6 +84,11 @@ export function Masthead({
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  useBackCloses(open, () => setOpen(false));
+  const leave = () => {
+    handOver();
+    setOpen(false);
+  };
   // Going somewhere closes the panel.
   const [shownAt, setShownAt] = useState(current);
   if (shownAt !== current) {
@@ -97,7 +103,7 @@ export function Masthead({
   // No sections: the page before it knows who is signed in, which may yet be the sign-in page, so the name alone.
   if (items.length === 0)
     return (
-      <header className="flex items-center pt-4 pb-6 md:hidden">
+      <header className="flex items-center pt-[calc(1rem+var(--safe-top))] pb-6 md:hidden">
         {/* As tall as the row the menu button makes, so the name stays put as it arrives. */}
         <Anchor href="/" aria-label="Sift" className="flex min-h-11 items-center">
           <Wordmark />
@@ -111,7 +117,7 @@ export function Masthead({
     <header
       ref={measure}
       className={cn(
-        'sticky top-0 z-20 -mx-4 bg-background px-4 py-2 transition-[translate] duration-200 motion-reduce:transition-none md:hidden',
+        'sticky top-0 z-20 -mx-4 bg-background px-4 pt-[calc(0.5rem+var(--safe-top))] pb-2 transition-[translate] duration-200 motion-reduce:transition-none md:hidden',
         away && '-translate-y-full',
       )}
     >
@@ -122,7 +128,7 @@ export function Masthead({
             {waiting > 0 && here?.count === undefined ? <span aria-hidden className="absolute top-2 right-2 size-2 rounded-full bg-highlight" /> : null}
           </Dialog.Trigger>
           <Dialog.Portal>
-            <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background px-4 pt-4 pb-8 outline-none transition-opacity duration-150 data-ending-style:pointer-events-none data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none md:hidden">
+            <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background pt-[calc(1rem+var(--safe-top))] pr-[max(1rem,var(--safe-right))] pb-[calc(2rem+var(--safe-bottom))] pl-[max(1rem,var(--safe-left))] outline-none transition-opacity duration-150 data-ending-style:pointer-events-none data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none md:hidden">
               <div className="flex items-center justify-between">
                 <Wordmark />
                 <Dialog.Title className="sr-only">Menu</Dialog.Title>
@@ -138,7 +144,8 @@ export function Masthead({
                         href={`/${item.to}`}
                         aria-current={item.to === current ? 'page' : undefined}
                         className="statement flex min-h-12 items-center gap-3 text-muted-foreground"
-                        onClick={() => setOpen(false)}
+                        replace
+                        onClick={leave}
                       >
                         <span className={item.to === current ? 'hl mx-0 px-2' : undefined}>{item.label}</span>
                         {item.count ? <span className="text-base font-medium tabular-nums">{item.count}</span> : null}
@@ -181,7 +188,7 @@ export function Masthead({
                         {...(item.note ? { why: item.note } : {})}
                         className="justify-center"
                         onClick={() => {
-                          setOpen(false);
+                          leave();
                           item.onSelect();
                         }}
                       >

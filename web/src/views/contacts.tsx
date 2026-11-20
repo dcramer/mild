@@ -1,11 +1,10 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { ErrorNote, Verdict } from '@/components/bits.tsx';
 import { SenderCell, senderHref } from '@/components/sender.tsx';
 import { type ContactPage, api, useLoaded } from '@/lib/api.ts';
 import { CONTACT_FILTER, STANDINGS, count, dateTime, plural } from '@/lib/format.ts';
-import { paramNow, setParams, useParam } from '@/lib/params.ts';
+import { paramNow, setParams, useGo, useParam } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { Ago, Empty, FilterGroup, Heads, ListView, OnPhone, Pager, Table, Td, Th, Tr } from '@/system';
 
@@ -35,7 +34,7 @@ const Next = ({ contact }: { contact: Contact }) => (
 
 /** Everyone the reader gets mail from, newest first, each opening their page. `loading` stands in for the rows until they come. */
 export function ContactsView({ loading: loadingRows }: { loading: ReactNode }) {
-  const router = useRouter();
+  const go = useGo();
   const [search] = useParam('q');
   const [standing] = useParam('standing', STANDING_FILTER);
   const [know] = useParam('know', CONTACT_FILTER);
@@ -94,7 +93,7 @@ export function ContactsView({ loading: loadingRows }: { loading: ReactNode }) {
               const address = reveal(contact.address);
               const name = reveal(contact.name);
               return (
-                <Tr key={address} onOpen={() => router.push(senderHref(address))}>
+                <Tr key={address} onOpen={() => go(senderHref(address))}>
                   <SenderCell address={address} name={name} contact={contact.contact} term={search}>
                     <OnPhone>
                       {name ? <span className="w-full truncate">{address}</span> : null}
