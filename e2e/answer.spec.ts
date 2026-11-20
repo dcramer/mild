@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { makeRule, proposal, ruleDialog, seededRulesOnly } from './rule.ts';
 import {
   answersSent,
+  boxOf,
   choose,
   expect,
   failureToast,
@@ -11,6 +12,7 @@ import {
   panel,
   panelHeading,
   param,
+  PHONE,
   putAway,
   query,
   refused,
@@ -290,6 +292,46 @@ test.describe('An answer on its way', () => {
     await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
     await expect.poll(sent).toBe(1);
   });
+
+  test('times out while the window has lost focus, as it does to a message being read in its frame', async ({ page }) => {
+    const sent = answersSent(page);
+    await page.clock.install();
+    await page.goto('/');
+    await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
+    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await page.mouse.move(0, 0);
+    await page.evaluate("window.dispatchEvent(new FocusEvent('blur'))");
+    await page.clock.runFor(8000);
+    await page.clock.resume();
+    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+    await expect.poll(sent).toBe(1);
+  });
+
+  test('is sent when its toast is dismissed', async ({ page }) => {
+    const sent = answersSent(page);
+    await page.goto('/');
+    await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
+    await toast(page, 'Archive as Marketing').getByRole('button', { name: 'Dismiss' }).click();
+    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+    await expect.poll(sent).toBe(1);
+  });
+
+  for (const [where, viewport] of [
+    ['', undefined],
+    [', across the bottom of a phone', PHONE],
+  ] as const) {
+    test(`in a message's panel, its toast sits above the panel's footer, so Next stays pressable${where}`, async ({ page }) => {
+      if (viewport) await page.setViewportSize(viewport);
+      await page.goto('/');
+      await (viewport ? page.getByRole('row').filter({ hasText: 'Winter sale starts now' }).click() : openMessage(page, 'Winter sale starts now'));
+      await panel(page).getByRole('button', { name: 'Agree: Marketing' }).click();
+      const said = toast(page, 'Archive as Marketing');
+      await expect(said).toBeVisible();
+      const next = await boxOf(page.getByRole('button', { name: /Next$/ }));
+      const box = await boxOf(said);
+      expect(box.y + box.height).toBeLessThanOrEqual(next.y);
+    });
+  }
 
   test('Undo puts the row back and sends nothing', async ({ page }) => {
     const sent = answersSent(page);
