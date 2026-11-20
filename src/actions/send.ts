@@ -4,6 +4,7 @@ import { preferences } from '../store/preferences.ts';
 import { recordSent } from '../store/sent.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
+import { reportError } from '../telemetry.ts';
 import type { Mailbox } from './mailbox.ts';
 
 interface Party {
@@ -96,6 +97,12 @@ export function buildMessage(mail: Outgoing, id: string, at: number): string {
   return `${headers.join('\r\n')}\r\n\r\n${body.replaceAll(/.{1,76}/g, '$&\r\n')}`;
 }
 
+/**
+ * How long a try whose answer never came is left before Gmail's search is trusted to say it did not go: the search can lag
+ * a send by seconds, and a request still running has not answered yet. Sending again sooner could send it twice.
+ */
+export const SETTLE_MS = 2 * 60_000;
+
 /** A party as the record keeps it, for `envelopeOf` to read back: the name quoted, without the quotes and backslashes it cannot hold. */
 const recorded = ({ name, address: value }: Party) => (name ? `"${name.replaceAll(/["\\]/g, '')}" <${value}>` : value);
 
@@ -134,15 +141,18 @@ export async function sendMail(
   if (!own.includes(mail.from.address.toLowerCase())) throw new Refusal(`${mail.from.address} is not an address of ${accountId}.`);
   const at = now();
   const raw = buildMessage(mail, id, at);
+  // It went: a record that could not be written is not a failure the person should answer by sending again. Sync records it.
   const keep = async (sent: { id: string; threadId: string; labelIds: readonly string[] }) => {
-    await recordSent(db, accountId, { ...sent, headers: sentHeaders(mail, id, at), text: mail.text, at });
+    await recordSent(db, accountId, { ...sent, headers: sentHeaders(mail, id, at), text: mail.text, at }).catch(reportError);
     return { id: sent.id, threadId: sent.threadId };
   };
 
   const earlier = await openTries(db, 'send', (payload) => payload.send?.messageId === id);
   if (earlier.length > 0) {
     const found = await mailbox.findByMessageId(id);
-    for (const action of earlier) await finishAction(db, action, found ? 'done' : 'failed', null, found ? null : 'not in Gmail', now());
+    if (!found && earlier.some((t) => t.status === 'pending' || at - t.at < SETTLE_MS))
+      throw new Refusal('Sift cannot tell yet whether this went. Try again in a couple of minutes.');
+    for (const action of earlier) await finishAction(db, action.id, found ? 'done' : 'failed', null, found ? null : 'not in Gmail', now());
     if (found) return await keep({ ...found, labelIds: ['SENT'] });
   }
   const actionId = await insertPendingAction(

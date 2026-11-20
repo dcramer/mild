@@ -23,33 +23,40 @@ export function useMailPress(): { press: (threads: readonly Pressed[], what: Pre
   const undo = useAction();
   const toast = useToast();
   const send = (threads: readonly Pressed[], what: Press) => {
-    const sent = pressing.then(async () =>
-      (
-        await Promise.all(
-          [...Map.groupBy(threads, (t) => t.accountId)].map(([accountId, mine]) =>
-            api.changeMail({ accountId, messageIds: mine.flatMap((t) => (what === 'unread' ? t.messageIds.slice(-1) : t.messageIds)), change: what }),
-          ),
-        )
-      ).flatMap((reply) => reply.actions),
-    );
+    const sent = pressing.then(async () => {
+      const replies = await Promise.all(
+        [...Map.groupBy(threads, (t) => t.accountId)].map(([accountId, mine]) =>
+          api.changeMail({ accountId, messageIds: mine.flatMap((t) => (what === 'unread' ? t.messageIds.slice(-1) : t.messageIds)), change: what }),
+        ),
+      );
+      return { actions: replies.flatMap((reply) => reply.actions), missed: replies.some((reply) => reply.missed > 0) };
+    });
     pressing = sent.catch(() => undefined);
     return sent;
+  };
+  /** What Gmail did not take, said as a failure once what it did take can be undone. Counted in messages, so said without a number. */
+  const unless = (missed: boolean, threads: readonly Pressed[]) => {
+    if (missed) throw new Error(`Gmail did not take ${threads.length === 1 ? 'it' : 'all of them'}. Try again.`);
   };
   return {
     error,
     press: (threads, what, then) => {
       if (threads.length === 0) return;
       if (what !== 'archive') {
-        run(() => send(threads, what), then);
+        run(async () => {
+          const { missed } = await send(threads, what);
+          unless(missed, threads);
+        }, then);
         return;
       }
       hide(threads.map(threadKey), threads.length === 1 ? 'Could not archive it' : 'Could not archive them', async () => {
-        const actions = await send(threads, what);
+        const { actions, missed } = await send(threads, what);
         if (actions.length > 0)
           toast(threads.length === 1 ? reveal(threads[0].subject) || '(no subject)' : `${threads.length} conversations`, {
             kind: 'Archived',
             undo: () => undo.hide([], 'Could not undo it', () => Promise.all(actions.map((id) => api.undo(id)))),
           });
+        unless(missed, threads);
       });
       then?.();
     },

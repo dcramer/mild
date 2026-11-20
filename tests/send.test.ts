@@ -1,7 +1,7 @@
 import { globSync, readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { undo } from '../src/actions/executor.ts';
-import { type Outgoing, buildMessage, sendMail } from '../src/actions/send.ts';
+import { type Outgoing, SETTLE_MS, buildMessage, sendMail } from '../src/actions/send.ts';
 import type { Controls } from '../src/dashboard/controls.ts';
 import { replyTo } from '../src/dashboard/queries/reply.ts';
 import { recordSync, setCanSend, setMailboxAliases } from '../src/store/accounts.ts';
@@ -91,13 +91,15 @@ describe('building a message', () => {
 describe('sending', () => {
   let db: Sql;
   let mailbox: FakeMailbox;
+  let clock = AT;
   const send = (id = ID, more: Partial<Outgoing> = {}) =>
-    sendMail({ db, mailbox, now: () => AT }, { accountId: ACCOUNT, id, threadId: 't1', mail: mail(more) });
+    sendMail({ db, mailbox, now: () => clock }, { accountId: ACCOUNT, id, threadId: 't1', mail: mail(more) });
   const tries = async () => await raw(db).all('SELECT type, status, message_id FROM actions ORDER BY id');
 
   beforeEach(async () => {
     db = await openUserDb(ACCOUNT);
     mailbox = new FakeMailbox();
+    clock = AT;
   });
 
   it('is only for someone with Inbox on, from a mailbox Google let send, as one of its own addresses', async () => {
@@ -142,10 +144,14 @@ describe('sending', () => {
       expect(await tries()).toEqual([{ type: 'send', status: 'done', message_id: null }]);
     });
 
-    it('sends again when the try before it never went', async () => {
+    it('sends again when the try before it never went, once Gmail has had time to show it if it had', async () => {
       mailbox.failSend = 'before';
       await expect(send()).rejects.toThrow('network down');
       mailbox.failSend = null;
+      clock = AT + SETTLE_MS - 1;
+      await expect(send()).rejects.toThrow('cannot tell yet whether this went');
+      expect(mailbox.sent.size).toBe(0);
+      clock = AT + SETTLE_MS;
       expect((await send()).id).toBe('sent-1');
       expect(await tries()).toEqual([
         { type: 'send', status: 'failed', message_id: null },
@@ -153,6 +159,44 @@ describe('sending', () => {
       ]);
       // Another press is mail of its own.
       expect((await send('<a2@example.org>')).id).toBe('sent-2');
+    });
+
+    it('does not send again while Gmail’s search has yet to show a try whose answer was lost', async () => {
+      mailbox.failSend = 'after';
+      await expect(send()).rejects.toThrow('timeout');
+      mailbox.failSend = null;
+      const finding = mailbox.findByMessageId.bind(mailbox);
+      mailbox.findByMessageId = async () => null;
+      clock = AT + 5000;
+      await expect(send()).rejects.toThrow('cannot tell yet whether this went');
+      expect(mailbox.sent.size).toBe(1);
+      mailbox.findByMessageId = finding;
+      expect((await send()).id).toBe('sent-1');
+      expect(mailbox.sent.size).toBe(1);
+    });
+
+    it('does not send over a try still waiting on Gmail', async () => {
+      const sending = mailbox.send.bind(mailbox);
+      let pressedAgain: Promise<unknown> | undefined;
+      mailbox.send = async (message) => {
+        pressedAgain = send().catch((error: unknown) => error);
+        await pressedAgain;
+        return await sending(message);
+      };
+      expect((await send()).id).toBe('sent-1');
+      expect(String(await pressedAgain)).toContain('cannot tell yet whether this went');
+      expect(mailbox.sent.size).toBe(1);
+    });
+
+    it('answers that mail went though the record of it could not be written, so it is not sent again', async () => {
+      // The record is written in a transaction of its own, and nothing else sending does is.
+      const failing = new Proxy(db, {
+        get: (to, key) => (key === 'transaction' ? async () => await Promise.reject(new Error('database gone')) : Reflect.get(to, key)),
+      });
+      const sent = await sendMail({ db: failing, mailbox, now: () => clock }, { accountId: ACCOUNT, id: ID, threadId: 't1', mail: mail() });
+      expect(sent).toEqual({ id: 'sent-1', threadId: 't1' });
+      expect(await queuedMessage(db, ACCOUNT, 'sent-1')).toBeNull();
+      expect(await tries()).toEqual([{ type: 'send', status: 'done', message_id: null }]);
     });
 
     it('keeps what went in the record, as theirs and not mail to triage, with the text they wrote', async () => {

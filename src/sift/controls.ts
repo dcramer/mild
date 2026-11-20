@@ -36,6 +36,7 @@ import { recordLabels } from '../store/messages.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
+import { reportError } from '../telemetry.ts';
 import type { StandIns } from './sift.ts';
 import { seal } from '../plain.ts';
 
@@ -193,13 +194,17 @@ export async function buildControls(
       const landed: number[] = [];
       let missed = 0;
       for (const messageId of messageIds) {
-        const { outcome, labels } = await press(deps, accountId, messageId, change);
-        if (labels) await recordLabels(db, accountId, messageId, labels);
-        if (outcome.status === 'done') landed.push(outcome.actionId);
-        else if (outcome.status !== 'skipped') missed++;
+        try {
+          const { outcome, labels } = await press(deps, accountId, messageId, change);
+          if (labels) await recordLabels(db, accountId, messageId, labels);
+          if (outcome.status === 'done') landed.push(outcome.actionId);
+          else if (outcome.status !== 'skipped') missed++;
+        } catch (error) {
+          reportError(error);
+          missed++;
+        }
       }
-      if (missed > 0) throw new Refusal(`Gmail did not take ${missed === messageIds.length ? 'it' : `${missed} of ${messageIds.length}`}. Try again.`);
-      return landed;
+      return { actions: landed, missed };
     },
     inboxEstimate: async (db, mailboxes, reach) => {
       let messages = 0;

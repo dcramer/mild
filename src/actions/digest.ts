@@ -22,7 +22,7 @@ export async function putDigest(deps: PutDeps, digest: Put, raw: string | null):
   const earlier = await openTries(db, 'digest', (payload) => payload.digest === digest.id);
   if (earlier.length > 0) {
     const found = await mailbox.findByMessageId(digest.messageId);
-    for (const id of earlier) await finishAction(db, id, found ? 'done' : 'failed', null, found ? null : 'not in Gmail', now());
+    for (const { id } of earlier) await finishAction(db, id, found ? 'done' : 'failed', null, found ? null : 'not in Gmail', now());
     if (found) return found.id;
   }
   if (raw === null) return null;

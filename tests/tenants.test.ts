@@ -121,7 +121,7 @@ beforeEach(async () => {
     saveModelKey: async (db, provider) => void calls.push(`key ${provider} ${await personOf(db)}`),
     signOutModel: async (db, provider) => void calls.push(`signout ${provider} ${await personOf(db)}`),
     undo: async (_db, id) => (calls.push(`undo ${id}`), 'undone'),
-    changeMail: async (_db, accountId, messageIds, change) => (calls.push(`${change} ${accountId} ${messageIds.join(',')}`), [1]),
+    changeMail: async (_db, accountId, messageIds, change) => (calls.push(`${change} ${accountId} ${messageIds.join(',')}`), { actions: [1], missed: 0 }),
     putBack: async () => {},
     ruleFilter: async (_db, id) => void calls.push(`filter ${id}`),
     // Answers with the mail of whoever has the rule: only the route's own check keeps it from someone else.

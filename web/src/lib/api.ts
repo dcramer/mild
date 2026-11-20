@@ -342,7 +342,7 @@ export const api = {
   mailThread: (thread: string, signal: AbortSignal, mailbox = '') =>
     get<MailConversation>('/api/mail/thread', mailbox ? { thread, mailbox } : { thread }, signal),
   /** The reader's own press on mail in their inbox. `actions`: what landed, for Undo. */
-  changeMail: (change: MailChange) => post<{ actions: number[] }>('/api/mail/change', change),
+  changeMail: (change: MailChange) => post<{ actions: number[]; missed: number }>('/api/mail/change', change),
   /** Whether Sift keeps a copy of the person's mail, for Inbox, and how far back. */
   setMail: (on: boolean, window?: ManageState['mailWindow']) => post('/api/mail/on', window ? { on, window } : { on }),
   /** What copying the mail for each window would take, from Gmail's counts. */

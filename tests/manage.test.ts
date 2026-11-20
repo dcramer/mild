@@ -44,7 +44,7 @@ const controls: Controls = {
     const each = { messages: 1, bytes: 1, minutes: 1 };
     return { year: each, three_years: each, all: each };
   },
-  changeMail: async () => [],
+  changeMail: async () => ({ actions: [], missed: 0 }),
   putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');

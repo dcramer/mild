@@ -13,6 +13,7 @@ import {
   settings,
   settingsInbox,
   test,
+  failureToast,
   toast,
 } from './sift.ts';
 
@@ -133,6 +134,22 @@ test.describe('Inbox', () => {
     await page.keyboard.press('z');
     await expect(inboxRows(page)).toHaveCount(19);
     await expect(inboxRow(page, 'This week in widgets')).toBeVisible();
+  });
+
+  test('when Gmail takes only some of what is selected, what it took can still be undone, and the page says the rest failed', async ({ page }) => {
+    await page.route('**/api/mail/change', async (route) => {
+      const reply = (await (await route.fetch()).json()) as { actions: number[] };
+      await route.fulfill({ json: { actions: reply.actions.slice(1), missed: 1 } });
+    });
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(19);
+    await page.keyboard.press('j');
+    await page.keyboard.press('x');
+    await page.keyboard.press('j');
+    await page.keyboard.press('x');
+    await page.keyboard.press('e');
+    await expect(toast(page, '2 conversations').getByRole('button', { name: /^Undo/ })).toBeVisible();
+    await expect(failureToast(page, 'Could not archive them')).toContainText('Gmail did not take all of them. Try again.');
   });
 
   test('the search finds words in a message’s text, as they are typed, and an archived conversation says it is out of the inbox', async ({ page }) => {

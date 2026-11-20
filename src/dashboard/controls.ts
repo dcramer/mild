@@ -30,10 +30,10 @@ export interface Controls {
   undo(db: Sql, actionId: number): Promise<string | null>;
   /**
    * The person's own press on messages of theirs in the inbox, through the executor, Sift on or off. Messages no longer in
-   * the inbox are left as they are. Resolves with the changes that landed, which `undo` takes back; rejects with a sentence
-   * for them when Gmail did not take some.
+   * the inbox are left as they are. Resolves with the changes that landed, which `undo` takes back, and how many Gmail did
+   * not take, which a failed call counts too, so those that landed before it can still be taken back.
    */
-  changeMail(db: Sql, accountId: string, messageIds: readonly string[], change: MailChange['change']): Promise<number[]>;
+  changeMail(db: Sql, accountId: string, messageIds: readonly string[], change: MailChange['change']): Promise<{ actions: number[]; missed: number }>;
   /**
    * What going through the newest `reach` of these of the person's inboxes would take, read from Gmail: how
    * many messages, how many of those likely need the model, and about what that costs.

@@ -68,6 +68,42 @@ test.describe('with Inbox on', () => {
     await expect(composer(page, 'New message').getByRole('textbox', { name: 'To' })).toHaveValue('');
   });
 
+  test.describe('when Sift could not answer', () => {
+    test.use({ allow: ['status of 503'] });
+
+    test('Send tried again after a failure goes as the same message, but a draft changed since goes as a new one', async ({ page, sift }) => {
+      const ids: string[] = [];
+      let fail = 2;
+      await page.route('**/api/mail/send', async (route) => {
+        ids.push((route.request().postDataJSON() as { id: string }).id);
+        if (fail-- > 0) await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Try again.' }) });
+        else await route.continue();
+      });
+      await page.goto('/inbox');
+      await compose(page).click();
+      const writing = composer(page, 'New message');
+      await writing.getByRole('textbox', { name: 'To' }).fill('ada@example.org');
+      await writing.getByRole('textbox', { name: 'Subject' }).fill('Lunch');
+      await writing.getByRole('textbox', { name: 'Message' }).fill('See you at noon.');
+      const sendIt = writing.getByRole('button', { name: /^Send/ });
+      await sendIt.click();
+      await expect.poll(() => ids.length).toBe(1);
+      await expect(sendIt).toBeEnabled();
+      await sendIt.click();
+      await expect.poll(() => ids.length).toBe(2);
+      expect(ids[1]).toBe(ids[0]);
+
+      await expect(sendIt).toBeEnabled();
+      await writing.getByRole('textbox', { name: 'Message' }).fill('See you at one.');
+      await sendIt.click();
+      await expect(toast(page, 'Lunch')).toContainText('Sent');
+      expect(ids).toHaveLength(3);
+      expect(ids[2]).not.toBe(ids[0]);
+      const [sent] = sift.sent();
+      expect(readSent(sent!.raw).headers['Message-ID']).toBe(ids[2]);
+    });
+  });
+
   test('what is written is kept in the browser through a reload, and a draft discarded can be had back', async ({ page }) => {
     await page.goto('/');
     await compose(page).click();

@@ -162,7 +162,8 @@ function Writer({
   const who = useLoaded('session', (signal) => api.session(signal), 300_000, '').data?.email ?? '';
   const [draft, setDraft] = useState(() => keptDraft(who, what) ?? start);
   const change = (next: Partial<Draft>) => {
-    const changed = { ...draft, ...next };
+    // A changed draft is mail of its own: a try before the change may have gone, and must not be found and called this one.
+    const changed = { ...draft, ...('id' in next ? {} : { id: null }), ...next };
     setDraft(changed);
     keepDraft(who, what, changed);
   };
