@@ -32,7 +32,7 @@ export function Toaster({ children }: { children: ReactNode }) {
     <Base.Provider limit={3}>
       {children}
       <Base.Portal>
-        <Base.Viewport className="pointer-events-none fixed inset-x-4 bottom-20 z-[60] mb-[env(safe-area-inset-bottom)] flex flex-col-reverse items-center gap-2 outline-none md:inset-x-auto md:right-6 md:bottom-16 md:items-end">
+        <Base.Viewport className="pointer-events-none fixed inset-x-4 bottom-20 z-[60] mb-(--safe-bottom) flex flex-col-reverse items-center gap-2 outline-none md:inset-x-auto md:right-6 md:bottom-16 md:items-end">
           <Receipts />
         </Base.Viewport>
       </Base.Portal>

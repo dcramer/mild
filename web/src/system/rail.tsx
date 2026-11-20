@@ -40,7 +40,7 @@ export function Rail({
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   return (
-    <header className="sticky top-0 hidden h-svh max-h-full w-18 shrink-0 flex-col items-center border-r border-(--frame) pt-5 pb-4 md:flex">
+    <header className="sticky top-0 hidden h-svh max-h-full w-[calc(4.5rem+var(--safe-left))] shrink-0 flex-col items-center border-r border-(--frame) pt-[calc(1.25rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))] pl-(--safe-left) md:flex">
       <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Sift" className="flex min-h-(--control) items-center">
         <Wordmark />
       </Anchor>

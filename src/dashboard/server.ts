@@ -100,6 +100,8 @@ export interface DashboardOptions {
   signInAddresses?: readonly string[];
   /** `SIFT_CLOUD`: this Sift is a service for other people, with terms, a privacy policy and a security page. */
   cloud?: boolean;
+  /** Which build of the page this server came with (`SIFT_BUILD`, next.config.js), for a page left open across an update to notice. */
+  build?: string | null;
   /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
   controls?: Controls;
   /** Where an error goes that is Sift's own, not a `Refusal`: the page is told only that something failed. */
@@ -115,6 +117,8 @@ export interface Dashboard {
 }
 
 const SESSION_DAYS = 30;
+/** A session in use is issued again once this old, so someone who opens Sift within the month is never signed out. */
+const RENEW_MS = 86_400_000;
 const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64url');
 
 /** A session cookie value: which mailbox, whose, until when, signed so it cannot be forged or altered. */
@@ -123,8 +127,8 @@ function signSession(session: { email: string; person: number }, secret: string,
   return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`;
 }
 
-/** The mailbox and person a session cookie was issued to, or null if it is missing, forged or expired. */
-function readSession(value: string | undefined, secret: string, now: number): { email: string; person: number } | null {
+/** The mailbox and person a session cookie was issued to, and when it ends, or null if it is missing, forged or expired. */
+function readSession(value: string | undefined, secret: string, now: number): { email: string; person: number; expires: number } | null {
   const [body, signature] = (value ?? '').split('.');
   if (!body || !signature) return null;
   const expected = Buffer.from(createHmac('sha256', secret).update(body).digest('base64url'));
@@ -132,7 +136,7 @@ function readSession(value: string | undefined, secret: string, now: number): { 
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
   try {
     const { e, p, x } = JSON.parse(Buffer.from(body, 'base64url').toString()) as { e?: unknown; p?: unknown; x?: unknown };
-    return typeof e === 'string' && typeof p === 'number' && typeof x === 'number' && x > now ? { email: e, person: p } : null;
+    return typeof e === 'string' && typeof p === 'number' && typeof x === 'number' && x > now ? { email: e, person: p, expires: x } : null;
   } catch {
     return null;
   }
@@ -178,6 +182,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   if (signIn && !ephemeral) throw new Error('signIn needs an ephemeral store');
   const log = options.log ?? (() => {});
   const cloud = options.cloud ?? false;
+  const build = options.build ?? null;
   const report = (request: Request, error: unknown) =>
     log(`${request.method} ${new URL(request.url).pathname}: ${error instanceof Error ? error.message : String(error)}`);
   /** What the page is told of an error: a refusal's own words, anything else only that it failed. */
@@ -254,15 +259,25 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
 
     if (signIn && method === 'GET' && url.pathname === '/api/session') {
       const reason = !signIn.hasClient() ? 'no-client' : !googleCanReturnHere ? 'address' : null;
-      return json(200, {
-        required: true,
-        email: session,
-        canSignIn: reason === null,
-        reason,
-        addresses: options.signInAddresses ?? [],
-        cloud,
-        telemetry: forThePage(),
-      });
+      // The page asks every few minutes while it is open, which is when a session is renewed.
+      const renewed: Record<string, string> =
+        session && issued && issued.expires - now() < SESSION_DAYS * 86_400_000 - RENEW_MS
+          ? { 'set-cookie': sessionCookie(signSession({ email: session, person: issued.person }, secret, now()), SESSION_DAYS * 86_400) }
+          : {};
+      return json(
+        200,
+        {
+          required: true,
+          email: session,
+          canSignIn: reason === null,
+          reason,
+          addresses: options.signInAddresses ?? [],
+          cloud,
+          telemetry: forThePage(),
+          build,
+        },
+        renewed,
+      );
     }
     if (signIn && method === 'GET' && url.pathname === '/auth/login') {
       // Letting Sift send is for a mailbox of whoever is signed in.
@@ -317,7 +332,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     if (signIn && session === null && url.pathname.startsWith('/api/')) return json(401, { error: 'Sign in to use the dashboard.' });
     if (signIn && method === 'POST' && url.pathname === '/api/signout') return json(200, { ok: true }, { 'set-cookie': sessionCookie('', 0) });
     if (!signIn && method === 'GET' && url.pathname === '/api/session')
-      return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], cloud, telemetry: forThePage() });
+      return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], cloud, telemetry: forThePage(), build });
 
     if (method === 'POST') {
       const handler = writes.get(url.pathname);

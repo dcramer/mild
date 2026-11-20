@@ -52,7 +52,7 @@
   /* How tall the phone's top bar is while it shows (the bar measures itself), so what sticks under it (a day's heading) sits below it. */
   --bar: 0px;
   @media (width < 48rem), (height < 30rem) {
-    --bar: 64px;
+    --bar: calc(64px + var(--safe-top));
   }
 
   /* Type, by role. */
@@ -100,6 +100,13 @@
   /* How far a row's hover reaches past its text when the table sits straight on the page, so the text is
      never flush against the edge of the highlight; on a panel too. Inside a sheet the gutter does this instead. */
   --bleed: 0.75rem;
+
+  /* Where the screen's own edges reach into the page, in an installed app drawn to them (`viewport-fit=cover`): the
+     status bar, the notch, the home indicator. Zero in a browser tab. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 
   /* One height for everything pressed or typed into in a row or a toolbar, so they line up. */
   --control: 2rem;
@@ -341,12 +348,24 @@
   }
   html {
     @apply font-sans;
+    /* Android reloads the page when it is pulled down from the top, which in the installed app throws away what was open. */
+    overscroll-behavior-y: none;
   }
   body {
     @apply bg-background text-foreground;
     font-size: var(--text-base);
     line-height: var(--text-base--line-height);
     -webkit-font-smoothing: antialiased;
+  }
+  /* The status bar is drawn over the page in the installed app: what scrolls under it is covered by the page's own
+     colour, as if it stopped at the bar. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 40;
+    height: var(--safe-top);
+    background: var(--background);
   }
   /* Focus is a highlighter outline, the same yellow that marks what needs you. In this layer so that a part's
      `outline-none` wins: a menu, a select's list and their items show focus by their fill instead. */

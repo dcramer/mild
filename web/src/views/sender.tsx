@@ -1,6 +1,6 @@
 'use client';
 import { ArrowLeftIcon } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, DomainLink, NameCell, SenderCell, SenderFacts, senderHref } from '@/components/sender.tsx';
@@ -9,7 +9,7 @@ import { useAction } from '@/lib/action.ts';
 import { INBOX, STANDINGS, count, dateTime, describeMatch, doesName, duration, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { useCompose } from '@/lib/compose.ts';
-import { messageKey, rulePath, useOpenRule, useParam } from '@/lib/params.ts';
+import { messageKey, rulePath, useGo, useOpenRule, useParam } from '@/lib/params.ts';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import {
   Ago,
@@ -302,7 +302,7 @@ function SenderView({ who }: { who: Who }) {
   const { data, error, loading, reload } = useLoaded(`${'address' in who ? 'sender' : 'domain'}-page-${key}`, (signal) =>
     'address' in who ? api.sender(who.address, signal) : api.domain(who.domain, signal),
   );
-  const router = useRouter();
+  const go = useGo();
   const compose = useCompose();
   const give = useAction();
   const openRule = useOpenRule();
@@ -462,7 +462,7 @@ function SenderView({ who }: { who: Who }) {
                 </Heads>
                 <tbody>
                   {data.senders.map((sender) => (
-                    <Tr key={reveal(sender.address)} onOpen={() => router.push(senderHref(reveal(sender.address)))}>
+                    <Tr key={reveal(sender.address)} onOpen={() => go(senderHref(reveal(sender.address)))}>
                       <SenderCell address={reveal(sender.address)} name={reveal(sender.name)} contact={sender.contact} />
                       <Td num className="md:w-full">
                         {count(sender.messages)}

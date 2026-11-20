@@ -50,7 +50,7 @@ export const ComposeContext = createContext<typeof openComposer | null>(null);
 /** For a press that writes a message: `compose()` for a new one, `compose({ kind: 'reply' | 'forward', … })` to answer or forward one. */
 export const useCompose = () => useContext(ComposeContext);
 
-/** Everything in the composer, kept in this browser until it is sent or discarded. */
+/** Everything in the composer, kept in this browser, for whoever wrote it, until it is sent or discarded, or they sign out. */
 export interface Draft {
   /** The address it is from; empty for the one it starts on. */
   from: string;
@@ -64,14 +64,17 @@ export interface Draft {
   id: string | null;
 }
 
-const draftKey = (what: Writing) =>
-  what.kind === 'new' ? `sift:draft:new${what.to ? `/${what.to}` : ''}` : `sift:draft:${what.kind === 'forward' ? 'forward/' : ''}${what.messageId}`;
+const DRAFT = 'sift:draft:';
 
-/** The unsent draft kept for this, if any; a new message to someone starts as one to them. */
-export function keptDraft(what: Writing): Draft | null {
+/** `who` is whoever is signed in, so someone else signed in on this browser finds none of theirs. */
+const draftKey = (who: string, what: Writing) =>
+  `${DRAFT}${who}:${what.kind === 'new' ? `new${what.to ? `/${what.to}` : ''}` : `${what.kind === 'forward' ? 'forward/' : ''}${what.messageId}`}`;
+
+/** The unsent draft `who` kept for this, if any; a new message to someone starts as one to them. */
+export function keptDraft(who: string, what: Writing): Draft | null {
   const started = what.kind === 'new' && what.to ? { from: '', to: what.to, cc: '', showCc: false, subject: '', text: '', id: null } : null;
   try {
-    const stored = window.localStorage.getItem(draftKey(what));
+    const stored = window.localStorage.getItem(draftKey(who, what));
     return stored === null ? started : (JSON.parse(stored) as Draft);
   } catch {
     return started;
@@ -79,12 +82,21 @@ export function keptDraft(what: Writing): Draft | null {
 }
 
 /** Keep a draft, or with null forget it. */
-export function keepDraft(what: Writing, draft: Draft | null) {
+export function keepDraft(who: string, what: Writing, draft: Draft | null) {
   try {
-    if (draft === null) window.localStorage.removeItem(draftKey(what));
-    else window.localStorage.setItem(draftKey(what), JSON.stringify(draft));
+    if (draft === null) window.localStorage.removeItem(draftKey(who, what));
+    else window.localStorage.setItem(draftKey(who, what), JSON.stringify(draft));
   } catch {
     // Not kept; it is still there until the composer is closed.
+  }
+}
+
+/** Every draft kept in this browser, whoever's. */
+export function forgetDrafts() {
+  try {
+    for (const key of Object.keys(window.localStorage)) if (key.startsWith(DRAFT)) window.localStorage.removeItem(key);
+  } catch {
+    // Nothing was kept.
   }
 }
 

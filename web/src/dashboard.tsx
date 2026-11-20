@@ -2,16 +2,21 @@
 import { type DehydratedState, HydrationBoundary, useIsFetching } from '@tanstack/react-query';
 import { ActivityIcon, ContactRoundIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
+import { serverBuild } from '@/lib/build.ts';
+import { useKeptPlace } from '@/lib/place.ts';
+import { signOut } from '@/lib/sign-out.ts';
+import { keepStart } from '@/lib/start.ts';
 import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
 import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
+import { useStarted } from '@/system/started.ts';
 import { useHidden } from '@/lib/action.ts';
 import { subscription } from '@/lib/prices.ts';
 import { startTelemetry } from '@/lib/telemetry.ts';
@@ -71,7 +76,7 @@ const closeSettings = () => (panelEntry() ? window.history.back() : setParams({ 
  * setting-up steps until there is something to show, and otherwise the sections, the screen and its foot.
  */
 export function Dashboard({ drawn, children }: { drawn: DehydratedState | null; children: ReactNode }) {
-  if (!drawn) return <Signed>{children}</Signed>;
+  if (!drawn) return <Signed drawnForEveryone>{children}</Signed>;
   return (
     <HydrationBoundary state={drawn}>
       <Signed>{children}</Signed>
@@ -79,18 +84,34 @@ export function Dashboard({ drawn, children }: { drawn: DehydratedState | null; 
   );
 }
 
-function Signed({ children }: { children: ReactNode }) {
+/**
+ * A page drawn for everyone (a sender's) at another page's address is the one the service worker kept, standing in
+ * for a page it could not fetch: it says so until Sift answers, then loads the page that was asked for.
+ */
+const ADDRESSED = /^\/(sender|domain)(\/|$)/;
+
+function Signed({ drawnForEveryone = false, children }: { drawnForEveryone?: boolean; children: ReactNode }) {
   const [settings] = useParam('settings');
   const [signin] = useParam('signin');
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
   const online = useOnline();
   const known = session.data;
+  // The router's path, not the address bar's, which Next.js moves only once the page it goes to is drawn.
+  const path = usePathname();
+  const standIn = useStarted() && drawnForEveryone && !ADDRESSED.test(path);
   const telemetry = known?.telemetry ?? null;
   useEffect(() => startTelemetry(telemetry), [telemetry]);
+  const build = known?.build ?? null;
+  useEffect(() => serverBuild(build), [build]);
+  const answered = known !== null;
+  useEffect(() => {
+    if (standIn && answered) window.location.reload();
+  }, [standIn, answered]);
   const nobody = known?.required === true && known.email === null;
   // Drawn for everyone (`drawn` null), or the server could not read the session: only the opening until the browser has, so a
   // sign-in screen is not drawn over a dashboard, nor one over the other. Not set up, or not answering, it says so.
-  if (!known) return session.missing || session.error || !online ? <Boot missing={session.missing} error={session.error} online={online} /> : <Opening />;
+  if (!known || standIn)
+    return session.missing || session.error || !online ? <Boot missing={session.missing} error={session.error} online={online} /> : <Opening />;
   if (nobody)
     return (
       <Cloud value={known.cloud}>
@@ -107,6 +128,10 @@ function Signed({ children }: { children: ReactNode }) {
   );
 }
 
+/** The screen beside the rail, clear of the notch, the status bar and the home indicator in an installed app. */
+const COLUMN =
+  'mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col pr-[max(1rem,var(--safe-right))] pb-(--safe-bottom) pl-[max(1rem,var(--safe-left))] md:pt-[calc(1.5rem+var(--safe-top))] md:pr-[max(1.5rem,var(--safe-right))] md:pl-6';
+
 /**
  * The page while the server draws its frame, or the browser asks who is signed in: the name where the rail, the
  * masthead and the sign-in page have it, and the loading bar. Built once for everyone, so nothing that only someone signed in sees.
@@ -115,7 +140,7 @@ export function Opening() {
   return (
     <div className="md:flex">
       <Rail current="" items={[]} />
-      <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6">
+      <div className={COLUMN}>
         <LoadingBar on />
         <Masthead current="" items={[]} />
       </div>
@@ -123,11 +148,28 @@ export function Opening() {
   );
 }
 
+/**
+ * Where the installed app opens, kept for the next start (`web/src/lib/start.ts`) as soon as it is known whether Inbox
+ * is on; on a start this browser knew nothing of, it goes there now.
+ */
+function useStartsOn(inbox: boolean | null) {
+  const router = useRouter();
+  const [start] = useParam('start');
+  useEffect(() => {
+    if (inbox === null) return;
+    keepStart(inbox);
+    if (!start) return;
+    if (inbox) router.replace('/inbox');
+    else setParams({ start: '' });
+  }, [inbox, start, router]);
+}
+
 /** Data a screen or panel has none of yet: a search, a sender's page, a message just opened. Not a list read again. */
 const firstLoad = { predicate: (query: { state: { data: unknown } }) => query.state.data === undefined };
 
 function Frame({ signedInAs, children }: { signedInAs: string | null; children: ReactNode }) {
   usePanelsAhead();
+  useKeptPlace();
   const pathname = usePathname();
   const [, page] = pathname.split('/');
   // A sender's and a domain's page are a contact's.
@@ -211,13 +253,14 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
           { label: 'Settings', onSelect: openSettings },
           {
             label: 'Sign out',
-            onSelect: () => void api.signOut().then(() => window.location.assign('/')),
+            onSelect: () => void signOut(),
             ...(online ? {} : { disabled: true, note: 'Not while Sift is unreachable.' }),
           },
         ],
       }
     : undefined;
   const choice = { mailboxes, value: mailbox, onChange: chooseMailbox };
+  useStartsOn(manage.data ? manage.data.mail : null);
   // Writing mail is offered only with Inbox on.
   const composer = manage.data?.mail ? openComposer : null;
   // A reply and a forward are written in the reader.
@@ -236,11 +279,11 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
               account={account}
               compose={composer ? () => composer() : undefined}
             />
-            <div className="mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col px-4 md:px-6 md:pt-6">
+            <div className={COLUMN}>
               <LoadingBar on={going || fetching > 0} />
               {/* An open message is read without it: the reader's bar is the top of the screen, and Back the way out. */}
               {open ? (
-                <div className="h-3 md:hidden" />
+                <div className="h-[calc(0.75rem+var(--safe-top))] md:hidden" />
               ) : (
                 <Masthead
                   current={section ?? ''}

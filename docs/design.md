@@ -117,6 +117,8 @@ On a phone a row keeps only what identifies it and what it is; figures, dates an
 | `Table` | Columns marked `phone="hide"` drop; what they said moves under the first column in an `OnPhone`, and the row opens for the rest. `RowActions` drop too, unless the row does not open (`phone="keep"`). |
 | Rows with a control | The control wraps under the text. |
 | Anything pressed | At least 44px both ways on a touch screen (`pointer: coarse`), whatever its size on a desktop. A row that opens is filled while pressed, and a long press on it or on a control selects no text. |
+| The screen's edges | In the installed app the page reaches under the status bar and the home indicator: the masthead, the menu, a `Panel`'s and a `Dialog`'s header start below `--safe-top`, their foot ends above `--safe-bottom`, and the rail and the page's column clear a notch to the side. A part that meets an edge of the screen pads by these; nothing else does. |
+| Back | Closes the menu, a `Dialog`, Settings and a new message, as it would a screen. |
 
 The page itself never scrolls sideways.
 
