@@ -130,7 +130,9 @@ test.describe('The reader, from Inbox', () => {
       await page.goto('/inbox');
       await page.getByRole('row').filter({ hasText: 'Your March bill' }).click();
       const open = reader(page);
-      // An open message's text arrives after the conversation, and is shorter than the rows standing in for it.
+      // An open message's text arrives after the conversation, and is shorter than the rows standing in for it. The
+      // reader is found by Sift's row, which comes with the conversation: before that, no rows are found because no reader is.
+      await expect(readerHeading(page, 'Your March bill')).toBeVisible();
       await expect(open.getByLabel('Loading')).toHaveCount(0);
       const title = await boxOf(readerHeading(page, 'Your March bill'));
       const answer = await boxOf(open.getByRole('combobox', { name: 'What this message is' }));
