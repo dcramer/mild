@@ -134,8 +134,8 @@ function Receipt({ toast, front, close }: { toast: Base.Root.ToastObject<Own>; f
         failed && 'border-destructive bg-destructive text-background',
       )}
     >
-      <div className="flex items-start gap-2 py-3 pr-1.5 pl-4">
-        <div className="flex min-w-0 grow flex-col gap-0.5 pt-0.5">
+      <div className="flex items-start gap-2 p-1.5 pl-4">
+        <div className="flex min-h-(--control) min-w-0 grow flex-col justify-center gap-0.5 py-1">
           <Base.Title render={<span />} className={cn('text-base leading-snug font-medium', failed && 'font-semibold')} />
           <Base.Description render={<span />} className={cn('text-sm', kind && 'order-first', failed ? 'text-background/75' : 'text-muted-foreground')} />
         </div>

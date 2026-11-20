@@ -307,6 +307,19 @@ test.describe('An answer on its way', () => {
     await expect.poll(sent).toBe(1);
   });
 
+  test("its toast's close button is level with its words, which take no more height than the presses under them", async ({ page }) => {
+    await page.goto('/');
+    await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
+    const said = toast(page, 'Archive as Marketing');
+    await expect(said).toBeVisible();
+    const box = await boxOf(said);
+    const words = await boxOf(said.getByText('Archive as Marketing', { exact: true }));
+    const close = await boxOf(said.getByRole('button', { name: 'Dismiss' }));
+    const undo = await boxOf(said.getByRole('button', { name: 'Undo' }));
+    expect(Math.abs(close.y + close.height / 2 - (words.y + words.height / 2))).toBeLessThan(2);
+    expect(close.y - box.y).toBeCloseTo(box.y + box.height - (undo.y + undo.height), 0);
+  });
+
   test('is sent when its toast is dismissed', async ({ page }) => {
     const sent = answersSent(page);
     await page.goto('/');
