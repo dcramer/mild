@@ -97,7 +97,7 @@ Gmail is where mail comes from and where the person's changes go, never where Si
 - **What Gmail is still asked:**
   - To change mail: labels, archive, spam, read, filters, the digest and send, with the labels re-read around each change (Safety rules). Writes are kept up with Gmail; if they near the quota, batch them (`batchModify`) rather than read less.
   - For mail Sift has never recorded: new mail from history, the copy, the inbox before Sift.
-  - For counts only Gmail knows (how much there is to copy, how many a rule would touch), only on a press, never on a page's own load.
+  - For counts only Gmail knows (how big the inbox is, how much there is to copy, how many a rule would touch), kept 5 minutes in `Ephemeral`, so a reload or a second look asks nothing.
 - **Read new mail once, whole only if needed.** At most 20 units (metadata) and 60 (whole, only when the model or Inbox needs the text); with Inbox on, one whole read at 60. Within a pass a message is read at most once (`readingOnce`).
 - **No page waits on Gmail** to show anything Sift recorded.
 
@@ -115,7 +115,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 
 | Rule | Enforced by |
 | --- | --- |
-| Once Sift has read a message, nothing reads it from Gmail again; Gmail is asked only to change mail, for mail Sift never recorded, and for counts on a press | `tests/read-once.test.ts` (a stand-in Gmail that fails a second read of any message across passes, retries, answers, corrections and rules applied) |
+| Once Sift has read a message, nothing reads it from Gmail again; Gmail is asked only to change mail, for mail Sift never recorded, and for counts it keeps 5 minutes | `tests/read-once.test.ts` (a stand-in Gmail that fails a second read of any message across passes, retries, answers, corrections and rules applied) |
 | Module boundaries (`triage/` pure, Google only in `gmail/`, pi-ai only in `model/`, Sentry only in `src/telemetry.ts` and the page's `web/src/lib/telemetry*.ts`, `dashboard/` never reaches Gmail or actions) | `no-restricted-imports`, `.oxlintrc.json` |
 | What is stored encrypted is never drawn on the server: it is `Confidential` to the page and revealed only in the browser | The type checker (React takes no `Confidential`, and a reply `src/sift/page-data.ts` draws with may hold none); `e2e/page.spec.ts` (no decrypted value of the seed in any screen's HTML); `client-only` in `web/src/lib/reveal.ts` (`next build` fails on a server component that reaches it); `no-restricted-imports` on `src/plain.ts` and `restrict-template-expressions`, `no-base-to-string` in `.oxlintrc.json`. That a new encrypted field is `held` in its reply schema is judgment |
 | Only `web/src/system/` imports Base UI | `no-restricted-imports`, `.oxlintrc.json` |
