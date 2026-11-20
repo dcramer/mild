@@ -656,7 +656,16 @@ export const ManageState = z.object({
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
   }),
   activity: z.object({ running: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
-  accounts: z.array(z.object({ id: z.string(), email: z.string(), lastSyncedAt: z.number().nullable(), primary: z.boolean() })),
+  accounts: z.array(
+    z.object({
+      id: z.string(),
+      email: z.string(),
+      lastSyncedAt: z.number().nullable(),
+      primary: z.boolean(),
+      /** When Google will end its sign-in, known only once one has ended a week after it was given (a client in Testing). */
+      signInEnds: z.number().nullable(),
+    }),
+  ),
   /** In order. */
   labels: z.array(LabelSummary),
   /** How many labels a person may have. */

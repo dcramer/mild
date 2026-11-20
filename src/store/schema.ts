@@ -126,6 +126,8 @@ export const mailboxes = pgTable(
     lastSyncedAt: time('last_synced_at'),
     filtersCheckedAt: time('filters_checked_at'),
     aliases: jsonb('aliases').$type<string[]>().notNull().default([]), // Gmail send-as addresses besides the id, as of the last sync that could read them
+    signedInAt: time('signed_in_at'), // when its Gmail sign-in was given; null for one given before this was kept
+    weeklySignIn: boolean('weekly_sign_in').notNull().default(false), // Google ended its last sign-in a week after it was given: the client is in Testing
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),

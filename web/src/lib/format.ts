@@ -382,4 +382,14 @@ export function dayName(ms: number, now: number = Date.now()): string {
   if (back === 1) return 'Yesterday';
   return new Date(ms).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
+/** A time in the next few days: "today at 3:40 PM", "tomorrow at 3:40 PM", else "Thursday at 3:40 PM". */
+export function ahead(ms: number, now: number): string {
+  const start = (at: number) => {
+    const d = new Date(at);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  };
+  const days = Math.round((start(ms) - start(now)) / 86_400_000);
+  const day = days === 0 ? 'today' : days === 1 ? 'tomorrow' : new Date(ms).toLocaleDateString(undefined, { weekday: 'long' });
+  return `${day} at ${clock(ms)}`;
+}
 export const clock = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });

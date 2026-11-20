@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
+import { and, asc, eq, gt, isNull, lte, accounts, credentials, labels, mailboxes, messages as messageRows, users } from './query.ts';
 import { inboxRow } from './labels.ts';
 import type { Sql } from './sql.ts';
 import { sealFacts, sealMessage } from './content.ts';
@@ -167,6 +167,42 @@ export async function personOf(db: Sql): Promise<number> {
 export async function lastSyncedAt(db: Sql, accountId: string): Promise<number | null> {
   const [row] = await db.select({ at: mailboxes.lastSyncedAt }).from(mailboxes).where(eq(mailboxes.id, accountId));
   return row?.at ?? null;
+}
+
+/** How long Google lets a sign-in from a client in Testing last ([gmail.md](../../docs/gmail.md#signing-in)). */
+export const TESTING_SIGN_IN_MS = 7 * 86_400_000;
+/**
+ * How long after the week an ended sign-in is still taken for Testing's: it is found only at the next look, and a
+ * revoked or password-changed one is refused the same way. Gmail still answering past it means the client is not in Testing.
+ */
+const NOTICED_MS = 86_400_000;
+
+export async function signedIn(db: Sql, accountId: string, now: number): Promise<void> {
+  await db.update(mailboxes).set({ signedInAt: now }).where(eq(mailboxes.id, accountId));
+}
+
+/** Google refused the mailbox's sign-in: if it was given a week ago, its client is in Testing and the next will end a week after it too. */
+export async function signInEnded(db: Sql, accountId: string, now: number): Promise<void> {
+  await db
+    .update(mailboxes)
+    .set({ weeklySignIn: true })
+    .where(
+      and(eq(mailboxes.id, accountId), lte(mailboxes.signedInAt, now - TESTING_SIGN_IN_MS), gt(mailboxes.signedInAt, now - TESTING_SIGN_IN_MS - NOTICED_MS)),
+    );
+}
+
+/** Gmail answered: a sign-in that has outlived the week was not given by a client in Testing, whatever an earlier one was. */
+export async function signInHeld(db: Sql, accountId: string, now: number): Promise<void> {
+  await db
+    .update(mailboxes)
+    .set({ weeklySignIn: false })
+    .where(and(eq(mailboxes.id, accountId), eq(mailboxes.weeklySignIn, true), lte(mailboxes.signedInAt, now - TESTING_SIGN_IN_MS - NOTICED_MS)));
+}
+
+/** When each mailbox's sign-in will end, for those whose last ended a week after it was given. */
+export async function signInEnds(db: Sql): Promise<Map<string, number>> {
+  const rows = await db.select({ id: mailboxes.id, at: mailboxes.signedInAt }).from(mailboxes).where(eq(mailboxes.weeklySignIn, true));
+  return new Map(rows.flatMap((r) => (r.at === null ? [] : [[r.id, r.at + TESTING_SIGN_IN_MS] as const])));
 }
 
 /** The mailboxes in one person's database. */

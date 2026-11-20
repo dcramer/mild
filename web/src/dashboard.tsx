@@ -4,11 +4,12 @@ import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
-import { SiftStatus, UsageDetail } from '@/components/status.tsx';
+import { SiftStatus, UsageDetail, useNow } from '@/components/status.tsx';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { OpenMessagesContext } from '@/lib/open-messages.ts';
 import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
 import { useHidden } from '@/lib/action.ts';
+import { ahead } from '@/lib/format.ts';
 import { subscription } from '@/lib/prices.ts';
 import { startTelemetry } from '@/lib/telemetry.ts';
 import { Cloud, LoadingBar, Masthead, Notice, PageFoot, useGoing } from '@/system';
@@ -106,6 +107,9 @@ export function Opening() {
   );
 }
 
+/** How long before Google ends a sign-in the masthead says so: two days, so someone who looks in once a day sees it. */
+const SIGN_IN_WARNING_MS = 2 * 86_400_000;
+
 /** Data a screen or panel has none of yet: a search, a sender's page, a message just opened. Not a list read again. */
 const firstLoad = { predicate: (query: { state: { data: unknown } }) => query.state.data === undefined };
 
@@ -123,6 +127,16 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const online = useOnline();
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const expired = manage.data?.activity.expired ?? [];
+  const now = useNow(60_000);
+  // The soonest sign-in Google will end within the warning, so it is renewed before Sift stops reading that mailbox.
+  const ending =
+    now === null
+      ? undefined
+      : (manage.data?.accounts ?? [])
+          .flatMap((a) =>
+            a.signInEnds !== null && a.signInEnds > now && a.signInEnds - now < SIGN_IN_WARNING_MS ? [{ email: a.email, at: a.signInEnds }] : [],
+          )
+          .toSorted((a, b) => a.at - b.at)[0];
   const here = useHere();
   // A list can be pressed while the last panel is still sliding away, its message still in the address. That
   // press gets a panel of its own, since the closing one would only finish closing and then go Back; and it
@@ -162,6 +176,10 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
               // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
               <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
                 Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}
+              </Notice>
+            ) : ending && now !== null ? (
+              <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
+                Google sign-in{ending.email === name ? '' : ` for ${ending.email}`} ends {ahead(ending.at, now)}
               </Notice>
             ) : null
           }
