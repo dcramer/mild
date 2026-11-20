@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { canSend, lastSyncedAt, listAccounts, mailboxAliases } from '../../../../store/accounts.ts';
+import { canSend, lastSyncedAt, listAccounts, mailboxAliases, signInEnds } from '../../../../store/accounts.ts';
 import { inboxProgress } from '../../../../store/inbox.ts';
 import { copyProgress } from '../../../../store/copies.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
@@ -14,6 +14,7 @@ import { type Context, ok, read } from '../../route.ts';
 async function manageState({ db, controls, person }: Context, scope: Scope): Promise<ManageState> {
   const accounts = (await listAccounts(db)).filter((a) => sees(scope, a.id));
   const own = await preferences(db);
+  const ends = await signInEnds(db);
   const activity = controls ? await controls.activity(accounts.map((a) => a.id)) : { running: false, lastPassAt: null, problems: [], expired: [] };
   return {
     owner: scope.owner,
@@ -41,6 +42,7 @@ async function manageState({ db, controls, person }: Context, scope: Scope): Pro
         primary: a.id === person?.primary,
         canSend: await canSend(db, a.id),
         aliases: await mailboxAliases(db, a.id),
+        signInEnds: ends.get(a.id) ?? null,
       })),
     ),
     labels: await listLabelSummaries(db, scope),

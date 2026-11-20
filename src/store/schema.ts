@@ -133,6 +133,8 @@ export const mailboxes = pgTable(
     filtersCheckedAt: time('filters_checked_at'),
     aliases: jsonb('aliases').$type<string[]>().notNull().default([]), // Gmail send-as addresses besides the id, as of the last sync that could read them
     canSend: boolean('can_send').notNull().default(false), // Google granted `gmail.send` to the sign-in Sift holds for it
+    signedInAt: time('signed_in_at'), // when its Gmail sign-in was given; null for one given before this was kept
+    weeklySignIn: boolean('weekly_sign_in').notNull().default(false), // Google ended its last sign-in a week after it was given: the client is in Testing
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -582,7 +584,7 @@ export const readBodies = pgTable(
     userId: userId(),
     accountId: text('account_id').notNull(),
     messageId: text('message_id').notNull(),
-    bodyText: text('body_text').notNull(), // all of its readable text, up to `MAX_MAIL_CHARS` (src/gmail/body.ts); before 0069, the model's 4,000
+    bodyText: text('body_text').notNull(), // all of its readable text, up to `MAX_MAIL_CHARS` (src/gmail/body.ts); before 0070, the model's 4,000
     bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
     fetchedAt: time('fetched_at').notNull(),
   },

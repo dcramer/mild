@@ -1,6 +1,6 @@
 {
-  "id": "997d6394-aaa3-4ead-8e1c-ab44d4243b6c",
-  "prevId": "c37ca40d-8c86-44c4-9377-a89c1821af2e",
+  "id": "c37ca40d-8c86-44c4-9377-a89c1821af2e",
+  "prevId": "7bf4ccca-7a73-4105-8d3d-2c88e60d0ea9",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2253,98 +2253,6 @@
       },
       "isRLSEnabled": true
     },
-    "public.mail_bodies": {
-      "name": "mail_bodies",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "current_setting('sift.user')::integer"
-        },
-        "account_id": {
-          "name": "account_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "body_text": {
-          "name": "body_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "body_html": {
-          "name": "body_html",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fetched_at": {
-          "name": "fetched_at",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "mail_bodies_user_id_users_id_fk": {
-          "name": "mail_bodies_user_id_users_id_fk",
-          "tableFrom": "mail_bodies",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mail_bodies_user_id_account_id_mailboxes_user_id_id_fk": {
-          "name": "mail_bodies_user_id_account_id_mailboxes_user_id_id_fk",
-          "tableFrom": "mail_bodies",
-          "tableTo": "mailboxes",
-          "columnsFrom": ["user_id", "account_id"],
-          "columnsTo": ["user_id", "id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mail_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
-          "name": "mail_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
-          "tableFrom": "mail_bodies",
-          "tableTo": "messages",
-          "columnsFrom": ["user_id", "account_id", "message_id"],
-          "columnsTo": ["user_id", "account_id", "id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "mail_bodies_user_id_account_id_message_id_pk": {
-          "name": "mail_bodies_user_id_account_id_message_id_pk",
-          "columns": ["user_id", "account_id", "message_id"]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {
-        "own": {
-          "name": "own",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": ["sift_app"],
-          "using": "user_id = nullif(current_setting('sift.user', true), '')::integer",
-          "withCheck": "user_id = nullif(current_setting('sift.user', true), '')::integer"
-        }
-      },
-      "checkConstraints": {},
-      "isRLSEnabled": true
-    },
     "public.mailboxes": {
       "name": "mailboxes",
       "schema": "",
@@ -2403,6 +2311,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'[]'::jsonb"
+        },
+        "signed_in_at": {
+          "name": "signed_in_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weekly_sign_in": {
+          "name": "weekly_sign_in",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},
@@ -2975,13 +2896,6 @@
         },
         "active": {
           "name": "active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "mail": {
-          "name": "mail",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

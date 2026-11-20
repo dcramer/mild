@@ -1,6 +1,6 @@
 {
-  "id": "9874309b-0b38-4c19-96b9-f2c6e543f04f",
-  "prevId": "712e835b-bd13-4053-a891-a8275bd25a96",
+  "id": "712e835b-bd13-4053-a891-a8275bd25a96",
+  "prevId": "21f0f9cc-d110-41fa-8a4e-755b00a59e70",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -46,29 +46,29 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"accounts\".\"primary\"",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "accounts_user_id_users_id_fk": {
           "name": "accounts_user_id_users_id_fk",
           "tableFrom": "accounts",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "accounts_own": {
           "name": "accounts_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         }
       },
       "policies": {},
@@ -85,15 +85,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "actions_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -194,9 +194,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "actions_time": {
           "name": "actions_time",
@@ -215,9 +215,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "actions_open": {
           "name": "actions_open",
@@ -230,10 +230,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"actions\".\"status\" IN ('pending', 'unknown')",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "actions_decision": {
           "name": "actions_decision",
@@ -246,9 +246,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "actions_filters": {
           "name": "actions_filters",
@@ -273,48 +273,48 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"actions\".\"type\" IN ('filter', 'unfilter')",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "actions_user_id_users_id_fk": {
           "name": "actions_user_id_users_id_fk",
           "tableFrom": "actions",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "actions_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "actions_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "actions",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "actions_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "actions_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
           "tableFrom": "actions",
-          "columnsFrom": ["user_id", "account_id", "message_id"],
           "tableTo": "messages",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
           "columnsTo": ["user_id", "account_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "actions_user_id_decision_id_decisions_user_id_id_fk": {
           "name": "actions_user_id_decision_id_decisions_user_id_id_fk",
           "tableFrom": "actions",
-          "columnsFrom": ["user_id", "decision_id"],
           "tableTo": "decisions",
+          "columnsFrom": ["user_id", "decision_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -401,29 +401,29 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "correspondents_user_id_users_id_fk": {
           "name": "correspondents_user_id_users_id_fk",
           "tableFrom": "correspondents",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "correspondents_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "correspondents_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "correspondents",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -481,11 +481,11 @@
         "credentials_user_id_users_id_fk": {
           "name": "credentials_user_id_users_id_fk",
           "tableFrom": "credentials",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -523,15 +523,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "decisions_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -685,9 +685,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "decisions_time": {
           "name": "decisions_time",
@@ -706,9 +706,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "decisions_run": {
           "name": "decisions_run",
@@ -727,9 +727,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "decisions_rule": {
           "name": "decisions_rule",
@@ -754,10 +754,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"decisions\".\"rule_id\" IS NOT NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "decisions_digest": {
           "name": "decisions_digest",
@@ -776,10 +776,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"decisions\".\"digest\"",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "decisions_unsettled": {
           "name": "decisions_unsettled",
@@ -792,65 +792,65 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"decisions\".\"carry_out\" AND \"decisions\".\"outcome\" IS NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "decisions_user_id_users_id_fk": {
           "name": "decisions_user_id_users_id_fk",
           "tableFrom": "decisions",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "decisions_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "decisions_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "decisions",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "decisions_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "decisions_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
           "tableFrom": "decisions",
-          "columnsFrom": ["user_id", "account_id", "message_id"],
           "tableTo": "messages",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
           "columnsTo": ["user_id", "account_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "decisions_label": {
           "name": "decisions_label",
           "tableFrom": "decisions",
-          "columnsFrom": ["user_id", "label_id"],
           "tableTo": "labels",
+          "columnsFrom": ["user_id", "label_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "decisions_user_id_run_id_model_runs_user_id_id_fk": {
           "name": "decisions_user_id_run_id_model_runs_user_id_id_fk",
           "tableFrom": "decisions",
-          "columnsFrom": ["user_id", "run_id"],
           "tableTo": "model_runs",
+          "columnsFrom": ["user_id", "run_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "decisions_own": {
           "name": "decisions_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         }
       },
       "policies": {
@@ -901,15 +901,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "digests_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -1037,9 +1037,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "digests_open": {
           "name": "digests_open",
@@ -1052,52 +1052,52 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"digests\".\"gmail_id\" IS NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "digests_user_id_users_id_fk": {
           "name": "digests_user_id_users_id_fk",
           "tableFrom": "digests",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "digests_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "digests_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "digests",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "digests_label": {
           "name": "digests_label",
           "tableFrom": "digests",
-          "columnsFrom": ["user_id", "label_id"],
           "tableTo": "labels",
+          "columnsFrom": ["user_id", "label_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "digests_own": {
           "name": "digests_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         },
         "digests_message": {
           "name": "digests_message",
-          "columns": ["user_id", "message_id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "message_id"]
         }
       },
       "policies": {
@@ -1205,20 +1205,20 @@
         "eval_results_user_id_users_id_fk": {
           "name": "eval_results_user_id_users_id_fk",
           "tableFrom": "eval_results",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "eval_results_user_id_run_id_eval_runs_user_id_id_fk": {
           "name": "eval_results_user_id_run_id_eval_runs_user_id_id_fk",
           "tableFrom": "eval_results",
-          "columnsFrom": ["user_id", "run_id"],
           "tableTo": "eval_runs",
+          "columnsFrom": ["user_id", "run_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1251,15 +1251,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "eval_runs_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -1348,28 +1348,28 @@
         "eval_runs_user_id_users_id_fk": {
           "name": "eval_runs_user_id_users_id_fk",
           "tableFrom": "eval_runs",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "eval_runs_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "eval_runs_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "eval_runs",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "eval_runs_own": {
           "name": "eval_runs_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         }
       },
       "policies": {
@@ -1471,10 +1471,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"examples\".\"status\" = 'pending'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "examples_by_name": {
           "name": "examples_by_name",
@@ -1499,10 +1499,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"examples\".\"status\" = 'captured'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "examples_by_subject": {
           "name": "examples_by_subject",
@@ -1527,10 +1527,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"examples\".\"status\" = 'captured'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "examples_by_label": {
           "name": "examples_by_label",
@@ -1555,48 +1555,48 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"examples\".\"status\" = 'captured'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "examples_user_id_users_id_fk": {
           "name": "examples_user_id_users_id_fk",
           "tableFrom": "examples",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "examples_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "examples_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "examples",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "examples_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "examples_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
           "tableFrom": "examples",
-          "columnsFrom": ["user_id", "account_id", "message_id"],
           "tableTo": "messages",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
           "columnsTo": ["user_id", "account_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "examples_label": {
           "name": "examples_label",
           "tableFrom": "examples",
-          "columnsFrom": ["user_id", "label_id"],
           "tableTo": "labels",
+          "columnsFrom": ["user_id", "label_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1634,15 +1634,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "feedback_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -1713,55 +1713,55 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "feedback_user_id_users_id_fk": {
           "name": "feedback_user_id_users_id_fk",
           "tableFrom": "feedback",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "feedback_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "feedback_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "feedback",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "feedback_user_id_decision_id_decisions_user_id_id_fk": {
           "name": "feedback_user_id_decision_id_decisions_user_id_id_fk",
           "tableFrom": "feedback",
-          "columnsFrom": ["user_id", "decision_id"],
           "tableTo": "decisions",
+          "columnsFrom": ["user_id", "decision_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "feedback_label": {
           "name": "feedback_label",
           "tableFrom": "feedback",
-          "columnsFrom": ["user_id", "label_id"],
           "tableTo": "labels",
+          "columnsFrom": ["user_id", "label_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "feedback_once": {
           "name": "feedback_once",
-          "columns": ["user_id", "decision_id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "decision_id"]
         }
       },
       "policies": {
@@ -1800,15 +1800,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "inbox_runs_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -1907,44 +1907,44 @@
             },
             {
               "expression": "coalesce(\"rule_id\", '')",
-              "isExpression": true,
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"inbox_runs\".\"finished_at\" IS NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "inbox_runs_user_id_users_id_fk": {
           "name": "inbox_runs_user_id_users_id_fk",
           "tableFrom": "inbox_runs",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "inbox_runs_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "inbox_runs_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "inbox_runs",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "inbox_runs_own": {
           "name": "inbox_runs_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         }
       },
       "policies": {
@@ -1970,15 +1970,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "label_proposals_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -2076,37 +2076,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "label_proposals_user_id_users_id_fk": {
           "name": "label_proposals_user_id_users_id_fk",
           "tableFrom": "label_proposals",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "label_proposals_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "label_proposals_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "label_proposals",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "label_proposals_own": {
           "name": "label_proposals_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         }
       },
       "policies": {
@@ -2209,11 +2209,11 @@
         "labels_user_id_users_id_fk": {
           "name": "labels_user_id_users_id_fk",
           "tableFrom": "labels",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2263,15 +2263,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "mail_asks_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -2370,37 +2370,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "mail_asks_user_id_users_id_fk": {
           "name": "mail_asks_user_id_users_id_fk",
           "tableFrom": "mail_asks",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "mail_asks_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "mail_asks_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "mail_asks",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "mail_asks_own": {
           "name": "mail_asks_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         }
       },
       "policies": {
@@ -2482,39 +2482,39 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"mail_bodies\".\"search\" IS NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "mail_bodies_user_id_users_id_fk": {
           "name": "mail_bodies_user_id_users_id_fk",
           "tableFrom": "mail_bodies",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "mail_bodies_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "mail_bodies_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "mail_bodies",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "mail_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "mail_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
           "tableFrom": "mail_bodies",
-          "columnsFrom": ["user_id", "account_id", "message_id"],
           "tableTo": "messages",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
           "columnsTo": ["user_id", "account_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2604,20 +2604,20 @@
         "mail_copies_user_id_users_id_fk": {
           "name": "mail_copies_user_id_users_id_fk",
           "tableFrom": "mail_copies",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "mail_copies_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "mail_copies_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "mail_copies",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2663,15 +2663,15 @@
           "primaryKey": false,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "mailboxes_number_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "history_id": {
@@ -2699,6 +2699,19 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
+        "signed_in_at": {
+          "name": "signed_in_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weekly_sign_in": {
+          "name": "weekly_sign_in",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "can_send": {
           "name": "can_send",
           "type": "boolean",
@@ -2712,20 +2725,20 @@
         "mailboxes_user_id_users_id_fk": {
           "name": "mailboxes_user_id_users_id_fk",
           "tableFrom": "mailboxes",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "mailboxes_user_id_id_accounts_user_id_id_fk": {
           "name": "mailboxes_user_id_id_accounts_user_id_id_fk",
           "tableFrom": "mailboxes",
-          "columnsFrom": ["user_id", "id"],
           "tableTo": "accounts",
+          "columnsFrom": ["user_id", "id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2737,8 +2750,8 @@
       "uniqueConstraints": {
         "mailboxes_number_unique": {
           "name": "mailboxes_number_unique",
-          "columns": ["number"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["number"]
         }
       },
       "policies": {
@@ -2871,9 +2884,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "messages_domain": {
           "name": "messages_domain",
@@ -2892,9 +2905,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "messages_received": {
           "name": "messages_received",
@@ -2913,9 +2926,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "messages_thread": {
           "name": "messages_thread",
@@ -2940,9 +2953,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "messages_inbox": {
           "name": "messages_inbox",
@@ -2961,10 +2974,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"messages\".\"label_ids\" @> '[\"INBOX\"]'::jsonb",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "messages_undecided": {
           "name": "messages_undecided",
@@ -2983,10 +2996,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "NOT \"messages\".\"decided\"",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "messages_facts": {
           "name": "messages_facts",
@@ -2999,29 +3012,29 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "gin",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "messages_user_id_users_id_fk": {
           "name": "messages_user_id_users_id_fk",
           "tableFrom": "messages",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "messages_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "messages_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "messages",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3054,15 +3067,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "model_runs_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -3160,9 +3173,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "model_runs_time": {
           "name": "model_runs_time",
@@ -3181,9 +3194,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "model_runs_rule": {
           "name": "model_runs_rule",
@@ -3208,47 +3221,47 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"model_runs\".\"rule_id\" IS NOT NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "model_runs_user_id_users_id_fk": {
           "name": "model_runs_user_id_users_id_fk",
           "tableFrom": "model_runs",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "model_runs_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "model_runs_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "model_runs",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "model_runs_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "model_runs_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
           "tableFrom": "model_runs",
-          "columnsFrom": ["user_id", "account_id", "message_id"],
           "tableTo": "messages",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
           "columnsTo": ["user_id", "account_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "model_runs_own": {
           "name": "model_runs_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         }
       },
       "policies": {
@@ -3328,11 +3341,11 @@
         "preferences_user_id_users_id_fk": {
           "name": "preferences_user_id_users_id_fk",
           "tableFrom": "preferences",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3373,15 +3386,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "proposals_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -3452,37 +3465,37 @@
         "proposals_user_id_users_id_fk": {
           "name": "proposals_user_id_users_id_fk",
           "tableFrom": "proposals",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "proposals_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "proposals_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "proposals",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "proposals_label": {
           "name": "proposals_label",
           "tableFrom": "proposals",
-          "columnsFrom": ["user_id", "label_id"],
           "tableTo": "labels",
+          "columnsFrom": ["user_id", "label_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "proposals_once": {
           "name": "proposals_once",
-          "columns": ["user_id", "account_id", "conditions"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "account_id", "conditions"]
         }
       },
       "policies": {
@@ -3517,15 +3530,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "rule_drafts_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "user_id": {
@@ -3624,37 +3637,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "rule_drafts_user_id_users_id_fk": {
           "name": "rule_drafts_user_id_users_id_fk",
           "tableFrom": "rule_drafts",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "rule_drafts_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "rule_drafts_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "rule_drafts",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "rule_drafts_own": {
           "name": "rule_drafts_own",
-          "columns": ["user_id", "id"],
-          "nullsNotDistinct": false
+          "nullsNotDistinct": false,
+          "columns": ["user_id", "id"]
         }
       },
       "policies": {
@@ -3723,29 +3736,29 @@
         "rule_filters_user_id_users_id_fk": {
           "name": "rule_filters_user_id_users_id_fk",
           "tableFrom": "rule_filters",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "rule_filters_user_id_rule_id_rules_user_id_id_fk": {
           "name": "rule_filters_user_id_rule_id_rules_user_id_id_fk",
           "tableFrom": "rule_filters",
-          "columnsFrom": ["user_id", "rule_id"],
           "tableTo": "rules",
+          "columnsFrom": ["user_id", "rule_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "rule_filters_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "rule_filters_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "rule_filters",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3896,38 +3909,38 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "rules_user_id_users_id_fk": {
           "name": "rules_user_id_users_id_fk",
           "tableFrom": "rules",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "rules_label": {
           "name": "rules_label",
           "tableFrom": "rules",
-          "columnsFrom": ["user_id", "label_id"],
           "tableTo": "labels",
+          "columnsFrom": ["user_id", "label_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "rules_when_label": {
           "name": "rules_when_label",
           "tableFrom": "rules",
-          "columnsFrom": ["user_id", "when_label"],
           "tableTo": "labels",
+          "columnsFrom": ["user_id", "when_label"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4022,29 +4035,29 @@
         "suggestion_bodies_user_id_users_id_fk": {
           "name": "suggestion_bodies_user_id_users_id_fk",
           "tableFrom": "suggestion_bodies",
-          "columnsFrom": ["user_id"],
           "tableTo": "users",
+          "columnsFrom": ["user_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "suggestion_bodies_user_id_account_id_mailboxes_user_id_id_fk": {
           "name": "suggestion_bodies_user_id_account_id_mailboxes_user_id_id_fk",
           "tableFrom": "suggestion_bodies",
-          "columnsFrom": ["user_id", "account_id"],
           "tableTo": "mailboxes",
+          "columnsFrom": ["user_id", "account_id"],
           "columnsTo": ["user_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "suggestion_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk": {
           "name": "suggestion_bodies_user_id_account_id_message_id_messages_user_id_account_id_id_fk",
           "tableFrom": "suggestion_bodies",
-          "columnsFrom": ["user_id", "account_id", "message_id"],
           "tableTo": "messages",
+          "columnsFrom": ["user_id", "account_id", "message_id"],
           "columnsTo": ["user_id", "account_id", "id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -4077,15 +4090,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "byDefault",
             "name": "users_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "byDefault"
+            "cycle": false
           }
         },
         "owner": {
@@ -4114,10 +4127,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"users\".\"owner\"",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -4130,7 +4143,6 @@
   },
   "enums": {},
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {
     "sift_app": {
@@ -4141,6 +4153,7 @@
     }
   },
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

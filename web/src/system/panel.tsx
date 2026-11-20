@@ -5,6 +5,7 @@ import { type ReactNode, type RefObject, useRef, useState } from 'react';
 import { Control, ControlBar } from './controls.tsx';
 import { KeyLayer } from './keys.tsx';
 import { Backdrop, LayerContent, LayerFooter, useLayerOpen } from './layer.tsx';
+import { AboveToasts } from './toast.tsx';
 
 /** What had the focus as each panel opened, for its close to return there, through a panel replaced once it loaded (the composer's). */
 const openers = new WeakMap<HTMLElement, HTMLElement | null>();
@@ -80,27 +81,29 @@ export function Panel({
             <LayerContent title={title} subtitle={subtitle}>
               {children}
             </LayerContent>
-            {actions ? <LayerFooter>{actions}</LayerFooter> : null}
-            {stepping ? (
-              <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
-                <Control
-                  label="Previous"
-                  keys={[]}
-                  icon={<ChevronLeftIcon aria-hidden className="size-4" />}
-                  disabled={!onPrevious}
-                  onClick={() => onPrevious?.()}
-                />
-                <Control
-                  label="Next"
-                  keys={[]}
-                  icon={<ChevronRightIcon aria-hidden className="size-4" />}
-                  iconAfter
-                  disabled={!onNext}
-                  onClick={() => onNext?.()}
-                  className="phone:order-3"
-                />
-              </ControlBar>
-            ) : null}
+            <AboveToasts>
+              {actions ? <LayerFooter>{actions}</LayerFooter> : null}
+              {stepping ? (
+                <ControlBar start={position} className="border-t border-(--rule) px-3 py-1.5 md:px-4">
+                  <Control
+                    label="Previous"
+                    keys={[]}
+                    icon={<ChevronLeftIcon aria-hidden className="size-4" />}
+                    disabled={!onPrevious}
+                    onClick={() => onPrevious?.()}
+                  />
+                  <Control
+                    label="Next"
+                    keys={[]}
+                    icon={<ChevronRightIcon aria-hidden className="size-4" />}
+                    iconAfter
+                    disabled={!onNext}
+                    onClick={() => onNext?.()}
+                    className="phone:order-3"
+                  />
+                </ControlBar>
+              ) : null}
+            </AboveToasts>
           </KeyLayer>
         </Base.Popup>
       </Base.Portal>

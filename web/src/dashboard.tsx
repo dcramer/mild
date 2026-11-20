@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
-import { SiftStatus, UsageDetail } from '@/components/status.tsx';
+import { SiftStatus, UsageDetail, useNow } from '@/components/status.tsx';
 import { api, useLoaded, useOnline } from '@/lib/api.ts';
 import { serverBuild } from '@/lib/build.ts';
 import { useKeptPlace } from '@/lib/place.ts';
@@ -18,6 +18,7 @@ import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
 import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
 import { useStarted } from '@/system/started.ts';
 import { useHidden } from '@/lib/action.ts';
+import { ahead } from '@/lib/format.ts';
 import { subscription } from '@/lib/prices.ts';
 import { startTelemetry } from '@/lib/telemetry.ts';
 import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, rowHolding, useGoing } from '@/system';
@@ -164,6 +165,9 @@ function useStartsOn(inbox: boolean | null) {
   }, [inbox, start, router]);
 }
 
+/** How long before Google ends a sign-in the page says so: two days, so someone who looks in once a day sees it. */
+const SIGN_IN_WARNING_MS = 2 * 86_400_000;
+
 /** Data a screen or panel has none of yet: a search, a sender's page, a message just opened. Not a list read again. */
 const firstLoad = { predicate: (query: { state: { data: unknown } }) => query.state.data === undefined };
 
@@ -199,6 +203,16 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const mailbox = useChosenMailbox(mailboxes);
   const inMailbox = useLoaded('manage', (signal) => api.manage(signal), 60_000, mailbox);
   const expired = manage.data?.activity.expired ?? [];
+  const now = useNow(60_000);
+  // The soonest sign-in Google will end within the warning, so it is renewed before Sift stops reading that mailbox.
+  const ending =
+    now === null
+      ? undefined
+      : (manage.data?.accounts ?? [])
+          .flatMap((a) =>
+            a.signInEnds !== null && a.signInEnds > now && a.signInEnds - now < SIGN_IN_WARNING_MS ? [{ email: a.email, at: a.signInEnds }] : [],
+          )
+          .toSorted((a, b) => a.at - b.at)[0];
   const here = useHere();
   // Each opening is a reader of its own, with a history entry of its own, so Back returns to the list.
   const [opened, setOpened] = useState(0);
@@ -243,6 +257,10 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
     // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
     <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
       Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}
+    </Notice>
+  ) : ending && now !== null ? (
+    <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
+      Google sign-in{ending.email === name ? '' : ` for ${ending.email}`} ends {ahead(ending.at, now)}
     </Notice>
   ) : null;
   const status = (stacked: boolean) => (manage.data ? <SiftStatus accounts={accounts} usage={usage.data} plan={plan} stacked={stacked} /> : null);

@@ -86,7 +86,9 @@ test('the service worker keeps only the built files a page it keeps names', asyn
   await page.reload();
   const chunks = async () => (await kept()).filter((path) => path.startsWith('/_next/static/chunks/'));
   await expect.poll(async () => (await chunks()).length).toBeGreaterThan(0);
-  const current = await kept();
+  // What the page as served names. Next also prefetches other screens' files, which are kept until a prune drops them.
+  const html = await (await page.request.get('/sender')).text();
+  const current = (await kept()).filter((path) => path === '/sender' || html.includes(path));
   // What an older build of Sift left.
   await page.evaluate(`(async () => (await caches.open((await caches.keys())[0])).put('/_next/static/chunks/older-build.js', new Response('')))()`);
   await expect.poll(kept).toContain('/_next/static/chunks/older-build.js');

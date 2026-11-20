@@ -5,6 +5,7 @@ import { useBackCloses } from '@/lib/params.ts';
 import { cn } from '@/lib/utils';
 import { KeyLayer } from './keys.tsx';
 import { Backdrop, LayerContent, LayerFooter, useLayerOpen } from './layer.tsx';
+import { AboveToasts } from './toast.tsx';
 
 /**
  * Something opened from the page and read or answered without leaving it: one message, one sender, a
@@ -43,7 +44,11 @@ export function Dialog({
             <LayerContent title={title} subtitle={subtitle}>
               {children}
             </LayerContent>
-            {footer ? <LayerFooter>{footer}</LayerFooter> : null}
+            {footer ? (
+              <AboveToasts>
+                <LayerFooter>{footer}</LayerFooter>
+              </AboveToasts>
+            ) : null}
           </KeyLayer>
         </Base.Popup>
       </Base.Portal>

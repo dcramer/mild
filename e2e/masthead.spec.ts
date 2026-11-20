@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import type { ManageState } from '../src/dashboard/types.ts';
 import { boxOf, expect, PHONE, patchJson, pointAt, senderPage, settings, sideScroll, test, tooltip } from './sift.ts';
 
 test.describe('When a Google sign-in expired', () => {
@@ -22,6 +23,31 @@ test.describe('When a Google sign-in expired', () => {
     await expect(page.getByRole('link', { name: 'Reconnect' }).filter({ visible: true })).toHaveAttribute(
       'href',
       `/auth/login?to=${encodeURIComponent('/rules/r-1')}`,
+    );
+  });
+
+  const HOUR = 3_600_000;
+  const DAY = 24 * HOUR;
+
+  test('one Google will end within two days says when, with Reconnect, before it does', async ({ page }) => {
+    const now = new Date('2026-11-20T12:00:00').getTime();
+    let ends = now + 3 * DAY;
+    await patchJson(page, '**/api/manage*', (manage: ManageState) => ({ ...manage, accounts: manage.accounts.map((a) => ({ ...a, signInEnds: ends })) }));
+    await page.clock.install({ time: now });
+    await page.goto('/labels');
+    await expect(page.getByRole('heading', { name: 'Labels', level: 1 })).toBeVisible();
+    const asked = page.waitForResponse('**/api/manage*');
+    await page.clock.runFor(60_000);
+    await asked;
+    await expect(page.getByRole('status').filter({ hasText: 'Google sign-in' })).toHaveCount(0);
+
+    ends = now + DAY + 2 * HOUR;
+    await page.clock.runFor(60_000);
+    await page.clock.resume();
+    await expect(page.getByRole('status').filter({ hasText: 'Google sign-in ends tomorrow at 2:00 PM' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reconnect' }).filter({ visible: true })).toHaveAttribute(
+      'href',
+      `/auth/login?to=${encodeURIComponent('/labels')}`,
     );
   });
 });

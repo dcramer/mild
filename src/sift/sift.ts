@@ -159,7 +159,7 @@ export async function createSift(host: Host): Promise<Sift> {
     allowedHosts: host.allowedHosts,
     forwarded: host.forwarded,
     controls: { ...controls, ...standIns?.inbox },
-    signIn: buildSignIn(config, store),
+    signIn: buildSignIn(config, store, { ephemeral, kick: (person) => tick([person]) }),
     sessionSecret: host.sessionSecret,
     signInAddresses: host.signInAddresses,
     ...(config.settings.cloud ? { cloud: true } : {}),

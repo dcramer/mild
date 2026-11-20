@@ -1,6 +1,6 @@
 {
-  "id": "f1d6c19d-a356-41c1-9173-65dee8c21d2d",
-  "prevId": "1cdc6fe9-d1c5-4775-82e3-c6dc85304084",
+  "id": "1cdc6fe9-d1c5-4775-82e3-c6dc85304084",
+  "prevId": "3adc8a39-c0e1-4bc9-aa75-ea330bf0c913",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -332,7 +332,7 @@
       "checkConstraints": {
         "actions_type": {
           "name": "actions_type",
-          "value": "\"actions\".\"type\" IN ('archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter', 'digest', 'send')"
+          "value": "\"actions\".\"type\" IN ('archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter', 'digest')"
         },
         "actions_status": {
           "name": "actions_status",
@@ -2403,6 +2403,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'[]'::jsonb"
+        },
+        "signed_in_at": {
+          "name": "signed_in_at",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weekly_sign_in": {
+          "name": "weekly_sign_in",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "can_send": {
           "name": "can_send",

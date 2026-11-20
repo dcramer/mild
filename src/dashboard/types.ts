@@ -828,6 +828,8 @@ export const ManageState = z.object({
       primary: z.boolean(),
       canSend: z.boolean(),
       aliases: z.array(z.string()),
+      /** When Google will end its sign-in, known only once one has ended a week after it was given (a client in Testing). */
+      signInEnds: z.number().nullable(),
     }),
   ),
   /** In order. */

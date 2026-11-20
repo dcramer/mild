@@ -8,7 +8,7 @@ import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
 import type { Highlighter } from '../triage/digest.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
-import { type Account, lastSyncedAt, listAccounts, listUsers, mailboxesOf } from '../store/accounts.ts';
+import { type Account, lastSyncedAt, listAccounts, listUsers, mailboxesOf, signInEnded, signInHeld } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
 import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
 import { latestArrival, listUndecided } from '../store/messages.ts';
@@ -298,11 +298,13 @@ async function passWanted(db: Sql, account: Account, options: RunOptions): Promi
     if (last && now - last.at <= lookGap(arrived === null ? null : now - arrived) - TICK_MS) return false;
     const { api } = await options.connect(db, account);
     const wanted = await syncWants(db, api, account);
+    await signInHeld(db, account.id, now);
     if (last?.expired || wanted) return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // Any other error the pass meets too, and reports.
     if (!message.includes('invalid_grant')) return true;
+    await signInEnded(db, account.id, now);
     if (!last?.expired) options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
     await recordPassStatus(options.ephemeral, account.id, { at: now, error: message, expired: true });
     return false;
@@ -386,6 +388,7 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     // Google's answer when a refresh token is no longer good; an app left in Testing does this every 7 days.
     if (result.error.includes('invalid_grant')) {
       result.expired = true;
+      await signInEnded(db, account.id, (options.now ?? Date.now)());
       options.log(`${account.email}: Google sign-in has expired. Sign in to the dashboard again.`);
     } else {
       reportError(error);

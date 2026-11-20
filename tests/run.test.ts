@@ -12,7 +12,7 @@ import { userChanges } from '../src/learn/gmail.ts';
 import { insertPendingAction, lastStandingChange } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { passStatus } from '../src/work/status.ts';
-import { connectAccount, deleteUser, recordSync, removeMailbox } from '../src/store/accounts.ts';
+import { TESTING_SIGN_IN_MS, connectAccount, deleteUser, recordSync, removeMailbox, signInEnds, signedIn } from '../src/store/accounts.ts';
 import { freshStore, modelRun, onePerson, openUserDb, raw, withReason } from './fixtures.ts';
 import { addLabels, updateLabel } from '../src/store/labels.ts';
 import { listUndecided } from '../src/store/messages.ts';
@@ -209,6 +209,7 @@ describe('runOnce', () => {
   });
 
   it('says when the failure is an expired Google sign-in, which no retry fixes', async () => {
+    await signedIn(db, ACCOUNT, 5000 - TESTING_SIGN_IN_MS);
     const [failed] = await runOnce(await active(false), {
       ...options(),
       connect: () => {
@@ -217,6 +218,8 @@ describe('runOnce', () => {
     });
     expect(failed).toMatchObject({ error: 'invalid_grant', expired: true });
     expect(logs).toEqual([expect.stringContaining('Google sign-in has expired')]);
+    // Ended a week after it was given: the next will be too.
+    expect(await signInEnds(db)).toEqual(new Map([[ACCOUNT, 5000]]));
 
     const [other] = await runOnce(await active(false), {
       ...options(),
