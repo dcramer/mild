@@ -723,6 +723,11 @@ export class FakeGoogle {
     return this.grants.has(refreshToken);
   }
 
+  /** How many sign-ins to the mailbox Google still honours: one revoked is gone. */
+  grantsFor(address: string): number {
+    return [...this.grants.values()].filter((g) => g.address === address).length;
+  }
+
   /** All it holds, to be put back by `restore` in another process (the browser tests' server). */
   save() {
     return { mailboxes: [...this.mailboxes.values()].map((m) => m.save()), grants: [...this.grants], issued: this.issued };

@@ -239,9 +239,10 @@ export async function buildControls(
     },
     putBack: async (db, accountId, messageId) => {
       const last = await lastStandingChange(db, accountId, messageId);
-      if (last) await undo({ db, mailbox: (await gmail(db, accountId)).mailbox }, last.id);
+      const outcome = last ? await undo({ db, mailbox: (await gmail(db, accountId)).mailbox }, last.id) : null;
       // The corrected decision is waiting to be carried out; do it now, not at the next interval.
       await passNow(db);
+      if (outcome?.status === 'failed' || outcome?.status === 'unknown') throw new Refusal(outcome.reason);
     },
     startEval: async (db, request) => {
       const tier = await openModelTier(config, live.ephemeral, db);

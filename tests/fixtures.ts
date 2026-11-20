@@ -4,6 +4,7 @@ import { type IncomingMessage, type ServerResponse, createServer, request } from
 import { Readable } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
+import { type FauxResponseStep, createModels, fauxProvider } from '@earendil-works/pi-ai';
 import { afterAll, afterEach, beforeAll, beforeEach, inject, onTestFinished } from 'vitest';
 import { type DashboardOptions, createDashboard } from '../src/dashboard/server.ts';
 import type { People } from '../src/store/people.ts';
@@ -11,14 +12,16 @@ import { PARSERS, pglite } from '../src/store/db.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { type Store, storeOn } from '../src/store/store.ts';
 import { type Keyring, loadKeyring } from '../src/secrets.ts';
-import { type Account, connectAccount, listAccounts, recordSync } from '../src/store/accounts.ts';
+import { type Account, connectAccount, listAccounts, recordSync, userOf } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { setRuleFilter } from '../src/store/filters.ts';
 import { addRule } from '../src/store/rules.ts';
+import { addLabels } from '../src/store/labels.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { conditionsHash } from '../src/store/content.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
 import type { Usage } from '../src/triage/stages/model.ts';
+import type { Decision } from '../src/triage/types.ts';
 import { ACCOUNT, tempDir, withSampleLabels } from './helpers.ts';
 import { FakeGoogle, SECRETS, serveGoogle } from './google.ts';
 import { loadConfig } from '../src/config.ts';
@@ -365,6 +368,17 @@ export function fakeGoogle(): { readonly google: FakeGoogle } {
 
 const SITE = 'http://localhost:3000';
 
+/** Every `/api/` route a `startSift` browser in this test file was answered 200 by, as `GET /api/rules`. */
+export const answeredRoutes = new Set<string>();
+
+/** pi-ai's faux provider as the person's model, for `startSift`: `answers` queues what its next calls reply, one a call. */
+export function fauxModel(): { chosen: ChosenModel; answers: (...replies: FauxResponseStep[]) => void } {
+  const faux = fauxProvider();
+  const models = createModels();
+  models.setProvider(faux.provider);
+  return { chosen: { spec: 'faux/model', models, model: faux.getModel(), reasoning: 'low' }, answers: (...replies) => faux.setResponses(replies) };
+}
+
 /** One browser's view of the app: its own cookies, and what each call answered. */
 export type Browser = Awaited<ReturnType<Awaited<ReturnType<typeof startSift>>['browser']>>;
 
@@ -374,8 +388,8 @@ export type Browser = Awaited<ReturnType<Awaited<ReturnType<typeof startSift>>['
  * it, as a Workflow run would after the request answered. `browser()` is a browser with nobody signed in; `signIn` signs one
  * in through Google's consent screen as a mailbox: a new person, or with `addTo`, another mailbox of whoever that browser is.
  */
-export async function startSift(google: FakeGoogle, options: { model?: ChosenModel; keys?: Keyring; now?: () => number } = {}) {
-  const config = loadConfig({ SIFT_HOME: tempDir() });
+export async function startSift(google: FakeGoogle, options: { model?: ChosenModel; keys?: Keyring; now?: () => number; env?: Record<string, string> } = {}) {
+  const config = loadConfig({ SIFT_HOME: tempDir(), ...options.env });
   installClient(config, JSON.stringify({ web: { client_id: SECRETS.clientId, client_secret: SECRETS.clientSecret } }));
   const store = await freshStore(options.keys);
   const queued: Work[] = [];
@@ -418,6 +432,7 @@ export async function startSift(google: FakeGoogle, options: { model?: ChosenMod
         if (value === '' || /max-age=0/i.test(set)) cookies.delete(name);
         else cookies.set(name, value);
       }
+      if (response.status === 200 && path.startsWith('/api/')) answeredRoutes.add(`${method} ${new URL(path, SITE).pathname}`);
       const text = await response.text();
       let parsed: Record<string, unknown> = {};
       try {
@@ -439,6 +454,15 @@ export async function startSift(google: FakeGoogle, options: { model?: ChosenMod
     return { call, signIn };
   };
 
+  const signedIn = async (address: string) => {
+    const b = browser();
+    await b.signIn(address);
+    return b;
+  };
+  const work = async () => {
+    while (queued.length > 0) await sift.work(queued.shift()!);
+  };
+  const db = async (address: string) => await store.user((await userOf(store.central, address))!.id);
   return {
     sift,
     store,
@@ -446,14 +470,38 @@ export async function startSift(google: FakeGoogle, options: { model?: ChosenMod
     queued,
     browser,
     /** A browser signed in as a new person with this mailbox, the first of whom owns the install. */
-    signedIn: async (address: string) => {
-      const b = browser();
-      await b.signIn(address);
+    signedIn,
+    /**
+     * `signedIn`, with a label of their own (Receipts, archived) put in their record, without which Sift reads nothing of
+     * their Gmail, and the work signing in began done.
+     */
+    settled: async (address: string) => {
+      const b = await signedIn(address);
+      await addLabels(await db(address), [{ name: 'Receipts', description: 'Receipts and order confirmations.', disposition: 'archive' }]);
+      await work();
       return b;
     },
+    /** The database of whoever has this mailbox: to seed what Sift would have recorded, such as the model's answer about a message. */
+    db,
+    /**
+     * The model's answer that a message a pass recorded is `labelId`, recorded as a pass with Sift off records it: a
+     * suggestion, waiting on the person. A pass here has no model of its own.
+     */
+    judged: async (address: string, messageId: string, labelId: string, disposition: Decision['disposition'] = 'archive') =>
+      await recordDecision(await db(address), address, messageId, {
+        stage: 'model',
+        disposition,
+        labelId,
+        subscription: 'preserve',
+        reason: 'The model read it as this label.',
+        confidence: 0.9,
+      }),
     /** Do the work that was begun, and what it begins in turn, until none is left. */
-    work: async () => {
-      while (queued.length > 0) await sift.work(queued.shift()!);
+    work,
+    /** The next tick: begin what is due, and do it. */
+    tick: async () => {
+      await sift.tick();
+      await work();
     },
   };
 }
