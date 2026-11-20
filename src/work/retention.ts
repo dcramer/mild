@@ -21,7 +21,7 @@ import {
   not,
   or,
   sql,
-  suggestionBodies,
+  readBodies,
 } from '../store/query.ts';
 
 /**
@@ -127,9 +127,9 @@ export async function pruneOld(db: Sql, now: number = Date.now()): Promise<numbe
     // A mailbox at a time, each table in one statement: a narrowed window can let go of many thousands at once.
     for (const [accountId, rows] of Map.groupBy(going, (m) => m.accountId)) {
       const ids = rows.map((m) => m.id);
-      const of = (t: typeof suggestionBodies | typeof mailBodies | typeof actions | typeof decisions | typeof modelRuns) =>
+      const of = (t: typeof readBodies | typeof mailBodies | typeof actions | typeof decisions | typeof modelRuns) =>
         and(eq(t.accountId, accountId), inArray(t.messageId, ids));
-      await tx.delete(suggestionBodies).where(of(suggestionBodies));
+      await tx.delete(readBodies).where(of(readBodies));
       await tx.delete(mailBodies).where(of(mailBodies));
       await tx.delete(actions).where(of(actions));
       await tx.delete(feedback).where(inArray(feedback.decisionId, tx.select({ id: decisions.id }).from(decisions).where(of(decisions))));

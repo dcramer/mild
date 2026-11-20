@@ -300,7 +300,7 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
       decision,
     ],
     [`INSERT INTO examples (account_id, message_id, label_id, marked_at) VALUES (?, ?, 'newsletter', 0)`, account, message],
-    [`INSERT INTO suggestion_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
+    [`INSERT INTO read_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
     [`INSERT INTO mail_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
     [`INSERT INTO model_runs (account_id, message_id, model, started_at, error) VALUES (?, ?, 'p/m', 0, 'e')`, account, message],
     [`INSERT INTO label_proposals (account_id, started_at, model, goal) VALUES (?, 0, 'p/m', 'g')`, account],

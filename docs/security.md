@@ -4,7 +4,7 @@ How Sift keeps one person's mail from anyone else. Decided 2026-11-15 for Sift o
 
 ## Hold as little as possible
 
-Everything stored or sent anywhere (a column, a log line, telemetry, what the model provider is sent) has a reason, a lifetime and a form from the table below; anything without a reason goes. Message text and HTML are kept in two places only: mail the person answered for, until they delete it or for a year, and the text of mail waiting on them, until they answer it and for at most 30 days.
+Everything stored or sent anywhere (a column, a log line, telemetry, what the model provider is sent) has a reason, a lifetime and a form from the table below; anything without a reason goes. Message text and HTML are kept in three places only: mail the person answered for, until they delete it or for a year; what Sift read of a message, for 30 days from reading, so it is not read from Gmail again; and, while they have Inbox on, their mail within the window they chose.
 
 ## What is stored, and how
 

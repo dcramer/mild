@@ -1,4 +1,4 @@
-import { actions, and, asc, decisions, eq, examples, feedback, mailBodies, messages, modelRuns, sql, suggestionBodies } from '../../store/query.ts';
+import { actions, and, asc, decisions, eq, examples, feedback, mailBodies, messages, modelRuns, sql, readBodies } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt, openPayload } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
@@ -108,9 +108,9 @@ async function storedBody(db: Sql, accountId: string, messageId: string): Promis
     .where(and(eq(mailBodies.accountId, accountId), eq(mailBodies.messageId, messageId)));
   if (whole) return { text: openPart(db, accountId, messageId, 'text', whole.text)!, html: openPart(db, accountId, messageId, 'html', whole.html) };
   const [held] = await db
-    .select({ text: suggestionBodies.bodyText, html: suggestionBodies.bodyHtml })
-    .from(suggestionBodies)
-    .where(and(eq(suggestionBodies.accountId, accountId), eq(suggestionBodies.messageId, messageId)));
+    .select({ text: readBodies.bodyText, html: readBodies.bodyHtml })
+    .from(readBodies)
+    .where(and(eq(readBodies.accountId, accountId), eq(readBodies.messageId, messageId)));
   if (held) return { text: openPart(db, accountId, messageId, 'text', held.text)!, html: openPart(db, accountId, messageId, 'html', held.html) };
   const [kept] = await db
     .select({ text: examples.bodyText, html: examples.bodyHtml })

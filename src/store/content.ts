@@ -27,7 +27,7 @@ import {
   ruleFilters,
   rules,
   sql,
-  suggestionBodies,
+  readBodies,
 } from './query.ts';
 import { type RuleMatch, tidyMatch } from '../triage/stages/rules.ts';
 import { searchIndex } from './search.ts';
@@ -390,16 +390,16 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
   const touched = new Set<string>();
   const bodies = [
     {
-      table: suggestionBodies,
+      table: readBodies,
       rows: await db
         .select({
-          accountId: suggestionBodies.accountId,
-          messageId: suggestionBodies.messageId,
-          text: suggestionBodies.bodyText,
-          html: suggestionBodies.bodyHtml,
+          accountId: readBodies.accountId,
+          messageId: readBodies.messageId,
+          text: readBodies.bodyText,
+          html: readBodies.bodyHtml,
         })
-        .from(suggestionBodies)
-        .where(or(notLike(suggestionBodies.bodyText, `${prefix}%`), notLike(suggestionBodies.bodyHtml, `${prefix}%`))),
+        .from(readBodies)
+        .where(or(notLike(readBodies.bodyText, `${prefix}%`), notLike(readBodies.bodyHtml, `${prefix}%`))),
     },
     {
       table: examples,

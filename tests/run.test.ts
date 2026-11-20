@@ -297,7 +297,7 @@ describe('a tick', () => {
     const limited: RunOptions = { ...options(), connect: () => ({ api: reading(), mailbox }), now: () => clock, model: slow };
     expect(await workDue(store, limited, 500)).toMatchObject([{ unfinished: true }]);
     expect(read).toEqual(['ada']);
-    expect(await raw(own).all('SELECT message_id, body_text FROM suggestion_bodies')).toEqual([{ message_id: 'ada', body_text: 'sift-plain:Body ada' }]);
+    expect(await raw(own).all('SELECT message_id, body_text FROM read_bodies')).toEqual([{ message_id: 'ada', body_text: 'sift-plain:Body ada' }]);
   });
 
   it('fetches the text of mail left waiting by an earlier pass while every pass runs out of time', async () => {
@@ -317,11 +317,11 @@ describe('a tick', () => {
     backlog('b2');
     expect(await workDue(store, limited, 500)).toMatchObject([{ unfinished: true }]);
     expect(await raw(own).all("SELECT message_id FROM decisions WHERE stage = 'rules'")).toEqual([{ message_id: 'news' }]);
-    expect(await raw(own).all("SELECT message_id FROM suggestion_bodies WHERE message_id = 'news'")).toEqual([]);
+    expect(await raw(own).all("SELECT message_id FROM read_bodies WHERE message_id = 'news'")).toEqual([]);
     backlog('b3');
     backlog('b4');
     expect(await workDue(store, limited, 500)).toMatchObject([{ unfinished: true }]);
-    expect(await raw(own).all("SELECT body_text FROM suggestion_bodies WHERE message_id = 'news'")).toEqual([{ body_text: 'sift-plain:Body news' }]);
+    expect(await raw(own).all("SELECT body_text FROM read_bodies WHERE message_id = 'news'")).toEqual([{ body_text: 'sift-plain:Body news' }]);
   });
 
   it('goes through an inbox it was asked to, until it is all done', async () => {

@@ -19,7 +19,7 @@ import {
   not,
   or,
   sql,
-  suggestionBodies,
+  readBodies,
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { listAccounts } from '../../store/accounts.ts';
@@ -311,7 +311,7 @@ async function previewsOf(db: Sql, wanted: readonly (readonly [string, string])[
   if (wanted.length === 0) return previews;
   const ids = [...new Set(wanted.map(([, id]) => id))];
   const keys = new Set(wanted.map(([account, id]) => `${account}\n${id}`));
-  for (const table of [suggestionBodies, mailBodies]) {
+  for (const table of [readBodies, mailBodies]) {
     const rows = await db
       .select({ accountId: table.accountId, messageId: table.messageId, text: table.bodyText })
       .from(table)

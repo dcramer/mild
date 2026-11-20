@@ -1,10 +1,11 @@
-import { and, count, eq, isNull, mailBodies, messages, preferences, sql, suggestionBodies } from './query.ts';
+import { and, count, eq, inArray, isNull, lt, mailBodies, messages, notExists, preferences, readBodies, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import { openEnvelope, openPart, sealFacts, sealMessage, sealPart } from './content.ts';
 import { type Searched, searchIndex } from './search.ts';
 import { plain } from '../plain.ts';
 import { mailboxAliases } from './accounts.ts';
 import { type ContentFacts, deriveFacts } from '../triage/facts.ts';
+import { heldContent } from '../gmail/body.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 /**
@@ -95,6 +96,68 @@ export async function keepText(db: Sql, accountId: string, messageId: string, te
   return kept === true;
 }
 
+/**
+ * How long the text of a message read with Inbox off is kept from when it was read: what a model call tried again, an answer
+ * or a look in For review needs within a month, with no second read of Gmail. Past it, an answer is kept without the text.
+ */
+export const READ_KEEP_DAYS = 30;
+
+/**
+ * Keep the text of a message Sift read whole with Inbox off, for `READ_KEEP_DAYS`, and add what reading it showed to its facts,
+ * which also says it was read (`neverRead`). Safe to repeat.
+ */
+export async function keepRead(db: Sql, accountId: string, messageId: string, text: Text, now: number): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(readBodies)
+      .values({
+        accountId,
+        messageId,
+        bodyText: sealPart(tx, accountId, messageId, 'text', text.text)!,
+        bodyHtml: sealPart(tx, accountId, messageId, 'html', text.html),
+        fetchedAt: now,
+      })
+      .onConflictDoNothing();
+    await tx
+      .update(messages)
+      .set({ facts: sql`${messages.facts} || ${JSON.stringify(text.read)}::jsonb` })
+      .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+  });
+}
+
+/** Delete the text of mail read before `cutoff`, every mailbox's. Returns how many went. */
+export async function purgeRead(db: Sql, cutoff: number): Promise<number> {
+  return (await db.delete(readBodies).where(lt(readBodies.fetchedAt, cutoff)).returning({ id: readBodies.messageId })).length;
+}
+
+/**
+ * Of `ids`, the recorded messages Sift has never read whole: no text held, and no fact only the whole message gives. One read
+ * of them is their first.
+ */
+export async function neverRead(db: Sql, accountId: string, ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const none = (table: typeof readBodies | typeof mailBodies) =>
+    notExists(
+      db
+        .select({ one: sql`1` })
+        .from(table)
+        .where(and(eq(table.accountId, messages.accountId), eq(table.messageId, messages.id))),
+    );
+  const rows = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.accountId, accountId),
+        inArray(messages.id, [...ids]),
+        sql`${messages.facts} -> 'hasAttachments' IS NULL`,
+        none(readBodies),
+        none(mailBodies),
+      ),
+    );
+  return rows.map((r) => r.id);
+}
+
 /** Fewer than this and an average says more about those messages than about the person's mail. */
 const ENOUGH = 20;
 
@@ -102,7 +165,7 @@ const ENOUGH = 20;
 export async function keptSize(db: Sql): Promise<number | null> {
   let bytes = 0;
   let n = 0;
-  for (const table of [mailBodies, suggestionBodies]) {
+  for (const table of [mailBodies, readBodies]) {
     const [row] = await db
       .select({
         bytes: sql<number>`coalesce(sum(octet_length(${table.bodyText}) + coalesce(octet_length(${table.bodyHtml}), 0)), 0)`.mapWith(Number),
@@ -118,22 +181,36 @@ export async function keptSize(db: Sql): Promise<number | null> {
 const READ = ['hasAttachments', 'words', 'trackingPixel', 'linkHosts', 'trackedLinks', 'linksOffDomain'] as const;
 
 /**
- * Inbox's copy of a recorded message's text, so reading it costs Gmail nothing, with what reading it whole showed. Null when
- * there is none. Not the text kept of mail waiting on the person, which is only the model's share of it.
+ * The text Sift holds of a recorded message, so reading it costs Gmail nothing, with what reading it whole showed: Inbox's copy,
+ * or else what it read with Inbox off in the last `READ_KEEP_DAYS`. Null when it holds none; empty when the message had gone.
  */
 export async function heldText(db: Sql, accountId: string, messageId: string): Promise<Text | null> {
-  const [row] = await db
-    .select({ text: mailBodies.bodyText, html: mailBodies.bodyHtml, facts: messages.facts })
-    .from(mailBodies)
-    .innerJoin(messages, and(eq(messages.accountId, mailBodies.accountId), eq(messages.id, mailBodies.messageId)))
-    .where(and(eq(mailBodies.accountId, accountId), eq(mailBodies.messageId, messageId)));
-  if (!row) return null;
-  const read: Record<string, unknown> = { hasAttachments: false };
-  for (const key of READ) if (row.facts[key] !== undefined) read[key] = row.facts[key];
+  for (const table of [mailBodies, readBodies]) {
+    const [row] = await db
+      .select({ text: table.bodyText, html: table.bodyHtml, facts: messages.facts })
+      .from(table)
+      .innerJoin(messages, and(eq(messages.accountId, table.accountId), eq(messages.id, table.messageId)))
+      .where(and(eq(table.accountId, accountId), eq(table.messageId, messageId)));
+    if (!row) continue;
+    const read: Record<string, unknown> = { hasAttachments: false };
+    for (const key of READ) if (row.facts[key] !== undefined) read[key] = row.facts[key];
+    return {
+      text: plain(openPart(db, accountId, messageId, 'text', row.text)) ?? '',
+      html: plain(openPart(db, accountId, messageId, 'html', row.html)),
+      read: read as unknown as ContentFacts,
+    };
+  }
+  return null;
+}
+
+/** What an example keeps of a message's held text, sealed: the model's share of it and its HTML. Null when none is held. */
+export async function exampleText(db: Sql, accountId: string, messageId: string): Promise<{ bodyText: string; bodyHtml: string | null } | null> {
+  const held = await heldText(db, accountId, messageId);
+  // A message gone from Gmail was kept empty.
+  if (!held || (held.text === '' && held.html === null)) return null;
   return {
-    text: plain(openPart(db, accountId, messageId, 'text', row.text)) ?? '',
-    html: plain(openPart(db, accountId, messageId, 'html', row.html)),
-    read: read as unknown as ContentFacts,
+    bodyText: sealPart(db, accountId, messageId, 'text', heldContent(held.text, held.html, held.read).text)!,
+    bodyHtml: sealPart(db, accountId, messageId, 'html', held.html),
   };
 }
 

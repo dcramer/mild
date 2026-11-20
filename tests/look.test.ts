@@ -217,15 +217,15 @@ describe('the timed tick', () => {
     expect(await timedTickPasses()).toBe(false);
   });
 
-  it('begins one for the text of mail waiting on the person, to keep or to let go', async () => {
+  it('begins one for the text of mail waiting on the person that Sift never read, and none once read', async () => {
     await recordDecision(db, ACCOUNT, 'news', decision('archive'), { now: clock });
     expect(await timedTickPasses()).toBe(true);
     await workDue(store, options(), Infinity);
-    expect(await raw(db).all('SELECT message_id FROM suggestion_bodies')).toEqual([{ message_id: 'news' }]);
+    expect(await raw(db).all('SELECT message_id FROM read_bodies')).toEqual([{ message_id: 'news' }]);
     expect(await timedTickPasses()).toBe(false);
-    // Decided again, to be carried out once Sift is on: it no longer waits on the person, and its text is to go.
-    await recordDecision(db, ACCOUNT, 'news', decision('archive'), { carryOut: true, now: clock });
-    expect(await timedTickPasses()).toBe(true);
+    // Decided again: its text stays for its month, and nothing is due for it.
+    await recordDecision(db, ACCOUNT, 'news', decision('archive'), { now: clock });
+    expect(await timedTickPasses()).toBe(false);
   });
 
   it('begins one for a marked message to store as an example', async () => {

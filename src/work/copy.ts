@@ -4,7 +4,7 @@ import type { GmailApi } from '../gmail/api.ts';
 import { NOT_MAIL, toFacts } from '../gmail/sync.ts';
 import { type MailCopy, advanceCopy, goingCopy } from '../store/copies.ts';
 import { isOwnDigest, knownDigests } from '../store/digests.ts';
-import { keepText, recordKept } from '../store/kept.ts';
+import { heldText, keepText, recordKept } from '../store/kept.ts';
 import { textOf } from './bodies.ts';
 import { QUOTA_PER_MINUTE } from '../gmail/quota.ts';
 import { type MailWindow, windowStart } from '../mail-window.ts';
@@ -51,7 +51,7 @@ async function recorded(db: Sql, accountId: string, ids: readonly string[]) {
 /**
  * Go on copying one mailbox for Inbox, a page of Gmail's listing at a time, newest first, starting nothing after `until`.
  * Each message new to the record is read whole once (60 units) and recorded with its text, never triaged (`recordKept`);
- * one recorded without its text has the text read. What is in the inbox and recorded is left to the pass, which keeps its
+ * one recorded without its text has the text read, unless Sift read it in the last month. What is in the inbox and recorded is left to the pass, which keeps its
  * text newest first too (`keepMailBodies`), so the two never read the same message. A page cut short is listed again and
  * what it recorded is passed over, so a crash or a failed step loses nothing. Stops once Inbox is off: every write checks.
  * Returns how many messages it read, or null when there is no copy going.
@@ -76,7 +76,8 @@ export async function copyMail(
       if (out()) return read;
       let kept: boolean;
       if (state) {
-        kept = await keepText(db, accountId, id, textOf(await api.getContent(id)), now());
+        // Read with Inbox off in the last month: moved, not read again.
+        kept = await keepText(db, accountId, id, (await heldText(db, accountId, id)) ?? textOf(await api.getContent(id)), now());
       } else {
         const whole = await api.getMessage(id);
         const facts = whole && !whole.raw.labelIds.some((l) => NOT_MAIL.includes(l)) ? toFacts(accountId, whole.raw) : null;

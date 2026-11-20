@@ -1,4 +1,4 @@
-import { type SQL, and, asc, decisions, desc, eq, inArray, lt, lte, max, messages, notExists, or, sql, suggestionBodies } from './query.ts';
+import { type SQL, and, asc, decisions, desc, eq, inArray, lte, max, messages, notExists, or, sql } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
@@ -103,11 +103,11 @@ export async function storedFacts(db: Sql, accountId: string, messageId: string)
   return row ? openFacts(row.facts, plain(openEnvelope(db, accountId, messageId, { headers: row.headers }).headers)) : null;
 }
 
-/** Replace a message's recorded facts, once reading the whole message has added to them. */
+/** Add to a message's recorded facts what reading the whole message or its thread showed. What an earlier read showed stays. */
 export async function recordFacts(db: Sql, accountId: string, messageId: string, facts: Facts): Promise<void> {
   await db
     .update(messages)
-    .set({ facts: sealFacts(facts) })
+    .set({ facts: sql`${messages.facts} || ${JSON.stringify(sealFacts(facts))}::jsonb` })
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 
@@ -178,11 +178,6 @@ export async function recordLabels(db: Sql, accountId: string, messageId: string
     .update(messages)
     .set({ labelIds: [...labelIds] })
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
-}
-
-/** Delete the text of waiting mail fetched before `cutoff`, every mailbox's. Returns how many went. */
-export async function purgeSuggestionBodies(db: Sql, cutoff: number): Promise<number> {
-  return (await db.delete(suggestionBodies).where(lt(suggestionBodies.fetchedAt, cutoff)).returning({ id: suggestionBodies.messageId })).length;
 }
 
 /** Facts that hold a name or null: `true` or `false` against one asks whether there is a name. */

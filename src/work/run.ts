@@ -2,8 +2,7 @@ import type { Sql } from '../store/sql.ts';
 import { reconcile, reconcileDue } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
-import { type MessageContent, heldContent } from '../gmail/body.ts';
-import { heldText, indexKept, searchDue } from '../store/kept.ts';
+import { READ_KEEP_DAYS, indexKept, purgeRead, searchDue } from '../store/kept.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
@@ -12,10 +11,10 @@ import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { type Account, lastSyncedAt, listAccounts, listUsers, mailboxesOf } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';
 import { EXAMPLE_KEEP_DAYS, pruneExamples } from '../store/examples.ts';
-import { latestArrival, listUndecided, purgeSuggestionBodies } from '../store/messages.ts';
+import { latestArrival, listUndecided } from '../store/messages.ts';
 import { listUnsettledDecisions } from '../store/decisions.ts';
 import { preferences } from '../store/preferences.ts';
-import { KEEP_BODY_DAYS, bodiesDue, keepMailBodies, keepSuggestionBodies, mailBodiesDue } from './bodies.ts';
+import { bodiesDue, keepMailBodies, keepWaitingText, mailBodiesDue, readingOnce } from './bodies.ts';
 import { captureExamples, examplesDue } from './examples.ts';
 import { PRUNE_PER_RUN, RETENTION_DAYS, pruneOld } from './retention.ts';
 import { continueEval, goingEvals } from '../learn/evals.ts';
@@ -234,34 +233,6 @@ async function digests(store: Store, db: Sql, person: number, options: RunOption
 }
 
 /**
- * Gmail for one pass, reading each message whole at most once: the model, the examples and the bodies kept
- * for waiting mail share the read, and a message whose text Sift holds is not read from Gmail at all (`heldText`).
- * `held` says which were read from Gmail; a read that failed is asked for again. Held only for the pass.
- */
-function readingOnce(db: Sql, accountId: string, api: GmailApi): { api: GmailApi; held: (messageId: string) => boolean } {
-  const reads = new Map<string, Promise<MessageContent | null>>();
-  const done = new Set<string>();
-  const fromGmail = (messageId: string) => {
-    const read = api.getContent(messageId);
-    read.then(
-      () => done.add(messageId),
-      () => reads.delete(messageId),
-    );
-    return read;
-  };
-  const getContent = (messageId: string) => {
-    let read = reads.get(messageId);
-    if (!read) {
-      read = heldText(db, accountId, messageId).then((text) => (text ? heldContent(text.text, text.html, text.read) : fromGmail(messageId)));
-      reads.set(messageId, read);
-      read.catch(() => reads.delete(messageId));
-    }
-    return read;
-  };
-  return { api: { ...api, getContent }, held: (messageId) => done.has(messageId) };
-}
-
-/**
  * Go on with an inbox run over one mailbox. Applying a rule needs no model: it takes back what Sift did to the
  * mail it replaces, and the pass carries out what it records. Going through the inbox uses what a pass would:
  * its model, Gmail read once per message, and the mailbox only while Sift is on. Without a model it waits; deciding only what rules cover would leave the rest behind it.
@@ -278,7 +249,7 @@ async function goThroughInbox(db: Sql, account: Account, run: number, options: R
   const { active } = await preferences(db);
   const leave = options.unsubscribe;
   const { api: gmail, mailbox } = await options.connect(db, account);
-  const { api, held } = readingOnce(db, account.id, gmail);
+  const api = { ...gmail, ...readingOnce(db, account.id, gmail, options.now) };
   const went = await continueInboxRun(
     {
       db,
@@ -294,9 +265,6 @@ async function goThroughInbox(db: Sql, account: Account, run: number, options: R
     account,
     run,
   );
-  // The text the model read is kept for what is now waiting on the person, and for Inbox; the rest waits for a pass.
-  await keepSuggestionBodies(db, api, account.id, options.now, { held, fetch: false });
-  await keepMailBodies(db, api, account.id, options.now, { held, fetch: false });
   if (went && went.to > went.from) options.log(`${account.email}: went through ${went.to} of ${went.of} in the inbox`);
 }
 
@@ -374,13 +342,14 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
   const result: PassResult = { email: account.email };
   try {
     const { api: gmail, mailbox } = await options.connect(db, account);
-    const { api, held } = readingOnce(db, account.id, gmail);
+    // Every read of a message's text in the pass goes through this, so each is read from Gmail once and kept.
+    const api = { ...gmail, ...readingOnce(db, account.id, gmail, options.now) };
     const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
     if (active) await reconcile(deps, { accountId: account.id });
     result.sync = await syncAccount(db, api, account, options.now, until);
     if (result.sync.unfinished) return finish(result, active, options, true);
-    // Before triage, which takes every pass there is while a backlog lasts: fetched only after it, mail left waiting would never get its text.
-    await keepSuggestionBodies(db, api, account.id, options.now, { fetch: !over() });
+    // Before triage, which takes every pass there is while a backlog lasts: read only after it, mail left waiting would never get its text.
+    if (!over()) await keepWaitingText(db, api, account.id, options.now);
     result.triage = await triageAccount(
       {
         ...deps,
@@ -393,12 +362,11 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
       },
       account,
     );
-    const out = Boolean(result.triage.unfinished) || over();
-    // Out of time, the text the model read is still kept for the mail it left waiting; the rest waits for the next pass.
-    await keepSuggestionBodies(db, api, account.id, options.now, { held, fetch: !out });
+    if (result.triage.unfinished || over()) return finish(result, active, options, true);
+    await keepWaitingText(db, api, account.id, options.now);
     // After triage, unlike waiting mail's: Inbox shows mail as it is, so classifying comes first.
-    await keepMailBodies(db, api, account.id, options.now, { held, fetch: !out });
-    if (out) return finish(result, active, options, true);
+    await keepMailBodies(db, api, account.id, options.now);
+    if (over()) return finish(result, active, options, true);
     result.indexed = await indexKept(db, account.id, INDEX_PER_PASS, over);
     if (over()) return finish(result, active, options, true);
     result.captured = await captureExamples(db, api, account.id);
@@ -469,7 +437,7 @@ export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>):
   const now = (options.now ?? Date.now)();
   const dropped = await pruneExamples(db, now);
   if (dropped > 0) options.log(`Deleted ${dropped} example${dropped === 1 ? '' : 's'} older than ${EXAMPLE_KEEP_DAYS} days`);
-  await purgeSuggestionBodies(db, now - KEEP_BODY_DAYS * DAY_MS);
+  await purgeRead(db, now - READ_KEEP_DAYS * DAY_MS);
   let pruned: number;
   do {
     pruned = await pruneOld(db, now);

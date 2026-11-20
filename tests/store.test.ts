@@ -333,6 +333,25 @@ describe('Inbox turned on before it copied all mail', () => {
   });
 });
 
+describe('the text Sift read', () => {
+  it('kept while mail waited is kept as read text by a migration, as a Postgres server runs it, held to its person', async () => {
+    const { db, run } = await migratedBefore('0069_read_text_is_kept_thirty_days');
+    await db.exec(`
+      INSERT INTO users (id, owner, created_at) VALUES (1, true, 0);
+      INSERT INTO accounts (id, user_id, created_at, "primary") VALUES ('a@example.org', 1, 0, true);
+      INSERT INTO mailboxes (user_id, id) VALUES (1, 'a@example.org');
+      INSERT INTO messages (user_id, account_id, id, thread_id, sender_hash, domain_hash, received_at, headers, synced_at, facts) VALUES
+        (1, 'a@example.org', 'waiting', 't', 's', 'd', 0, 'h', 0, '{}');
+      INSERT INTO suggestion_bodies (user_id, account_id, message_id, body_text, fetched_at) VALUES (1, 'a@example.org', 'waiting', 'sealed', 5);
+    `);
+    await run('0069_read_text_is_kept_thirty_days');
+    expect((await db.query('SELECT user_id, message_id, body_text, fetched_at FROM read_bodies')).rows).toEqual([
+      { user_id: 1, message_id: 'waiting', body_text: 'sealed', fetched_at: 5 },
+    ]);
+    expect((await db.query(`SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname = 'read_bodies'`)).rows).toEqual([{ forced: true }]);
+  });
+});
+
 describe('a model call', () => {
   it('made before calls said which rule they checked is given the rule whose condition it met, by a migration', async () => {
     // On a Postgres server row-level security hid every row from it, so only a machine's install was given them.

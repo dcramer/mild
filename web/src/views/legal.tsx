@@ -35,7 +35,7 @@ export function PrivacyView() {
               For each message in your inbox: its headers (sender, recipients, subject, date, the sender’s authentication results, mailing list and unsubscribe
               headers) and its Gmail labels.
             </li>
-            <li>Its body, only when a model is about to judge it, while it waits for your answer, and once you have answered for it.</li>
+            <li>Its body, once, only when a model is about to judge it, it waits for your answer, or you answer for it.</li>
             <li>
               Whether you have written to a sender, and for a reply, whether you wrote earlier in the thread. No other message’s content is read for this.
             </li>
@@ -47,7 +47,7 @@ export function PrivacyView() {
             <li>A record of every message it reads: the facts from its headers and its subject, not its body.</li>
             <li>Every decision it made and every change it made to your mailbox, so you can see why and undo it.</li>
             <li>Your labels, rules and answers.</li>
-            <li>The text of mail waiting for your answer. It is deleted when you answer, when the message stops waiting, and after 30 days in any case.</li>
+            <li>The text of each message whose body it read, for 30 days from reading it, so it never has to read it again.</li>
             <li>
               The text of each message you answered for, kept as an example that teaches Sift your preferences, until you delete it in the dashboard or the
               period we set for examples ends.

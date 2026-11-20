@@ -27,7 +27,7 @@ import { finishLabelProposal, latestLabelProposal, startLabelProposal } from '..
 import { listProposals } from '../src/store/proposals.ts';
 import { rekeyStore } from '../src/store/rekey.ts';
 import { connectAccount, recordSync } from '../src/store/accounts.ts';
-import { mailBodies, suggestionBodies } from '../src/store/query.ts';
+import { mailBodies, readBodies } from '../src/store/query.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { cachedCorrespondent, domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
@@ -212,7 +212,7 @@ describe('mail', () => {
       '2',
       0,
     );
-    const hold = async (db: Sql, messageId: string, text: string, html: string | null, table: typeof suggestionBodies | typeof mailBodies = suggestionBodies) =>
+    const hold = async (db: Sql, messageId: string, text: string, html: string | null, table: typeof readBodies | typeof mailBodies = readBodies) =>
       await db.insert(table).values({
         accountId: 'alpha@example.org',
         messageId,
@@ -220,7 +220,7 @@ describe('mail', () => {
         bodyHtml: sealPart(db, 'alpha@example.org', messageId, 'html', html),
         fetchedAt: 0,
       });
-    const stored = async (table: 'suggestion_bodies' | 'mail_bodies' = 'suggestion_bodies') =>
+    const stored = async (table: 'read_bodies' | 'mail_bodies' = 'read_bodies') =>
       await raw(plain).all<{ message_id: string; body_text: string; body_html: string | null }>(
         `SELECT message_id, body_text, body_html FROM ${table} ORDER BY message_id`,
       );

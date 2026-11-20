@@ -7,6 +7,7 @@ import type { Sql } from '../src/store/sql.ts';
 import type { ExistingFilter, FilterProposal } from '../src/actions/filters.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
 import type { GmailApi, RawMessage } from '../src/gmail/api.ts';
+import { toFacts } from '../src/gmail/sync.ts';
 import { readContent } from '../src/gmail/body.ts';
 import type { SignIns } from '../src/model/credentials.ts';
 import { recordSync, listAccounts } from '../src/store/accounts.ts';
@@ -425,5 +426,88 @@ export function gmailOf(mail: HeldMail[], added: { id: string; labelIds: string[
     getMessage: async (id) => (calls.push(`whole:${id}`), find(id) ? { raw: raw(find(id)!), content: content(find(id)!) } : null),
     getThread: async () => null,
     listSendAs: async () => [ACCOUNT],
+  };
+}
+
+/**
+ * A Gmail that holds a message's labels where `mailbox` does, and fails a second read of any message: its metadata (20 units)
+ * may be read once and its whole (60) once, and nothing again, as docs/runtime.md expects. `deliver` puts mail in it and in
+ * the next page of history, with the mailbox's own label changes since. `again` lists each read that was not the first of its
+ * kind (`meta:<id>`, `whole:<id>`, `labels:<id>`); `reads` every read of a message or thread, in order, with each search of the
+ * inbox (`search`).
+ */
+export function onceGmail(mailbox: FakeMailbox) {
+  const mail = new Map<string, HeldMail>();
+  const added: { id: string; labelIds: string[] }[] = [];
+  const reads: string[] = [];
+  const again: string[] = [];
+  let cursor = 1;
+  const read = (kind: 'meta' | 'whole' | 'labels' | 'thread', id: string) => {
+    const key = `${kind === 'labels' ? 'meta' : kind}:${id}`;
+    if (kind !== 'thread' && reads.some((r) => r.replace(/^labels:/, 'meta:') === key)) {
+      again.push(`${kind}:${id}`);
+      reads.push(`${kind}:${id}`);
+      throw new Error(`${id} was read from Gmail again`);
+    }
+    reads.push(`${kind}:${id}`);
+    return mail.get(id);
+  };
+  const raw = (m: HeldMail): RawMessage => ({
+    id: m.id,
+    threadId: m.threadId,
+    labelIds: [...(mailbox.labels.get(m.id) ?? [])],
+    internalDate: m.internalDate,
+    headers: m.headers,
+  });
+  const content = (m: HeldMail) => readContent({ mimeType: 'text/plain', body: { data: b64(m.text ?? `Text of ${m.id}.`) } });
+  const newest = (inbox: boolean) =>
+    [...mail.values()]
+      .filter((m) => !inbox || mailbox.labels.get(m.id)?.includes('INBOX'))
+      .toSorted((a, b) => b.internalDate - a.internalDate)
+      .map((m) => m.id);
+  const api: GmailApi = {
+    getProfile: async () => ({ emailAddress: ACCOUNT, historyId: String(cursor) }),
+    listHistory: async () => ({ additions: added.splice(0), labelChanges: mailbox.history.splice(0), historyId: String(++cursor) }),
+    searchInbox: async () => {
+      reads.push('search');
+      return { ids: newest(true), estimate: newest(true).length };
+    },
+    searchMail: async () => ({ ids: newest(false), estimate: mail.size }),
+    mailboxSize: async () => mail.size,
+    inboxSize: async () => newest(true).length,
+    getMetadata: async (id) => {
+      const m = read('meta', id);
+      return m ? raw(m) : null;
+    },
+    getLabelIds: async (id) => (read('labels', id) ? [...(mailbox.labels.get(id) ?? [])] : null),
+    listLabels: async () => [...new Set([...mailbox.labels.values()].flat())].filter((id) => id.startsWith('L:')).map((id) => ({ id, name: id.slice(2) })),
+    getContent: async (id) => {
+      const m = read('whole', id);
+      return m ? content(m) : null;
+    },
+    getMessage: async (id) => {
+      const m = read('whole', id);
+      return m ? { raw: raw(m), content: content(m) } : null;
+    },
+    getThread: async (threadId) => {
+      read('thread', threadId);
+      return [...mail.values()]
+        .filter((m) => m.threadId === threadId)
+        .toSorted((a, b) => a.internalDate - b.internalDate)
+        .map((m) => ({ id: m.id, labelIds: [...(mailbox.labels.get(m.id) ?? [])] }));
+    },
+    listSendAs: async () => [ACCOUNT],
+  };
+  return {
+    api,
+    reads,
+    again,
+    /** Mail arriving: in Gmail, and in the next page of history unless `quietly` (mail from before Sift, found only by a search). */
+    deliver(m: HeldMail, { quietly = false }: { quietly?: boolean } = {}) {
+      mail.set(m.id, m);
+      mailbox.labels.set(m.id, [...m.labelIds]);
+      if (!quietly) added.push({ id: m.id, labelIds: [...m.labelIds] });
+      return toFacts(ACCOUNT, raw(m))!;
+    },
   };
 }

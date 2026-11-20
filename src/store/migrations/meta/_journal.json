@@ -484,6 +484,13 @@
       "when": 1795116119684,
       "tag": "0068_search_stays_in_the_row",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1795129797432,
+      "tag": "0069_read_text_is_kept_thirty_days",
+      "breakpoints": true
     }
   ]
 }

@@ -572,14 +572,17 @@ export const examples = pgTable(
   ],
 ).enableRLS();
 
-/** The readable text of mail waiting on the user. Deleted when it is answered or stops being a suggestion, and after 30 days. */
-export const suggestionBodies = pgTable(
-  'suggestion_bodies',
+/**
+ * The text of a message Sift read whole with Inbox off (for the model, for mail waiting on the person, for an example), kept 30
+ * days from reading whatever becomes of the message, so nothing reads it from Gmail again (`keepRead`, src/store/kept.ts).
+ */
+export const readBodies = pgTable(
+  'read_bodies',
   {
     userId: userId(),
     accountId: text('account_id').notNull(),
     messageId: text('message_id').notNull(),
-    bodyText: text('body_text').notNull(), // as the model is shown it: plain text, truncated
+    bodyText: text('body_text').notNull(), // all of its readable text, up to `MAX_MAIL_CHARS` (src/gmail/body.ts); before 0069, the model's 4,000
     bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
     fetchedAt: time('fetched_at').notNull(),
   },
