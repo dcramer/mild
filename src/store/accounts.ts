@@ -205,7 +205,14 @@ export async function setMailboxAliases(db: Sql, accountId: string, aliases: rea
     .where(eq(mailboxes.id, accountId));
 }
 
-async function insertMessages(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number, suggestOnly: boolean): Promise<number> {
+async function insertMessages(
+  db: Sql,
+  accountId: string,
+  messages: readonly MessageFacts[],
+  now: number,
+  suggestOnly: boolean,
+  decided = false,
+): Promise<number> {
   if (messages.length === 0) return 0;
   const aliases = await mailboxAliases(db, accountId);
   const added = await db
@@ -220,6 +227,7 @@ async function insertMessages(db: Sql, accountId: string, messages: readonly Mes
         labelIds: m.labelIds,
         syncedAt: now,
         suggestOnly,
+        decided,
         facts: sealFacts(deriveFacts(m, {}, aliases)),
       })),
     )
@@ -257,6 +265,14 @@ export async function recordSync(
 /** Record synced messages before the cursor moves, for a sync too long to fetch in one go. Returns how many were not already known. */
 export async function recordSynced(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number = Date.now()): Promise<number> {
   return await db.transaction(async (tx) => await insertMessages(tx, accountId, messages, now, false));
+}
+
+/**
+ * Record mail found in the inbox that Sift had not seen, read for a look that decides nothing (what a rule would do), so it
+ * is not read again. Out of the triage queue, as the copy's mail is: going through the inbox or applying a rule decides it.
+ */
+export async function recordFound(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number): Promise<void> {
+  await db.transaction(async (tx) => await insertMessages(tx, accountId, messages, now, false, true));
 }
 
 /**

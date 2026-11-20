@@ -120,11 +120,14 @@ export async function recordedThread(db: Sql, accountId: string, threadId: strin
     .orderBy(asc(messages.receivedAt), asc(messages.id));
 }
 
-/** The user applied `ruleId` to their inbox: once a model has said what this message is, what that rule decides is carried out. */
+/**
+ * The user applied `ruleId` to their inbox: once a model has said what this message is, what that rule decides is carried out.
+ * In the triage queue, where the model is asked, even if it was recorded out of it.
+ */
 export async function markApplying(db: Sql, accountId: string, messageId: string, ruleId: string): Promise<void> {
   await db
     .update(messages)
-    .set({ applyRule: ruleId })
+    .set({ applyRule: ruleId, decided: false })
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 

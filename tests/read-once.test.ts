@@ -7,6 +7,10 @@ import { setActive, setMail } from '../src/store/preferences.ts';
 import type { Judge } from '../src/triage/stages/model.ts';
 import { type RunOptions, runOnce } from '../src/work/run.ts';
 import { copyMail } from '../src/work/copy.ts';
+import { ruleInbox } from '../src/work/apply.ts';
+import { continueRuleRun } from '../src/work/inbox.ts';
+import { goingInboxRuns, startInboxRuns } from '../src/store/inbox.ts';
+import { addRule } from '../src/store/rules.ts';
 import { ACCOUNT, FakeMailbox, onceGmail, rawMessage, testModel } from './helpers.ts';
 import { onePerson, raw, startDashboard } from './fixtures.ts';
 
@@ -102,6 +106,33 @@ describe('with Inbox off, each message is read from Gmail once', () => {
 
     expect(gmail.again).toEqual([]);
     expect(gmail.reads).toEqual(['meta:news', 'whole:news']);
+  });
+});
+
+describe('applying a rule to mail already there', () => {
+  it('reads from Gmail only mail Sift never recorded, once, however often it is looked at', async () => {
+    gmail.deliver(mail('seen', 'News <news@example.com>'));
+    await runOnce(db, options());
+    for (const [id, from, hoursAgo] of [
+      ['old1', 'News <news@example.com>', 48],
+      ['other', 'Bo <bo@example.net>', 49],
+      ['old2', 'News <news@example.com>', 50],
+    ] as const)
+      gmail.deliver(mail(id, from, { hoursAgo }), { quietly: true });
+    const rule = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+
+    for (let look = 0; look < 2; look++) expect(await ruleInbox(db, gmail.api, ACCOUNT, rule, NOW)).toMatchObject({ messages: 3, reading: 0, exact: true });
+    await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10_000, now: NOW, ruleId: rule });
+    const [run] = await goingInboxRuns(db);
+    await continueRuleRun({ db, api: gmail.api, mailbox, now: () => NOW }, run!.id);
+    expect(await raw(db).all('SELECT message_id, by_user FROM decisions ORDER BY message_id')).toEqual([
+      { message_id: 'old1', by_user: true },
+      { message_id: 'old2', by_user: true },
+      { message_id: 'seen', by_user: true },
+    ]);
+
+    expect(gmail.again).toEqual([]);
+    expect(gmail.reads.filter((r) => r !== 'search').toSorted()).toEqual(['meta:old1', 'meta:old2', 'meta:other', 'meta:seen']);
   });
 });
 
