@@ -32,7 +32,7 @@ import { writeSecret } from '../../../../src/secrets.ts';
 import { connectAccount, setCanSend } from '../../../../src/store/accounts.ts';
 import { listLabels, removeLabel } from '../../../../src/store/labels.ts';
 import { setActive, setMail, setModel } from '../../../../src/store/preferences.ts';
-import { advanceCopy, goingCopy, startCopies } from '../../../../src/store/copies.ts';
+import { advanceCopy, countCopy, goingCopy, startCopies } from '../../../../src/store/copies.ts';
 import { lastStandingChange } from '../../../../src/store/actions.ts';
 import { undo } from '../../../../src/actions/executor.ts';
 import { listProposals } from '../../../../src/store/proposals.ts';
@@ -272,11 +272,15 @@ await connectAccount(store, WORK, cursor(google.mailbox(WORK)), now - 23 * HOUR,
 await signIn(db, WORK);
 if (variant === '--inbox') {
   await setCanSend(db, ACCOUNT, true);
-  // Copying the year part-way, as if Inbox had been turned on ten minutes ago and its first ten listed; the next pass begun finishes it.
+  // Copying the year part-way, as if Inbox had been turned on ten minutes ago, its mail counted and its first ten listed; the next pass begun finishes it.
   await startCopies(db, [ACCOUNT], { since: now - 365 * DAY, before: now - 10 * 60_000, now: now - 10 * 60_000 });
+  const fresh = (await goingCopy(db, ACCOUNT))!;
+  await countCopy(db, fresh, { found: (await api.searchMail(copyQuery(fresh), 500)).ids.length, next: null });
+  // The work mailbox, connected while Inbox was on, has its own copy, counted too: it has no mail.
+  await countCopy(db, (await goingCopy(db, WORK))!, { found: 0, next: null });
   const copy = (await goingCopy(db, ACCOUNT))!;
   const page = await api.searchMail(copyQuery(copy), 10);
-  await advanceCopy(db, copy, { listed: page.ids.length, next: page.nextPageToken ?? null, estimate: page.estimate ?? 0 }, now);
+  await advanceCopy(db, copy, { listed: page.ids.length, next: page.nextPageToken ?? null }, now);
 }
 // `--bare` takes the person's labels out, as before they chose any, so every screen is the setting-up steps.
 if (variant === '--bare') for (const label of await listLabels(db)) if (label.id !== LEAVE_IN_INBOX) await removeLabel(db, label.id, now - 23 * HOUR);

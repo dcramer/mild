@@ -2,7 +2,7 @@ import { and, eq, exists, inArray, mailBodies, messages, sql } from '../store/qu
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { NOT_MAIL, toFacts } from '../gmail/sync.ts';
-import { type MailCopy, advanceCopy, goingCopy } from '../store/copies.ts';
+import { type MailCopy, advanceCopy, countCopy, goingCopy } from '../store/copies.ts';
 import { isOwnDigest, knownDigests } from '../store/digests.ts';
 import { heldText, keepText, recordKept } from '../store/kept.ts';
 import { textOf } from './bodies.ts';
@@ -14,6 +14,9 @@ import { type MailWindow, windowStart } from '../mail-window.ts';
  * gets through a few pages and one cut short at its limit has little to list again.
  */
 const PAGE = 100;
+
+/** Ids listed a page while counting, the most Gmail lists: 5 units for each 500 messages, before one is read. */
+const COUNT_PAGE = 500;
 
 /**
  * The search a copy lists: mail received from `since` (whatever is in the inbox, however old) to `before`, which is when
@@ -52,8 +55,9 @@ async function recorded(db: Sql, accountId: string, ids: readonly string[]) {
  * Go on copying one mailbox for Inbox, a page of Gmail's listing at a time, newest first, starting nothing after `until`.
  * Each message new to the record is read whole once (60 units) and recorded with its text, never triaged (`recordKept`);
  * one recorded without its text has the text read, unless Sift read it in the last month. What is in the inbox and recorded is left to the pass, which keeps its
- * text newest first too (`keepMailBodies`), so the two never read the same message. A page cut short is listed again and
- * what it recorded is passed over, so a crash or a failed step loses nothing. Stops once Inbox is off: every write checks.
+ * text newest first too (`keepMailBodies`), so the two never read the same message. First it counts what the listing holds
+ * by listing it, for how far it has got. A page cut short is listed again and what it recorded is passed over, so a crash
+ * or a failed step loses nothing. Stops once Inbox is off: every write checks.
  * Returns how many messages it read, or null when there is no copy going.
  */
 export async function copyMail(
@@ -67,6 +71,12 @@ export async function copyMail(
   let copy = await goingCopy(db, accountId);
   if (!copy) return null;
   while (copy && !out()) {
+    if (!copy.counted) {
+      const page = await api.searchMail(copyQuery(copy), COUNT_PAGE, copy.countToken ?? undefined);
+      await countCopy(db, copy, { found: page.ids.length, next: page.nextPageToken ?? null });
+      copy = await goingCopy(db, accountId);
+      continue;
+    }
     const page = await api.searchMail(copyQuery(copy), PAGE, copy.pageToken ?? undefined);
     const known = await recorded(db, accountId, page.ids);
     const digests = await knownDigests(db, accountId, page.ids);
@@ -86,7 +96,7 @@ export async function copyMail(
       read++;
       if (!kept) return read;
     }
-    await advanceCopy(db, copy, { listed: page.ids.length, next: page.nextPageToken ?? null, estimate: page.estimate ?? 0 }, now());
+    await advanceCopy(db, copy, { listed: page.ids.length, next: page.nextPageToken ?? null }, now());
     copy = await goingCopy(db, accountId);
   }
   return read;

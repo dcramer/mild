@@ -7,6 +7,7 @@ import { listUndecided } from '../src/store/messages.ts';
 import { setMail } from '../src/store/preferences.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';
+import { copyProgress } from '../src/store/copies.ts';
 import { copyMail, copyQuery } from '../src/work/copy.ts';
 import { pruneOld } from '../src/work/retention.ts';
 import { type RunOptions, dueWork, runOnce } from '../src/work/run.ts';
@@ -61,16 +62,43 @@ describe('copying a mailbox for Inbox', () => {
     await setMail(db, true, { now: NOW });
     const mail = Array.from({ length: 150 }, (_, i) => archived(`m${String(i).padStart(3, '0')}`, NOW - (i + 1) * 60_000));
     deliver([...mail, archived('junk', NOW - 200 * 60_000), archived('draft', NOW - 2000, ['DRAFT'])]);
+    // The count lists first, then the first page; the second page finds the junk gone to Spam since.
+    gmail.gmail.meanwhile('users.messages.list', () => {});
     gmail.gmail.meanwhile('users.messages.list', () => {});
     gmail.gmail.meanwhile('users.messages.list', () => gmail.gmail.change('junk', { add: ['SPAM'] }));
     expect(await copy()).toBe(151);
-    expect(pages()).toEqual(['', '100']);
+    expect(pages()).toEqual(['', '', '100']);
     expect(reads().toSorted()).toEqual(['full:junk', ...mail.map((m) => `full:${m.id}`)]);
     expect(await ids('mail_bodies')).toEqual(mail.map((m) => m.id));
     expect(await ids('messages', 'id')).toEqual(mail.map((m) => m.id));
     expect(await listUndecided(db, ACCOUNT, 500)).toEqual([]);
     expect(await copies()).toMatchObject([{ finished: true }]);
     expect(await copy()).toBeNull();
+  });
+
+  it('counts what it copies before reading any, a page of 500 at a time, whatever Gmail guesses', async () => {
+    await setMail(db, true, { now: NOW, window: 'year' });
+    gmail.gmail.estimate = () => 4;
+    deliver([
+      ...Array.from({ length: 1200 }, (_, i) => archived(`m${String(i).padStart(4, '0')}`, NOW - (i + 1) * 60_000)),
+      inInbox('old', NOW - 2 * YEAR),
+      archived('older', NOW - 2 * YEAR),
+    ]);
+    const going = async () => (await copyProgress(db, [ACCOUNT])).going;
+    expect(await going()).toMatchObject({ counted: false, done: 0, total: 0 });
+    let clock = NOW;
+    const api = {
+      ...gmail.api,
+      searchMail: async (...args: Parameters<typeof gmail.api.searchMail>) => ((clock += 1000), await gmail.api.searchMail(...args)),
+    };
+    expect(await copy(api, { until: NOW + 2000, now: () => clock })).toBe(0);
+    expect(await going()).toMatchObject({ counted: false, done: 0, total: 1000 });
+    expect(await copy(api, { until: NOW + 3500, now: () => clock })).toBe(0);
+    expect(await going()).toMatchObject({ counted: true, done: 0, total: 1201 });
+    expect(reads()).toEqual([]);
+    expect(pages()).toEqual(['', '500', '1000', '']);
+    await copy();
+    expect(await ids('mail_bodies')).toHaveLength(1201);
   });
 
   it('stops at its limit and goes on where it left off, reading no message twice', async () => {
@@ -83,7 +111,7 @@ describe('copying a mailbox for Inbox', () => {
     expect(new Set(reads()).size).toBe(120);
     expect(reads()).toHaveLength(120);
     expect(reads().every((r) => r.startsWith('full:'))).toBe(true);
-    expect(pages()).toEqual(['', '', '100']);
+    expect(pages()).toEqual(['', '', '', '100']);
     expect(await ids('mail_bodies')).toHaveLength(120);
   });
 
@@ -92,7 +120,11 @@ describe('copying a mailbox for Inbox', () => {
     await setMail(db, true, { now: NOW });
     deliver([inInbox('in', NOW - 1000), archived('out', NOW - 2000)]);
     await copy();
-    expect(gmail.gmail.requests.map((r) => `${r.method}:${r.format ?? ''}:${r.id ?? ''}`)).toEqual(['users.messages.list::', 'users.messages.get:full:out']);
+    expect(gmail.gmail.requests.map((r) => `${r.method}:${r.format ?? ''}:${r.id ?? ''}`)).toEqual([
+      'users.messages.list::',
+      'users.messages.list::',
+      'users.messages.get:full:out',
+    ]);
     expect(await ids('mail_bodies')).toEqual(['out']);
   });
 

@@ -277,7 +277,7 @@ test.describe('Inbox in Settings', () => {
     test('shows the copy going, and widening or narrowing the window changes it, narrowing only after asking', async ({ page }) => {
       await page.goto('/?settings=1');
       await expect(settingsInbox(page).getByText('Copying the last year')).toBeVisible();
-      await expect(settingsInbox(page).getByText(/^10 of about 21 /)).toBeVisible();
+      await expect(settingsInbox(page).getByText(/^10 of 21 /)).toBeVisible();
 
       await settingsInbox(page).getByRole('button', { name: 'Change…' }).click();
       await mailWindow(page)

@@ -12,6 +12,8 @@ export interface MailCopy {
   pageToken: string | null;
   done: number;
   total: number;
+  countToken: string | null;
+  counted: boolean;
   startedAt: number;
 }
 
@@ -22,13 +24,18 @@ const COLUMNS = {
   pageToken: mailCopies.pageToken,
   done: mailCopies.done,
   total: mailCopies.total,
+  countToken: mailCopies.countToken,
+  counted: mailCopies.counted,
   startedAt: mailCopies.startedAt,
 };
+
+/** A listing begun again: counted from the top, then copied from the top. */
+const FROM_THE_TOP = { pageToken: null, done: 0, total: 0, countToken: null, counted: false };
 
 /** Copy these mailboxes from `since` to `before`, starting the listing again where one is already under way or done. */
 export async function startCopies(db: Sql, accountIds: readonly string[], copy: { since: number | null; before: number; now: number }): Promise<void> {
   if (accountIds.length === 0) return;
-  const fresh = { since: copy.since, before: copy.before, pageToken: null, done: 0, total: 0, startedAt: copy.now, finishedAt: null };
+  const fresh = { since: copy.since, before: copy.before, ...FROM_THE_TOP, startedAt: copy.now, finishedAt: null };
   await db
     .insert(mailCopies)
     .values(accountIds.map((accountId) => ({ accountId, ...fresh })))
@@ -57,25 +64,28 @@ export async function goingCopy(db: Sql, accountId: string): Promise<MailCopy | 
   return row ?? null;
 }
 
-/**
- * A page of the listing is recorded: count it and move to the next, or finish at the end. Nothing is written when the copy
- * was started again or stopped meanwhile (`startedAt` changed, or the row went with Inbox).
- */
-export async function advanceCopy(db: Sql, copy: MailCopy, page: { listed: number; next: string | null; estimate: number }, now: number): Promise<void> {
+/** Nothing is written when the copy was started again or stopped meanwhile (`startedAt` changed, or the row went with Inbox). */
+const still = (copy: MailCopy) => and(eq(mailCopies.accountId, copy.accountId), eq(mailCopies.startedAt, copy.startedAt), isNull(mailCopies.finishedAt));
+
+/** A page of the count is listed: add it, and move to the next, or begin copying at the end. */
+export async function countCopy(db: Sql, copy: MailCopy, page: { found: number; next: string | null }): Promise<void> {
   await db
     .update(mailCopies)
-    .set({
-      done: copy.done + page.listed,
-      total: copy.pageToken === null ? Math.max(page.estimate, page.listed) : copy.total,
-      pageToken: page.next,
-      finishedAt: page.next === null ? now : null,
-    })
-    .where(and(eq(mailCopies.accountId, copy.accountId), eq(mailCopies.startedAt, copy.startedAt), isNull(mailCopies.finishedAt)));
+    .set({ total: (copy.countToken === null ? 0 : copy.total) + page.found, countToken: page.next, counted: page.next === null })
+    .where(still(copy));
+}
+
+/** A page of the listing is recorded: count it and move to the next, or finish at the end. */
+export async function advanceCopy(db: Sql, copy: MailCopy, page: { listed: number; next: string | null }, now: number): Promise<void> {
+  await db
+    .update(mailCopies)
+    .set({ done: copy.done + page.listed, pageToken: page.next, finishedAt: page.next === null ? now : null })
+    .where(still(copy));
 }
 
 export interface CopyProgress {
-  /** Copying these mailboxes now, all of them together. */
-  going: { done: number; total: number; startedAt: number } | null;
+  /** Copying these mailboxes now, all of them together; `total` is only so far until every one is `counted`. */
+  going: { counted: boolean; done: number; total: number; startedAt: number } | null;
 }
 
 export async function copyProgress(db: Sql, accountIds: readonly string[]): Promise<CopyProgress> {
@@ -87,6 +97,7 @@ export async function copyProgress(db: Sql, accountIds: readonly string[]): Prom
   if (going.length === 0) return { going: null };
   return {
     going: {
+      counted: going.every((c) => c.counted),
       done: going.reduce((n, c) => n + c.done, 0),
       total: going.reduce((n, c) => n + Math.max(c.total, c.done), 0),
       startedAt: Math.min(...going.map((c) => c.startedAt)),
@@ -102,7 +113,7 @@ export async function copyProgress(db: Sql, accountIds: readonly string[]): Prom
 export async function moveWindow(db: Sql, from: MailWindow, to: MailWindow, now: number): Promise<void> {
   const was = windowStart(from, now);
   const since = windowStart(to, now);
-  const restart = { since, pageToken: null, done: 0, total: 0, startedAt: now };
+  const restart = { since, ...FROM_THE_TOP, startedAt: now };
   const going = await goingCopies(db);
   if (wider(since, was)) {
     for (const copy of going) await db.update(mailCopies).set(restart).where(eq(mailCopies.accountId, copy.accountId));
