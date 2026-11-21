@@ -808,8 +808,8 @@ export const ManageState = z.object({
   /** Whether Inbox is on for the viewer: Sift keeps a copy of their mail, and may send as them. */
   mail: z.boolean(),
   mailWindow: MailWindow,
-  /** Copying the viewer's mailboxes for Inbox, all of them together: `total` is Gmail's estimate. Null when none is going. */
-  copying: z.object({ done: z.number(), total: z.number(), startedAt: z.number() }).nullable(),
+  /** Copying the viewer's mailboxes for Inbox, all of them together: `total` is what counting has found so far until `counted`. Null when none is going. */
+  copying: z.object({ counted: z.boolean(), done: z.number(), total: z.number(), startedAt: z.number() }).nullable(),
   /** The viewer's own model: which one they chose, how they can reach one, and a ChatGPT sign-in under way. */
   model: z.object({
     chosen: z.string().nullable(),

@@ -632,7 +632,10 @@ export const mailCopies = pgTable(
     before: time('before').notNull(),
     pageToken: text('page_token'), // where the page under way starts in Gmail's listing; null: at the top
     done: integer('done').notNull().default(0), // listed and recorded, in this listing
-    total: integer('total').notNull().default(0), // Gmail's estimate of what the listing holds, from its first page
+    // What the listing holds, counted by listing it before reading any: Gmail's estimate of a search can be off by thousands.
+    total: integer('total').notNull().default(0),
+    countToken: text('count_token'), // where counting got to; null: at the top
+    counted: boolean('counted').notNull().default(false),
     startedAt: time('started_at').notNull(),
     finishedAt: time('finished_at'), // null while it goes on
   },
