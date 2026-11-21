@@ -115,6 +115,24 @@ test.describe('The reader, from Inbox', () => {
     expect((await boxOf(folded.last())).y).toBeLessThan((await boxOf(opened)).y);
   });
 
+  test('draws a conversation the copy holds at once, its text following as its newest message arrives', async ({ page }) => {
+    let release = () => {};
+    const held = new Promise<void>((done) => (release = done));
+    await page.route(/\/api\/message\?/, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto('/inbox');
+    await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
+    const arriving = page.getByRole('region', { name: 'Your March bill' });
+    await expect(arriving.getByRole('heading', { name: 'Your March bill', level: 1 })).toBeVisible();
+    await expect(arriving.getByRole('article')).toHaveCount(3);
+    await expect(arriving.getByText('Your bill is ready.', { exact: true })).toHaveCount(0);
+
+    release();
+    await expect(reader(page).getByRole('article').getByText('Your bill is ready.', { exact: true })).toHaveCount(3);
+  });
+
   test('the sender’s name over the message goes to their page', async ({ page }) => {
     await page.goto('/inbox');
     await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
