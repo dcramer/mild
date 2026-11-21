@@ -65,7 +65,7 @@ export function MailFrame({ src, title, onBlocked }: { src?: string | undefined;
       clearTimeout(wait);
     };
   }, [sized]);
-  const fallback = untold && !sized;
+  const fallback = (untold || !src) && !sized;
   return (
     <div className={cn(fallback ? 'h-[70svh] min-h-64 bg-(--paper)' : sized ? undefined : 'h-24')}>
       <iframe

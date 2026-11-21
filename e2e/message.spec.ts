@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { mailDocument } from '../src/dashboard/mail-html.ts';
 import { FRAME_POLICY } from '../src/dashboard/policy.ts';
 import { addRule, makeRule, ruleDialog, rulePanel, writeRule } from './rule.ts';
@@ -39,6 +39,15 @@ function remote(page: Page, origin: string) {
   return sent;
 }
 
+/** Shows the open message as its text or its HTML, from its ⋮ menu. */
+async function showAs(open: Locator, view: 'text' | 'HTML') {
+  await open.getByRole('button', { name: 'More' }).click();
+  await open
+    .page()
+    .getByRole('menuitem', { name: `Show as ${view}` })
+    .click();
+}
+
 const mailFrame = (page: Page, subject: string) => page.frameLocator(`iframe[title="${subject}"]`);
 
 test.describe('A message as its HTML', () => {
@@ -46,7 +55,6 @@ test.describe('A message as its HTML', () => {
     const sent = remote(page, sift.url);
     await page.goto(DEALS);
     const open = reader(page);
-    await expect(open.getByRole('radio', { name: 'HTML' })).toBeChecked();
     await expect(open.getByText('Remote images are blocked')).toBeVisible();
     const frame = mailFrame(page, '48 hours only: 30% off');
     await expect(frame.getByRole('heading', { name: '30% off everything' })).toBeVisible();
@@ -74,28 +82,28 @@ test.describe('A message as its HTML', () => {
   test('Text, once chosen, is kept in the browser', async ({ page }) => {
     await page.goto(DEALS);
     const open = reader(page);
-    await open.getByRole('radio', { name: 'Text' }).click();
+    await showAs(open, 'text');
     await expect(page.locator('iframe')).toHaveCount(0);
     await expect(open.getByText('Remote images are blocked')).toHaveCount(0);
     await expect(open.getByText('Everything must go.')).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('sift:message-view'))).toBe('text');
 
     await page.reload();
-    await expect(reader(page).getByRole('radio', { name: 'Text' })).toBeChecked();
+    await expect(reader(page).getByText('Everything must go.')).toBeVisible();
     await expect(page.locator('iframe')).toHaveCount(0);
 
-    await reader(page).getByRole('radio', { name: 'HTML' }).click();
+    await showAs(reader(page), 'HTML');
     await expect(mailFrame(page, '48 hours only: 30% off').getByRole('heading', { name: '30% off everything' })).toBeVisible();
   });
 
   test('mail held as text alone, or not held, has nothing to choose', async ({ page }) => {
     await page.goto(`/?${messageQuery('m6')}`);
     await expect(reader(page).getByText('Are you free for lunch on Thursday?')).toBeVisible();
-    await expect(reader(page).getByRole('radiogroup', { name: 'Read it as' })).toHaveCount(0);
+    await expect(reader(page).getByRole('button', { name: 'More' })).toHaveCount(0);
 
     await page.goto(`/activity?show=all&${messageQuery('m1')}`);
     await expect(reader(page).getByText('Sift does not hold this message’s text.')).toBeVisible();
-    await expect(reader(page).getByRole('radiogroup', { name: 'Read it as' })).toHaveCount(0);
+    await expect(reader(page).getByRole('button', { name: 'More' })).toHaveCount(0);
   });
 
   test('fits a phone', async ({ page }) => {
@@ -146,7 +154,7 @@ test.describe('A message read as part of the page', () => {
   test('its text folds the same history', async ({ page }) => {
     await page.goto(RELEASE);
     const open = reader(page);
-    await open.getByRole('radio', { name: 'Text' }).click();
+    await showAs(open, 'text');
     await expect(open.getByText(/^I pushed a fix for the tag step\./)).toBeVisible();
     await expect(open.getByText(/The release script stops at the tag step\./)).toHaveCount(0);
     await open.getByRole('button', { name: 'Show the quoted text' }).click();

@@ -1412,7 +1412,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
           )
         }
       >
-        <MessageStack messages={inbox ? THREAD : [NEWEST]} open={open} onToggle={toggle}>
+        <MessageStack messages={(inbox ? THREAD : [NEWEST]).map((m) => ({ ...m, unread: m.id === 'f' }))} open={open} onToggle={toggle}>
           {(id) => {
             const m = THREAD.find((one) => one.id === id) ?? NEWEST;
             return (
@@ -1427,10 +1427,24 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                     </>
                   }
                   {...(inbox
-                    ? { answers: { reply: () => answer('Reply', m), all: () => answer('Reply to all', m), forward: () => answer('Forward', m) } }
+                    ? {
+                        answers: {
+                          reply: () => answer('Reply', m),
+                          all: () => answer('Reply to all', m),
+                          forward: () => answer('Forward', m),
+                        },
+                      }
                     : {})}
+                  more={[{ label: 'Show as text', onSelect: () => toast('Shows its text') }]}
                 />
-                <p className="text-reading leading-relaxed">{m.preview}</p>
+                <div className="flex min-w-0 flex-col gap-3">
+                  <p className="text-reading leading-relaxed">{m.preview}</p>
+                  {m === NEWEST ? (
+                    <Quoted>
+                      <p className="text-reading leading-relaxed whitespace-pre-wrap">{'On Nov 12, me wrote:\n> See you both there.'}</p>
+                    </Quoted>
+                  ) : null}
+                </div>
               </>
             );
           }}

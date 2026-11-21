@@ -90,7 +90,7 @@ test.describe('Inbox', () => {
     // Read, it opens folded to all but its newest, each row saying when it came, short, not how long ago.
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
     await expect(open.getByRole('article')).toHaveCount(1);
-    const folded = open.getByRole('row', { name: /^Utility/ });
+    const folded = open.getByRole('button', { name: /^Utility/, expanded: false });
     await expect(folded).toHaveCount(2);
     await expect(folded.first().locator('time')).toHaveText(/^([A-Z][a-z]{2} \d{1,2}, )?\d{1,2}:\d{2} [AP]M$/);
     await page.keyboard.press('Escape');
