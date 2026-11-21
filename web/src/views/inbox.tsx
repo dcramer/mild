@@ -1,6 +1,7 @@
 'use client';
 import { ArchiveIcon, MailIcon, MailOpenIcon } from 'lucide-react';
 import { type ReactNode, useDeferredValue, useState } from 'react';
+import { type AnswerLabel, answerChoices, useRecordAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
@@ -8,7 +9,7 @@ import { Thinks, useMailPress, whoWrote } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, useLoaded, usePages } from '@/lib/api.ts';
 import { useHidden } from '@/lib/action.ts';
 import { useCompose } from '@/lib/compose.ts';
-import { inboxFirst, period } from '@/lib/format.ts';
+import { inboxFirst, period, sureness } from '@/lib/format.ts';
 import { messageKey, threadKey, useParam } from '@/lib/params.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -21,6 +22,7 @@ import {
   Failure,
   FilterGroup,
   Heads,
+  LabelPick,
   ListView,
   More,
   Note,
@@ -51,6 +53,31 @@ function Place({ thread }: { thread: MailThread }) {
 }
 
 /**
+ * What Sift thinks the newest message is, as a dropdown that says it otherwise: saved at once and the mail left where
+ * it is, so picking again is the undo. Mail Sift never placed shows nothing until its row is pointed at, and is answered all the same.
+ */
+function Label({ thread, labels }: { thread: MailThread; labels: readonly AnswerLabel[] }) {
+  const record = useRecordAnswer();
+  const { thinks } = thread;
+  const target = {
+    accountId: thread.accountId,
+    sender: reveal(thread.from),
+    messageId: newest(thread).messageId,
+    labelId: thinks?.labelId ?? null,
+    ...(thinks ? { decisionId: thinks.decisionId } : {}),
+  };
+  return (
+    <LabelPick
+      key={`${thinks?.decisionId ?? 'undecided'}/${thinks?.labelId ?? ''}`}
+      label={`What ${reveal(thread.subject) || '(no subject)'} is`}
+      value={thinks?.labelId ?? null}
+      groups={answerChoices(labels, target, thinks ? sureness(thinks) : 1, [])}
+      onSubmit={(id) => record(target, id)}
+    />
+  );
+}
+
+/**
  * One conversation, on one line as Gmail lists it: who wrote and how many messages, the subject and the start of the
  * newest, the label Sift gave it, and when; pointed at, Archive and read or unread take the time's place. Unread is bold
  * and bright, read is plain and dimmer. On a phone it reads as For review's rows do: who and when, the subject, then a
@@ -58,12 +85,14 @@ function Place({ thread }: { thread: MailThread }) {
  */
 function ThreadRow({
   thread,
+  labels,
   selected,
   onSelect,
   onOpen,
   press,
 }: {
   thread: MailThread;
+  labels: readonly AnswerLabel[];
   selected: boolean;
   onSelect: (on: boolean) => void;
   onOpen: () => void;
@@ -111,8 +140,9 @@ function ThreadRow({
           {thread.preview ? <span className="text-muted-foreground"> — {reveal(thread.preview)}</span> : null}
         </span>
       </Td>
-      <Td phone="hide" quiet className="whitespace-nowrap">
-        <Thinks thinks={thread.thinks} />
+      {/* A press on the dropdown is not a press on the row. */}
+      <Td phone="hide" quiet className="whitespace-nowrap" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+        <Label thread={thread} labels={labels} />
       </Td>
       <RowPresses
         presses={
@@ -179,7 +209,8 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const chosen = threads.filter((t) => selected.has(threadKey(t)));
   const { press, error } = useMailPress();
   const act = (what: 'archive' | 'read' | 'unread') => press(chosen, what, () => setSelected(new Set()));
-  const names = new Map((manage.data?.labels ?? []).map((l) => [l.id, l.name] as const));
+  const labels = manage.data?.labels ?? [];
+  const names = new Map(labels.map((l) => [l.id, l.name] as const));
   const now = useNow();
   const periods: { title: string | null; rows: MailThread[] }[] = [];
   for (const thread of threads) {
@@ -259,6 +290,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
                   <ThreadRow
                     key={threadKey(thread)}
                     thread={thread}
+                    labels={labels}
                     selected={selected.has(threadKey(thread))}
                     onSelect={(next) =>
                       setSelected((was) => {

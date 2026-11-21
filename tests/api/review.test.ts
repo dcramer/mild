@@ -78,6 +78,25 @@ describe('an answer', () => {
     });
   });
 
+  it('only recorded, as Inbox gives it, leaves the mail where it is, and can be given again', async () => {
+    const { sift, box, me, receipt, decision } = await waiting();
+    for (const label of ['receipts', 'everything_else']) {
+      const answered = await me.call('POST', '/api/feedback', {
+        accountId: ME,
+        sender: SHOP,
+        label,
+        decisionId: decision,
+        messageId: receipt,
+        carryOut: false,
+      });
+      expect(answered).toMatchObject({ status: 200, body: { notFixed: null } });
+      await sift.work();
+      expect(box.message(receipt)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    }
+    expect(await itemsOf(me)).toEqual([]);
+    expect((await rowsOf(me))[0]).toMatchObject({ messageId: receipt, labelId: 'everything_else', byUser: true, carryOut: false, actionId: null });
+  });
+
   it('that corrects what Sift did takes its change back in Gmail', async () => {
     const { sift, box, me } = await waiting();
     await me.call('POST', '/api/active', { active: true });

@@ -36,7 +36,7 @@ export function AnswerPicker({
   value: string | null;
   groups: readonly (readonly Pick[])[];
   empty: string;
-  onSubmit: (id: string) => void;
+  onSubmit: (id: string) => unknown;
   busy?: boolean;
   className?: string;
   /** Last in the list, set apart: something to do instead of a choice, such as adding a label that does not exist yet. */
@@ -54,8 +54,10 @@ export function AnswerPicker({
           if (next === EXTRA) return extra?.onSelect();
           // Base UI also sets a value of its own accord (one no longer listed), which is no answer.
           if (next === null || reason !== 'item-press') return;
+          const was = chosen;
           setChosen(next);
-          onSubmit(next);
+          // A save that resolves later goes back to what was chosen if it fails.
+          void Promise.resolve(onSubmit(next)).catch(() => setChosen(was));
         }}
       >
         <Base.Trigger
@@ -75,60 +77,120 @@ export function AnswerPicker({
           </span>
           <ChevronDownIcon aria-hidden className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
         </Base.Trigger>
-        <Base.Portal>
-          <Base.Positioner sideOffset={4} align="start" alignItemWithTrigger={false} className="z-50">
-            <Base.Popup className="sheet max-h-(--available-height) min-w-(--anchor-width) overflow-y-auto bg-popover p-1 text-sm outline-none">
-              <Base.List>
-                {groups
-                  .filter((group) => group.length > 0)
-                  .map((group, index) => (
-                    <Fragment key={group[0]?.id ?? index}>
-                      {index > 0 ? <Base.Separator className="my-1 border-t border-(--rule)" /> : null}
-                      {group.map((p) => (
-                        <Base.Item
-                          key={p.id}
-                          value={p.id}
-                          className="relative flex cursor-pointer items-center gap-2.5 data-disabled:cursor-default py-1.5 pr-8 pl-2 whitespace-nowrap outline-none select-none data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11"
-                        >
-                          <span aria-hidden className="flex w-3.5 shrink-0 justify-center">
-                            {p.lead}
-                          </span>
-                          <Base.ItemText>{p.label}</Base.ItemText>
-                          <Base.ItemIndicator className="absolute right-2 flex items-center">
-                            <CheckIcon className="size-3.5" />
-                          </Base.ItemIndicator>
-                        </Base.Item>
-                      ))}
-                    </Fragment>
-                  ))}
-                {extra ? (
-                  <>
-                    <Base.Separator className="my-1 border-t border-(--rule)" />
-                    <Base.Item
-                      value={EXTRA}
-                      className="relative flex cursor-pointer items-center gap-2.5 py-1.5 pr-8 pl-2 whitespace-nowrap text-muted-foreground outline-none select-none data-highlighted:bg-(--fill-strong) data-highlighted:text-foreground pointer-coarse:min-h-11"
-                    >
-                      <span aria-hidden className="flex w-3.5 shrink-0 justify-center [&_svg]:size-3.5">
-                        {extra.lead}
-                      </span>
-                      <Base.ItemText>{extra.label}</Base.ItemText>
-                    </Base.Item>
-                  </>
-                ) : null}
-              </Base.List>
-            </Base.Popup>
-          </Base.Positioner>
-        </Base.Portal>
+        <Choices groups={groups} extra={extra} />
       </Base.Root>
       <Button
         aria-label={current ? `Agree: ${current.label}` : 'Choose what it is'}
         disabled={chosen === null}
         busy={busy ?? false}
-        onClick={() => chosen !== null && onSubmit(chosen)}
+        onClick={() => chosen !== null && void Promise.resolve(onSubmit(chosen)).catch(() => undefined)}
         className="px-2"
       >
         <CheckIcon aria-hidden />
       </Button>
     </span>
+  );
+}
+
+/**
+ * What something is, down a list where most rows are left as they are (Inbox): Sift's label as plain words, or
+ * nothing where it gave none, the dropdown only when its row is pointed at. Picking saves it at once, with no check, since there is nothing to agree
+ * to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back.
+ */
+export function LabelPick({
+  label,
+  value,
+  groups,
+  onSubmit,
+}: {
+  label: string;
+  value: string | null;
+  groups: readonly (readonly Pick[])[];
+  onSubmit: (id: string) => Promise<unknown>;
+}) {
+  const [chosen, setChosen] = useState<string | null>(value);
+  const all = groups.flat();
+  const current = all.find((p) => p.id === chosen);
+  return (
+    <Base.Root
+      items={all.map((p) => ({ value: p.id, label: p.label }))}
+      value={chosen}
+      onValueChange={(next, { reason }) => {
+        if (next === null || reason !== 'item-press' || next === chosen) return;
+        const was = chosen;
+        setChosen(next);
+        onSubmit(next).catch(() => setChosen(was));
+      }}
+    >
+      <Base.Trigger
+        aria-label={label}
+        className="group/pick press -mx-2 inline-flex h-(--control) cursor-pointer items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground select-none hover:bg-(--fill-strong) hover:text-foreground group-hover/row:bg-(--fill-strong) data-popup-open:bg-(--fill-strong) data-popup-open:text-foreground"
+      >
+        {/* Never cut short: a column of these is as wide as its longest label, as the words were before. */}
+        {/* Without a label, nothing but the chevron once the row is pointed at, as a list of mail leaves it blank. */}
+        {current ? (
+          <span className="relative top-px flex items-baseline gap-2">
+            {current.lead}
+            {current.label}
+          </span>
+        ) : null}
+        {/* A touch screen has no pointing at, so the chevron always shows there. */}
+        <ChevronDownIcon
+          aria-hidden
+          className="size-3.5 shrink-0 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-data-popup-open/pick:opacity-100 pointer-coarse:opacity-100"
+        />
+      </Base.Trigger>
+      <Choices groups={groups} />
+    </Base.Root>
+  );
+}
+
+/** The open list of either picker: its groups set apart, and `extra` last. */
+function Choices({ groups, extra }: { groups: readonly (readonly Pick[])[]; extra?: { label: string; lead?: ReactNode; onSelect: () => void } | undefined }) {
+  return (
+    <Base.Portal>
+      <Base.Positioner sideOffset={4} align="start" alignItemWithTrigger={false} className="z-50">
+        <Base.Popup className="sheet max-h-(--available-height) min-w-(--anchor-width) overflow-y-auto bg-popover p-1 text-sm outline-none">
+          <Base.List>
+            {groups
+              .filter((group) => group.length > 0)
+              .map((group, index) => (
+                <Fragment key={group[0]?.id ?? index}>
+                  {index > 0 ? <Base.Separator className="my-1 border-t border-(--rule)" /> : null}
+                  {group.map((p) => (
+                    <Base.Item
+                      key={p.id}
+                      value={p.id}
+                      className="relative flex cursor-pointer items-center gap-2.5 data-disabled:cursor-default py-1.5 pr-8 pl-2 whitespace-nowrap outline-none select-none data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11"
+                    >
+                      <span aria-hidden className="flex w-3.5 shrink-0 justify-center">
+                        {p.lead}
+                      </span>
+                      <Base.ItemText>{p.label}</Base.ItemText>
+                      <Base.ItemIndicator className="absolute right-2 flex items-center">
+                        <CheckIcon className="size-3.5" />
+                      </Base.ItemIndicator>
+                    </Base.Item>
+                  ))}
+                </Fragment>
+              ))}
+            {extra ? (
+              <>
+                <Base.Separator className="my-1 border-t border-(--rule)" />
+                <Base.Item
+                  value={EXTRA}
+                  className="relative flex cursor-pointer items-center gap-2.5 py-1.5 pr-8 pl-2 whitespace-nowrap text-muted-foreground outline-none select-none data-highlighted:bg-(--fill-strong) data-highlighted:text-foreground pointer-coarse:min-h-11"
+                >
+                  <span aria-hidden className="flex w-3.5 shrink-0 justify-center [&_svg]:size-3.5">
+                    {extra.lead}
+                  </span>
+                  <Base.ItemText>{extra.label}</Base.ItemText>
+                </Base.Item>
+              </>
+            ) : null}
+          </Base.List>
+        </Base.Popup>
+      </Base.Positioner>
+    </Base.Portal>
   );
 }

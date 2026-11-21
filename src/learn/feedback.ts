@@ -13,6 +13,7 @@ import {
   gte,
   inArray,
   isNotNull,
+  isNull,
   labels,
   max,
   messages,
@@ -159,6 +160,20 @@ async function undecided(db: Sql, accountId: string, messageId: string): Promise
   return row ? plain(openEnvelope(db, accountId, messageId, row)) : null;
 }
 
+/**
+ * The newest decision for a message that is not one of the user's own answers (a rule they applied is still scored),
+ * or null when there is none: what an answer is scored against, so picking again is never scored against the last pick.
+ */
+async function siftSaid(db: Sql, accountId: string, messageId: string): Promise<{ decisionId: number; labelId: string | null } | null> {
+  const [row] = await db
+    .select({ decisionId: decisions.id, labelId: decisions.labelId })
+    .from(decisions)
+    .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId), not(and(eq(decisions.byUser, true), isNull(decisions.ruleId))!)))
+    .orderBy(desc(decisions.id))
+    .limit(1);
+  return row ?? null;
+}
+
 /** The decision that currently stands for a message, in the shape of a suggestion, or null if it has none. */
 async function currentDecision(db: Sql, accountId: string, messageId: string): Promise<Suggestion | null> {
   const [row] = await db
@@ -201,7 +216,7 @@ interface FeedbackResult {
   corrected: string | null;
   /** How many messages now have the answer waiting to be carried out in Gmail. */
   carrying: number;
-  /** Messages this answer settled that Sift had marked for review in Gmail, so the caller can take that mark back. */
+  /** Messages this answer settled that Sift had marked for review in Gmail, so the caller can take that mark back, carried out or not. */
   asked: string[];
 }
 
@@ -231,6 +246,8 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   const from = given?.fromAddress ?? fresh?.fromAddress;
   if (from !== undefined && from !== input.sender) throw new Refusal('That message is not from that sender.');
   if (targets.length === 0 && !given && !fresh) throw new Refusal('That message is no longer waiting for review.');
+  // With only the user's own answers before it, there is nothing of Sift's to be right or wrong.
+  const scored = given ? ((await siftSaid(db, input.accountId, given.messageId)) ?? { decisionId: given.decisionId, labelId: null }) : null;
 
   // Agreeing with a decision that already stands changes nothing about the message itself.
   const changes = given !== null && (given.labelId !== label.id || given.disposition !== outcome);
@@ -249,7 +266,8 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
           : `you said this is ${label.name}`,
   };
   await db.transaction(async (tx) => {
-    const settled: Pick<Suggestion, 'accountId' | 'decisionId' | 'messageId' | 'labelId'>[] = given ? [...targets, given] : [...targets];
+    const settled: Pick<Suggestion, 'accountId' | 'decisionId' | 'messageId' | 'labelId'>[] =
+      given && scored ? [...targets, { accountId: given.accountId, messageId: given.messageId, ...scored }] : [...targets];
     const carried = { carryOut: input.carryOut ?? false, byUser: true, now };
     if (fresh) {
       const decisionId = await recordDecision(tx, input.accountId, input.messageId, answer, carried);
@@ -281,7 +299,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   return {
     corrected: given && changes ? given.messageId : null,
     carrying: input.carryOut ? targets.length + ((given && changes) || fresh ? 1 : 0) : 0,
-    asked: input.carryOut ? targets.filter((t) => t.carriedOut).map((t) => t.messageId) : [],
+    asked: targets.filter((t) => t.carriedOut).map((t) => t.messageId),
   };
 }
 

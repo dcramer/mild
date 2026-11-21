@@ -192,6 +192,28 @@ describe('teaching', () => {
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
   });
 
+  it('answering again is scored against what sift said, never against the answer before', async () => {
+    const decisionId = await suggest('ada@example.org', 'archive', { labelId: 'marketing' });
+    for (const label of ['personal', 'newsletter', 'marketing'])
+      await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label, decisionId, messageId: 'm1' }, 50);
+
+    expect(await raw(db).all('SELECT decision_id, verdict, label_id FROM feedback')).toEqual([
+      { decision_id: decisionId, verdict: 'right', label_id: 'marketing' },
+    ]);
+    expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 1 });
+    expect(await raw(db).get(`SELECT label_id, by_user, carry_out FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`)).toEqual({
+      label_id: 'marketing',
+      by_user: true,
+      carry_out: false,
+    });
+  });
+
+  it('answering again mail only the user ever placed is still no mistake of sift’s', async () => {
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'never', from: { address: 'cold@example.net', domain: 'example.net' } })], '2');
+    for (const label of ['personal', 'newsletter']) await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label, messageId: 'never' });
+    expect(await raw(db).all('SELECT verdict, label_id FROM feedback')).toEqual([{ verdict: 'answered', label_id: 'newsletter' }]);
+  });
+
   it('answering mail sift could not place does not count as a mistake', async () => {
     await suggest('cold@example.net', 'review');
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label: 'newsletter', messageId: 'm1' });
