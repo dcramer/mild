@@ -29,7 +29,8 @@ import {
 const labelPanel = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true }).and(page.locator(':not([aria-modal="false"])'));
 
 /** "12 of 30" beside `Add labels`: how many labels there are, of how many there may be. */
-const labelCount = (page: Page) => page.getByText(/^\d+ of \d+$/);
+// A desktop and a phone each draw the page's action in a place of their own.
+const labelCount = (page: Page) => page.getByText(/^\d+ of \d+$/).filter({ visible: true });
 
 /** In the open Add labels, asks the model for labels for `words`. */
 async function askForLabels(page: Page, words: string) {

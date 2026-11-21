@@ -613,19 +613,11 @@ export function SystemView() {
           </div>
         </Section>
 
-        <Section title="Page header and section" meta="the top of every page, and the parts under it; the second narrowed to one mailbox">
+        <Section title="Page header and section" meta="the top of a page about one thing, and the parts under it; the second narrowed to one mailbox">
           <Sheet className="gap-8 p-5">
-            <PageHeader
-              title="Rules"
-              actions={
-                <Button>
-                  <PlusIcon aria-hidden />
-                  Add a rule
-                </Button>
-              }
-            />
+            <PageHeader title="Ada Lovelace" meta="ada@example.org" actions={<Button>Write to them</Button>} />
             <Mailbox value="ada@work.example.org">
-              <PageHeader title="For review" />
+              <PageHeader title="news.example.com" />
             </Mailbox>
             <Section title="Proposed rules" meta="2" action={<TextLink href="/system">See all</TextLink>}>
               <p className="text-muted-foreground">A section’s content. No rule or box sets it apart, only space.</p>
@@ -633,7 +625,10 @@ export function SystemView() {
           </Sheet>
         </Section>
 
-        <Section title="List page, list view" meta="how every screen shows many of one thing: the page drawn on the server, the list in it">
+        <Section
+          title="List page, list view"
+          meta="how every screen shows many of one thing: the page drawn on the server, the list in it; on a desktop the rail names it, and its action ends the bar"
+        >
           <Sheet className="p-5">
             <ListPage title="For review">
               <ListView
@@ -697,6 +692,23 @@ export function SystemView() {
           <p className="text-muted-foreground">
             On a phone the table keeps its first column; what the others said moves under it, and the row opens for the rest.
           </p>
+          <Sheet className="p-5">
+            <Mailbox value="ada@work.example.org">
+              <ListPage
+                title="Labels"
+                actions={
+                  <Button>
+                    <PlusIcon aria-hidden />
+                    Add labels
+                  </Button>
+                }
+              >
+                <ListView>
+                  <p className="text-muted-foreground">A list with no search: the mailbox and the action on a line of their own over it.</p>
+                </ListView>
+              </ListPage>
+            </Mailbox>
+          </Sheet>
         </Section>
 
         <Section title="Label pick" meta="what a row's mail is, changed in place down a list: words until the row is pointed at, and nothing without a label">
