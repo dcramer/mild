@@ -1,5 +1,8 @@
 'use client';
-import { ArchiveIcon, MailIcon, MailOpenIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, WorkflowIcon } from 'lucide-react';
+import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
+import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { proposalStart, standingStart } from '@/lib/rule-start.ts';
 import { eq, inArray, isNull, or, useLiveQuery } from '@tanstack/react-db';
 import { type ReactNode, useContext, useDeferredValue, useState } from 'react';
 import { type AnswerLabel, answerChoices, useRecordAnswer } from '@/components/answer.tsx';
@@ -11,10 +14,10 @@ import { type MailThread, type MailView, api, readAhead, useLoaded, usePages } f
 import { type Copied, conversations, useWhole } from '@/lib/copy.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';
-import { useHidden } from '@/lib/action.ts';
+import { useAction, useHidden } from '@/lib/action.ts';
 import { useCompose } from '@/lib/compose.ts';
-import { inboxFirst, period, sureness } from '@/lib/format.ts';
-import { messageKey, threadKey, useParam } from '@/lib/params.ts';
+import { count, inboxFirst, period, sureness } from '@/lib/format.ts';
+import { messageKey, proposalKey, setParams, threadKey, useParam } from '@/lib/params.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
 import {
@@ -32,6 +35,7 @@ import {
   Note,
   RowCheck,
   RowPresses,
+  Sub,
   Table,
   Td,
   Th,
@@ -122,13 +126,15 @@ function ThreadRow({
   onSelect,
   onOpen,
   press,
+  block,
 }: {
   thread: Listed;
   labels: readonly AnswerLabel[];
   selected: boolean;
   onSelect: (on: boolean) => void;
   onOpen: () => void;
-  press: (threads: readonly Listed[], what: 'archive' | 'read' | 'unread') => void;
+  press: (threads: readonly Listed[], what: 'archive' | 'spam' | 'read' | 'unread') => void;
+  block: (threads: readonly Listed[]) => void;
 }) {
   const subject = reveal(thread.subject) || '(no subject)';
   const { who } = thread;
@@ -190,6 +196,16 @@ function ThreadRow({
                 <ArchiveIcon aria-hidden />
               </Button>
             </Tooltip>
+            <Tooltip says="Spam">
+              <Button variant="bare" size="tray" aria-label="Spam" onClick={() => press([thread], 'spam')}>
+                <ShieldAlertIcon aria-hidden />
+              </Button>
+            </Tooltip>
+            <Tooltip says="Block sender">
+              <Button variant="bare" size="tray" aria-label="Block sender" onClick={() => block([thread])}>
+                <BanIcon aria-hidden />
+              </Button>
+            </Tooltip>
             {thread.unread ? (
               <Tooltip says="Mark read">
                 <Button variant="bare" size="tray" aria-label="Mark read" onClick={() => press([thread], 'read')}>
@@ -214,6 +230,66 @@ function ThreadRow({
   );
 }
 
+/**
+ * A rule Sift proposes, drawn as mail is: from Sift, the rule as its subject and why as its text, its label where mail
+ * has one. Pressing it opens why in full; pointed at, it can be made or dismissed in place.
+ */
+function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
+  const { hide } = useAction();
+  const [making, setMaking] = useState(false);
+  return (
+    <Tr onOpen={() => setParams({ proposal: String(proposal.id) }, { state: { panel: true } })}>
+      <Td phone="hide" className="w-px">
+        <WorkflowIcon aria-hidden className="size-3.5 text-muted-foreground" />
+      </Td>
+      <Td className="max-w-0 phone:py-2 md:w-[18%] md:min-w-40">
+        <span className="font-semibold">Sift</span>
+        <span className="block truncate md:hidden">
+          <ProposalWords proposal={proposal} />
+        </span>
+        <Sub className="md:hidden">{proposalWhy(proposal)}</Sub>
+      </Td>
+      <Td phone="hide" className="max-w-0 md:w-full">
+        <span className="block truncate">
+          <span className="font-semibold">
+            <ProposalWords proposal={proposal} />
+          </span>
+          <span className="text-muted-foreground"> — {proposalWhy(proposal)}</span>
+        </span>
+      </Td>
+      <Td phone="hide" quiet className="whitespace-nowrap">
+        {proposal.labelName}
+      </Td>
+      <RowPresses
+        presses={
+          <>
+            <Button variant="bare" className="h-7 px-2" onClick={() => setMaking(true)}>
+              Make rule…
+            </Button>
+            <Button
+              variant="bare"
+              className="h-7 px-2"
+              onClick={() => hide([proposalKey(proposal)], 'Could not dismiss it', () => api.dismissProposal(proposal.id))}
+            >
+              Dismiss
+            </Button>
+          </>
+        }
+      >
+        <span className="text-sm">{count(proposal.agreed)} in a row</span>
+      </RowPresses>
+      {making ? (
+        <RuleDialog
+          labels={labels}
+          start={proposalStart(reveal(proposal.match), proposal.labelId, proposal.disposition)}
+          proposal={proposal.id}
+          onClose={() => setMaking(false)}
+        />
+      ) : null}
+    </Tr>
+  );
+}
+
 /** Compose on a phone, which has no rail. Nothing while Inbox is off. */
 export function PhoneCompose() {
   const compose = useCompose();
@@ -234,6 +310,8 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const [asked, setView] = useParam<MailView | ''>('view', VIEWS);
   const view = asked || 'all';
   const [unread, setUnread] = useParam('unread');
+  // Rules Sift proposes, at the top of the inbox: For review is not a section of its own while Inbox is on.
+  const suggestions = useLoaded('suggestions-false', (signal) => api.suggestions(false, '', signal));
   const q = useDeferredValue(search.trim());
   const ask = useAsk();
   const query = { view, label, q, unread: unread === '1', ...ask.query } as const;
@@ -272,8 +350,9 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const threads = listed.filter((t) => !hidden.has(threadKey(t)));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const chosen = threads.filter((t) => selected.has(threadKey(t)));
-  const { press, error } = useMailPress();
-  const act = (what: 'archive' | 'read' | 'unread') => press(chosen, what, () => setSelected(new Set()));
+  const { press, block, ruling, stopRuling, error } = useMailPress();
+  const act = (what: 'archive' | 'spam' | 'read' | 'unread') => press(chosen, what, () => setSelected(new Set()));
+  const proposals = (suggestions.data?.proposals ?? []).filter((p) => !hidden.has(proposalKey(p)));
   const now = useNow();
   const periods: { title: string | null; rows: Listed[] }[] = [];
   for (const thread of threads) {
@@ -319,11 +398,14 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
         clear: () => setSelected(new Set()),
         actions: [
           { label: 'Archive', key: 'e', onPress: () => act('archive') },
+          { label: 'Spam', key: '!', onPress: () => act('spam') },
+          { label: chosen.length === 1 ? 'Block sender' : 'Block senders', key: 'Shift+b', onPress: () => block(chosen, () => setSelected(new Set())) },
           { label: 'Mark read', key: 'Shift+i', onPress: () => act('read') },
           { label: 'Mark unread', key: 'Shift+u', onPress: () => act('unread') },
         ],
       }}
     >
+      {ruling ? <RuleDialog labels={labels} start={standingStart({ address: ruling }, 'blocked')} onClose={stopRuling} /> : null}
       {pages.error ? <ErrorNote message={pages.error} /> : null}
       {error ? <ErrorNote message={error} /> : null}
       <Failure>{ask.error}</Failure>
@@ -346,11 +428,19 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
               <Th phone="hide">Label</Th>
               <Th phone="hide">Received</Th>
             </Heads>
+            {proposals.length > 0 ? (
+              <tbody>
+                {proposals.map((p) => (
+                  <ProposalRow key={p.id} proposal={p} labels={labels} />
+                ))}
+              </tbody>
+            ) : null}
             {periods.map(({ title, rows }) => (
               <tbody key={title ?? ''}>
                 {title ? <TrGroup title={title} span={5} /> : null}
                 {rows.map((thread) => (
                   <ThreadRow
+                    block={block}
                     key={threadKey(thread)}
                     thread={thread}
                     labels={labels}

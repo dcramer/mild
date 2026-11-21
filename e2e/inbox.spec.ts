@@ -3,6 +3,8 @@ import {
   back,
   choose,
   expect,
+  forReviewLink,
+  proposedRule,
   inboxLink,
   inboxRow,
   inboxRows,
@@ -155,9 +157,75 @@ test.describe('Inbox', () => {
     await expect.poll(() => page.evaluate<string[]>(databases)).not.toContain('sift-copy');
   });
 
+  test('is the section For review was: / opens it, and its icon carries what waits on the reader', async ({ page }) => {
+    await page.goto('/');
+    await path(page).toBe('/inbox');
+    await expect(forReviewLink(page)).toHaveCount(0);
+    await expect(inboxLink(page)).toContainText('12');
+  });
+
+  test('a rule Sift proposes is a row from Sift at the top, which opens on why and the mail it is about, and is dismissed there', async ({ page }) => {
+    await page.goto('/inbox');
+    const proposal = proposedRule(page, 'Keep Receipts from billing@utility.example.net?');
+    await expect(page.getByRole('main').getByRole('row').nth(1)).toContainText('Sift');
+    await proposal.getByRole('cell').nth(2).click();
+    await param(page, 'proposal').not.toBeNull();
+    const view = page.getByRole('region', { name: 'Keep Receipts from billing@utility.example.net?' });
+    await expect(view.getByText('You kept the last 3, but the label archives them.')).toBeVisible();
+    await expect(view.getByRole('row').filter({ hasText: 'Your March bill' })).toBeVisible();
+
+    await view.getByRole('button', { name: 'Dismiss' }).click();
+    await param(page, 'proposal').toBeNull();
+    await expect(inboxRow(page, 'Your March bill')).toBeVisible();
+    await expect(proposal).toHaveCount(0);
+  });
+
+  test('Make rule… on a proposed rule opens the rule dialog started on it', async ({ page }) => {
+    await page.goto('/inbox');
+    const proposal = proposedRule(page, 'Keep Receipts from billing@utility.example.net?');
+    await pointAt(proposal);
+    await proposal.getByRole('button', { name: 'Make rule…' }).click();
+    await expect(page.getByRole('dialog', { name: /rule/i })).toBeVisible();
+  });
+
+  test('Spam marks the conversation spam in Gmail, and Undo puts it back', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    const deal = inboxRow(page, '48 hours only: 30% off');
+    const id = (await deal.getAttribute('data-holds'))!.split('/')[1]!;
+    await pointAt(deal);
+    await deal.getByRole('button', { name: 'Spam' }).click();
+    await expect(deal).toHaveCount(0);
+    await expect(toast(page, '48 hours only: 30% off')).toBeVisible();
+    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
+    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+
+    await toast(page, '48 hours only: 30% off').getByRole('button', { name: /^Undo/ }).click();
+    await expect(deal).toBeVisible();
+    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
+  });
+
+  test('Block sender gives them Blocked and marks their conversation spam, with one Undo', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    const sale = inboxRow(page, 'Winter sale starts now');
+    const id = (await sale.getAttribute('data-holds'))!.split('/')[1]!;
+    await pointAt(sale);
+    await sale.getByRole('button', { name: 'Block sender' }).click();
+    await expect(sale).toHaveCount(0);
+    const blocked = toast(page, 'Blocked sale@store.example.com');
+    await expect(blocked).toBeVisible();
+    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
+
+    await blocked.getByRole('button', { name: /^Undo/ }).click();
+    await expect(sale).toBeVisible();
+    await page.goto('/sender/sale%40store.example.com');
+    await expect(page.getByRole('radio', { name: 'Blocked', checked: true })).toHaveCount(0);
+  });
+
   test('J and K move, O opens a conversation with its unread open, and opening it marks it read', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
+    // The rule Sift proposes is the first row; the mail starts after it.
+    await page.keyboard.press('j');
     await page.keyboard.press('j');
     await page.keyboard.press('j');
     await page.keyboard.press('k');
@@ -245,6 +313,8 @@ test.describe('Inbox', () => {
   test('X selects, E archives what is selected, and Undo puts it back', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
+    // The rule Sift proposes is the first row; the mail starts after it.
+    await page.keyboard.press('j');
     await page.keyboard.press('j');
     await page.keyboard.press('x');
     await page.keyboard.press('j');
@@ -269,6 +339,8 @@ test.describe('Inbox', () => {
     });
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
+    // The rule Sift proposes is the first row; the mail starts after it.
+    await page.keyboard.press('j');
     await page.keyboard.press('j');
     await page.keyboard.press('x');
     await page.keyboard.press('j');

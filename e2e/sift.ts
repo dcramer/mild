@@ -401,6 +401,13 @@ export const inboxRows = (page: Page) => page.getByRole('row').filter({ has: pag
 export const inboxRow = (page: Page, subject: string) =>
   page.getByRole('row').filter({ has: page.getByRole('checkbox', { name: `Select ${subject}`, exact: true }) });
 
+/** A rule Sift proposes, as a row at the top of Inbox, by its words. */
+export const proposedRule = (page: Page, words: string) =>
+  page
+    .getByRole('row')
+    .filter({ hasText: words })
+    .filter({ hasNot: page.getByRole('checkbox') });
+
 /** The composer, by its title: new mail in a panel of its own, a reply or a forward in the reader. */
 export const composer = (page: Page, title: 'New message' | 'Reply' | 'Reply to all' | 'Forward') =>
   page.getByRole(title === 'New message' ? 'dialog' : 'region', { name: title, exact: true });

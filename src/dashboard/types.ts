@@ -805,7 +805,7 @@ export type SyncPage = z.infer<typeof SyncPage>;
 export const MailChange = z.strictObject({
   accountId: z.string(),
   messageIds: z.array(z.string().min(1).max(200)).min(1).max(200),
-  change: z.enum(['archive', 'read', 'unread']),
+  change: z.enum(['archive', 'spam', 'read', 'unread']),
 });
 export type MailChange = z.infer<typeof MailChange>;
 

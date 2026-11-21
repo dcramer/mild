@@ -163,6 +163,7 @@ export async function execute(deps: ActionDeps, accountId: string, messageId: st
 /** What the person can do to mail in their inbox from Inbox, and the change in Gmail each is. */
 const PRESSES = {
   archive: { add: [], remove: ['INBOX'] },
+  spam: { add: ['SPAM'], remove: ['INBOX'] },
   read: { add: [], remove: ['UNREAD'] },
   unread: { add: ['UNREAD'], remove: [] },
 } as const satisfies Record<string, LabelChange>;

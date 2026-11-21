@@ -128,7 +128,8 @@ test.describe('with Inbox on', () => {
     await expect(writing.getByText(`Sift can’t send from ${WORK} yet`)).toBeVisible();
     await expect(writing.getByRole('link', { name: 'Let Sift send' })).toHaveAttribute(
       'href',
-      `/auth/login?${new URLSearchParams({ grant: 'send', mailbox: WORK, to: '/?compose=new' }).toString()}`,
+      // With Inbox on, `/` is Inbox.
+      `/auth/login?${new URLSearchParams({ grant: 'send', mailbox: WORK, to: '/inbox?compose=new' }).toString()}`,
     );
     await expect(writing.getByRole('textbox')).toHaveCount(0);
     await expect(writing.getByRole('button', { name: /^Send/ })).toHaveCount(0);

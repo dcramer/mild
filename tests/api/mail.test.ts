@@ -153,6 +153,22 @@ describe('changing mail', () => {
     expect(threadsOf(await me.call('GET', '/api/mail/threads')).map((t) => t.threadId)).toEqual([b]);
   });
 
+  it('marks a conversation spam as the person’s own press, taken back by Undo', async () => {
+    const { sift, box, me } = await withInbox();
+    const deal = box.deliver({ from: 'deals@example.com', subject: 'Deal' });
+    await arrives(sift, me);
+
+    const spam = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [deal], change: 'spam' });
+    expect(spam.body).toMatchObject({ actions: [expect.any(Number)], missed: 0 });
+    expect(box.message(deal)!.labelIds).toContain('SPAM');
+    expect(box.message(deal)!.labelIds).not.toContain('INBOX');
+    expect(threadsOf(await me.call('GET', '/api/mail/threads'))).toEqual([]);
+
+    expect((await me.call('POST', '/api/undo', { id: (spam.body as { actions: number[] }).actions[0] })).status).toBe(200);
+    expect(box.message(deal)!.labelIds).toContain('INBOX');
+    expect(box.message(deal)!.labelIds).not.toContain('SPAM');
+  });
+
   it('leaves mail no longer in the inbox as it is', async () => {
     const { sift, box, me } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com' });
