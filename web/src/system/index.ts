@@ -42,7 +42,7 @@ export { Entry } from './entry.tsx';
 export { Onboarding } from './onboarding.tsx';
 export { Blank, Empty, Loading, More } from './state.tsx';
 export { LoadingBar, useGoing } from './loading-bar.tsx';
-export { Heads, OnPhone, RowActions, RowCheck, Sub, Table, Td, Th, Tr, TrGroup, rowHolding } from './table.tsx';
+export { Heads, OnPhone, RowActions, RowCheck, RowPresses, Sub, Table, Td, Th, Tr, TrGroup, rowHolding } from './table.tsx';
 export { Timeline, TimelineEvent } from './timeline.tsx';
 export { Toaster, useToast } from './toast.tsx';
 export { Tooltip } from './tooltip.tsx';

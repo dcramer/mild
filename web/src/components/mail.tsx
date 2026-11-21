@@ -70,13 +70,13 @@ export function whoWrote(who: readonly Confidential[]): string {
   return names.map((name) => (name.includes('@') ? name.split('@')[0] : name.split(/\s+/)[0])).join(', ');
 }
 
-/** What Sift thinks a message is: how sure, then the label; mail it could not place says so; mail it never decided, nothing. */
+/** The label Sift gave a message, with how sure it is; nothing for mail it never decided or could not place, which is most of an inbox. */
 export function Thinks({ thinks }: { thinks: MailThread['thinks'] }) {
-  if (!thinks) return null;
+  if (!thinks || thinks.labelId === null) return null;
   return (
     <span className="inline-flex items-baseline gap-2">
-      <Meter level={thinks.labelId === null ? null : sureness(thinks)} />
-      {thinks.labelId === null ? outcomeName('review') : (thinks.labelName ?? outcomeName(thinks.disposition))}
+      <Meter level={sureness(thinks)} />
+      {thinks.labelName ?? outcomeName(thinks.disposition)}
     </span>
   );
 }

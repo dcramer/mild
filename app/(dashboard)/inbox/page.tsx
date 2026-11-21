@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Blank, ListPage, Loading, OnPhone, Sub, Td } from '@/system';
+import { Blank, ListPage, Loading, OnPhone, Td } from '@/system';
 import { InboxView, PhoneCompose } from '@/views/inbox.tsx';
 
 export const metadata: Metadata = { title: 'Inbox' };
@@ -9,11 +9,11 @@ export default function Inbox() {
     <ListPage title="Inbox" actions={<PhoneCompose />}>
       <InboxView
         loading={
-          <Loading>
+          <Loading dense>
             <Td phone="hide" className="w-px">
               <Blank className="size-3.5" />
             </Td>
-            <Td className="max-w-0 md:w-[22%] md:min-w-48">
+            <Td className="max-w-0 md:w-[18%] md:min-w-40">
               <Blank />
               <OnPhone>
                 <span className="w-full text-base">
@@ -24,9 +24,6 @@ export default function Inbox() {
             </Td>
             <Td phone="hide" className="max-w-0 md:w-full">
               <Blank />
-              <Sub>
-                <Blank />
-              </Sub>
             </Td>
             <Td phone="hide">
               <Blank word />
