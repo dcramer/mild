@@ -10,9 +10,9 @@ export interface Answerable {
   accountId: string;
   sender: string;
   messageId: string;
-  /** Absent for mail sift never decided: the answer is its first decision. */
+  /** Absent for mail Mild never decided: the answer is its first decision. */
   decisionId?: number;
-  /** The label sift gave, if any. */
+  /** The label Mild gave, if any. */
   labelId: string | null;
 }
 
@@ -23,9 +23,9 @@ export interface AnswerLabel {
 }
 
 /**
- * Saying what one message is, like a spam button with more than two outcomes: sift records it, does what
+ * Saying what one message is, like a spam button with more than two outcomes: Mild records it, does what
  * that label does to the message in Gmail, and keeps it as an example. No rule is made. When the sender
- * has other mail waiting that sift guessed the same way, the toast offers the same answer for those. An answered
+ * has other mail waiting that Mild guessed the same way, the toast offers the same answer for those. An answered
  * message leaves the list, and `onDone` is called, as soon as it is pressed. The answer is sent only once its
  * toast goes, so Undo puts the row back with nothing to take back in Gmail or the record.
  */
@@ -57,7 +57,7 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
     hide(targets.map(messageKey), 'Could not save your answer', async () => {
       if (!(await held(title, action))) return;
       const replies = await Promise.all(targets.map((t) => say(t, labelId)));
-      // The answer is saved; what sift itself did to the message could not be taken back in Gmail.
+      // The answer is saved; what Mild itself did to the message could not be taken back in Gmail.
       const notFixed = replies.find((r) => r.notFixed !== null)?.notFixed;
       if (notFixed) toast('Could not put the message back in Gmail', { tone: 'failure', description: notFixed });
     });
@@ -100,7 +100,7 @@ interface Alternative {
 }
 
 /**
- * What a message might be, for the answer's dropdown: Leave in inbox, always first; then sift's label and its
+ * What a message might be, for the answer's dropdown: Leave in inbox, always first; then Mild's label and its
  * other likely ones, each with how sure; then every other label. Leave in inbox has its meter where it is,
  * when it is one of the likely ones.
  */
@@ -142,7 +142,7 @@ export function useRecordAnswer(): (target: Answerable, labelId: string) => Prom
           label: labelId,
           carryOut: false,
         });
-        // The answer is saved; Sift's own label on the message could not be taken back in Gmail.
+        // The answer is saved; Mild's own label on the message could not be taken back in Gmail.
         if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
       });
     } catch (failure) {

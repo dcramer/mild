@@ -52,7 +52,7 @@ export async function draftRule(
   const spent = { lookups: answer.lookups, ...(answer.usage ? { usage: answer.usage } : {}), now: now() };
   if ('failed' in answer) {
     await finishRuleDraft(db, request.accountId, id, { error: answer.failed, ...spent });
-    // A refusal is the page's to show and is not reported, but a model that keeps failing is Sift's to fix.
+    // A refusal is the page's to show and is not reported, but a model that keeps failing is Mild's to fix.
     reportError(new Error(`Rule drafting failed: ${answer.failed}`));
     throw new Refusal(`The model could not fill in a rule (${answer.failed}). Try again, or fill it in yourself.`);
   }

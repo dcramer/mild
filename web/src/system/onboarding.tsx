@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { TextPress, Wordmark } from './type.tsx';
 
 /**
- * The page in place of the dashboard while someone sets Sift up: connecting a model, saying what they want,
+ * The page in place of the dashboard while someone sets Mild up: connecting a model, saying what they want,
  * choosing their labels. One column, centred, with the name and who is signed in along its top; the steps
  * in order above the step's title, those done ticked and this one underlined in the highlighter (on a
  * phone, "Step 2 of 4" and its name). The page scrolls when a step is long. `steps` is left out when there

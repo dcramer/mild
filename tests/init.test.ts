@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { describe, expect, it } from 'vitest';
@@ -26,12 +26,12 @@ function wizard(
     serveFails?: boolean;
     /** The step to change when setup is finished and init lists them. Without it, none. */
     change?: number;
-    /** A SIFT_KEY already set. */
+    /** A MILD_KEY already set. */
     key?: string;
     keyFails?: boolean;
   } = {},
 ) {
-  const config = loadConfig({ SIFT_HOME: tempDir(), ...(state.key ? { SIFT_KEY: state.key } : {}) });
+  const config = loadConfig({ MILD_HOME: tempDir(), ...(state.key ? { MILD_KEY: state.key } : {}) });
   const said: string[] = [];
   const asked: string[] = [];
   const calls: string[] = [];
@@ -47,7 +47,7 @@ function wizard(
       ...(state.location === 'remote' ? { location: 'remote' as const } : finished && state.location !== 'ask' ? { location: 'local' as const } : {}),
     },
   };
-  // The first question is where sift runs (a home with no answer yet) or which step to change (a finished one).
+  // The first question is where mild runs (a home with no answer yet) or which step to change (a finished one).
   // Unless a test is about that, answer with the first option: this machine, or none.
   if (finished) answers.unshift(state.change ?? 0);
   else if (state.location === undefined) answers.unshift(0);
@@ -91,7 +91,7 @@ function wizard(
     saveKey: (key) => {
       calls.push('save key');
       if (state.keyFails) throw new Error('read-only file system');
-      Object.assign(config.keys, loadKeyring({ SIFT_KEY: key }));
+      Object.assign(config.keys, loadKeyring({ MILD_KEY: key }));
       return '/work/sift/.env';
     },
     hasGoogleClient: () => world.client,
@@ -127,17 +127,17 @@ const CLIENT_STEP = 3;
 const SENTRY_STEP = 4;
 const links = (said: string[]) => said.filter((line) => line.startsWith('link: ')).map((line) => line.slice(6).replace('https://console.cloud.google.com', ''));
 
-describe('sift init', () => {
+describe('mild init', () => {
   it('walks a new user through setup, and leaves connecting Gmail to the browser', async () => {
     const w = wizard([...GOOGLE]);
     await runInit(w.deps);
 
     expect(w.calls).toEqual(['save key', `install ${CLIENT}`]);
     expect(w.config.keys.current).not.toBeNull();
-    expect(w.text()).toContain('ok: Saved as SIFT_KEY in /work/sift/.env');
-    expect(loadConfig({ SIFT_HOME: w.config.home }).settings).toEqual(DEFAULT_SETTINGS);
+    expect(w.text()).toContain('ok: Saved as MILD_KEY in /work/sift/.env');
+    expect(loadConfig({ MILD_HOME: w.config.home }).settings).toEqual(DEFAULT_SETTINGS);
     expect(w.text()).toContain('signing in to the dashboard with Google is what connects the account');
-    expect(w.text()).toMatch(/Ready.*sift run.*http:\/\/localhost:8787.*sign in with Google/);
+    expect(w.text()).toMatch(/Ready.*mild run.*http:\/\/localhost:8787.*sign in with Google/);
   });
 
   it('gives each Google task its link and values, with the redirect URIs the client needs', async () => {
@@ -194,11 +194,11 @@ describe('sift init', () => {
     await runInit(w.deps);
     expect(w.asked).toEqual(['Change a step?']);
     expect(w.calls).toEqual([]);
-    expect(w.text()).toContain('Where Sift runs: Dashboard at');
+    expect(w.text()).toContain('Where Mild runs: Dashboard at');
     expect(w.text()).toContain('Google OAuth client: Client in place');
     expect(w.text()).toContain('Gmail account: me@example.org');
     expect(w.config.settings).toEqual(DEFAULT_SETTINGS);
-    expect(w.text()).toMatch(/Ready.*sift run/);
+    expect(w.text()).toMatch(/Ready.*mild run/);
     expect(w.text()).not.toContain('sign in with Google');
   });
 
@@ -217,14 +217,14 @@ describe('sift init', () => {
   it('generates the encryption key before any credential is stored, and shows it when it cannot be saved', async () => {
     const saved = wizard([...GOOGLE]);
     await runInit(saved.deps);
-    expect(saved.said.indexOf('ok: Saved as SIFT_KEY in /work/sift/.env')).toBeLessThan(saved.said.findIndex((line) => line.startsWith('link: ')));
-    expect(saved.text()).toContain('Sift reads it only when started from this directory');
+    expect(saved.said.indexOf('ok: Saved as MILD_KEY in /work/sift/.env')).toBeLessThan(saved.said.findIndex((line) => line.startsWith('link: ')));
+    expect(saved.text()).toContain('Mild reads it only when started from this directory');
 
     const failed = wizard([...GOOGLE], { keyFails: true });
     await runInit(failed.deps);
     expect(failed.config.keys.current).toBeNull();
     expect(failed.text()).toContain('fail: Could not save the key: read-only file system');
-    expect(failed.said[failed.said.findIndex((line) => line.includes('Set this as SIFT_KEY')) + 1]).toMatch(/^[\w-]{43}$/);
+    expect(failed.said[failed.said.findIndex((line) => line.includes('Set this as MILD_KEY')) + 1]).toMatch(/^[\w-]{43}$/);
 
     // A finished setup without one lists it, and makes one when picked; with one set it is never replaced.
     const later = wizard([], { client: true, accounts: ['me@example.org'], change: KEY_STEP });
@@ -235,7 +235,7 @@ describe('sift init', () => {
     const set = wizard([], { client: true, accounts: ['me@example.org'], key: 'key-a', change: KEY_STEP });
     await runInit(set.deps);
     expect(set.text()).toContain(`Encryption key: Credentials encrypted · key ${set.config.keys.current!.id}`);
-    expect(set.text()).toContain('SIFT_OLD_KEYS');
+    expect(set.text()).toContain('MILD_OLD_KEYS');
     expect(set.calls).toEqual([]);
   });
 
@@ -300,15 +300,37 @@ describe('sift init', () => {
 });
 
 describe('settings', () => {
-  it('defaults to ~/.config/sift and honours XDG_CONFIG_HOME and SIFT_HOME', () => {
-    expect(resolveHome({ HOME: '/home/u' })).toMatch(/\/\.config\/sift$/);
-    expect(resolveHome({ XDG_CONFIG_HOME: '/x' })).toBe('/x/sift');
-    expect(resolveHome({ SIFT_HOME: '/data', XDG_CONFIG_HOME: '/x' })).toBe('/data');
+  it('defaults to ~/.config/mild and honours XDG_CONFIG_HOME and MILD_HOME', () => {
+    const base = tempDir();
+    expect(resolveHome({ XDG_CONFIG_HOME: base })).toBe(join(base, 'mild'));
+    expect(resolveHome({ MILD_HOME: '/data', XDG_CONFIG_HOME: base })).toBe('/data');
+  });
+
+  it('keeps a home and settings from before the rename to Mild until they are moved', () => {
+    const base = tempDir();
+    mkdirSync(join(base, 'sift'));
+    expect(resolveHome({ XDG_CONFIG_HOME: base })).toBe(join(base, 'sift'));
+    mkdirSync(join(base, 'mild'));
+    expect(resolveHome({ XDG_CONFIG_HOME: base })).toBe(join(base, 'mild'));
+    expect(resolveHome({ SIFT_HOME: '/data' })).toBe('/data');
+    expect(resolveHome({ SIFT_HOME: '/old', MILD_HOME: '/new' })).toBe('/new');
+    expect(readSettings({ SIFT_URL: 'https://box.example.ts.net', SIFT_DASHBOARD_PORT: '9100', MILD_DASHBOARD_PORT: '9200' })).toMatchObject({
+      url: 'https://box.example.ts.net',
+      dashboardPort: 9200,
+    });
+    expect(() => readSettings({ SIFT_CLOUD: 'yes' })).toThrow('MILD_CLOUD must be true or false.');
+    const old = 'a'.repeat(64);
+    expect(loadKeyring({ SIFT_KEY: old }).current).toEqual(loadKeyring({ MILD_KEY: old }).current);
+
+    const config = loadConfig({ MILD_HOME: tempDir() });
+    writeFileSync(config.envPath, 'SIFT_URL=https://old.example.ts.net\n');
+    saveSetting(config, 'MILD_URL', 'https://box.example.ts.net');
+    expect(readFileSync(config.envPath, 'utf8')).toBe('MILD_URL=https://box.example.ts.net\n');
   });
 
   it('keeps everything in the home directory and needs no environment variables', () => {
     const home = tempDir();
-    const config = loadConfig({ SIFT_HOME: home });
+    const config = loadConfig({ MILD_HOME: home });
     for (const path of [config.envPath, config.databaseDir, config.googleClientPath]) {
       expect(path.startsWith(`${home}/`)).toBe(true);
     }
@@ -316,45 +338,45 @@ describe('settings', () => {
   });
 
   it("writes one setting at a time to the home's .env, keeping every other line", () => {
-    const config = loadConfig({ SIFT_HOME: tempDir() });
-    writeFileSync(config.envPath, 'SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_PORT=9000\n');
-    saveSetting(config, 'SIFT_DASHBOARD_PORT', '9100');
-    saveSetting(config, 'SIFT_URL', 'https://box.example.ts.net');
+    const config = loadConfig({ MILD_HOME: tempDir() });
+    writeFileSync(config.envPath, 'MILD_OLD_KEYS=old\nMILD_DASHBOARD_PORT=9000\n');
+    saveSetting(config, 'MILD_DASHBOARD_PORT', '9100');
+    saveSetting(config, 'MILD_URL', 'https://box.example.ts.net');
     expect(saved(config)).toEqual({ ...DEFAULT_SETTINGS, dashboardPort: 9100, url: 'https://box.example.ts.net' });
     expect(config.settings).toEqual(saved(config));
-    saveSetting(config, 'SIFT_URL', undefined);
-    expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_OLD_KEYS=old\nSIFT_DASHBOARD_PORT=9100\n');
+    saveSetting(config, 'MILD_URL', undefined);
+    expect(readFileSync(config.envPath, 'utf8')).toBe('MILD_OLD_KEYS=old\nMILD_DASHBOARD_PORT=9100\n');
   });
 
   it('refuses a wrong value by the variable that gave it', () => {
-    expect(() => readSettings({ SIFT_DASHBOARD_PORT: '0' })).toThrow('SIFT_DASHBOARD_PORT must be a port number.');
-    expect(() => readSettings({ SIFT_DASHBOARD_PORT: 'soon' })).toThrow('SIFT_DASHBOARD_PORT must be a port number.');
+    expect(() => readSettings({ MILD_DASHBOARD_PORT: '0' })).toThrow('MILD_DASHBOARD_PORT must be a port number.');
+    expect(() => readSettings({ MILD_DASHBOARD_PORT: 'soon' })).toThrow('MILD_DASHBOARD_PORT must be a port number.');
     for (const url of ['box.example.ts.net', 'ftp://box.example.ts.net', 'https://box.example.ts.net/sift', 'https://me@box.example.ts.net']) {
-      expect(() => readSettings({ SIFT_URL: url })).toThrow('SIFT_URL must be an address starting https:// or http://, with no path.');
+      expect(() => readSettings({ MILD_URL: url })).toThrow('MILD_URL must be an address starting https:// or http://, with no path.');
     }
-    expect(readSettings({ SIFT_URL: 'https://Box.example.ts.net/' }).url).toBe('https://box.example.ts.net');
+    expect(readSettings({ MILD_URL: 'https://Box.example.ts.net/' }).url).toBe('https://box.example.ts.net');
     expect(() => readSettings({ DATABASE_URL: 'mysql://x' })).toThrow('DATABASE_URL must be an address starting postgres://');
     expect(() => readSettings({ REDIS_URL: 'http://x' })).toThrow('REDIS_URL must be an address starting redis:// or rediss://');
-    expect(() => readSettings({ SIFT_CHATGPT_SIGN_IN: 'on' })).toThrow('SIFT_CHATGPT_SIGN_IN must be "device-code" or "redirect".');
-    expect(readSettings({ SIFT_CHATGPT_SIGN_IN: 'redirect', SIFT_DASHBOARD_PORT: '' }).chatgptSignIn).toBe('redirect');
-    expect(() => readSettings({ SIFT_CLOUD: 'yes' })).toThrow('SIFT_CLOUD must be true or false.');
-    expect(readSettings({ SIFT_CLOUD: 'true' }).cloud).toBe(true);
-    expect(readSettings({ SIFT_CLOUD: 'false' }).cloud).toBe(false);
+    expect(() => readSettings({ MILD_CHATGPT_SIGN_IN: 'on' })).toThrow('MILD_CHATGPT_SIGN_IN must be "device-code" or "redirect".');
+    expect(readSettings({ MILD_CHATGPT_SIGN_IN: 'redirect', MILD_DASHBOARD_PORT: '' }).chatgptSignIn).toBe('redirect');
+    expect(() => readSettings({ MILD_CLOUD: 'yes' })).toThrow('MILD_CLOUD must be true or false.');
+    expect(readSettings({ MILD_CLOUD: 'true' }).cloud).toBe(true);
+    expect(readSettings({ MILD_CLOUD: 'false' }).cloud).toBe(false);
   });
 
   it('installs a pasted Web application client, or one given as a path, and refuses a Desktop one', () => {
-    const config = loadConfig({ SIFT_HOME: tempDir() });
+    const config = loadConfig({ MILD_HOME: tempDir() });
     const web = JSON.stringify({ web: { client_id: 'id', client_secret: 'secret' } }, null, 2);
     const desktop = JSON.stringify({ installed: { client_id: 'id', client_secret: 'secret' } });
 
     expect(() => installClient(config, JSON.stringify({ other: {} }))).toThrow('not a Google OAuth client');
     expect(() => installClient(config, '{"web": ')).toThrow('not valid JSON');
-    expect(() => loadClientSecrets(config, {})).toThrow('Run `sift init`');
+    expect(() => loadClientSecrets(config, {})).toThrow('Run `mild init`');
 
     installClient(config, `  ${web}\n`);
     expect(loadClientSecrets(config, {})).toEqual({ clientId: 'id', clientSecret: 'secret' });
 
-    const other = loadConfig({ SIFT_HOME: tempDir() });
+    const other = loadConfig({ MILD_HOME: tempDir() });
     const file = join(tempDir(), 'client.json');
     writeFileSync(file, web);
     installClient(other, file);
@@ -373,15 +395,15 @@ describe('settings from the environment', () => {
   };
 
   it('are read from their variables', () => {
-    const config = loadConfig({ SIFT_HOME: tempDir(), SIFT_DASHBOARD_PORT: '9100', ...DATABASE });
+    const config = loadConfig({ MILD_HOME: tempDir(), MILD_DASHBOARD_PORT: '9100', ...DATABASE });
     expect(config.settings).toMatchObject({ dashboardPort: 9100 });
     expect([config.databaseUrl, config.databaseMigrationUrl]).toEqual([DATABASE.DATABASE_URL, DATABASE.DATABASE_MIGRATION_URL]);
   });
 
   it("never copies one into the home's .env when another is saved", () => {
-    const config = loadConfig({ SIFT_HOME: tempDir(), ...DATABASE });
-    saveSetting(config, 'SIFT_URL', 'https://box.example.ts.net');
-    expect(readFileSync(config.envPath, 'utf8')).toBe('SIFT_URL=https://box.example.ts.net\n');
+    const config = loadConfig({ MILD_HOME: tempDir(), ...DATABASE });
+    saveSetting(config, 'MILD_URL', 'https://box.example.ts.net');
+    expect(readFileSync(config.envPath, 'utf8')).toBe('MILD_URL=https://box.example.ts.net\n');
     expect(config.settings.databaseUrl).toBe(DATABASE.DATABASE_URL);
   });
 });

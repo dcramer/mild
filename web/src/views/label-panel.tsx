@@ -69,7 +69,7 @@ export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft
       </Field>
       <Field inline label="Then" hint={EXPLAIN[draft.disposition]}>
         <Select
-          label="What Sift does with it"
+          label="What Mild does with it"
           value={draft.disposition}
           options={ACTIONS}
           icons={ICONS}
@@ -81,9 +81,9 @@ export function LabelFields({ draft, onChange, gmailLabel }: { draft: LabelDraft
         label="Also"
         hint={
           draft.unsubscribe
-            ? `Only while Sift is on, never from someone you have written to, and it cannot be undone from here.${
+            ? `Only while Mild is on, never from someone you have written to, and it cannot be undone from here.${
                 draft.disposition === 'spam' || draft.disposition === 'block'
-                  ? ' Answering a spammer’s link tells them the address is read, so Sift only does it when the message proves who sent it.'
+                  ? ' Answering a spammer’s link tells them the address is read, so Mild only does it when the message proves who sent it.'
                   : ''
               }`
             : undefined
@@ -189,7 +189,7 @@ export function LabelPanel({
           />
           <Figure label="Rules" value={count(label.rules)} {...(label.rules > 0 ? { href: `/rules?label=${label.id}` } : {})} />
         </Figures>
-        {/* Sift's own: nothing about it changes. */}
+        {/* Mild's own: nothing about it changes. */}
         {label.gmailLabel === null ? (
           <p className="text-muted-foreground">
             Mail none of your labels fit stays in your inbox. Add a label of your own for mail you want treated differently.
@@ -318,7 +318,7 @@ export function AddLabelsDialog({ onClose, onSaved }: { onClose: () => void; onS
     <DescribeStep
       title="Add labels"
       question="What mail, and what should happen to it?"
-      hint="Sift suggests one label or several, mostly for mail to move, none overlapping the ones you have. You choose which to add."
+      hint="Mild suggests one label or several, mostly for mail to move, none overlapping the ones you have. You choose which to add."
       placeholder="Archive shipping updates, but never a missed or failed delivery"
       value={text}
       onChange={setText}

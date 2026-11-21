@@ -3,7 +3,7 @@ import { type KeyboardEvent, useState } from 'react';
 import { Button } from './button.tsx';
 
 /**
- * A press that is hard to take back but deletes nothing (turning Sift on); deleting is `DeleteButton`. The first
+ * A press that is hard to take back but deletes nothing (turning Mild on); deleting is `DeleteButton`. The first
  * press asks, in place, with the question and the same words on the button that does it; Cancel or Escape puts it
  * back. The answer has the focus, so a keyboard user confirms with Enter.
  */
@@ -15,7 +15,7 @@ export function ConfirmButton({
   disabled,
   children,
 }: {
-  /** Says what will happen: "Turn Sift on?" */
+  /** Says what will happen: "Turn Mild on?" */
   question: string;
   onConfirm: () => void;
   /** How the first press looks: `quiet` down a list, `plain` on its own. */

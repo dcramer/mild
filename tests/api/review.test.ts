@@ -64,12 +64,12 @@ describe('For review', () => {
 });
 
 describe('an answer', () => {
-  it('that agrees is carried out in Gmail, Sift on or off, and its message kept as an example', async () => {
+  it('that agrees is carried out in Gmail, Mild on or off, and its message kept as an example', async () => {
     const { sift, box, me, receipt, decision } = await waiting();
     const answered = await me.call('POST', '/api/feedback', { accountId: ME, sender: SHOP, label: 'receipts', decisionId: decision, messageId: receipt });
     expect(answered).toMatchObject({ status: 200, body: { notFixed: null } });
     await sift.work();
-    expect(box.message(receipt)!.labelIds).toEqual(['UNREAD', box.labelId('sift/receipts'), box.labelId('sift/did/archived')]);
+    expect(box.message(receipt)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts'), box.labelId('mild/did/archived')]);
     expect(await itemsOf(me)).toEqual([]);
     expect((await rowsOf(me))[0]).toMatchObject({ messageId: receipt, byUser: true, carryOut: true, actionStatus: 'done' });
     expect((await me.call('GET', '/api/examples')).body).toMatchObject({
@@ -97,7 +97,7 @@ describe('an answer', () => {
     expect((await rowsOf(me))[0]).toMatchObject({ messageId: receipt, labelId: 'everything_else', byUser: true, carryOut: false, actionId: null });
   });
 
-  it('that corrects what Sift did takes its change back in Gmail', async () => {
+  it('that corrects what Mild did takes its change back in Gmail', async () => {
     const { sift, box, me } = await waiting();
     await me.call('POST', '/api/active', { active: true });
     await me.call('POST', '/api/rules', { match: { from: ['deals@example.com'] }, label: 'receipts' });
@@ -114,7 +114,7 @@ describe('an answer', () => {
     expect(await rowsOf(me, '?status=undone')).toMatchObject([{ messageId: deal, stage: 'rules' }]);
   });
 
-  it('says so when Gmail refuses to take Sift’s change back, keeping the answer', async () => {
+  it('says so when Gmail refuses to take Mild’s change back, keeping the answer', async () => {
     const { sift, box, me } = await waiting();
     await me.call('POST', '/api/active', { active: true });
     await me.call('POST', '/api/rules', { match: { from: ['deals@example.com'] }, label: 'receipts' });

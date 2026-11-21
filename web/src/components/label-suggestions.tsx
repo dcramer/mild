@@ -37,8 +37,8 @@ export const keepWord = (verb: 'Use' | 'Add', kept: number) =>
 const word = (key: string) => ACTIONS.find(([k]) => k === key)?.[1] ?? key;
 
 /**
- * What the model suggested, each ticked to keep: its name, what it is and what Sift will do with it, and Edit.
- * On a phone, what Sift does and Edit share the line under the description, which keeps the width.
+ * What the model suggested, each ticked to keep: its name, what it is and what Mild will do with it, and Edit.
+ * On a phone, what Mild does and Edit share the line under the description, which keeps the width.
  */
 export function SuggestionList({
   suggestions,

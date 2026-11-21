@@ -65,7 +65,7 @@ export const saysOf = ({ label, whenLabel, disposition, markRead, unsubscribe, w
 
 /**
  * Take out the Gmail filters written for a rule that is about to go, in every mailbox: one left behind would
- * keep acting on mail with no rule to explain or remove it. Asked even with no filter recorded: one sift wrote
+ * keep acting on mail with no rule to explain or remove it. Asked even with no filter recorded: one Mild wrote
  * and lost track of is found and removed there too. False when there is no such rule.
  */
 export async function removeFilter({ db, controls }: Context, id: string): Promise<boolean> {

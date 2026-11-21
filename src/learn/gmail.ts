@@ -15,15 +15,15 @@ interface MessageChange {
 }
 
 /**
- * The part of Gmail's history that sift did not cause: what the user (or another client of theirs) did.
- * History does not say who made a change, so each of sift's own logged changes since `since` cancels one
+ * The part of Gmail's history that Mild did not cause: what the user (or another client of theirs) did.
+ * History does not say who made a change, so each of Mild's own logged changes since `since` cancels one
  * matching entry, and what is left over is the user's. `since` is when the previous sync began: nothing
- * sift did before then can still be in this history, and counting an older action could hide a real change.
+ * Mild did before then can still be in this history, and counting an older action could hide a real change.
  * One entry per message, each label listed once.
  */
 export async function userChanges(db: Sql, accountId: string, history: readonly MessageChange[], since: number): Promise<MessageChange[]> {
   if (history.length === 0) return [];
-  // messageId -> "+LABEL" or "-LABEL" -> how many times more than sift did it
+  // messageId -> "+LABEL" or "-LABEL" -> how many times more than Mild did it
   const tally = new Map<string, Map<string, number>>();
   const count = (messageId: string, key: string, by: number) => {
     const counts = tally.get(messageId) ?? new Map<string, number>();
@@ -57,7 +57,7 @@ export async function userChanges(db: Sql, accountId: string, history: readonly 
   return changes;
 }
 
-/** What correction detection reads from Gmail: the names of the account's labels, to tell which are Sift's. */
+/** What correction detection reads from Gmail: the names of the account's labels, to tell which are Mild's. */
 interface GmailLabels {
   listLabels(): Promise<{ id: string; name: string }[]>;
 }
@@ -68,11 +68,11 @@ const moves = (labels: string[]) => labels.includes('INBOX') || labels.includes(
 
 /**
  * Treat what the user did to a message in Gmail as their answer about that one message: moving it back
- * to the inbox or out of spam, archiving it or marking it spam, or giving it a different `sift/…` label.
+ * to the inbox or out of spam, archiving it or marking it spam, or giving it a different `mild/…` label.
  * `changes` must be the user's own (see `userChanges`), and the record's labels already moved by the same history. Where
- * the message is now is what they want; a move alone does not say what the mail is, so it keeps the label sift gave it and records
+ * the message is now is what they want; a move alone does not say what the mail is, so it keeps the label Mild gave it and records
  * the different outcome. The answer is recorded as the dashboard's "only this one" is: never a rule, and
- * nothing is changed in Gmail, since the message is already where the user put it. Mail sift could not
+ * nothing is changed in Gmail, since the message is already where the user put it. Mail Mild could not
  * place, and mail it left in the inbox and the user moved, are skipped unless the user labelled it. Safe to
  * run again over the same history.
  * Returns how many answers were recorded.
@@ -103,8 +103,9 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
     const touched = [...change.added, ...change.removed];
     const moved = moves(touched);
     if (!moved && !touched.some(isUserLabel)) continue;
-    // Gmail compares label names without case, so one renamed "Sift/…" there is still Sift's.
-    names ??= new Map((await gmail.listLabels()).map((l) => [l.id, l.name.toLowerCase()]));
+    // Gmail compares label names without case, so one renamed "Mild/…" there is still Mild's; and one still "sift/…",
+    // from before the rename, is Mild's until a pass renames it (src/gmail/mailbox.ts).
+    names ??= new Map((await gmail.listLabels()).map((l) => [l.id, l.name.toLowerCase().replace(/^sift(?=\/|$)/, 'mild')]));
     const siftLabel = (id: string) => labels.find((l) => l.gmailLabel !== undefined && l.gmailLabel.toLowerCase() === names?.get(id));
     if (!moved && !touched.some(siftLabel)) continue;
 
@@ -115,12 +116,12 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
     const on = current.flatMap((id) => siftLabel(id) ?? []);
     const given = change.added.flatMap((id) => siftLabel(id) ?? []).filter((l) => on.includes(l));
     const label = given.length === 1 ? given[0] : on.length === 1 ? on[0] : labels.find((l) => l.id === decision.labelId);
-    // Moving mail Sift left in the inbox says it is not that, but not what it is: like mail Sift could not place.
+    // Moving mail Mild left in the inbox says it is not that, but not what it is: like mail Mild could not place.
     if (!label || (label.id === LEAVE_IN_INBOX && place !== 'keep')) continue;
 
     const agrees = decision.labelId === label.id && (decision.disposition === 'review' ? 'keep' : decision.disposition) === place;
     if (agrees) {
-      // Doing what sift only suggested confirms it, once. Anything else here is sift's own work or the user's earlier answer, seen again.
+      // Doing what Mild only suggested confirms it, once. Anything else here is Mild's own work or the user's earlier answer, seen again.
       if (
         !moved ||
         decision.carryOut ||

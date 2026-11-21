@@ -38,24 +38,24 @@ describe('network', () => {
   });
 });
 
-describe("sift run's host", () => {
+describe("mild run's host", () => {
   const host = async (env: Record<string, string>) => await localHost({ PORT: '8787', ...env });
 
-  it('signs sessions with a key kept in its home, so starting again signs no one out, unless SIFT_SESSION_SECRET gives one', async () => {
+  it('signs sessions with a key kept in its home, so starting again signs no one out, unless MILD_SESSION_SECRET gives one', async () => {
     const home = tempDir();
-    const first = (await host({ SIFT_HOME: home })).sessionSecret;
-    expect((await host({ SIFT_HOME: home })).sessionSecret).toBe(first);
-    expect((await host({ SIFT_HOME: tempDir() })).sessionSecret).not.toBe(first);
-    expect((await host({ SIFT_HOME: home, SIFT_SESSION_SECRET: 'synthetic-session' })).sessionSecret).toBe('synthetic-session');
+    const first = (await host({ MILD_HOME: home })).sessionSecret;
+    expect((await host({ MILD_HOME: home })).sessionSecret).toBe(first);
+    expect((await host({ MILD_HOME: tempDir() })).sessionSecret).not.toBe(first);
+    expect((await host({ MILD_HOME: home, MILD_SESSION_SECRET: 'synthetic-session' })).sessionSecret).toBe('synthetic-session');
   });
 
-  it("answers to this machine's names and SIFT_URL's, and offers sign-in here and there", async () => {
-    expect(await host({ SIFT_HOME: tempDir(), SIFT_URL: 'https://mail.example.org' })).toMatchObject({
+  it("answers to this machine's names and MILD_URL's, and offers sign-in here and there", async () => {
+    expect(await host({ MILD_HOME: tempDir(), MILD_URL: 'https://mail.example.org' })).toMatchObject({
       url: 'https://mail.example.org',
       allowedHosts: [...machineNames(), 'mail.example.org'],
       signInAddresses: ['http://localhost:8787', 'https://mail.example.org'],
     });
-    expect(await host({ SIFT_HOME: tempDir() })).toMatchObject({
+    expect(await host({ MILD_HOME: tempDir() })).toMatchObject({
       url: 'http://localhost:8787',
       allowedHosts: machineNames(),
       signInAddresses: ['http://localhost:8787'],
@@ -63,15 +63,15 @@ describe("sift run's host", () => {
   });
 
   it('believes a forwarded scheme only while it listens on loopback, where every peer is this machine', async () => {
-    expect((await host({ SIFT_HOME: tempDir(), HOSTNAME: '127.0.0.1' })).forwarded).toBe(true);
-    expect((await host({ SIFT_HOME: tempDir(), HOSTNAME: '::1' })).forwarded).toBe(true);
-    expect((await host({ SIFT_HOME: tempDir(), HOSTNAME: '::' })).forwarded).toBe(false);
-    expect((await host({ SIFT_HOME: tempDir(), HOSTNAME: '192.168.1.40' })).forwarded).toBe(false);
+    expect((await host({ MILD_HOME: tempDir(), HOSTNAME: '127.0.0.1' })).forwarded).toBe(true);
+    expect((await host({ MILD_HOME: tempDir(), HOSTNAME: '::1' })).forwarded).toBe(true);
+    expect((await host({ MILD_HOME: tempDir(), HOSTNAME: '::' })).forwarded).toBe(false);
+    expect((await host({ MILD_HOME: tempDir(), HOSTNAME: '192.168.1.40' })).forwarded).toBe(false);
   });
 
   it("keeps Workflow's runs in its home and has them delivered to its own listener", async () => {
-    const env: Record<string, string> = { SIFT_HOME: tempDir(), HOSTNAME: '::', PORT: '8790' };
+    const env: Record<string, string> = { MILD_HOME: tempDir(), HOSTNAME: '::', PORT: '8790' };
     await localHost(env);
-    expect(env).toMatchObject({ WORKFLOW_LOCAL_DATA_DIR: `${env['SIFT_HOME']}/workflow`, WORKFLOW_LOCAL_BASE_URL: 'http://[::1]:8790' });
+    expect(env).toMatchObject({ WORKFLOW_LOCAL_DATA_DIR: `${env['MILD_HOME']}/workflow`, WORKFLOW_LOCAL_BASE_URL: 'http://[::1]:8790' });
   });
 });

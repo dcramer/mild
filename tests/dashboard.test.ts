@@ -62,7 +62,7 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
     db,
     ACCOUNT,
     'a',
-    { ...base, disposition: 'archive', stage: 'rules', ruleId: 'r1', labelId: 'newsletter', gmailLabel: 'sift/newsletters' },
+    { ...base, disposition: 'archive', stage: 'rules', ruleId: 'r1', labelId: 'newsletter', gmailLabel: 'mild/newsletters' },
     { now: NOW - DAY },
   );
   await recordDecision(db, ACCOUNT, 'b', { ...base, disposition: 'archive', stage: 'classifier' }, { now: NOW - DAY });
@@ -273,7 +273,7 @@ describe('tracking', () => {
       fromName: 'Example News',
       stage: 'rules',
       labelId: 'newsletter',
-      gmailLabel: 'sift/newsletters',
+      gmailLabel: 'mild/newsletters',
       actionId: null,
     });
   });
@@ -315,7 +315,7 @@ describe('dashboard server', () => {
     expect(paged.rows.map((r) => r.id)).toEqual([2]);
   });
 
-  it('narrows decisions by what sift recorded about each message', async () => {
+  it('narrows decisions by what Mild recorded about each message', async () => {
     const { store, db } = await seededStore();
     await raw(db).run(`UPDATE messages SET facts = facts || '{"isReply": true, "listId": "dev.example.com", "dmarc": "pass"}'::jsonb WHERE id = 'a'`);
     await raw(db).run(`UPDATE messages SET facts = facts || '{"dmarc": "fail"}'::jsonb WHERE id = 'c'`);
@@ -391,8 +391,8 @@ describe('dashboard server', () => {
           state: 'none',
           possible: true,
           reason: null,
-          plan: { criteria: { from: '@example.com' }, gmailLabel: 'sift/cold-outreach', archive: true },
-          differs: ['Mail the filter archives never reaches Sift: it is not recorded, counted or unsubscribed from.'],
+          plan: { criteria: { from: '@example.com' }, gmailLabel: 'mild/cold-outreach', archive: true },
+          differs: ['Mail the filter archives never reaches Mild: it is not recorded, counted or unsubscribed from.'],
           checkedAt: null,
           history: [],
         },
@@ -638,14 +638,14 @@ describe('dashboard server', () => {
     expect((await post('/api/rules/edit', { id: 'r-gone', match: { from: ['x@example.com'] }, disposition: 'archive' })).status).toBe(409);
   });
 
-  it("tells the page only that something failed when it is Sift's own error, and logs why", async () => {
+  it("tells the page only that something failed when it is Mild's own error, and logs why", async () => {
     const { store, db } = await seededStore();
     await raw(db).run("UPDATE messages SET headers = 'sift-secret:v1:deadbeef:x:y' WHERE id = 'c'");
     const logged: string[] = [];
     const base = await start({ log: (line) => logged.push(line) }, store);
     const reply = await fetch(`${base}/api/message?id=c`);
-    expect([reply.status, await reply.json()]).toEqual([500, { error: 'Sift could not do that. Why is in its log.' }]);
-    expect(logged).toEqual([expect.stringMatching(/^GET \/api\/message: .*SIFT_KEY/)]);
+    expect([reply.status, await reply.json()]).toEqual([500, { error: 'Mild could not do that. Why is in its log.' }]);
+    expect(logged).toEqual([expect.stringMatching(/^GET \/api\/message: .*MILD_KEY/)]);
   });
 
   it('lets someone sign in behind tailscale serve, which tells this machine the browser used HTTPS', async () => {

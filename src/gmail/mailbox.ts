@@ -5,6 +5,9 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import { calls, isConflict, isNotFound, labelKey } from './call.ts';
 import type { Pace } from './quota.ts';
 
+/** What Mild's labels in Gmail began with when it was Sift: `sift`, and `sift/…` under it. */
+const BEFORE_MILD = /^sift(?=\/|$)/i;
+
 /** Gmail implementation of the Mailbox port. Deliberately has no forward, trash or delete. Calls are paced as `createGmailApi`'s are. */
 export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
   const client = gmail({ version: 'v1', auth });
@@ -13,7 +16,24 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
   let labelIdsByName: Map<string, string> | null = null;
   const listLabelIds = async () => {
     const data = await call('users.labels.list', 1, () => client.users.labels.list({ userId }));
-    return new Map((data.labels ?? []).flatMap((l) => (l.name && l.id ? [[labelKey(l.name), l.id] as const] : [])));
+    const labels = data.labels ?? [];
+    // Labels made when Mild was Sift are renamed the first time a pass needs one, parents before what is under them.
+    // The id stays, so the mail and filters that have one keep it.
+    const taken = new Set(labels.flatMap((l) => (l.name ? [labelKey(l.name)] : [])));
+    for (const label of labels.toSorted((a, b) => (a.name ?? '').length - (b.name ?? '').length)) {
+      if (!label.id || !label.name || label.type !== 'user' || !BEFORE_MILD.test(label.name)) continue;
+      const name = label.name.replace(BEFORE_MILD, 'mild');
+      if (taken.has(labelKey(name))) continue;
+      try {
+        await call('users.labels.patch', 5, () => client.users.labels.patch({ userId, id: label.id!, requestBody: { name } }));
+      } catch (error) {
+        if (isConflict(error)) continue;
+        throw error;
+      }
+      taken.add(labelKey(name));
+      label.name = name;
+    }
+    return new Map(labels.flatMap((l) => (l.name && l.id ? [[labelKey(l.name), l.id] as const] : [])));
   };
 
   return {

@@ -10,7 +10,7 @@ test.describe('Inbox, with the model', () => {
 
     await search.fill('unanswered');
     await page.getByRole('button', { name: 'Ask', exact: true }).click();
-    await expect(page.getByText('Sift cannot tell which mail you have answered.')).toBeVisible();
+    await expect(page.getByText('Mild cannot tell which mail you have answered.')).toBeVisible();
     await search.fill('');
     await expect(inboxRows(page)).toHaveCount(19);
 

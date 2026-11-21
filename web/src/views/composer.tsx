@@ -11,7 +11,7 @@ import { reveal } from '@/lib/reveal.ts';
 import { Button, DiscardButton, DraftBlocked, DraftLine, DraftText, Failure, Finish, Input, Loading, Panel, ReplyBox, Select, useToast } from '@/system';
 import type { ManageState, MessageDetail } from '../../../src/dashboard/types.ts';
 
-/** An address mail can be from: a mailbox's own, or one of its aliases, and whether Google lets Sift send from that mailbox. */
+/** An address mail can be from: a mailbox's own, or one of its aliases, and whether Google lets Mild send from that mailbox. */
 interface From {
   address: string;
   accountId: string;
@@ -234,14 +234,14 @@ function Writer({
       </DraftLine>
     ) : null;
 
-  // Nothing to write in until Google lets Sift send from this mailbox: only the press that asks, and any other address to send from.
+  // Nothing to write in until Google lets Mild send from this mailbox: only the press that asks, and any other address to send from.
   if (!from.canSend) {
     const allow = (
       <Button variant="mark" href={`/auth/login?${new URLSearchParams({ grant: 'send', mailbox: from.accountId, to: here })}`}>
-        Let Sift send
+        Let Mild send
       </Button>
     );
-    const blocked = <DraftBlocked title={`Sift can’t send from ${from.accountId} yet`}>Google asks you once before Sift can send as you.</DraftBlocked>;
+    const blocked = <DraftBlocked title={`Mild can’t send from ${from.accountId} yet`}>Google asks you once before Mild can send as you.</DraftBlocked>;
     if (inline)
       return (
         <ReplyBox

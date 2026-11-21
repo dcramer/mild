@@ -35,7 +35,7 @@ export function machineNames(): string[] {
   return [...new Set([...addresses, host, short, `${short}.local`, ...(name ? [name] : [])])];
 }
 
-/** Where Google can sign someone in: this machine, and SIFT_URL. */
+/** Where Google can sign someone in: this machine, and MILD_URL. */
 export const signInAddresses = (port: number, url: string | undefined): string[] => [...new Set([`http://localhost:${port}`, ...(url ? [url] : [])])];
 
 /** The listener at `address`, as this machine reaches it: a wildcard at its own family's loopback, since `::` may take no IPv4. */

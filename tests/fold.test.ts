@@ -35,7 +35,7 @@ describe("For review's rows", () => {
     ).toEqual([['a', 'd', 'e'], ['b'], ['c']]);
   });
 
-  it('never fold mail Sift could not place: each needs its own answer', () => {
+  it('never fold mail Mild could not place: each needs its own answer', () => {
     expect(rows([mail('a', 'ada@example.org', null), mail('b', 'ada@example.org', null)])).toEqual([['a'], ['b']]);
   });
 });

@@ -90,7 +90,7 @@ export async function listRuleSummaries(db: Sql, scope: Scope, now: number): Pro
 const MOST_WAITING = 50;
 
 /**
- * Mail a rule decided that Sift has not moved and the user has not answered: it came while Sift was off, or
+ * Mail a rule decided that Mild has not moved and the user has not answered: it came while Mild was off, or
  * before the rule and was decided again when it was made. Newest first. And how far applying it to the inbox has got.
  */
 export async function ruleWaiting(db: Sql, scope: Scope, ruleId: string): Promise<RuleWaiting> {

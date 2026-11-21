@@ -29,7 +29,7 @@ export async function init(): Promise<void> {
     saveSetting: (variable, value) => saveSetting(config, variable, value),
     saveKey: (key) => {
       const path = saveKeyFile(process.cwd(), key);
-      process.env['SIFT_KEY'] = key;
+      process.env['MILD_KEY'] = key;
       // In place: the model credential store already holds this keyring.
       Object.assign(config.keys, loadKeyring());
       return path;

@@ -9,7 +9,7 @@ const CALLBACK = 'http://127.0.0.1:1455/auth/callback';
 
 const modelOf = async (b: Browser) => (await b.call('GET', '/api/manage')).body['model'] as Record<string, unknown>;
 
-/** OpenAI's sign-in, answering Sift's requests to it; every other request goes where it would, Google's to the fake. */
+/** OpenAI's sign-in, answering Mild's requests to it; every other request goes where it would, Google's to the fake. */
 function openAI() {
   const asked: string[] = [];
   const through = globalThis.fetch;
@@ -85,7 +85,7 @@ describe('ChatGPT', () => {
 
   it('signs in by the address ChatGPT sends the browser back to, and says what is wrong with one that is not it', async () => {
     const asked = openAI();
-    const sift = await startSift(fake.google, { env: { SIFT_CHATGPT_SIGN_IN: 'redirect' } });
+    const sift = await startSift(fake.google, { env: { MILD_CHATGPT_SIGN_IN: 'redirect' } });
     const me = await sift.settled(ME);
     const started = await me.call('POST', '/api/model/chatgpt', {});
     expect(started.status).toBe(200);

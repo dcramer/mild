@@ -103,7 +103,7 @@ test.describe('On a phone', () => {
     await expect(said.getByRole('button', { name: /^Undo/ })).toBeVisible();
   });
 
-  test("Sift's line is in the menu and on Activity, and Sift is off is said in full", async ({ page }) => {
+  test("Mild's line is in the menu and on Activity, and Mild is off is said in full", async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText('Nothing here has been done in Gmail.', { exact: false })).toBeVisible();
     await expect(bar(page).getByRole('link', { name: /30D$/ })).toHaveCount(0);

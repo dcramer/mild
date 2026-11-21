@@ -27,7 +27,7 @@ let store: Store;
 let gmail: ReturnType<typeof connectGmail>;
 let serial = 0;
 
-/** Record a message from `address` and what sift would do with it, as a suggestion. */
+/** Record a message from `address` and what Mild would do with it, as a suggestion. */
 async function suggest(address: string, disposition: Disposition, extra: Partial<Decision> = {}): Promise<number> {
   const id = `m${++serial}`;
   await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
@@ -68,7 +68,7 @@ describe('leaving mail in the inbox', () => {
   });
 });
 
-/** The rule sift holds for one sender, without its bookkeeping. */
+/** The rule Mild holds for one sender, without its bookkeeping. */
 const ruleFor = async (address: string) =>
   (await listRules(db))
     .filter((r) => r.match.from?.[0] === address)
@@ -79,7 +79,7 @@ const ruleFor = async (address: string) =>
       source,
     }));
 
-const NEWS = { labelId: 'newsletter', gmailLabel: 'sift/newsletters' } as const;
+const NEWS = { labelId: 'newsletter', gmailLabel: 'mild/newsletters' } as const;
 
 describe('suggestions', () => {
   it('are the current decision for each message recorded as a suggestion, newest first', async () => {
@@ -103,7 +103,7 @@ describe('suggestions', () => {
     expect(pending.map((s) => s.decisionId)).not.toContain(second);
   });
 
-  it("leave out what a rule of the user's decided, but not what a rule sift learned did", async () => {
+  it("leave out what a rule of the user's decided, but not what a rule Mild learned did", async () => {
     const mine = await addRule(db, { match: { from: ['rule@example.com'] }, labelId: 'newsletter' }, 'user');
     const corrected = await addRule(db, { match: { from: ['taught@example.com'] }, labelId: 'newsletter' }, 'correction');
     const learned = await addRule(db, { match: { from: ['learned@example.com'] }, labelId: 'newsletter' }, 'learned');
@@ -138,7 +138,7 @@ describe('suggestions', () => {
     expect((await listSuggestions(db, await everything(db), { includeKept: true })).waiting).toBe(6);
   });
 
-  it('are listed newest received first, however late Sift decided them', async () => {
+  it('are listed newest received first, however late Mild decided them', async () => {
     const at = { older: 2 * DAY, newer: 3 * DAY };
     for (const [id, receivedAt] of [
       ['newer', at.newer],
@@ -162,7 +162,7 @@ describe('suggestions', () => {
     expect((await listSuggestions(db, await everything(db))).items.map((i) => i.messageId)).toEqual(['newer', 'older']);
   });
 
-  it('carry the start of the text sift holds for each, on one line', async () => {
+  it('carry the start of the text Mild holds for each, on one line', async () => {
     await suggest('a@example.com', 'archive', NEWS);
     await suggest('b@example.com', 'archive', NEWS);
     await raw(db).run(
@@ -180,7 +180,7 @@ describe('suggestions', () => {
 });
 
 describe('teaching', () => {
-  it('saying what a message is corrects sift and teaches by example, with no rule tying the sender to a label', async () => {
+  it('saying what a message is corrects Mild and teaches by example, with no rule tying the sender to a label', async () => {
     const decisionId = await suggest('ada@example.org', 'archive', { labelId: 'marketing' });
     const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'personal', decisionId, messageId: 'm1' }, 50);
 
@@ -192,7 +192,7 @@ describe('teaching', () => {
     expect(await accuracy(db)).toMatchObject({ reviewed: 1, right: 0 });
   });
 
-  it('answering again is scored against what sift said, never against the answer before', async () => {
+  it('answering again is scored against what Mild said, never against the answer before', async () => {
     const decisionId = await suggest('ada@example.org', 'archive', { labelId: 'marketing' });
     for (const label of ['personal', 'newsletter', 'marketing'])
       await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label, decisionId, messageId: 'm1' }, 50);
@@ -208,13 +208,13 @@ describe('teaching', () => {
     });
   });
 
-  it('answering again mail only the user ever placed is still no mistake of sift’s', async () => {
+  it('answering again mail only the user ever placed is still no mistake of Mild’s', async () => {
     await recordSync(db, ACCOUNT, [facts({ messageId: 'never', from: { address: 'cold@example.net', domain: 'example.net' } })], '2');
     for (const label of ['personal', 'newsletter']) await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label, messageId: 'never' });
     expect(await raw(db).all('SELECT verdict, label_id FROM feedback')).toEqual([{ verdict: 'answered', label_id: 'newsletter' }]);
   });
 
-  it('answering mail sift could not place does not count as a mistake', async () => {
+  it('answering mail Mild could not place does not count as a mistake', async () => {
     await suggest('cold@example.net', 'review');
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label: 'newsletter', messageId: 'm1' });
     expect(await raw(db).get('SELECT verdict, disposition, label_id FROM feedback')).toEqual({
@@ -252,9 +252,9 @@ describe('teaching', () => {
 });
 
 describe('an answer pressed in the dashboard', () => {
-  it('is carried out on its message even while sift is off, and makes no rule', async () => {
+  it('is carried out on its message even while Mild is off, and makes no rule', async () => {
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
-    // sift's own decision, left over from when it was on: while off it must still be left alone.
+    // Mild's own decision, left over from when it was on: while off it must still be left alone.
     await recordSync(db, ACCOUNT, [facts({ messageId: 'left', from: { address: 'other@example.com', domain: 'example.com' } })], '3');
     await recordDecision(
       db,
@@ -283,7 +283,7 @@ describe('an answer pressed in the dashboard', () => {
     });
   });
 
-  it('answers mail the model could never judge before a pass leaves it to the user, as mail sift had no suggestion for', async () => {
+  it('answers mail the model could never judge before a pass leaves it to the user, as mail Mild had no suggestion for', async () => {
     await recordSync(db, ACCOUNT, [facts({ messageId: 'stuck', from: { address: 'news@example.com', domain: 'example.com' } })], '3');
     for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'stuck', model: 'test/model', now: 0 });
     await expect(
@@ -466,7 +466,7 @@ describe('accuracy', () => {
 });
 
 describe('correcting a decision that is not waiting', () => {
-  /** A message sift already acted on. */
+  /** A message Mild already acted on. */
   async function acted(address: string, labelId: string) {
     const id = `a${++serial}`;
     await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
@@ -503,7 +503,7 @@ describe('correcting a decision that is not waiting', () => {
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', messageId: id });
     expect(await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'newsletter', messageId: id })).toMatchObject({ corrected: id });
     expect((await decisionsFor(id)).map((d) => (d as { label_id: string }).label_id)).toEqual(['marketing', 'personal', 'newsletter']);
-    // While sift is off, the new decision is a record, not something to carry out.
+    // While Mild is off, the new decision is a record, not something to carry out.
     expect((await decisionsFor(id)).at(-1)).toMatchObject({ carry_out: false, outcome: null });
     expect(await pendingSuggestions(db)).toEqual([]);
   });
@@ -606,7 +606,7 @@ describe('examples', () => {
     ]);
   });
 
-  it('keeps an answer without the text once Sift has let it go, rather than read Gmail again', async () => {
+  it('keeps an answer without the text once Mild has let it go, rather than read Gmail again', async () => {
     await suggest('news@example.com', 'archive', NEWS); // m1
     inGmail('m1');
     await keepWaitingText(
@@ -622,7 +622,7 @@ describe('examples', () => {
     expect(await raw(db).get(`SELECT status, body_text FROM examples WHERE message_id = 'm1'`)).toEqual({ status: 'gone', body_text: null });
   });
 
-  it('takes the text Sift read, and reads only what it never read', async () => {
+  it('takes the text Mild read, and reads only what it never read', async () => {
     await suggest('news@example.com', 'archive', NEWS); // m1: kept
     await suggest('news@example.com', 'archive', NEWS); // m2: gone from Gmail when its text was fetched
     gmail.gmail.deliver({ id: 'm1', from: 'news@example.com', text: 'Text of m1', html: '<p>m1</p>' });

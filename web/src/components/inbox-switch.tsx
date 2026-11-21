@@ -39,7 +39,7 @@ export function MailWindowDialog({ current, onClose, onDone }: { current: Window
         <>
           {narrower ? (
             <DeleteButton
-              question={`Delete what Sift copied from before ${windowName(chosen).toLowerCase()}?`}
+              question={`Delete what Mild copied from before ${windowName(chosen).toLowerCase()}?`}
               what="Mail in your inbox stays, however old."
               action="Delete"
               onDelete={async () => {
@@ -76,7 +76,7 @@ export function MailWindowDialog({ current, onClose, onDone }: { current: Window
     >
       <div className="flex flex-col gap-3">
         <ChoiceGroup label="How far back" value={chosen} options={WINDOWS} onChange={(value) => value && setChosen(value)} {...(notes ? { notes } : {})} />
-        <p className="text-muted-foreground">Sift copies it from Gmail newest first, as fast as Gmail allows. Turning Inbox off deletes the copy.</p>
+        <p className="text-muted-foreground">Mild copies it from Gmail newest first, as fast as Gmail allows. Turning Inbox off deletes the copy.</p>
         <Failure>{error ?? reach.error}</Failure>
       </div>
     </Dialog>

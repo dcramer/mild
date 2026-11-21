@@ -22,10 +22,10 @@ import {
   turnOnQuestion,
 } from './sift.ts';
 
-const offCallout = (page: Page) => page.getByRole('heading', { name: 'Sift is off' });
+const offCallout = (page: Page) => page.getByRole('heading', { name: 'Mild is off' });
 
 test.describe('Settings', () => {
-  test('turning Sift on offers to go through the inbox, with what it would cost', async ({ page }) => {
+  test('turning Mild on offers to go through the inbox, with what it would cost', async ({ page }) => {
     await page.goto('/?settings=1');
     await confirmTurnOn(page);
     await expect(goThrough(page).getByText('$0.06')).toBeVisible();
@@ -87,15 +87,15 @@ test.describe('Settings', () => {
     await expect(settingsActive(page).getByText('Off', { exact: true })).toBeVisible();
   });
 
-  test('For review says Sift is off, and its button opens Settings', async ({ page }) => {
+  test('For review says Mild is off, and its button opens Settings', async ({ page }) => {
     await page.goto('/');
     await expect(offCallout(page)).toBeVisible();
     await expect(page.getByText('Nothing here has been done in Gmail.', { exact: false })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Turn Sift on…' }).click();
+    await page.getByRole('link', { name: 'Turn Mild on…' }).click();
     await expect(settings(page)).toBeVisible();
     await param(page, 'settings').toBe('1');
-    await expect(settingsActive(page).getByText('Nothing in Gmail changes. Sift suggests, and learns from your answers.')).toBeVisible();
+    await expect(settingsActive(page).getByText('Nothing in Gmail changes. Mild suggests, and learns from your answers.')).toBeVisible();
 
     await closeSettings(page);
     await query(page).toBe('');
@@ -113,7 +113,7 @@ test.describe('Settings', () => {
     await expect(page.getByRole('heading', { name: 'Labels', level: 1 })).toBeVisible();
   });
 
-  test('turning Sift on asks first, and Cancel leaves it off', async ({ page }) => {
+  test('turning Mild on asks first, and Cancel leaves it off', async ({ page }) => {
     await page.goto('/?settings=1');
     await expect(settingsActive(page).getByText('Off', { exact: true })).toBeVisible();
     await settingsActive(page).getByRole('button', { name: 'Turn on', exact: true }).click();
@@ -139,10 +139,10 @@ test.describe('Settings', () => {
     await param(page, 'settings').toBe('1');
   });
 
-  test('once on, For review no longer says Sift is off, and off again it does', async ({ page }) => {
+  test('once on, For review no longer says Mild is off, and off again it does', async ({ page }) => {
     await turnOn(page);
     await expect(settingsActive(page).getByRole('button', { name: 'Turn off' })).toBeVisible();
-    await expect(settingsActive(page).getByText('Sift carries out its decisions in Gmail as each label says.', { exact: false })).toBeVisible();
+    await expect(settingsActive(page).getByText('Mild carries out its decisions in Gmail as each label says.', { exact: false })).toBeVisible();
 
     await closeSettings(page);
     await query(page).toBe('');
@@ -163,7 +163,7 @@ test.describe('Settings', () => {
 
   test('closed Settings stays closed after a reload', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('link', { name: 'Turn Sift on…' }).click();
+    await page.getByRole('link', { name: 'Turn Mild on…' }).click();
     await expect(settings(page)).toBeVisible();
     await closeSettings(page);
     await page.reload();
@@ -301,7 +301,7 @@ test.describe('Inbox in Settings', () => {
         .getByRole('radio', { name: /^The last year/ })
         .click();
       await mailWindow(page).getByRole('button', { name: 'Keep less' }).click();
-      const asked = page.getByRole('dialog', { name: 'Delete what Sift copied from before the last year?' });
+      const asked = page.getByRole('dialog', { name: 'Delete what Mild copied from before the last year?' });
       await expect(asked.getByText('Mail in your inbox stays, however old.')).toBeVisible();
       await asked.getByRole('button', { name: 'Delete', exact: true }).click();
       await expect(mailWindow(page)).toHaveCount(0);

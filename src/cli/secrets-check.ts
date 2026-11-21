@@ -12,7 +12,7 @@ export async function checkSecrets(config: Config, store: Store, rekey: boolean)
   const { encrypted, rotated } = rekeySecrets(secretPaths(config), config.keys, rekey);
   const { credentials: rows, messages } = await rekeyStore(store, rekey);
   return () => {
-    if (!config.keys.current) ui.warn(`Credentials and mail are stored unencrypted. ${paint.cmd('sift init')} makes a key to encrypt them.`);
+    if (!config.keys.current) ui.warn(`Credentials and mail are stored unencrypted. ${paint.cmd('mild init')} makes a key to encrypt them.`);
     if (!rekey) return;
     for (const path of encrypted) ui.ok(`Encrypted ${paint.path(path)}`);
     for (const path of rotated) ui.ok(`Re-encrypted ${paint.path(path)} with the current key`);

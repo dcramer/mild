@@ -55,7 +55,7 @@ describe('cleaning a message for the frame', () => {
   it('drops remote images, marking where they were, and keeps inline ones; CSS is left to the frame policy', () => {
     expect(clean('<img src="https://cdn.example.com/a.png" srcset="https://cdn.example.com/b.png 2x" alt="A">')).toBe('<img alt="A" data-sift-remote>');
     expect(clean('<td background="http://cdn.example.com/bg.png">x</td>')).toBe('<td data-sift-remote>x</td>');
-    // Sift keeps no picture sent inside the message, so Show images would bring nothing.
+    // Mild keeps no picture sent inside the message, so Show images would bring nothing.
     expect(clean('<img src="cid:logo">')).toBe('<img>');
     expect(clean('<img src="data:image/png;base64,AAAA">')).toBe('<img src="data:image/png;base64,AAAA">');
     expect(clean('<style>p{color:red}</style>')).toBe('<style>p{color:red}</style>');
@@ -150,7 +150,7 @@ describe('the frame route', () => {
     ]);
   });
 
-  it('sends the HTML Sift holds, cleaned, under a strict policy of its own, in a sandbox, running only its own script and loading nothing', async () => {
+  it('sends the HTML Mild holds, cleaned, under a strict policy of its own, in a sandbox, running only its own script and loading nothing', async () => {
     const { call } = await startDashboard(people(store));
     const reply = await call('GET', `/api/message/html?id=m1`);
     expect(reply.status).toBe(200);
@@ -163,7 +163,7 @@ describe('the frame route', () => {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
     });
-    // Sift's own script runs, by its hash alone, in a frame with no origin of its own that reaches nowhere.
+    // Mild's own script runs, by its hash alone, in a frame with no origin of its own that reaches nowhere.
     const policy = String(reply.headers['content-security-policy']);
     expect(policy).not.toMatch(/allow-same-origin|unsafe-eval|connect-src|https?:/);
     expect(/script-src ([^;]*)/.exec(policy)?.[1]).toMatch(/^'sha256-[\w+/]+=*'$/);
@@ -182,7 +182,7 @@ describe('the frame route', () => {
     expect((await call('GET', `/api/message/html?id=m1`)).text).not.toContain('hero.png');
   });
 
-  it('says so, in the frame, when Sift holds no HTML for it', async () => {
+  it('says so, in the frame, when Mild holds no HTML for it', async () => {
     const { call } = await startDashboard(people(store));
     for (const id of ['plain', 'unheld', 'unknown']) {
       const reply = await call('GET', `/api/message/html?id=${id}`);
@@ -192,7 +192,7 @@ describe('the frame route', () => {
     expect((await call('GET', '/api/message/html?mailbox=other%40example.com&id=m1')).status).toBe(404);
   });
 
-  it('tells the page whether Sift holds the HTML, so it never offers a frame with nothing in it', async () => {
+  it('tells the page whether Mild holds the HTML, so it never offers a frame with nothing in it', async () => {
     const { call } = await startDashboard(people(store));
     const open = async (id: string) => (await call('GET', `/api/message?id=${id}`)).body;
     expect(await open('m1')).toMatchObject({ body: 'Sale', hasHtml: true });

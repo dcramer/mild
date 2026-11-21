@@ -29,13 +29,13 @@ export async function serveSeed(root: string, flags: string[] = []): Promise<{ u
   const child: ChildProcess = spawn(
     'node',
     ['--disable-warning=ExperimentalWarning', join(SCRIPTS, 'serve.ts'), join(dir, 'home'), String(port), join(dir, 'google.json')],
-    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, SIFT_CLOUD: 'false' } },
+    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, MILD_CLOUD: 'false' } },
   );
   let log = '';
   await new Promise<void>((ready, fail) => {
     const read = (chunk: Buffer) => {
       log += chunk.toString();
-      if (log.includes('Sift is running on the seeded home')) ready();
+      if (log.includes('Mild is running on the seeded home')) ready();
     };
     child.stdout?.on('data', read);
     child.stderr?.on('data', read);

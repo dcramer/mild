@@ -57,7 +57,7 @@ export function proposalStart(match: RuleMatch, label: string, does: string): Ru
   };
 }
 
-/** A message's sender, as what sift says the message is. */
+/** A message's sender, as what Mild says the message is. */
 export const messageStart = (sender: string, label: string | null): RuleStart => ({
   conditions: [{ by: 'from', value: sender }],
   facts: [],
@@ -70,7 +70,7 @@ export const nameStart = (sender: string, name: string, label: string | null): R
   return { ...start, conditions: [...start.conditions, { by: 'fromName', value: name }] };
 };
 
-/** A message's sender, when their mail is what sift says it is but should stay in the inbox. */
+/** A message's sender, when their mail is what Mild says it is but should stay in the inbox. */
 export const keepStart = (sender: string, label: string): RuleStart => ({
   conditions: [{ by: 'from', value: sender }],
   facts: [],
@@ -78,7 +78,7 @@ export const keepStart = (sender: string, label: string): RuleStart => ({
   action: 'keep',
 });
 
-/** A message's sender and one thing sift saw in it. */
+/** A message's sender and one thing Mild saw in it. */
 export const factStart = (sender: string, fact: FactAnswer): RuleStart => ({ conditions: [{ by: 'from', value: sender }], facts: [fact] });
 
 /** Everything on a mailing list. */

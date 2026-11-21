@@ -8,7 +8,7 @@ import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { INBOX, count, percent } from '@/lib/format.ts';
 import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
 
-/** What Sift does with a label's mail, as the page groups it: blocking is marking spam, and more. */
+/** What Mild does with a label's mail, as the page groups it: blocking is marking spam, and more. */
 const GROUPS = [
   { title: 'Kept in your inbox', has: (l: LabelSummary) => l.disposition === 'keep' },
   { title: 'Archived', has: (l: LabelSummary) => l.disposition === 'archive' },
@@ -22,14 +22,14 @@ const order = (a: LabelSummary, b: LabelSummary) => Number(b.id === INBOX) - Num
 /** Under a label's name: what it is. Leave in inbox has no words of the person's. */
 const about = (label: LabelSummary) => (label.id === INBOX ? 'Mail none of your labels fit' : label.description);
 
-/** How often Sift had the label right when the reader checked, in yellow when it is often wrong. Nothing until then. */
+/** How often Mild had the label right when the reader checked, in yellow when it is often wrong. Nothing until then. */
 function Right({ label }: { label: LabelSummary }) {
   if (label.record.reviewed === 0) return null;
   const text = percent(label.record.right, label.record.reviewed);
   return weak(label) ? <Look>{text}</Look> : <span className="text-muted-foreground">{text}</span>;
 }
 
-/** Labels' own action, adding some, with how many there are of how many Sift keeps. */
+/** Labels' own action, adding some, with how many there are of how many Mild keeps. */
 export function LabelActions() {
   const { data, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
   const [adding, setAdding] = useState(false);
@@ -41,7 +41,7 @@ export function LabelActions() {
       <span className="text-sm text-muted-foreground tabular-nums max-sm:hidden">{data ? `${count(own)} of ${data.labelLimit}` : <Blank word />}</span>
       <Button
         disabled={!data || data.accounts.length === 0 || full}
-        {...(full ? { why: `Sift keeps at most ${data?.labelLimit} labels. Remove one you no longer use first.` } : {})}
+        {...(full ? { why: `Mild keeps at most ${data?.labelLimit} labels. Remove one you no longer use first.` } : {})}
         onClick={() => setAdding(true)}
       >
         <PlusIcon aria-hidden />
@@ -53,8 +53,8 @@ export function LabelActions() {
 }
 
 /**
- * The labels, under what Sift does with their mail, so the page reads as what happens to it: each with what
- * it is, how much of the mail it is and how often Sift has had it right.
+ * The labels, under what Mild does with their mail, so the page reads as what happens to it: each with what
+ * it is, how much of the mail it is and how often Mild has had it right.
  */
 export function LabelsView({ loading: loadingRows }: { loading: ReactNode }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);

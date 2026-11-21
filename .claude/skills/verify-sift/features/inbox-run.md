@@ -1,10 +1,10 @@
 # Go through the inbox, apply a rule to it
 
-Mail already in the inbox when Sift starts, or when a rule is added, is not looked at by itself. The user can have Sift go through the inbox from Settings, after seeing what it would cost, or apply one rule to the mail it covers there. Either is a run in the background, one for each mailbox, that the user can stop.
+Mail already in the inbox when Mild starts, or when a rule is added, is not looked at by itself. The user can have Mild go through the inbox from Settings, after seeing what it would cost, or apply one rule to the mail it covers there. Either is a run in the background, one for each mailbox, that the user can stop.
 
 ## Sub-features
 
-- `inbox-go`: Settings' `Your inbox` (`21 messages. Going through them costs about $0.06.`), `Go through…`, then `Go through your inbox?` with `In your inbox`, `Need the model`, `About` and the model, and `Go through 21` or `Not now`. The same dialog opens after turning Sift on.
+- `inbox-go`: Settings' `Your inbox` (`21 messages. Going through them costs about $0.06.`), `Go through…`, then `Go through your inbox?` with `In your inbox`, `Need the model`, `About` and the model, and `Go through 21` or `Not now`. The same dialog opens after turning Mild on.
 - `inbox-progress`: while it runs, Settings' section is `Going through your inbox`, `Reading your inbox · N found`, with `Stop`; once stopped, `Stopped after N messages … · $N` and `Go through again…`.
 - `apply-rule`: `Apply to inbox…` on a rule's panel (and `Apply to your inbox`, opened after adding a rule that moves mail): `In your inbox` `About N`, the newest it found, and the press named by the action (`Archive all`, …) or `Cancel`.
 - `apply-progress`: the panel's `Still in your inbox` shows `Finding them in Gmail · N so far` with `Stop` while the run goes, then `Apply to inbox…` again.

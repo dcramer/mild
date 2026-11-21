@@ -78,14 +78,14 @@ const postOneClick: PostOneClick = (url, address) =>
   });
 
 /**
- * Unsubscribe from the list a message came from, the one way sift can do it safely: the sender's own
+ * Unsubscribe from the list a message came from, the one way Mild can do it safely: the sender's own
  * one-click address (RFC 8058), and only where the user's label or rule says to.
  *
  * The address comes from the email, so nothing about it is trusted. It is used only if the message
  * passed DMARC (so the header is the real sender's), is HTTPS on the standard port with no credentials,
  * and resolves to a public address (so it cannot be pointed at this machine or its network). One POST
  * is made; a redirect is not followed. Lists that can only be left by sending an email are refused:
- * sift does not send mail. Recorded as an action before the request, never repeated for a sender it
+ * Mild does not send mail. Recorded as an action before the request, never repeated for a sender it
  * worked for, and not retried for a week for one it failed for.
  */
 export const unsubscribe = (deps: UnsubscribeDeps, accountId: string, messageId: string): Promise<UnsubscribeOutcome> =>
@@ -109,14 +109,14 @@ async function leave(deps: UnsubscribeDeps, accountId: string, messageId: string
     return {
       status: 'refused',
       reason: signals.hasListUnsubscribe
-        ? 'This list can only be left by sending an email or opening a page, and Sift does neither. Use the link in the message.'
+        ? 'This list can only be left by sending an email or opening a page, and Mild does neither. Use the link in the message.'
         : 'This message offers no way to unsubscribe.',
     };
   }
   if (!passedDmarc(message.headers)) return { status: 'refused', reason: 'The message did not prove who sent it, so its unsubscribe address is not trusted.' };
   if ((await unsubscribedAt(deps.db, accountId, message.fromAddress)) !== null)
     return { status: 'refused', reason: 'You have already unsubscribed from this sender.' };
-  // sift runs this for every message a label says to unsubscribe from: a sender whose address fails is left alone for a while.
+  // mild runs this for every message a label says to unsubscribe from: a sender whose address fails is left alone for a while.
   const failed = await lastUnsubscribeFailure(deps.db, accountId, message.fromAddress);
   if (failed !== null && now() - failed < RETRY_AFTER_MS)
     return { status: 'refused', reason: 'Unsubscribing from this sender failed recently; it will be tried again later.' };
@@ -155,7 +155,7 @@ async function leave(deps: UnsubscribeDeps, accountId: string, messageId: string
     }
     reason =
       status >= 300 && status < 400
-        ? `${url.hostname} answered with a redirect, which Sift does not follow.`
+        ? `${url.hostname} answered with a redirect, which Mild does not follow.`
         : `${url.hostname} refused the request (${status}).`;
   } catch (error) {
     reason = `The request to ${url.hostname} failed, so it is not known whether it took: ${error instanceof Error ? error.message : String(error)}.`;

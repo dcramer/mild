@@ -44,7 +44,7 @@ export async function dailyDigests(piece: Work): Promise<void> {
 
 const FLOWS = { pass: mailboxPass, inbox: inboxRun, copy: mailboxCopy, eval: testRun, upkeep, digest: dailyDigests } satisfies Record<Work['kind'], unknown>;
 
-/** Runs in the process Workflow delivered the run to, with that process's Sift. */
+/** Runs in the process Workflow delivered the run to, with that process's Mild. */
 async function doPiece(piece: Work): Promise<void> {
   'use step';
   // Not a static import: the hosts that instance.ts opens import `begin` from here.

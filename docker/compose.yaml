@@ -13,10 +13,10 @@ services:
     # Inside a container sift listens on every interface; the mapping below decides who can reach it.
     command: [run, --host, 0.0.0.0]
     # Passed through from the shell or a .env beside this file when set. See docs/secrets.md.
-    environment: [SIFT_KEY, SIFT_OLD_KEYS]
+    environment: [MILD_KEY, MILD_OLD_KEYS]
     ports:
       # This machine only. To reach the dashboard from other devices, publish on the address they use
-      # (for example 100.x.y.z:8787:8787 for Tailscale) and set SIFT_URL to it (http://100.x.y.z:8787),
+      # (for example 100.x.y.z:8787:8787 for Tailscale) and set MILD_URL to it (http://100.x.y.z:8787),
       # so sift answers to it. Signing in still needs localhost or an HTTPS address.
       - 127.0.0.1:8787:8787
     volumes:

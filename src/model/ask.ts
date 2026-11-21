@@ -14,7 +14,7 @@ const MAX_FILLS = 2;
 
 const find: Tool = {
   name: FIND_TOOL,
-  description: 'Find senders Sift has recorded mail from, by words in their name, address, mailing list or newest subject.',
+  description: 'Find senders Mild has recorded mail from, by words in their name, address, mailing list or newest subject.',
   parameters: {
     type: 'object',
     properties: { query: { type: 'string', description: 'A name, brand, domain or a few words.' } },

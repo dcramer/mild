@@ -14,7 +14,7 @@ import { plain, seal } from '../../plain.ts';
 
 const later = alias(decisions, 'later');
 
-/** How much of an address's mail the names are read from. Each name is in its message's encrypted headers, so each is opened in Sift. */
+/** How much of an address's mail the names are read from. Each name is in its message's encrypted headers, so each is opened in Mild. */
 const NAMES_FROM = 2_000;
 
 /**
@@ -82,7 +82,7 @@ async function namesOf(
   };
 }
 
-/** What sift knows about one sender, from all of the person's mailboxes. */
+/** What Mild knows about one sender, from all of the person's mailboxes. */
 async function profileOf(db: Sql, scope: Scope, who: { address: string } | { domain: string }, now: number): Promise<SenderProfile | null> {
   const known = 'address' in who ? await senderFacts(db, scope.accounts, who.address, now) : await domainFacts(db, scope.accounts, who.domain, now);
   if (!known) return null;
@@ -130,7 +130,7 @@ async function profileOf(db: Sql, scope: Scope, who: { address: string } | { dom
   };
 }
 
-/** What sift knows about a sender, the rules that apply to them and where they stand. */
+/** What Mild knows about a sender, the rules that apply to them and where they stand. */
 export async function senderProfile(db: Sql, scope: Scope, address: string, now: number = Date.now()): Promise<SenderProfile | null> {
   return await profileOf(db, scope, { address }, now);
 }

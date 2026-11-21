@@ -1,5 +1,5 @@
 /**
- * The query builder a handle gives out, held to one person in sift's own code, so that isolation does
+ * The query builder a handle gives out, held to one person in Mild's own code, so that isolation does
  * not rest on row-level security alone. Every person's table a query reads, joins, changes or deletes
  * from gets `user_id = <person>` added; an insert has the person's id put on each row; nothing may set
  * `user_id`. The handle with nobody behind it (`central`) may not touch a person's table at all.

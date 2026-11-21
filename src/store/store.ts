@@ -16,7 +16,7 @@ export interface Store {
   forget(id: number): void;
   /** Sees no one's rows, for a request with nobody behind it. */
   nobody: Sql;
-  /** For whoever runs sift, said when it starts: the database role it runs as is not held by row-level security. */
+  /** For whoever runs Mild, said when it starts: the database role it runs as is not held by row-level security. */
   warning?: string;
   /** Keep the planner's statistics up to date, as the timed tick asks (`Driver.analyze`). */
   analyze(): Promise<void>;

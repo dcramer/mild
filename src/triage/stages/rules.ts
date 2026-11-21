@@ -33,7 +33,7 @@ export interface RuleMatch {
   listId?: string[];
   /** Case-insensitive substring of the subject. */
   subjectContains?: string[];
-  /** What sift recorded about the message (`Facts`): each one named must have the answer given. */
+  /** What Mild recorded about the message (`Facts`): each one named must have the answer given. */
   facts?: RuleFacts;
 }
 
@@ -90,7 +90,7 @@ export interface Rule {
   markRead?: boolean;
   /** A condition in plain language ("auction notices for lots I did not bid on"). Only a model can apply it, and it needs `labelId` for the model to answer with. */
   when?: string;
-  /** sift made this rule itself, when it blocked the sender. The user's own rules are trusted further. */
+  /** Mild made this rule itself, when it blocked the sender. The user's own rules are trusted further. */
   learned?: boolean;
   /** What the user calls it ("Shop receipts"), said in place of its conditions. */
   name?: string;

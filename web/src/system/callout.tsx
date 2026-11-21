@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 /**
- * What the reader has to know before anything on the page makes sense: the state Sift is in, and how to
+ * What the reader has to know before anything on the page makes sense: the state Mild is in, and how to
  * read the page because of it. First on the page, framed and set large, at most one per page. `action` is
  * the press that leaves that state; on a phone it goes under the words.
  */

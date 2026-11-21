@@ -1,11 +1,11 @@
 # Edit a label
 
-A label is what mail is; its outcome is what happens to it. Labels are the person's, one set for all their mailboxes: the Labels screen lists each under what Sift does with its mail, and mail with that label follows a change.
+A label is what mail is; its outcome is what happens to it. Labels are the person's, one set for all their mailboxes: the Labels screen lists each under what Mild does with its mail, and mail with that label follows a change.
 
 ## Sub-features
 
 - `label-open` opens a label's editor from its row.
-- `label-outcome` changes `What Sift does with it`, with `Mark it read` and `Unsubscribe, when the sender offers a safe way`.
+- `label-outcome` changes `What Mild does with it`, with `Mark it read` and `Unsubscribe, when the sender offers a safe way`.
 - `label-describe` edits `Name` and `What it is`.
 - `label-add` adds labels: described, then kept from what the model suggests (`Suggest labels`), with a `Not in these labels` note for what it left out, or by hand (`Write one yourself`).
 - `label-remove` removes a label from its panel, with the rules that name it.
@@ -22,8 +22,8 @@ Preconditions:
 
 - Fresh seed. Labels lists Newsletters once, under `Archived`, with 2 messages.
 
-- **Open.** `ab open "$B/labels"`, then `ab find text "Newsletters" click --exact`. It opens: a level-2 heading `Newsletters` with `Name`, `What it is`, `What Sift does with it: Archive`, and `Unsubscribe, when the sender offers a safe way` unchecked.
-- **Change the outcome.** `ab find role combobox click --name "What Sift does with it"` lists `Keep`, `Archive`, `Spam`, `Block`; then `ab find role option click --name "Keep"`.
+- **Open.** `ab open "$B/labels"`, then `ab find text "Newsletters" click --exact`. It opens: a level-2 heading `Newsletters` with `Name`, `What it is`, `What Mild does with it: Archive`, and `Unsubscribe, when the sender offers a safe way` unchecked.
+- **Change the outcome.** `ab find role combobox click --name "What Mild does with it"` lists `Keep`, `Archive`, `Spam`, `Block`; then `ab find role option click --name "Keep"`.
 - **Save.** `ab find role button click --name "Save"`. The panel stays open (`/labels/newsletter`). `Close`: Newsletters is now under `Kept in your inbox`.
 - **Second view.** `ab reload`. It is still under `Kept in your inbox`. `ab open "$B/"`: Deals (`48 hours only: 30% off`) is gone (see Gotchas).
 - **Spam drops Mark it read.** `ab open "$B/labels/marketing"`, tick `Mark it read`, then choose `Spam`: the box goes. `Save`; `SELECT disposition, mark_read FROM labels WHERE id = 'marketing'` is `spam`, `false`.
@@ -40,4 +40,4 @@ Preconditions:
 - `Remove`'s question replaces the button with one of the same name: wait for `Remove <label>?` before the second press, or it presses nothing.
 - `Block` is spam plus blocking the sender, stored as `disposition = 'spam'`, `block = true`.
 - Changing or removing any label re-decides every waiting suggestion. The seed adds its spam rule for `promo.example.com` without doing that, so the first save moves `m4` from `Unlabelled` to that rule, and For review drops from 12 to 11. That comes from the seed, not from the label.
-- Leave in inbox opens on its figures and a line saying it is Sift's own: nothing to edit, and no `Remove`. Removing the last label besides it is refused under the button, since Sift reads no mail without one.
+- Leave in inbox opens on its figures and a line saying it is Mild's own: nothing to edit, and no `Remove`. Removing the last label besides it is refused under the button, since Mild reads no mail without one.

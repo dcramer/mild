@@ -8,7 +8,7 @@ import type { LabelSummary } from '../types.ts';
 export const outcomeOf = (label: { disposition: string; block?: boolean; digest?: boolean }) =>
   label.block ? 'block' : label.digest ? 'digest' : label.disposition;
 
-/** The person's labels, each with how much depends on it and how often sift has had it right, over the scope's mailboxes. */
+/** The person's labels, each with how much depends on it and how often Mild has had it right, over the scope's mailboxes. */
 export async function listLabelSummaries(db: Sql, scope: Scope): Promise<LabelSummary[]> {
   if (scope.accounts.length === 0) return [];
   const byLabel = <T extends { id: string | null }>(rows: T[]) => new Map(rows.map((r) => [r.id, r] as const));

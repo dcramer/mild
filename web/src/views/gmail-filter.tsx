@@ -26,7 +26,7 @@ export function useFilterOffer(onDone: () => void) {
   const toast = useToast();
   return (ruleId: string, { plan, differs }: RuleFilter, decline: string) => ({
     title: 'Add it to Gmail as a filter?',
-    subtitle: 'Gmail then runs it on new mail itself, even while Sift is not running.',
+    subtitle: 'Gmail then runs it on new mail itself, even while Mild is not running.',
     children: plan ? (
       <Facts>
         <Fact term="Matches">
@@ -78,7 +78,7 @@ function FilterDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => voi
 /** Where a rule stands as a Gmail filter, for the Rules list: `failed` and `look` need the user. */
 /**
  * Whether Gmail runs the rule as a filter, or could. A filter the user edited or deleted in Gmail is their
- * choice, one out of date is brought into line once Sift is on, and a change Gmail did not take is tried
+ * choice, one out of date is brought into line once Mild is on, and a change Gmail did not take is tried
  * again: none of them is the reader's to look at.
  */
 export function filterStanding(rule: RuleSummary): 'filter' | 'could' | 'cannot' {
@@ -86,7 +86,7 @@ export function filterStanding(rule: RuleSummary): 'filter' | 'could' | 'cannot'
 }
 
 /**
- * Whether Gmail runs the rule itself, as one of its own filters, or could, and if not why; what Sift did about
+ * Whether Gmail runs the rule itself, as one of its own filters, or could, and if not why; what Mild did about
  * it, and the press to add or remove it. Said so that someone who has never made a Gmail filter knows what one is.
  */
 export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boolean }) {
@@ -96,17 +96,17 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
   const { state, possible, reason, history, checkedAt } = rule.filter;
   const said = rule.filterId
     ? state === 'changed'
-      ? 'Its Gmail filter was edited in Gmail, so Sift leaves it as it is.'
+      ? 'Its Gmail filter was edited in Gmail, so Mild leaves it as it is.'
       : state === 'outdated'
-        ? 'Its Gmail filter still does what this rule used to. Sift updates it once it is on.'
-        : 'Gmail runs this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Sift isn’t running.'
+        ? 'Its Gmail filter still does what this rule used to. Mild updates it once it is on.'
+        : 'Gmail runs this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Mild isn’t running.'
     : state === 'gone'
-      ? 'Its Gmail filter was deleted in Gmail. Sift will not put it back.'
+      ? 'Its Gmail filter was deleted in Gmail. Mild will not put it back.'
       : !possible
         ? `Gmail can’t run this rule as one of its filters. ${reason ?? ''}`
         : active
-          ? 'Gmail could run this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Sift isn’t running.'
-          : 'Once Sift is on, Gmail could run this rule itself, as one of your Gmail filters, so it applies even when Sift isn’t running.';
+          ? 'Gmail could run this rule itself, as one of your Gmail filters, so it applies the moment mail arrives, even when Mild isn’t running.'
+          : 'Once Mild is on, Gmail could run this rule itself, as one of your Gmail filters, so it applies even when Mild isn’t running.';
   // A press writes to every mailbox, so with several each row has to say whose Gmail it was.
   const several = new Set(history.map((change) => change.mailbox)).size > 1;
   const events = [
@@ -121,7 +121,7 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
           <span className="text-muted-foreground">{change.type === 'filter' ? 'Gmail did not take the filter' : 'Gmail did not remove the filter'}</span>
         ),
     })),
-    // Noticed by a check, not done by Sift, so the audit log has no row for it.
+    // Noticed by a check, not done by Mild, so the audit log has no row for it.
     ...(state === 'gone' && checkedAt !== null
       ? [{ key: 'gone', at: checkedAt, mailbox: null, title: <span className="font-medium">Filter deleted in Gmail</span> }]
       : []),
@@ -134,7 +134,7 @@ export function GmailFilter({ rule, active }: { rule: RuleSummary; active: boole
         rule.filterId ? (
           <DeleteButton
             question="Remove the Gmail filter?"
-            says={`The rule stays, and applies only while Sift is on.${state === 'changed' ? ' What you changed in the filter in Gmail goes with it.' : ''}`}
+            says={`The rule stays, and applies only while Mild is on.${state === 'changed' ? ' What you changed in the filter in Gmail goes with it.' : ''}`}
             onDelete={async () => {
               await remove.settle(() => api.ruleFilter(rule.id, false));
               toast('Gmail filter removed');

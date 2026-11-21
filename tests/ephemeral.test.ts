@@ -4,7 +4,7 @@ import { type Ephemeral, holding, memoryEphemeral } from '../src/ephemeral/ephem
 import { redisEphemeral } from '../src/ephemeral/redis.ts';
 
 /** Set to a disposable Redis to run these against it as well (CI does). */
-const REDIS = process.env['SIFT_TEST_REDIS_URL'];
+const REDIS = process.env['MILD_TEST_REDIS_URL'];
 
 /**
  * Each store, and how time passes for it. Memory's clock is the test's, so an expiry is exact however loaded the

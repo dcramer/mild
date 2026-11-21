@@ -8,7 +8,7 @@ import { Refusal } from '../refusal.ts';
 import type { Confidential, Sealed } from '../confidential.ts';
 
 /**
- * The only choice a new person has; the labels are their own, from what they want of Sift. Listed after
+ * The only choice a new person has; the labels are their own, from what they want of Mild. Listed after
  * every label of theirs. Nothing about it changes: mail to treat differently gets a label of the person's own.
  */
 const leaveInInbox: Label = { id: LEAVE_IN_INBOX, name: LEAVE_IN_INBOX_NAME, description: '', disposition: 'keep' };
@@ -65,7 +65,7 @@ export async function labelNames(db: Sql): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.id, r.name]));
 }
 
-/** Names in Gmail that sift uses for something other than a label of the user's. */
+/** Names in Gmail that Mild uses for something other than a label of the user's. */
 const RESERVED = new Set(['review', 'did', 'digest']);
 
 const slug = (name: string) =>
@@ -95,13 +95,13 @@ function draft(existing: readonly Label[], label: NewLabel): Label {
   const id = slug(name);
   if (id === '' || RESERVED.has(id)) throw new Refusal(`"${name}" cannot be used as a label name.`);
   if (existing.filter((l) => l.id !== LEAVE_IN_INBOX).length >= MAX_LABELS)
-    throw new Refusal(`Sift keeps at most ${MAX_LABELS} labels. Remove one you no longer use first.`);
+    throw new Refusal(`Mild keeps at most ${MAX_LABELS} labels. Remove one you no longer use first.`);
   if (
     existing.some(
       (l) =>
         l.id === id ||
         (l.id !== LEAVE_IN_INBOX && l.id.replace(/_/g, '-') === id) ||
-        l.gmailLabel === `sift/${id}` ||
+        l.gmailLabel === `mild/${id}` ||
         l.name.toLowerCase() === name.toLowerCase(),
     )
   )
@@ -111,7 +111,7 @@ function draft(existing: readonly Label[], label: NewLabel): Label {
     name,
     description: label.description.trim(),
     disposition: label.disposition,
-    gmailLabel: `sift/${id}`,
+    gmailLabel: `mild/${id}`,
     ...normalise(label.disposition, label.block ?? false, label.digest ?? false, label.markRead ?? false),
     ...(label.unsubscribe ? { unsubscribe: true } : {}),
   };
@@ -160,7 +160,7 @@ export async function removeLabel(db: Sql, id: string, now: number): Promise<boo
   return true;
 }
 
-/** Whether the person has a label of their own, besides Leave in inbox. Until they do, Sift reads nothing from their Gmail. */
+/** Whether the person has a label of their own, besides Leave in inbox. Until they do, Mild reads nothing from their Gmail. */
 export async function hasOwnLabels(db: Sql): Promise<boolean> {
   return (await listLabels(db)).some((l) => l.id !== LEAVE_IN_INBOX);
 }
@@ -177,7 +177,7 @@ export async function updateLabel(
   const current = (await listLabels(db)).find((l) => l.id === id);
   if (!current) return false;
   if (id === LEAVE_IN_INBOX)
-    throw new Refusal('Leave in inbox is Sift’s own and does not change. Add a label of your own for mail you want treated differently.');
+    throw new Refusal('Leave in inbox is Mild’s own and does not change. Add a label of your own for mail you want treated differently.');
   const disposition = change.disposition ?? current.disposition;
   // Changing what a label does drops a block or a digest unless the change asks for one.
   const extras = normalise(

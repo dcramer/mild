@@ -32,7 +32,7 @@ export async function suggestionDetail(db: Sql, scope: Scope, sender: string): P
 const MAX_ITEMS = 500;
 
 /**
- * Sift is going through the inbox, or mail it found there only to suggest about waits for the model. Each
+ * Mild is going through the inbox, or mail it found there only to suggest about waits for the model. Each
  * becomes a suggestion on a later pass, unless the model keeps failing on it.
  */
 async function pulledInWaiting(db: Sql, scope: Scope): Promise<boolean> {
@@ -53,7 +53,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
   const waitingNow = (await pendingSuggestions(db, { accounts: scope.accounts, ...(options.fact ? { facts: FACT_FILTERS[options.fact] } : {}) })).filter(
     (s) => options.includeKept || s.disposition !== 'keep',
   );
-  // Newest mail first, as a mail app lists it, whenever Sift decided it.
+  // Newest mail first, as a mail app lists it, whenever Mild decided it.
   const shown = waitingNow.toSorted((a, b) => b.receivedAt - a.receivedAt || b.decisionId - a.decisionId).slice(0, MAX_ITEMS);
   // What each sender's mail has been labelled, by its current decision, to offer as other likely labels.
   const senders = new Map(
@@ -105,7 +105,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
         return name ? [{ id, name, share: n / total }] : [];
       });
   };
-  // The text Sift holds of what is shown: Inbox's copy, or what it read with Inbox off.
+  // The text Mild holds of what is shown: Inbox's copy, or what it read with Inbox off.
   const previews = new Map<string, Confidential>();
   const ids = [...new Set(shown.map((s) => s.messageId))];
   for (const table of ids.length === 0 ? [] : [readBodies, mailBodies])

@@ -15,7 +15,7 @@ const SEARCH = 'users.messages.list';
 const READ = 'users.messages.get';
 const LIMITED = { status: 403, reason: 'userRateLimitExceeded' };
 
-/** Sift's Gmail client and its mailbox, with `arrive` for mail from `News <news@example.com>` unless it says. */
+/** Mild's Gmail client and its mailbox, with `arrive` for mail from `News <news@example.com>` unless it says. */
 function gmail() {
   const connected = connectGmail(fake.google);
   const box = connected.gmail;
@@ -24,7 +24,7 @@ function gmail() {
   const spam = (n: number) => {
     for (let i = 0; i < n; i++) box.deliver({ from: 'spam@example.net', labelIds: ['SPAM'] });
   };
-  /** What Sift asked of `methods` since the `from`th request, with the page and search each asked for. */
+  /** What Mild asked of `methods` since the `from`th request, with the page and search each asked for. */
   const since = (from: number, ...methods: string[]) =>
     box.requests
       .slice(from)
@@ -364,7 +364,7 @@ describe('syncAccount', () => {
     await syncAccount(db, api, await firstAccount(db), () => 1000);
     const before = await firstAccount(db);
 
-    // `a` is opened, `b` arrives and is opened before sift has seen it, and a message sift never recorded is opened.
+    // `a` is opened, `b` arrives and is opened before Mild has seen it, and a message Mild never recorded is opened.
     arrive('elsewhere', { labelIds: ['UNREAD'] }, { quietly: true });
     box.change('a', { remove: ['UNREAD'] });
     spam(499);

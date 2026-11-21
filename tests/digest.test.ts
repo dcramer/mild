@@ -55,11 +55,11 @@ async function arrive(account: string, ...mail: [id: string, subject: string][])
 
 const digestsDue = async () => (await dueWork(store, options())).filter((w) => w.kind === 'digest');
 
-/** The digests Sift put into a mailbox, oldest first. */
+/** The digests Mild put into a mailbox, oldest first. */
 const digests = (account = ACCOUNT) =>
   boxOf(account)
     .all()
-    .filter((m) => m.header('From') === `Sift <${account}>`)
+    .filter((m) => m.header('From') === `Mild <${account}>`)
     .toReversed();
 
 /** The digests put into a mailbox, read as Gmail would show them. */
@@ -103,10 +103,10 @@ describe('a daily digest', () => {
     expect(digest?.subject).toBe('Notifications digest for Wed, Nov 18: 2 messages');
     expect(digest?.text).toContain('Run 2 failed');
     expect(digest?.text).toContain('https://mail.google.com/mail/u/work%40example.com/#all/w1');
-    expect(digest?.text).toContain('2 messages Sift archived since Tue, Nov 17, 7:00\u00a0AM');
+    expect(digest?.text).toContain('2 messages Mild archived since Tue, Nov 17, 7:00\u00a0AM');
     expect(delivered(WORK)).toEqual([]);
     const [put] = digests();
-    expect(put!.labelIds).toEqual(['INBOX', 'UNREAD', boxOf().labelId('sift/digest')]);
+    expect(put!.labelIds).toEqual(['INBOX', 'UNREAD', boxOf().labelId('mild/digest')]);
     expect(await raw(db).all('SELECT label_id, account_id, since, until, count, gmail_id FROM digests')).toEqual([
       { label_id: 'notification', account_id: ACCOUNT, since: SEVEN - 24 * HOUR, until: SEVEN, count: 2, gmail_id: put!.id },
     ]);
@@ -129,7 +129,7 @@ describe('a daily digest', () => {
     await arrive(ACCOUNT, ['b1', 'Run 1 passed']);
     clock = SEVEN + 6 * 60_000;
     await runWork(store, DIGEST, { ...options(), dashboard: 'https://sift.example.com' }, clock + 60_000);
-    expect(delivered()[0]!.text).toContain('See them in Sift: https://sift.example.com/activity?label=notification');
+    expect(delivered()[0]!.text).toContain('See them in Mild: https://sift.example.com/activity?label=notification');
   });
 
   it('is due at the hour of the person’s own day, five minutes on, and only with something in it', async () => {
@@ -163,14 +163,14 @@ describe('a daily digest', () => {
     ]);
   });
 
-  it('waits while Sift is off', async () => {
+  it('waits while Mild is off', async () => {
     await arrive(ACCOUNT, ['b1', 'Run 1 passed']);
     await setActive(db, false);
     clock = SEVEN + HOUR;
     expect(await digestsDue()).toEqual([]);
   });
 
-  it('lists only what Sift archived for the label by itself and that is still archived', async () => {
+  it('lists only what Mild archived for the label by itself and that is still archived', async () => {
     const T = SEVEN - 2 * HOUR;
     /** A message of the label's, decided as `decision` says and archived at `at`. */
     const archived = async (id: string, decision: { digest?: boolean; byUser?: boolean } = {}, at = T) => {
@@ -311,7 +311,7 @@ describe('a daily digest', () => {
     const { id } = digests()[0]!;
     /** The mailbox, with its history read from `cursor`. */
     const from = (cursor: string) => ({ id: ACCOUNT, number: 1, email: ACCOUNT, historyId: cursor });
-    // By Gmail's id, without reading it, arriving or read; and by its Message-ID before Sift has that.
+    // By Gmail's id, without reading it, arriving or read; and by its Message-ID before Mild has that.
     expect(await syncWants(db, api, from(before))).toBe(false);
     expect(await syncAccount(db, api, from(before), () => clock)).toMatchObject({ added: [], skipped: 0 });
     let cursor = fake.google.mailbox(ACCOUNT).cursor();

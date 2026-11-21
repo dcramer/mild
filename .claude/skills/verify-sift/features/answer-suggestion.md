@@ -1,12 +1,12 @@
 # Answer a suggestion
 
-A message Sift could not place, or placed wrongly, waits in For review. The user opens it, chooses what it is, and presses the check. Sift records the label, carries out that label's action on the message on the next pass (even while Sift is off), keeps the message as an example, makes no rule, and moves on to the next one.
+A message Mild could not place, or placed wrongly, waits in For review. The user opens it, chooses what it is, and presses the check. Mild records the label, carries out that label's action on the message on the next pass (even while Mild is off), keeps the message as an example, makes no rule, and moves on to the next one.
 
 ## Sub-features
 
 - `answer-open` opens a waiting message from its row, in the reader in the list's place.
-- `answer-pick` chooses a label in the reader's dropdown (`What this message is`): `Leave in inbox` first and set apart, then the label Sift gave and its likely others, each with a meter, then the rest. An `Unlabelled` message has no likely group.
-- `answer-save` is the check: `Agree:` the label while it is Sift's, `Save:` once changed. The reader moves to the next waiting message and the count drops. Only that message is answered; on For review, a folded row's check answers every message in it.
+- `answer-pick` chooses a label in the reader's dropdown (`What this message is`): `Leave in inbox` first and set apart, then the label Mild gave and its likely others, each with a meter, then the rest. An `Unlabelled` message has no likely group.
+- `answer-save` is the check: `Agree:` the label while it is Mild's, `Save:` once changed. The reader moves to the next waiting message and the count drops. Only that message is answered; on For review, a folded row's check answers every message in it.
 - `answer-more` is the toast's `Same for N more`: the only way one answer reaches the sender's other waiting mail, offered when that mail has the same label (or, like the two Ops alerts, none).
 - `answer-rule` is `Make a rule…`, which opens the rule dialog over the reader, started on this sender and the message's label (see rule-shortcuts.md).
 
@@ -33,4 +33,4 @@ Preconditions:
 - A row shows the sender's name, not the address; the address is in the panel.
 - Each subject is in its row twice, once in a copy shown only on phones, so `find text "<subject>"` reaches the hidden one and fails. Use `find role cell`.
 - Rows have no accessible name. `find role row --name` matches nothing.
-- The answer copies the text Sift read of the waiting message into the example: `SELECT status FROM examples WHERE message_id = 'm4'` is `captured`, and `read_bodies` still has `m4` until 30 days after it was read.
+- The answer copies the text Mild read of the waiting message into the example: `SELECT status FROM examples WHERE message_id = 'm4'` is `captured`, and `read_bodies` still has `m4` until 30 days after it was read.

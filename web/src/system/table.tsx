@@ -129,7 +129,7 @@ const PHONE = { hide: 'hidden md:table-cell' } as const;
 
 /**
  * A table's column heads, one `Th` each. Unshown, they are for screen readers alone: a list that reads as
- * plain rows (a sender, a subject, what Sift did). `shown` once a figure or a date would not say what it is
+ * plain rows (a sender, a subject, what Mild did). `shown` once a figure or a date would not say what it is
  * without one, as soon as there are two beside the first column: `wide` where a phone drops those columns,
  * `always` where it keeps some.
  */

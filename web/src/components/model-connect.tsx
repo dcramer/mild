@@ -138,7 +138,7 @@ export function useProviderConnect(choice: Choice, model: ManageState['model'], 
         listed.loading ? (
           <p className="text-muted-foreground">Listing models…</p>
         ) : (
-          <Failure>{listed.data?.error ?? `${name} offers no models Sift can use.`}</Failure>
+          <Failure>{listed.data?.error ?? `${name} offers no models Mild can use.`}</Failure>
         )
       ) : changing ? (
         <>

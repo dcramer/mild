@@ -16,7 +16,7 @@ interface Drawn {
 }
 
 /**
- * The API path each is read from. A reply that holds what Sift stores encrypted has the type `never` here, so the
+ * The API path each is read from. A reply that holds what Mild stores encrypted has the type `never` here, so the
  * type checker refuses it: whatever the server draws with is in the page's HTML.
  */
 const PATHS: { [K in keyof Drawn]: Holds<Drawn[K]> extends true ? never : string } = {

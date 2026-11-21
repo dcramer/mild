@@ -23,7 +23,7 @@ const SAMPLE = 20;
 export const EXAMPLES = 5;
 
 /**
- * What the rule would do to one message: decide it now, or wait for a model to say what it is. `replaces`: Sift's
+ * What the rule would do to one message: decide it now, or wait for a model to say what it is. `replaces`: Mild's
  * own change to it stands in Gmail, and is taken back first.
  */
 type Plan = { decide: Decision; again: boolean; replaces: boolean } | { read: true };
@@ -74,14 +74,14 @@ type Given = NonNullable<Awaited<ReturnType<typeof rulesWith>>>;
 
 /**
  * What `ruleId` does to one message, as the rules stand: null when it does nothing (another rule decides
- * it, the user has had their say, a decision waits to be carried out, or Sift already made the same change).
- * Mail Sift decided and changed while on is decided again, its change replaced. A rule that needs a model
+ * it, the user has had their say, a decision waits to be carried out, or Mild already made the same change).
+ * Mail Mild decided and changed while on is decided again, its change replaced. A rule that needs a model
  * applies at once to mail a tier already placed, and otherwise waits for the model.
  */
 async function planFor(db: Sql, given: Given, ruleId: string, facts: MessageFacts, now: number): Promise<Plan | null> {
   const current = await currentDecision(db, facts.accountId, facts.messageId);
   if (current && (current.answered || (current.carryOut && current.outcome === null))) return null;
-  // What Sift carried out stands in Gmail, as a change or as leaving the mail alone.
+  // What Mild carried out stands in Gmail, as a change or as leaving the mail alone.
   const standing = current?.carryOut && (current.outcome === 'done' || current.outcome === 'none') ? current.decision : null;
   const written = await cachedCorrespondent(db, facts.accountId, facts.from.address, now);
   const options = { hasWritten: () => written };
@@ -92,7 +92,7 @@ async function planFor(db: Sql, given: Given, ruleId: string, facts: MessageFact
   const decided = await rulesStage(given.rules, given.labels, { ...options, judged: true }).decide(facts);
   if (decided?.ruleId === ruleId) return plan(decided, false);
   if (current) {
-    // A rule made since Sift carried out its tier's label had no say in what followed from it.
+    // A rule made since Mild carried out its tier's label had no say in what followed from it.
     const settled = current.carryOut ? settle(given.rules, given.labels, facts, current.decision, options) : null;
     return settled?.ruleId === ruleId ? plan(settled, false) : null;
   }
@@ -103,8 +103,8 @@ const sameChange = (a: Decision, b: Decision) =>
   a.disposition === b.disposition && (a.labelId ?? null) === (b.labelId ?? null) && Boolean(a.markRead) === Boolean(b.markRead);
 
 /**
- * Recorded facts, or for mail Sift never saw, Gmail's, recorded as they are read so no look reads them again. Null when it has
- * gone, has left the inbox, or is Sift's own digest.
+ * Recorded facts, or for mail Mild never saw, Gmail's, recorded as they are read so no look reads them again. Null when it has
+ * gone, has left the inbox, or is Mild's own digest.
  */
 async function factsOf(db: Sql, api: Pick<GmailApi, 'getMetadata'>, accountId: string, messageId: string, now: number) {
   const stored = await getFacts(db, accountId, messageId);
@@ -119,7 +119,7 @@ async function factsOf(db: Sql, api: Pick<GmailApi, 'getMetadata'>, accountId: s
 /**
  * What applying a rule to the inbox would do, found by searching Gmail and checking the rule on the newest
  * `SAMPLE`: exact when that is all there is, and otherwise scaled to Gmail's estimate of how many match the
- * search, which is rough. Nothing is decided or changed; mail Sift had never seen is recorded, out of the triage queue.
+ * search, which is rough. Nothing is decided or changed; mail Mild had never seen is recorded, out of the triage queue.
  */
 export async function ruleInbox(
   db: Sql,
@@ -154,7 +154,7 @@ export async function ruleInbox(
 
 /**
  * Apply a rule to one message in the inbox, as the user's press: what it decides is recorded to be carried out
- * on the next pass whether Sift is on or off. Sift's own change from before is taken back first, so a retry
+ * on the next pass whether Mild is on or off. Mild's own change from before is taken back first, so a retry
  * finds nothing left of it. Mail that needs a model first is recorded and marked, so the pass carries out what
  * the rule decides once the model has spoken. Null when the rule does nothing to it.
  */
@@ -185,7 +185,7 @@ export async function applyTo(
   });
 }
 
-/** Take back Sift's last change to a message. False when it could not be: the rule then leaves the message as it is. */
+/** Take back Mild's last change to a message. False when it could not be: the rule then leaves the message as it is. */
 async function takeBack(db: Sql, mailbox: Mailbox, accountId: string, messageId: string, now: () => number): Promise<boolean> {
   const last = await lastStandingChange(db, accountId, messageId);
   if (!last) return true;

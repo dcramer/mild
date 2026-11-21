@@ -27,10 +27,10 @@ export interface MessageAction {
 }
 
 /**
- * What sift did, as a second Gmail label beside the one for what the mail is. Applied here to every
- * archived or spammed message whatever the caller passes, so anything sift moved can be found in Gmail itself.
+ * What Mild did, as a second Gmail label beside the one for what the mail is. Applied here to every
+ * archived or spammed message whatever the caller passes, so anything Mild moved can be found in Gmail itself.
  */
-const AUDIT_LABELS = { archive: 'sift/did/archived', spam: 'sift/did/spam' } as const;
+const AUDIT_LABELS = { archive: 'mild/did/archived', spam: 'mild/did/spam' } as const;
 
 export type Outcome =
   | { status: 'done'; actionId: number; finalLabels: string[] }
@@ -122,7 +122,7 @@ export async function reconcile(deps: ActionDeps, scope?: { accountId: string; m
   let settled = 0;
   for (const action of (await listOpenActions(deps.db, scope)).filter(settles)) {
     if (action.type === 'unsubscribe') {
-      await finishAction(deps.db, action.id, 'unknown', null, 'Sift stopped before the answer was recorded', clock(deps));
+      await finishAction(deps.db, action.id, 'unknown', null, 'Mild stopped before the answer was recorded', clock(deps));
       settled++;
       continue;
     }
@@ -170,8 +170,8 @@ const PRESSES = {
 export type Press = keyof typeof PRESSES;
 
 /**
- * The person's own press on one message, carried out whether Sift is on or not, as an answer is. Only a message in the
- * inbox now is changed; nothing is added for what Sift did, since Sift did not decide it. With the outcome, the
+ * The person's own press on one message, carried out whether Mild is on or not, as an answer is. Only a message in the
+ * inbox now is changed; nothing is added for what Mild did, since Mild did not decide it. With the outcome, the
  * message's labels as Gmail last said them, for the record; null when it no longer exists.
  */
 export async function press(deps: ActionDeps, accountId: string, messageId: string, what: Press): Promise<{ outcome: Outcome; labels: string[] | null }> {

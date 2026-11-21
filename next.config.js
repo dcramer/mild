@@ -1,4 +1,4 @@
-// JavaScript, not TypeScript: Next.js announces loading a TypeScript config on the terminal `sift run` prints to.
+// JavaScript, not TypeScript: Next.js announces loading a TypeScript config on the terminal `mild run` prints to.
 import { randomUUID } from 'node:crypto';
 import { withWorkflow } from 'workflow/next';
 import { PAGE_HEADERS } from './src/dashboard/policy.ts';
@@ -16,7 +16,7 @@ export default withWorkflow({
   // `pnpm typecheck` checks the page and the server with their own settings (tsconfig.web.json, tsconfig.json).
   typescript: { tsconfigPath: 'tsconfig.web.json', ignoreBuildErrors: true },
   poweredByHeader: false,
-  env: { SIFT_BUILD: BUILD },
+  env: { MILD_BUILD: BUILD },
   // Each screen is built once and only the dashboard's frame is drawn per request (app/(dashboard)/layout.tsx), so a
   // link fetches the screen behind it ahead, from the build's files, and pressing it waits on nothing.
   cacheComponents: true,
@@ -27,7 +27,7 @@ export default withWorkflow({
   images: { unoptimized: true },
   // The page and its files. The API and sign-in send their own (src/dashboard/server.ts), the message frame's among them.
   headers: async () => [{ source: '/((?!api/|auth/).*)', headers: Object.entries(PAGE_HEADERS).map(([key, value]) => ({ key, value })) }],
-  // Workflow builds a route that resumes a run waiting on a webhook. Sift creates none, so a request there finds no page.
+  // Workflow builds a route that resumes a run waiting on a webhook. Mild creates none, so a request there finds no page.
   rewrites: async () => ({
     beforeFiles: [
       { source: '/.well-known/workflow/v1/webhook/:path*', destination: '/.well-known/workflow/v1/no-webhook' },

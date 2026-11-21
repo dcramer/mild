@@ -19,7 +19,7 @@ const METADATA_HEADERS = [
   'Authentication-Results',
   'In-Reply-To',
   'References',
-  // How a digest Sift put in the mailbox is told from mail (`isOwnDigest`, src/store/digests.ts).
+  // How a digest Mild put in the mailbox is told from mail (`isOwnDigest`, src/store/digests.ts).
   'Message-ID',
   // Which service sent it (see `bulkService` in src/triage/facts.ts).
   'Return-Path',
@@ -47,7 +47,7 @@ interface HistoryAddition {
   labelIds: string[];
 }
 
-/** Labels put on or taken off one message, by anyone: the user, another client, or sift itself. */
+/** Labels put on or taken off one message, by anyone: the user, another client, or Mild itself. */
 export interface HistoryLabelChange {
   messageId: string;
   added: string[];

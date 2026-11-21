@@ -28,7 +28,7 @@ describe('pipeline', () => {
     );
     const rules = rulesStage([{ id: 'r1', match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }], LABELS);
     const decision = await triage([rules, classifier], facts());
-    expect(decision).toMatchObject({ disposition: 'archive', stage: 'rules', ruleId: 'r1', labelId: 'newsletter', gmailLabel: 'sift/newsletters' });
+    expect(decision).toMatchObject({ disposition: 'archive', stage: 'rules', ruleId: 'r1', labelId: 'newsletter', gmailLabel: 'mild/newsletters' });
     expect(classifierCalls).toBe(0);
   });
 });
@@ -40,7 +40,7 @@ describe('rules stage', () => {
   it('names a label, and the label decides what happens', async () => {
     expect(await decide([newsletters])).toMatchObject({
       labelId: 'newsletter',
-      gmailLabel: 'sift/newsletters',
+      gmailLabel: 'mild/newsletters',
       disposition: 'archive',
       reason: 'rule: from domain example.com is Newsletters',
     });
@@ -75,7 +75,7 @@ describe('rules stage', () => {
   it("lets a rule's own action beat its label's", async () => {
     expect(await decide([{ ...newsletters, disposition: 'keep' }])).toMatchObject({
       labelId: 'newsletter',
-      gmailLabel: 'sift/newsletters',
+      gmailLabel: 'mild/newsletters',
       disposition: 'keep',
     });
   });
@@ -168,7 +168,7 @@ describe('rules stage', () => {
     expect(await decide([rule], facts({ headers: { 'list-id': 'Dev List <dev.lists.example.com>' } }))).toMatchObject({ ruleId: 'r' });
   });
 
-  it('never hides mail from someone the owner has written to on a rule sift learned, but does on one the user made', async () => {
+  it('never hides mail from someone the owner has written to on a rule Mild learned, but does on one the user made', async () => {
     const written = { hasWritten: () => true };
     expect(await decide([{ ...newsletters, learned: true }], facts(), written)).toBeNull();
     expect(await decide([{ ...newsletters, learned: true }], facts(), { hasWritten: () => undefined })).toMatchObject({
@@ -277,7 +277,7 @@ describe('the three kinds of rule', () => {
     const named: Rule = { id: 'n', match: { fromDomain: [from.domain] }, labelId: 'newsletter' };
     // The action rule decides; the other names the label for nothing. Newsletters archives, the rule keeps.
     const decision = await decide([named, keep]);
-    expect(decision).toMatchObject({ ruleId: 'a', disposition: 'keep', labelId: 'newsletter', gmailLabel: 'sift/newsletters' });
+    expect(decision).toMatchObject({ ruleId: 'a', disposition: 'keep', labelId: 'newsletter', gmailLabel: 'mild/newsletters' });
     // The label's extras are not the rule's to apply.
     expect(decision).toMatchObject({ subscription: 'preserve' });
   });
@@ -336,7 +336,7 @@ describe('the three kinds of rule', () => {
 
 describe('classifier stage', () => {
   const options = { minConfidence: 0.9, minSpamConfidence: 0.99 };
-  const spam = [...LABELS, { id: 'scam', name: 'Scam', description: '', disposition: 'spam' as const, gmailLabel: 'sift/scam' }];
+  const spam = [...LABELS, { id: 'scam', name: 'Scam', description: '', disposition: 'spam' as const, gmailLabel: 'mild/scam' }];
 
   it('names a label above the bar and abstains below it', async () => {
     expect(await classifierStage(async () => ({ labelId: 'newsletter', confidence: 0.95 }), LABELS, options).decide(facts())).toMatchObject({

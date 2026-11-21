@@ -39,10 +39,10 @@ export interface RunOptions {
   connect: (db: Sql, account: Account) => { api: GmailApi; mailbox: Mailbox } | Promise<{ api: GmailApi; mailbox: Mailbox }>;
   /** The inference tier of the person whose database `db` is: null when they have no model, or it cannot be reached. */
   model?: (db: Sql) => Promise<{ judge: Judge; highlight?: Highlighter; model: string } | null>;
-  /** Leaves a mailing list, for decisions that say to. Without it sift never unsubscribes. */
+  /** Leaves a mailing list, for decisions that say to. Without it Mild never unsubscribes. */
   unsubscribe?: (db: Sql, accountId: string, messageId: string) => Promise<UnsubscribeOutcome>;
   log: (line: string) => void;
-  /** Where the dashboard is reached from the person's own devices, for links in what Sift puts in their Gmail. */
+  /** Where the dashboard is reached from the person's own devices, for links in what Mild puts in their Gmail. */
   dashboard?: string;
   now?: () => number;
 }
@@ -63,7 +63,7 @@ export interface PassResult {
   /** What a look at the account's Gmail filters found, on the passes that looked. */
   filters?: FilterCheck;
   error?: string;
-  /** The error is Google refusing sift's sign-in for this account. Retrying will not help; signing in again will. */
+  /** The error is Google refusing Mild's sign-in for this account. Retrying will not help; signing in again will. */
   expired?: true;
   /** Stopped at its time limit with work left. */
   unfinished?: true;
@@ -234,9 +234,9 @@ async function digests(store: Store, db: Sql, person: number, options: RunOption
 }
 
 /**
- * Go on with an inbox run over one mailbox. Applying a rule needs no model: it takes back what Sift did to the
+ * Go on with an inbox run over one mailbox. Applying a rule needs no model: it takes back what Mild did to the
  * mail it replaces, and the pass carries out what it records. Going through the inbox uses what a pass would:
- * its model, Gmail read once per message, and the mailbox only while Sift is on. Without a model it waits; deciding only what rules cover would leave the rest behind it.
+ * its model, Gmail read once per message, and the mailbox only while Mild is on. Without a model it waits; deciding only what rules cover would leave the rest behind it.
  */
 async function goThroughInbox(db: Sql, account: Account, run: number, options: RunOptions, until: number): Promise<void> {
   if ((await goingInboxRun(db, run))?.ruleId) {
@@ -334,7 +334,7 @@ async function recordWants(db: Sql, account: Account, options: RunOptions, now: 
 }
 
 /**
- * One pass over one mailbox, changing Gmail only if its person has sift on: settle unconfirmed actions,
+ * One pass over one mailbox, changing Gmail only if its person has Mild on: settle unconfirmed actions,
  * sync, triage. A failure is reported; the next pass picks up where this one stopped.
  */
 async function runMailbox(db: Sql, account: Account, options: RunOptions, until: number): Promise<PassResult | null> {

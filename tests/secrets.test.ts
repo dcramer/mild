@@ -41,9 +41,9 @@ import { examplesFor } from '../src/store/examples.ts';
 import { freshStore, raw } from './fixtures.ts';
 
 const NONE = loadKeyring({});
-const A = loadKeyring({ SIFT_KEY: 'key-a' });
-const B_AFTER_A = loadKeyring({ SIFT_KEY: 'key-b', SIFT_OLD_KEYS: 'key-a, key-b' });
-const B = loadKeyring({ SIFT_KEY: 'key-b' });
+const A = loadKeyring({ MILD_KEY: 'key-a' });
+const B_AFTER_A = loadKeyring({ MILD_KEY: 'key-b', MILD_OLD_KEYS: 'key-a, key-b' });
+const B = loadKeyring({ MILD_KEY: 'key-b' });
 
 describe('secrets', () => {
   it('stores plain text when there is no key', () => {
@@ -69,7 +69,7 @@ describe('secrets', () => {
   });
 
   it('gives the same secret the same key id and a different secret another', () => {
-    expect(loadKeyring({ SIFT_KEY: ' key-a ' }).current!.id).toBe(A.current!.id);
+    expect(loadKeyring({ MILD_KEY: ' key-a ' }).current!.id).toBe(A.current!.id);
     expect(B.current!.id).not.toBe(A.current!.id);
     expect(B_AFTER_A.old.map((k) => k.id)).toEqual([A.current!.id]);
   });
@@ -82,7 +82,7 @@ describe('secrets', () => {
 
     expect(readSecret(token, B_AFTER_A)).toBe('one');
     expect(rekeySecrets([token, key, join(home, 'missing')], B_AFTER_A, false)).toEqual({ encrypted: [], rotated: [token] });
-    expect(() => readSecret(token, B)).toThrow('SIFT_OLD_KEYS');
+    expect(() => readSecret(token, B)).toThrow('MILD_OLD_KEYS');
 
     expect(rekeySecrets([token, key], B_AFTER_A)).toEqual({ encrypted: [], rotated: [token] });
     expect(readSecret(token, B)).toBe('one');
@@ -107,7 +107,7 @@ describe('secrets', () => {
     for (const keys of [B, NONE]) {
       expect(() => readSecret(locked, keys)).toThrow(locked);
       expect(() => rekeySecrets([plain, locked], keys)).toThrow(
-        /token\.json was encrypted with a key that is not in SIFT_KEY.*sign in to Google and the model provider again/,
+        /token\.json was encrypted with a key that is not in MILD_KEY.*sign in to Google and the model provider again/,
       );
     }
     expect(readFileSync(plain, 'utf8')).toBe('two');
@@ -134,13 +134,13 @@ describe('credentials', () => {
     await connectAccount(store, 'beta@example.net', '1', 0);
     const stored = async (id: number) =>
       await raw(await store.user(id)).all<{ kind: string; key: string; value: string }>('SELECT kind, key, value FROM credentials');
-    /** A person's database as Sift opens it with these keys. */
+    /** A person's database as Mild opens it with these keys. */
     const as = async (id: number, keys: Keyring) => await (await freshStore(keys)).user(id);
     return { store, stored, as };
   }
 
   it("keeps the Google client in a file, and sign-ins in their person's database, encrypted", async () => {
-    const config = loadConfig({ SIFT_HOME: tempDir(), SIFT_KEY: 'key-a' });
+    const config = loadConfig({ MILD_HOME: tempDir(), MILD_KEY: 'key-a' });
     installClient(config, JSON.stringify({ web: { client_id: 'id', client_secret: 'client-secret-value' } }));
     expect(secretPaths(config).filter((p) => p !== config.dashboardKeyPath)).toEqual([config.googleClientPath]);
     expect(readFileSync(config.googleClientPath, 'utf8')).toMatch(/^sift-secret:v1:[0-9a-f]{8}:[\w-]+:[\w-]+\n$/);
@@ -159,7 +159,7 @@ describe('credentials', () => {
       type: 'api_key',
       key: 'api-key-value',
     });
-    await expect((await credentials(await as(1, B), 'gmail')).read('alpha@example.org')).rejects.toThrow('SIFT_KEY');
+    await expect((await credentials(await as(1, B), 'gmail')).read('alpha@example.org')).rejects.toThrow('MILD_KEY');
   });
 
   it("does not open one copied into another row or another person's database", async () => {
@@ -180,7 +180,7 @@ describe('credentials', () => {
     await expect((await credentials(alpha, 'model')).read('openai')).rejects.toThrow('person 1 model openai is stored unencrypted');
     expect(await (await credentials(await as(1, NONE), 'model')).read('openai')).toBe('{"type":"api_key","key":"planted"}');
     expect(openToRekey('x', 'plain', A)).toBe('plain');
-    expect(() => openSecret('x', 'plain', A)).toThrow('SIFT_KEY is set');
+    expect(() => openSecret('x', 'plain', A)).toThrow('MILD_KEY is set');
   });
 
   it('brings plain and old-key values under the current key, and refuses ones no key opens', async () => {
@@ -192,7 +192,7 @@ describe('credentials', () => {
     expect(await rekeyCredentials(rotating)).toEqual(['Gmail access for alpha@example.org', 'Model sign-in for openai']);
     expect(await (await credentials(await as(1, B), 'gmail')).read('alpha@example.org')).toBe('plain-token');
     expect(await rekeyCredentials(await as(1, B))).toEqual([]);
-    await expect(rekeyCredentials(await as(1, A))).rejects.toThrow('SIFT_KEY');
+    await expect(rekeyCredentials(await as(1, A))).rejects.toThrow('MILD_KEY');
   });
 });
 
@@ -239,7 +239,7 @@ describe('mail', () => {
       to: [{ address: 'me@example.org' }],
       headers: { subject: 'Weekly digest' },
     });
-    await expect(messageDetail(await as(B), await everything(db), 'm1')).rejects.toThrow('SIFT_KEY');
+    await expect(messageDetail(await as(B), await everything(db), 'm1')).rejects.toThrow('MILD_KEY');
   });
 
   it('finds a sender by a hash of their address that differs for each person, and shows it decrypted', async () => {
@@ -487,8 +487,8 @@ describe('mail', () => {
     expect(m2!.body_html).toBeNull();
     expect(await messageDetail(db, await everything(db), 'm1')).toMatchObject({ body: 'Hello', hasHtml: true });
     expect(await messageDetail(db, await everything(db), 'm2')).toMatchObject({ body: 'Plain', hasHtml: false });
-    expect(() => openPart(db, 'alpha@example.org', 'm2', 'text', m1!.body_text)).toThrow('SIFT_KEY');
-    await expect(messageDetail(await as(B), await everything(db), 'm1')).rejects.toThrow('SIFT_KEY');
+    expect(() => openPart(db, 'alpha@example.org', 'm2', 'text', m1!.body_text)).toThrow('MILD_KEY');
+    await expect(messageDetail(await as(B), await everything(db), 'm1')).rejects.toThrow('MILD_KEY');
   });
 
   it('brings bodies stored plain or under an old key under the current one', async () => {
@@ -519,11 +519,11 @@ describe('mail', () => {
 
 describe('.env', () => {
   it('reads the home then the working directory, never replacing what is set', () => {
-    const names = ['SIFT_TEST_SET', 'SIFT_TEST_HOME', 'SIFT_TEST_BOTH', 'SIFT_TEST_CWD'];
+    const names = ['MILD_TEST_SET', 'MILD_TEST_HOME', 'MILD_TEST_BOTH', 'MILD_TEST_CWD'];
     const [home, cwd] = [tempDir(), tempDir()];
-    writeFileSync(join(home, '.env'), 'SIFT_TEST_SET=home\nSIFT_TEST_HOME=home\nSIFT_TEST_BOTH=home\n');
-    writeFileSync(join(cwd, '.env'), 'SIFT_TEST_BOTH=cwd\nSIFT_TEST_CWD=cwd\n');
-    vi.stubEnv('SIFT_TEST_SET', 'environment');
+    writeFileSync(join(home, '.env'), 'MILD_TEST_SET=home\nMILD_TEST_HOME=home\nMILD_TEST_BOTH=home\n');
+    writeFileSync(join(cwd, '.env'), 'MILD_TEST_BOTH=cwd\nMILD_TEST_CWD=cwd\n');
+    vi.stubEnv('MILD_TEST_SET', 'environment');
     // Written by the code under test, not stubbed: stubbing each first marks it for removal after the test.
     for (const name of names.slice(1)) vi.stubEnv(name, undefined);
     loadEnvFiles(home, cwd);
@@ -535,7 +535,7 @@ describe('.env', () => {
     const cwd = tempDir();
     writeFileSync(join(cwd, '.env'), 'OTHER=1', { mode: 0o644 });
     const path = saveKeyFile(cwd, 'key-a');
-    expect(parseEnv(readFileSync(path, 'utf8'))).toEqual({ OTHER: '1', SIFT_KEY: 'key-a' });
+    expect(parseEnv(readFileSync(path, 'utf8'))).toEqual({ OTHER: '1', MILD_KEY: 'key-a' });
     expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });

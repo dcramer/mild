@@ -7,7 +7,7 @@ import { listLabels } from './labels.ts';
 import { hasRuleFor } from './rules.ts';
 import type { Sealed } from '../confidential.ts';
 
-/** A rule Sift thinks is worth having: "from them, when it is this label → what the user has been doing to it". */
+/** A rule Mild thinks is worth having: "from them, when it is this label → what the user has been doing to it". */
 export interface Proposal {
   id: number;
   accountId: string;
@@ -68,7 +68,7 @@ async function propose(db: Sql, p: Omit<Proposal, 'id' | 'createdAt'>, now: numb
 }
 
 /**
- * How many of a sender's messages of one label the user must have given the same other action before Sift
+ * How many of a sender's messages of one label the user must have given the same other action before Mild
  * offers a rule. Not one: one answer about one message does not become a rule about its sender.
  */
 const PROPOSE_AFTER = 2;

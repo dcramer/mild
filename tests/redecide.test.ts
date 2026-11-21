@@ -35,9 +35,9 @@ vi.mock('../src/store/senders.ts', async (actual) => {
 let db: Sql;
 let serial: number;
 
-const MARKETING = { disposition: 'archive', labelId: 'marketing', gmailLabel: 'sift/marketing', subscription: 'preserve' } as const;
+const MARKETING = { disposition: 'archive', labelId: 'marketing', gmailLabel: 'mild/marketing', subscription: 'preserve' } as const;
 
-/** A message from `address` with the decision sift suggested for it. Returns the message id. */
+/** A message from `address` with the decision Mild suggested for it. Returns the message id. */
 async function decided(address: string, decision: Partial<Decision> = {}, at = ++serial): Promise<string> {
   const id = `m${++serial}`;
   await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
@@ -169,7 +169,7 @@ describe('when a rule changes', () => {
     expect(await current(sale)).toMatchObject({ stage: 'rules', label_id: 'personal', carry_out: true });
   });
 
-  it('a rule sift learned changes a suggestion only when the outcome differs', async () => {
+  it('a rule Mild learned changes a suggestion only when the outcome differs', async () => {
     const sale = await decided('sales@example.com', MARKETING);
     await addRule(db, { match: { from: ['sales@example.com'] }, labelId: 'marketing' }, 'learned');
     expect((await redecideWaiting(db, ACCOUNT)).recorded).toBe(0);
@@ -186,7 +186,7 @@ describe('when a rule changes', () => {
     expect(await current(underLearned)).toMatchObject({ stage: 'rules', disposition: 'keep' });
     expect(await waiting()).toEqual([sale, underLearned].toSorted());
   });
-  it("mail Sift marked for review while on is settled by a rule of the user's that decides it, and its mark taken back", async () => {
+  it("mail Mild marked for review while on is settled by a rule of the user's that decides it, and its mark taken back", async () => {
     const { mailbox, gmail } = connectGmail(fake.google);
     const labelsOf = (id: string) => gmail.message(id)!.labelIds;
     const asked = async (address: string) => {
@@ -200,7 +200,7 @@ describe('when a rule changes', () => {
     const ops = await asked('ops@example.com');
     const account = await firstAccount(db);
     await triageAccount({ db, mailbox }, account);
-    expect(labelsOf(sale)).toEqual(['INBOX', gmail.labelId('sift/review')]);
+    expect(labelsOf(sale)).toEqual(['INBOX', gmail.labelId('mild/review')]);
 
     await addRule(db, { match: { from: ['sales@example.com'] }, disposition: 'archive' }, 'user');
     // Not the user's, and one a model must check: neither takes mail from them.
@@ -213,17 +213,17 @@ describe('when a rule changes', () => {
 
     for (const mark of marks) await undo({ db, mailbox }, mark);
     await triageAccount({ db, mailbox }, account);
-    expect(labelsOf(sale)).toEqual([gmail.labelId('sift/did/archived')]);
-    expect(labelsOf(news)).toEqual(['INBOX', gmail.labelId('sift/review')]);
+    expect(labelsOf(sale)).toEqual([gmail.labelId('mild/did/archived')]);
+    expect(labelsOf(news)).toEqual(['INBOX', gmail.labelId('mild/review')]);
   });
 
-  it('removing a rule sift learned brings back what it decided, even mail it was the first to decide', async () => {
+  it('removing a rule Mild learned brings back what it decided, even mail it was the first to decide', async () => {
     const ruleId = await addRule(db, { match: { from: ['spam@example.com'] }, labelId: 'marketing' }, 'learned');
     const first = await decided('spam@example.com', { stage: 'rules', ruleId, disposition: 'archive', labelId: 'marketing' });
     expect(await waiting()).toEqual([first]);
 
     expect(await removeRule(db, ruleId)).toBe('learned');
-    // Its rule gone, nothing says the rule was Sift's: without being told, the mail would read as the user's.
+    // Its rule gone, nothing says the rule was Mild's: without being told, the mail would read as the user's.
     expect(await waiting()).toEqual([]);
     expect((await redecideWaiting(db, ACCOUNT, 90, ruleId)).recorded).toBe(1);
     expect(await current(first)).toMatchObject({ stage: 'fallback', disposition: 'review', rule_id: null });
@@ -279,7 +279,7 @@ describe("when a label's outcome changes", () => {
   });
 
   it('asks about a label the model was not sure enough of, whatever the label now does', async () => {
-    const guess = await decided('sales@example.com', { disposition: 'review', labelId: 'marketing', gmailLabel: 'sift/marketing', confidence: 0.6 });
+    const guess = await decided('sales@example.com', { disposition: 'review', labelId: 'marketing', gmailLabel: 'mild/marketing', confidence: 0.6 });
     await updateLabel(db, 'marketing', { disposition: 'keep', unsubscribe: false });
     expect((await redecideWaiting(db, ACCOUNT)).recorded).toBe(0);
     expect(await current(guess)).toMatchObject({ disposition: 'review', label_id: 'marketing', reason: 'Marketing: a sale' });
@@ -290,11 +290,11 @@ describe("when a label's outcome changes", () => {
     expect(await current(before)).toMatchObject({
       disposition: 'review',
       label_id: 'marketing',
-      reason: 'Marketing is now archived, but Sift was not sure enough to act on it. Before: Marketing: a sale',
+      reason: 'Marketing is now archived, but Mild was not sure enough to act on it. Before: Marketing: a sale',
     });
   });
 
-  it('leaves mail sift could not place alone', async () => {
+  it('leaves mail Mild could not place alone', async () => {
     await decided('who@example.com', { stage: 'fallback' });
     await decided('unsure@example.com', { stage: 'model', reason: 'could be either' });
     await updateLabel(db, 'marketing', { disposition: 'keep' });

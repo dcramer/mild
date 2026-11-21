@@ -13,12 +13,12 @@ export default write({
   reply: done,
   touches: self,
   run: async ({ db, controls, now }, { reach }) => {
-    // Sift reads nothing from a mailbox without a label of the person's own.
+    // Mild reads nothing from a mailbox without a label of the person's own.
     const mailboxes = [];
     for (const account of await listAccounts(db)) if (await hasOwnLabels(db)) mailboxes.push(account.id);
     const { active } = await preferences(db);
     if ((await startInboxRuns(db, mailboxes, { acts: active, most: REACH[reach], now: now() })) === 0)
-      throw new Refusal('Sift is already going through your inbox.');
+      throw new Refusal('Mild is already going through your inbox.');
     await controls?.checkNow(db);
     return { ok: true as const };
   },

@@ -9,7 +9,7 @@ import { listRules } from './rules.ts';
 import { plain, seal } from '../plain.ts';
 import type { Sealed } from '../confidential.ts';
 
-/** What became of the Gmail filter sift wrote for a rule. */
+/** What became of the Gmail filter Mild wrote for a rule. */
 type FilterState = (typeof FILTER_STATES)[number];
 
 interface RuleFilterRow {
@@ -53,7 +53,7 @@ export async function getRuleFilter(db: Sql, ruleId: string, accountId: string):
   return row ? opened(db, accountId, row) : null;
 }
 
-/** The rules that have a filter in this mailbox's Gmail, as far as sift knows. */
+/** The rules that have a filter in this mailbox's Gmail, as far as Mild knows. */
 export async function listRuleFilters(db: Sql, accountId: string): Promise<RuleFilterRow[]> {
   const rows = await db
     .select(COLUMNS)

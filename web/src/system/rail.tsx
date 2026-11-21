@@ -20,7 +20,7 @@ export interface NavItem {
 /**
  * The sections down the left of every screen on a desktop: the name at the top, then `compose` (writing a new message,
  * with Inbox on, also C, with no keycap: the rail is not a list worked through), then each section as its icon over
- * its name, the current one's icon in the highlighter, then at the foot `aside` (Sift's line, stacked), the
+ * its name, the current one's icon in the highlighter, then at the foot `aside` (Mild's line, stacked), the
  * `mailbox` the dashboard shows, beside whose they are, and `account` (who is signed in, behind their `Avatar`). No fill; a line sets it apart. As tall as the window, and never taller
  * than what holds it. Given no sections it is the name alone, as `Masthead` is.
  */
@@ -41,7 +41,7 @@ export function Rail({
 }) {
   return (
     <header className="sticky top-0 hidden h-svh max-h-full w-[calc(4.5rem+var(--safe-left))] shrink-0 flex-col items-center border-r border-(--frame) pt-[calc(1.25rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))] pl-(--safe-left) md:flex">
-      <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Sift" className="flex min-h-(--control) items-center">
+      <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Mild" className="flex min-h-(--control) items-center">
         <Wordmark />
       </Anchor>
       {compose ? <Compose onPress={compose} /> : null}

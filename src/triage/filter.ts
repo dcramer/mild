@@ -55,12 +55,12 @@ const anyOf = (values: readonly string[]) => values.join(' OR ');
 
 /**
  * Whether a rule can be copied to Gmail as a filter, and what the filter is. A filter runs on every
- * message before sift sees it and knows nothing of sift's other rules or protections, so a rule
- * qualifies only when the filter could never do something sift itself would not have done.
+ * message before Mild sees it and knows nothing of Mild's other rules or protections, so a rule
+ * qualifies only when the filter could never do something Mild itself would not have done.
  * `rules` is every rule of the account, for finding one that could decide the same mail differently.
  */
 export function filterFor(rule: FilterableRule, labels: readonly Label[], rules: readonly FilterableRule[]): FilterVerdict {
-  if (rule.whenLabel !== undefined) return no('It applies only once Sift has said what the mail is.');
+  if (rule.whenLabel !== undefined) return no('It applies only once Mild has said what the mail is.');
   const label = rule.labelId === undefined ? undefined : labels.find((l) => l.id === rule.labelId);
   if (rule.labelId !== undefined && !label) return no('Its label has been removed.');
   if (rule.when !== undefined) return no('It has a condition in plain language, which Gmail cannot match.');
@@ -70,15 +70,15 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (outcome.disposition === 'spam') return no('Gmail filters cannot mark mail as spam.');
   if (outcome.disposition !== 'keep' && outcome.disposition !== 'archive') return no('Its label leaves mail for you.');
   const archive = outcome.disposition === 'archive';
-  if (rule.markRead || outcome.markRead) return no('It marks mail read, which Sift does not let a filter do.');
-  if (outcome.digest) return no('Its label puts mail in a daily digest, and mail a filter archives never reaches Sift to be listed there.');
-  if (rule.learned && archive) return no('Sift learned this rule and holds it back for people you have written to. A filter cannot.');
+  if (rule.markRead || outcome.markRead) return no('It marks mail read, which Mild does not let a filter do.');
+  if (outcome.digest) return no('Its label puts mail in a daily digest, and mail a filter archives never reaches Mild to be listed there.');
+  if (rule.learned && archive) return no('Mild learned this rule and holds it back for people you have written to. A filter cannot.');
 
   const { from, fromDomain, fromName, fromNameContains, to, listId, subjectContains } = rule.match;
   if (listId !== undefined && listId.length > 0) return no('Gmail filters cannot match a mailing list.');
   if ((fromName ?? []).length > 0 || (fromNameContains ?? []).length > 0)
     return no('Gmail filters match words in a sender’s name and address together, so they cannot hold to the name.');
-  if (asksFacts(rule.match)) return no('It asks what Sift found in the message, which Gmail filters cannot see.');
+  if (asksFacts(rule.match)) return no('It asks what Mild found in the message, which Gmail filters cannot see.');
   if ((rule.except ?? []).length > 0) return no('It has exceptions.');
 
   const criteria: FilterPlan['criteria'] = {};
@@ -97,11 +97,11 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   if (subjectContains !== undefined && subjectContains.length > 0) {
     if (subjectContains.some((words) => words.includes('"') || words.trim() === '')) return unsafe;
     criteria.subject = anyOf(subjectContains.map((words) => `"${words.trim()}"`));
-    differs.push('Gmail matches whole words in the subject, so it can miss mail the rule catches. Sift still handles that mail.');
+    differs.push('Gmail matches whole words in the subject, so it can miss mail the rule catches. Mild still handles that mail.');
   }
   if (Object.keys(criteria).length === 0) return no('It has no condition Gmail can match.');
 
-  // In sift a keep rule beats everything and otherwise the narrowest rule wins. Gmail would run this one regardless.
+  // In Mild a keep rule beats everything and otherwise the narrowest rule wins. Gmail would run this one regardless.
   const rival = rules.find((other) => {
     if (other.id === rule.id || !mayOverlap(rule.match, other.match)) return false;
     const named = other.labelId ?? other.whenLabel;
@@ -115,6 +115,6 @@ export function filterFor(rule: FilterableRule, labels: readonly Label[], rules:
   });
   if (rival) return no(`Another rule (${describeMatch(rival.match)}) can decide the same mail, and a filter would get to it first.`);
 
-  if (archive) differs.push('Mail the filter archives never reaches Sift: it is not recorded, counted or unsubscribed from.');
+  if (archive) differs.push('Mail the filter archives never reaches Mild: it is not recorded, counted or unsubscribed from.');
   return { possible: true, plan: { criteria, ...(label ? { gmailLabel: label.gmailLabel } : {}), archive }, differs };
 }

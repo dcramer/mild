@@ -95,7 +95,7 @@ export const chat = (
   );
 
 /**
- * Sift carrying out a tool call the model made, as a `gen_ai.execute_tool` span. Recording an answer counts:
+ * Mild carrying out a tool call the model made, as a `gen_ai.execute_tool` span. Recording an answer counts:
  * its span says whether the answer was usable, never what it was.
  */
 export const executeTool = <T>(name: string, callId: string | undefined, work: (span: Traced) => Promise<T>): Promise<T> =>

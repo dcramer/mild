@@ -88,7 +88,7 @@ export function Dashboard({ drawn, children }: { drawn: DehydratedState | null; 
 
 /**
  * A page drawn for everyone (a sender's) at another page's address is the one the service worker kept, standing in
- * for a page it could not fetch: it says so until Sift answers, then loads the page that was asked for.
+ * for a page it could not fetch: it says so until Mild answers, then loads the page that was asked for.
  */
 const ADDRESSED = /^\/(sender|domain)(\/|$)/;
 
@@ -202,7 +202,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   // A conversation, opened on its newest message; the server finds which mailbox holds it, as it does a message.
   const [threadId] = useParam('thread');
   const [compose] = useParam('compose');
-  // A rule Sift proposes, opened from Inbox in its place, as a message is.
+  // A rule Mild proposes, opened from Inbox in its place, as a message is.
   const [proposal] = useParam('proposal');
   const [to] = useParam('to');
   useEffect(() => void (messageId && panelOpened('Message')), [messageId]);
@@ -224,7 +224,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const inMailbox = useLoaded('manage', (signal) => api.manage(signal), 60_000, mailbox);
   const expired = manage.data?.activity.expired ?? [];
   const now = useNow(60_000);
-  // The soonest sign-in Google will end within the warning, so it is renewed before Sift stops reading that mailbox.
+  // The soonest sign-in Google will end within the warning, so it is renewed before Mild stops reading that mailbox.
   const ending =
     now === null
       ? undefined
@@ -277,9 +277,9 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
     ...(s.to === (inbox ? 'inbox' : '') && waiting ? { count: waiting } : {}),
   }));
   const notice = !online ? (
-    <Notice>Sift cannot be reached</Notice>
+    <Notice>Mild cannot be reached</Notice>
   ) : expired.length > 0 ? (
-    // Signing in again is what renews sift's access; Google asks which account. Named when it is one that is not the viewer's own.
+    // Signing in again is what renews Mild's access; Google asks which account. Named when it is one that is not the viewer's own.
     <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
       Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}
     </Notice>
@@ -297,7 +297,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
           {
             label: 'Sign out',
             onSelect: () => void signOut(),
-            ...(online ? {} : { disabled: true, note: 'Not while Sift is unreachable.' }),
+            ...(online ? {} : { disabled: true, note: 'Not while Mild is unreachable.' }),
           },
         ],
       }

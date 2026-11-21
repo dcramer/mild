@@ -184,7 +184,7 @@ export function handOver() {
 }
 
 /**
- * Go to another screen: without loading the page, unless Sift was updated since it was loaded (`isStale`). From a
+ * Go to another screen: without loading the page, unless Mild was updated since it was loaded (`isStale`). From a
  * layer's entry it replaces it: the screen goes with the layer.
  */
 export function useGo(): (href: string) => void {

@@ -11,7 +11,7 @@ export interface Evidence {
   /** Plain text of the message, truncated. Null if it could not be fetched. Untrusted. */
   body: string | null;
   sender: {
-    /** Messages sift has recorded from this address, including this one. */
+    /** Messages Mild has recorded from this address, including this one. */
     messagesSeen: number;
     /** Whether the account owner has ever written to this address. Null if that could not be checked. */
     userHasWritten: boolean | null;
@@ -94,7 +94,7 @@ export interface JudgeFailure {
   failed: string;
   /** A call that answered unusably was still billed. */
   usage?: Usage;
-  /** The model answered, but with no verdict sift could use: a failure of this message, not of the provider. */
+  /** The model answered, but with no verdict Mild could use: a failure of this message, not of the provider. */
   unusable?: true;
 }
 

@@ -3,16 +3,16 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { api, queryClientFor, readAheadOnRest } from '../web/src/lib/api.ts';
 
 const answer = (status: number, body: string, type: string) => vi.fn(async () => new Response(body, { status, headers: { 'content-type': type } }));
-// A change is refused before it is sent while Sift cannot be reached.
-const refusedUnsent = 'Sift cannot be reached, so nothing was changed. Try again when it is back.';
+// A change is refused before it is sent while Mild cannot be reached.
+const refusedUnsent = 'Mild cannot be reached, so nothing was changed. Try again when it is back.';
 
 describe('the dashboard client', () => {
   afterEach(() => void vi.useRealTimers());
 
-  it('takes a proxy answering for Sift as Sift not being there, until Sift answers', async () => {
+  it('takes a proxy answering for Mild as Mild not being there, until Mild answers', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', answer(502, '<html>Bad Gateway</html>', 'text/html'));
-    await expect(api.rules(new AbortController().signal)).rejects.toThrow('Sift cannot be reached.');
+    await expect(api.rules(new AbortController().signal)).rejects.toThrow('Mild cannot be reached.');
     await expect(api.saveModelKey('anthropic', 'key')).rejects.toThrow(refusedUnsent);
 
     await vi.advanceTimersByTimeAsync(2000);
@@ -22,7 +22,7 @@ describe('the dashboard client', () => {
     await expect(api.saveModelKey('anthropic', 'key')).resolves.toEqual({});
   });
 
-  it('leaves a failure Sift explains to the page it happened on', async () => {
+  it('leaves a failure Mild explains to the page it happened on', async () => {
     vi.stubGlobal('fetch', answer(500, '{"error":"Something broke."}', 'application/json'));
     await expect(api.rules(new AbortController().signal)).rejects.toThrow('Something broke.');
     vi.stubGlobal('fetch', answer(200, '{}', 'application/json'));

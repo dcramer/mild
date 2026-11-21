@@ -2,8 +2,8 @@ import { finishAction, insertPendingAction, openTries } from '../store/actions.t
 import type { Sql } from '../store/sql.ts';
 import type { Mailbox } from './mailbox.ts';
 
-/** Sift's own Gmail label on every digest, so they are found together. `digest` is a name no label of the person's may take. */
-const DIGEST_LABEL = 'sift/digest';
+/** Mild's own Gmail label on every digest, so they are found together. `digest` is a name no label of the person's may take. */
+const DIGEST_LABEL = 'mild/digest';
 
 type PutDeps = { db: Sql; mailbox: Mailbox; now?: () => number };
 type Put = { id: number; accountId: string; messageId: string };

@@ -80,7 +80,7 @@ describe('GET /api/contacts', () => {
     await recordSync(db, WORK, [facts({ accountId: WORK, messageId: 'boss', receivedAt: NOW - 1000, from: from('boss@work.example.org', 'Boss') })], '1', NOW);
     for (const id of ['bill-1', 'bill-2']) await recordDecision(db, ACCOUNT, id, { ...said, disposition: 'review' }, { now: NOW });
     await recordDecision(db, ACCOUNT, 'ada', { ...said, disposition: 'review' }, { now: NOW });
-    // The reader answered Utility's mail: that is what their row says, not Sift's Unlabelled.
+    // The reader answered Utility's mail: that is what their row says, not Mild's Unlabelled.
     for (const messageId of ['bill-1', 'bill-2'])
       await applyFeedback(db, { accountId: ACCOUNT, sender: 'billing@utility.example.net', messageId, label: 'transactional', disposition: 'keep' }, NOW);
     await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user', NOW);

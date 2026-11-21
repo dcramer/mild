@@ -64,18 +64,18 @@ test.describe('Labels', () => {
     await expect.poll(() => shown('Messages')).toBe(0);
   });
 
-  test('changing what Sift does with a label moves it, and stays changed', async ({ page }) => {
+  test('changing what Mild does with a label moves it, and stays changed', async ({ page }) => {
     await page.goto('/labels');
     await expect(section(page, 'Archived').getByText('Newsletters', { exact: true })).toBeVisible();
 
     const opened = await openLabel(page, 'Newsletters');
     await path(page).toBe('/labels/newsletter');
     await expect(opened.getByRole('textbox', { name: 'Name' })).toHaveValue('Newsletters');
-    await expect(opened.getByRole('combobox', { name: 'What Sift does with it' })).toHaveText(/Archive/);
+    await expect(opened.getByRole('combobox', { name: 'What Mild does with it' })).toHaveText(/Archive/);
     await expect(opened.getByRole('checkbox', { name: 'Unsubscribe, when the sender offers a safe way' })).not.toBeChecked();
     await expect(opened.getByRole('button', { name: 'Save' })).toBeDisabled();
 
-    await opened.getByRole('combobox', { name: 'What Sift does with it' }).click();
+    await opened.getByRole('combobox', { name: 'What Mild does with it' }).click();
     await expect(page.getByRole('option')).toHaveText([/Keep/, /Archive/, /Digest/, /Spam/, /Block/]);
     await page.getByRole('option', { name: 'Keep' }).click();
     await opened.getByRole('button', { name: 'Save' }).click();
@@ -102,7 +102,7 @@ test.describe('Labels', () => {
     await closeSettings(page);
 
     const opened = await openLabel(page, 'Newsletters');
-    await opened.getByRole('combobox', { name: 'What Sift does with it' }).click();
+    await opened.getByRole('combobox', { name: 'What Mild does with it' }).click();
     await page.getByRole('option', { name: 'Digest' }).click();
     await expect(opened.getByText('once a day one email lists it', { exact: false })).toBeVisible();
     await expect(opened.getByRole('checkbox', { name: 'Mark it read' })).toBeVisible();
@@ -111,7 +111,7 @@ test.describe('Labels', () => {
     await opened.getByRole('button', { name: 'Close' }).click();
     await expect(section(page, 'In a daily digest').getByText('Newsletters', { exact: true })).toBeVisible();
 
-    // The label told Sift this browser's time zone, which the digest's hour is read in.
+    // The label told Mild this browser's time zone, which the digest's hour is read in.
     const zone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
     await page.goto('/labels?settings=1');
     await expect(settingsActive(page).getByText(`One email each for Newsletters, in me@example.org, on ${zone.split('/').at(-1)} time.`)).toBeVisible();
@@ -131,15 +131,15 @@ test.describe('Labels', () => {
     await markRead.check();
     await expect(opened.getByRole('button', { name: 'Undo changes' })).toBeVisible();
 
-    await opened.getByRole('combobox', { name: 'What Sift does with it' }).click();
+    await opened.getByRole('combobox', { name: 'What Mild does with it' }).click();
     await page.getByRole('option', { name: 'Spam' }).click();
     await expect(markRead).toHaveCount(0);
 
     await opened.getByRole('button', { name: 'Undo changes' }).click();
-    await expect(opened.getByRole('combobox', { name: 'What Sift does with it' })).toHaveText(/Archive/);
+    await expect(opened.getByRole('combobox', { name: 'What Mild does with it' })).toHaveText(/Archive/);
     await expect(markRead).not.toBeChecked();
 
-    await opened.getByRole('combobox', { name: 'What Sift does with it' }).click();
+    await opened.getByRole('combobox', { name: 'What Mild does with it' }).click();
     await page.getByRole('option', { name: 'Spam' }).click();
     await opened.getByRole('button', { name: 'Save' }).click();
     await expect(opened.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -238,7 +238,7 @@ test.describe('Labels', () => {
     await expect(add).toBeDisabled();
     await manual.getByRole('textbox', { name: 'Name' }).fill('Field trips');
     await manual.getByRole('textbox', { name: 'What it is' }).fill('Permission slips and trip plans from school.');
-    await manual.getByRole('combobox', { name: 'What Sift does with it' }).click();
+    await manual.getByRole('combobox', { name: 'What Mild does with it' }).click();
     await page.getByRole('option', { name: 'Keep' }).click();
     await add.click();
 
@@ -302,7 +302,7 @@ test.describe('Labels', () => {
   test('Escape in the outcome list closes only the list', async ({ page }) => {
     await page.goto('/labels/newsletter');
     const opened = labelPanel(page, 'Newsletters');
-    await opened.getByRole('combobox', { name: 'What Sift does with it' }).click();
+    await opened.getByRole('combobox', { name: 'What Mild does with it' }).click();
     await expect(page.getByRole('option', { name: 'Keep' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('option')).toHaveCount(0);
@@ -320,7 +320,7 @@ test.describe('Labels', () => {
     await expect(page.getByRole('cell', { name: 'anyone at ci.example.org' })).toHaveCount(0);
   });
 
-  test('Leave in inbox is Sift’s own: nothing in it to change or remove', async ({ page }) => {
+  test('Leave in inbox is Mild’s own: nothing in it to change or remove', async ({ page }) => {
     await page.goto('/labels');
     const opened = await openLabel(page, 'Leave in inbox');
     await expect(opened.getByText('Mail none of your labels fit stays in your inbox.')).toBeVisible();
@@ -429,7 +429,7 @@ refused.describe('A mailbox with one label', () => {
     // The refusal stays in the question, which is still open over the panel.
     const ask = page.getByRole('dialog', { name: 'Remove Sales pitches?' });
     await ask.getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(ask.getByText('Sales pitches is the last of your labels, and Sift reads no mail without one. Add another first.')).toBeVisible();
+    await expect(ask.getByText('Sales pitches is the last of your labels, and Mild reads no mail without one. Add another first.')).toBeVisible();
     await expect(page.getByText('Label removed')).toHaveCount(0);
   });
 });

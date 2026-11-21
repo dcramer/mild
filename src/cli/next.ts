@@ -11,7 +11,7 @@ import { spin } from './ui.ts';
 /** The checkout, or in the image the folder Next.js's standalone server was copied to. */
 export const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
-/** Next.js reports how it is used to Vercel unless told not to; Sift sends nothing it is not asked to. */
+/** Next.js reports how it is used to Vercel unless told not to; Mild sends nothing it is not asked to. */
 const NO_TELEMETRY = { NEXT_TELEMETRY_DISABLED: '1' };
 
 const NEXT = join(ROOT, 'node_modules/next/dist/bin/next');
@@ -51,7 +51,7 @@ export interface NextServer {
 /**
  * Next.js on one address, the supported way: `next start` from a checkout, `next dev` with `dev`, or the standalone
  * server in a packaged install. `env` is added to this process's. What it prints once it answers goes to `print`;
- * its own banner before then does not, since Sift says where it is itself.
+ * its own banner before then does not, since Mild says where it is itself.
  */
 export async function startNext(options: {
   dev: boolean;

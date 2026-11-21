@@ -7,8 +7,8 @@ import { Toaster } from '@/system';
 import { ShortcutList } from '@/system/keys-help.tsx';
 
 /**
- * Installed, the app opens from what the service worker kept, even when Sift cannot be reached. Not while
- * developing, where the page must be the one just built: there, one left by `sift run` is removed.
+ * Installed, the app opens from what the service worker kept, even when Mild cannot be reached. Not while
+ * developing, where the page must be the one just built: there, one left by `mild run` is removed.
  */
 function useServiceWorker() {
   useEffect(() => {

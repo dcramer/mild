@@ -70,7 +70,7 @@ test.describe('Inbox, off', () => {
 test.describe('Inbox', () => {
   test.use({ variant: 'inbox' });
 
-  test('lists conversations newest first, with what Sift thinks of each, and narrows by it', async ({ page }) => {
+  test('lists conversations newest first, with what Mild thinks of each, and narrows by it', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
     await expect(inboxRows(page).first()).toContainText('This week in widgets');
@@ -189,10 +189,10 @@ test.describe('Inbox', () => {
     await expect(inboxLink(page)).toContainText('12');
   });
 
-  test('a rule Sift proposes is a row from Sift at the top, which opens on why and the mail it is about, and is dismissed there', async ({ page }) => {
+  test('a rule Mild proposes is a row from Mild at the top, which opens on why and the mail it is about, and is dismissed there', async ({ page }) => {
     await page.goto('/inbox');
     const proposal = proposedRule(page, 'Keep Receipts from billing@utility.example.net?');
-    await expect(page.getByRole('main').getByRole('row').nth(1)).toContainText('Sift');
+    await expect(page.getByRole('main').getByRole('row').nth(1)).toContainText('Mild');
     await proposal.getByRole('cell').nth(2).click();
     await param(page, 'proposal').not.toBeNull();
     const view = page.getByRole('region', { name: 'Keep Receipts from billing@utility.example.net?' });
@@ -249,7 +249,7 @@ test.describe('Inbox', () => {
   test('J and K move, O opens a conversation with its unread open, and opening it marks it read', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
-    // The rule Sift proposes is the first row; the mail starts after it.
+    // The rule Mild proposes is the first row; the mail starts after it.
     await page.keyboard.press('j');
     await page.keyboard.press('j');
     await page.keyboard.press('j');
@@ -266,12 +266,12 @@ test.describe('Inbox', () => {
     await expect(open.getByRole('heading', { name: 'Your March bill', level: 1 })).toBeVisible();
     // Unread, every message starts open.
     await expect(open.getByRole('article')).toHaveCount(3);
-    // Answered as Receipts, as its row says, though Sift could not place it.
+    // Answered as Receipts, as its row says, though Mild could not place it.
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toContainText('Receipts');
-    // In Inbox, Sift's reason waits for Why.
-    await expect(open.getByText(/^Your answer\. Sift said: /)).toHaveCount(0);
+    // In Inbox, Mild's reason waits for Why.
+    await expect(open.getByText(/^Your answer\. Mild said: /)).toHaveCount(0);
     await open.getByRole('button', { name: 'Why' }).click();
-    await expect(open.getByText(/^Your answer\. Sift said: /)).toBeVisible();
+    await expect(open.getByText(/^Your answer\. Mild said: /)).toBeVisible();
     await expect(open.getByRole('link', { name: 'Utility', exact: true })).toHaveCount(3);
     await page.keyboard.press('Escape');
     await expect(open).toHaveCount(0);
@@ -338,7 +338,7 @@ test.describe('Inbox', () => {
   test('X selects, E archives what is selected, and Undo puts it back', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
-    // The rule Sift proposes is the first row; the mail starts after it.
+    // The rule Mild proposes is the first row; the mail starts after it.
     await page.keyboard.press('j');
     await page.keyboard.press('j');
     await page.keyboard.press('x');
@@ -364,7 +364,7 @@ test.describe('Inbox', () => {
     });
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
-    // The rule Sift proposes is the first row; the mail starts after it.
+    // The rule Mild proposes is the first row; the mail starts after it.
     await page.keyboard.press('j');
     await page.keyboard.press('j');
     await page.keyboard.press('x');

@@ -37,7 +37,7 @@ export interface MessageFacts {
   headers: Record<string, string>;
   /** Epoch milliseconds. */
   receivedAt: number;
-  /** What sift has recorded about it. Absent for mail not yet recorded, whose headers say the same. */
+  /** What Mild has recorded about it. Absent for mail not yet recorded, whose headers say the same. */
   known?: Facts;
 }
 
@@ -46,7 +46,7 @@ export interface Decision {
   subscription: SubscriptionAction;
   /** What the mail is: a label's id. Absent only when no tier could place it. */
   labelId?: string;
-  /** That label's name in Gmail, e.g. `sift/newsletters`. */
+  /** That label's name in Gmail, e.g. `mild/newsletters`. */
   gmailLabel?: string;
   /** With `spam`: also treat everything from this sender as spam from now on. */
   block?: boolean;
@@ -63,8 +63,8 @@ export interface Decision {
 
 /**
  * Leave in inbox: the one choice every mailbox has that is not a label of the person's, for mail that is none
- * of their labels. Sift's own, and nothing about it changes. It always keeps and has no Gmail label, so mail put
- * there by mistake is where it would have been without Sift. The id is from when it was called Everything Else;
+ * of their labels. Mild's own, and nothing about it changes. It always keeps and has no Gmail label, so mail put
+ * there by mistake is where it would have been without Mild. The id is from when it was called Everything Else;
  * ids never change.
  */
 export const LEAVE_IN_INBOX = 'everything_else';
@@ -76,7 +76,7 @@ export interface Label {
   name: string;
   /** How to recognise it. Shown to the model. */
   description: string;
-  /** What sift does with mail that carries this label. */
+  /** What Mild does with mail that carries this label. */
   disposition: Disposition;
   /** Absent only for Leave in inbox, which would be on most of the inbox and say nothing. */
   gmailLabel?: string;

@@ -45,7 +45,7 @@ describe('model stage', () => {
       disposition: 'archive',
       subscription: 'unsubscribe',
       labelId: 'cold_outreach',
-      gmailLabel: 'sift/cold-outreach',
+      gmailLabel: 'mild/cold-outreach',
       stage: 'model',
       confidence: 0.9,
       reason: 'Cold outreach: a sales sequence',
@@ -375,12 +375,12 @@ describe('preferences in the database', () => {
       name: 'Pitches',
       description: 'Things I read.',
       disposition: 'keep',
-      gmailLabel: 'sift/cold-outreach',
+      gmailLabel: 'mild/cold-outreach',
       unsubscribe: true,
     });
     expect(await updateLabel(db, 'nope', { disposition: 'keep' })).toBe(false);
 
-    // Leave in inbox is Sift's own: nothing about it changes, whatever is sent.
+    // Leave in inbox is Mild's own: nothing about it changes, whatever is sent.
     for (const change of [
       { description: 'Bills I still owe.' },
       { name: 'Leave in inbox' },
@@ -399,7 +399,7 @@ describe('preferences in the database', () => {
     });
     // The database holds it too, whatever code writes the row.
     await expect(raw(db).run("UPDATE labels SET disposition = 'archive' WHERE id = 'everything_else'")).rejects.toThrow();
-    await expect(raw(db).run("UPDATE labels SET gmail_label = 'sift/rest' WHERE id = 'everything_else'")).rejects.toThrow();
+    await expect(raw(db).run("UPDATE labels SET gmail_label = 'mild/rest' WHERE id = 'everything_else'")).rejects.toThrow();
     await expect(raw(db).run("UPDATE labels SET digest = true WHERE id = 'everything_else'")).rejects.toThrow();
   });
 
@@ -650,7 +650,7 @@ describe('providers', () => {
   });
 });
 
-/** Answers every request sift makes with `answer`, keeping what was asked. Nothing reaches OpenAI. */
+/** Answers every request Mild makes with `answer`, keeping what was asked. Nothing reaches OpenAI. */
 function stubFetch(answer: (url: string, body: string) => Response) {
   const asked: { url: string; headers: Headers; body: string }[] = [];
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
@@ -697,7 +697,7 @@ describe('Sign in with ChatGPT', () => {
     const url = new URL(started.url);
     expect(url.origin + url.pathname).toBe('https://auth.openai.com/api/accounts/authorize');
     expect(url.searchParams.get('redirect_uri')).toBe('http://127.0.0.1:1455/auth/callback');
-    expect(url.searchParams.get('agent_name_hint')).toBe('Sift');
+    expect(url.searchParams.get('agent_name_hint')).toBe('Mild');
     expect(url.searchParams.get('ext_agent_host_id')).toBe(`urn:uuid:${DEVICE}`);
     expect(asked).toEqual([]);
     await finishChatGPTRedirect(signIns, started, `http://127.0.0.1:1455/auth/callback?code=c1&state=${url.searchParams.get('state')}&client_id=oaiapp_x`);
@@ -767,7 +767,7 @@ describe('Sign in with ChatGPT', () => {
     const back = `http://127.0.0.1:1455/auth/callback?code=c&state=${new URL(started.url).searchParams.get('state')}&client_id=oaiapp_x`;
     await expect(finishChatGPTRedirect(signIns, started, back)).rejects.toThrow('OpenAI refused the sign-in (400)');
     answer = Response.json({ ...TOKENS, scope: 'openid profile email' });
-    await expect(finishChatGPTRedirect(signIns, started, back)).rejects.toThrow('did not allow Sift to use your plan');
+    await expect(finishChatGPTRedirect(signIns, started, back)).rejects.toThrow('did not allow Mild to use your plan');
     expect(signIns.stored.has('chatgpt')).toBe(false);
   });
 });

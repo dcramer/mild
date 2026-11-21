@@ -27,7 +27,7 @@ let store: Store;
 let db: Sql;
 let person: number;
 let gmail: FakeGmail;
-/** The sign-in Sift holds for the mailbox. */
+/** The sign-in Mild holds for the mailbox. */
 let token: string;
 let ephemeral: Ephemeral;
 let clock: number;
@@ -37,7 +37,7 @@ let before: number;
 /** What Gmail was asked since `forget`, by the API's name for each method. */
 const asked = () => gmail.requests.slice(before).map((r) => r.method);
 const forget = () => void (before = gmail.requests.length);
-/** Google ends the sign-in Sift holds: Gmail refuses it until the person signs in again. */
+/** Google ends the sign-in Mild holds: Gmail refuses it until the person signs in again. */
 const signInEnded = () => fake.google.expire(token);
 const signInAgain = () => void (token = fake.google.grant(ACCOUNT));
 
@@ -158,7 +158,7 @@ describe('the timed tick', () => {
     expect(await timedTickPasses({ model: async () => null })).toBe(false);
   });
 
-  it('begins one for a change to the mailbox not yet confirmed, while Sift is on', async () => {
+  it('begins one for a change to the mailbox not yet confirmed, while Mild is on', async () => {
     await insertPendingAction(
       db,
       { accountId: ACCOUNT, messageId: 'news', type: 'archive', payload: { add: [], remove: ['INBOX'] }, originalLabels: ['INBOX'] },
@@ -182,7 +182,7 @@ describe('the timed tick', () => {
     expect(await timedTickPasses()).toBe(false);
   });
 
-  it('begins one for a decision to carry out: any while Sift is on, only the person’s own answer while off', async () => {
+  it('begins one for a decision to carry out: any while Mild is on, only the person’s own answer while off', async () => {
     await recordDecision(db, ACCOUNT, 'news', decision('archive'), { carryOut: true, now: clock });
     expect(await timedTickPasses()).toBe(false);
     await setActive(db, true);
@@ -203,7 +203,7 @@ describe('the timed tick', () => {
     expect(await timedTickPasses()).toBe(false);
   });
 
-  it('begins one for the text of mail waiting on the person that Sift never read, and none once read', async () => {
+  it('begins one for the text of mail waiting on the person that Mild never read, and none once read', async () => {
     await recordDecision(db, ACCOUNT, 'news', decision('archive'), { now: clock });
     expect(await timedTickPasses()).toBe(true);
     await workDue(store, options(), Infinity);
@@ -254,7 +254,7 @@ describe('the timed tick', () => {
       expect(await timedTickPasses()).toBe(true);
     });
 
-    it('begins one for a filter change Gmail did not take, to ask again while Sift is on', async () => {
+    it('begins one for a filter change Gmail did not take, to ask again while Mild is on', async () => {
       await finishAction(db, await change(await filtered()), 'failed', null, 'network down', clock);
       clock += FILTER_CHECK_MINUTES * MINUTE;
       expect(await timedTickPasses()).toBe(false);
@@ -264,8 +264,8 @@ describe('the timed tick', () => {
   });
 });
 
-describe('Sift’s own changes to the mailbox', () => {
-  /** Sift archives the mail it had recorded, in a pass of its own. */
+describe('Mild’s own changes to the mailbox', () => {
+  /** Mild archives the mail it had recorded, in a pass of its own. */
   async function siftArchives() {
     await setActive(db, true);
     await recordDecision(db, ACCOUNT, 'news', decision('archive'), { carryOut: true, now: clock });

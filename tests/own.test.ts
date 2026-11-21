@@ -129,7 +129,7 @@ describe("a person's handle, without row-level security", () => {
   });
 
   it('writes their id on every row it adds, and never lets anyone set it', async () => {
-    await alpha.insert(labels).values({ id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'sift/l', position: 0 });
+    await alpha.insert(labels).values({ id: 'l', name: 'L', description: '', disposition: 'keep', gmailLabel: 'mild/l', position: 0 });
     // Each person starts with the default labels; the one added here is the only 'l'.
     expect((await everyone('labels')).filter((r) => r['id'] === 'l').map((r) => r['user_id'])).toEqual([1]);
     const forged = {
@@ -137,7 +137,7 @@ describe("a person's handle, without row-level security", () => {
       name: 'L',
       description: '',
       disposition: 'keep' as const,
-      gmailLabel: 'sift/l',
+      gmailLabel: 'mild/l',
       position: 0,
       updatedAt: 0,
       userId: 2,
@@ -181,7 +181,7 @@ describe('a failed statement', () => {
       name: 'L',
       description: 'private words',
       disposition: 'nonsense' as Disposition,
-      gmailLabel: 'sift/l',
+      gmailLabel: 'mild/l',
       position: 0,
       updatedAt: 0,
     };

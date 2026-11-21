@@ -1,11 +1,12 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { named } from './env.ts';
 import { type Keyring, loadKeyring } from './secrets.ts';
 
 /**
  * What a deploy must say, each in its environment variable (`ENVIRONMENT`). Locally they can sit in the
- * home directory's `.env`, which sift reads when it starts; a variable already set wins.
+ * home directory's `.env`, which Mild reads when it starts; a variable already set wins.
  */
 export interface Settings {
   dashboardPort: number;
@@ -17,13 +18,13 @@ export interface Settings {
   /** A Postgres server's address. Unset: PGlite, in the home directory. */
   databaseUrl?: string;
   /**
-   * The same server as the role that owns the tables, for migrating them: sift migrates with it and
+   * The same server as the role that owns the tables, for migrating them: Mild migrates with it and
    * then runs as `databaseUrl`, which then needs to own nothing. Unset: `databaseUrl` migrates too.
    */
   databaseMigrationUrl?: string;
   /**
-   * A Redis server for what sift keeps only briefly (sign-ins in progress, which pass holds a mailbox,
-   * Gmail quota). Unset: kept in this process's memory, which holds only while one `sift run` is running.
+   * A Redis server for what Mild keeps only briefly (sign-ins in progress, which pass holds a mailbox,
+   * Gmail quota). Unset: kept in this process's memory, which holds only while one `mild run` is running.
    */
   redisUrl?: string;
   /**
@@ -39,23 +40,23 @@ export interface Settings {
    */
   sentryDsn?: string;
   /**
-   * True when this Sift is a service for other people. Only then does the page have terms, a privacy
+   * True when this Mild is a service for other people. Only then does the page have terms, a privacy
    * policy and a security page, which speak for whoever runs it. Unset: someone's own copy, where they
    * would speak to its own owner.
    */
   cloud?: boolean;
 }
 
-/** Each setting's variable, and what its text must be. Hosts that run sift for you (Vercel) configure it only this way. */
+/** Each setting's variable, and what its text must be. Hosts that run Mild for you (Vercel) configure it only this way. */
 const ENVIRONMENT = {
-  SIFT_DASHBOARD_PORT: 'dashboardPort',
-  SIFT_URL: 'url',
+  MILD_DASHBOARD_PORT: 'dashboardPort',
+  MILD_URL: 'url',
   DATABASE_URL: 'databaseUrl',
   DATABASE_MIGRATION_URL: 'databaseMigrationUrl',
   REDIS_URL: 'redisUrl',
-  SIFT_CHATGPT_SIGN_IN: 'chatgptSignIn',
+  MILD_CHATGPT_SIGN_IN: 'chatgptSignIn',
   SENTRY_DSN: 'sentryDsn',
-  SIFT_CLOUD: 'cloud',
+  MILD_CLOUD: 'cloud',
 } as const satisfies Record<string, keyof Settings>;
 export type Variable = keyof typeof ENVIRONMENT;
 
@@ -65,12 +66,12 @@ export type Env = Record<string, string | undefined>;
 export const DEFAULT_SETTINGS: Settings = { dashboardPort: 8787 };
 
 /**
- * Everything sift keeps lives in one directory, the home: settings, guidance, the database and
+ * Everything Mild keeps lives in one directory, the home: settings, guidance, the database and
  * credentials. Back it up or move it as a unit.
  */
 export interface Config {
   home: string;
-  /** The home's `.env`: settings, and anything else to set when sift starts there. */
+  /** The home's `.env`: settings, and anything else to set when Mild starts there. */
   envPath: string;
   /** Where PGlite keeps the database, when no Postgres server is given. */
   databaseDir: string;
@@ -80,24 +81,29 @@ export interface Config {
   databaseMigrationUrl: string | undefined;
   /** The user's own Google OAuth client, as downloaded from Google Cloud Console. */
   googleClientPath: string;
-  /** How far `sift init` has got. */
+  /** How far `mild init` has got. */
   setupStatePath: string;
   /** The secret in the dashboard's access link. */
   dashboardKeyPath: string;
-  /** Workflow's Local World: the runs `sift run` has begun, and the key its deliveries carry. */
+  /** Workflow's Local World: the runs `mild run` has begun, and the key its deliveries carry. */
   workflowDir: string;
-  /** From `SIFT_KEY` and `SIFT_OLD_KEYS`: what the credentials above are encrypted with. */
+  /** From `MILD_KEY` and `MILD_OLD_KEYS`: what the credentials above are encrypted with. */
   keys: Keyring;
   settings: Settings;
 }
 
 /**
- * Where the home is: `--home` or SIFT_HOME if given (containers use this), otherwise
- * `$XDG_CONFIG_HOME/sift`, which is `~/.config/sift` by default.
+ * Where the home is: `--home` or MILD_HOME if given (containers use this), otherwise
+ * `$XDG_CONFIG_HOME/mild`, which is `~/.config/mild` by default. A machine set up before the rename keeps
+ * `~/.config/sift` until it is moved.
  */
 export function resolveHome(env: Env = process.env): string {
-  if (env['SIFT_HOME']) return resolve(env['SIFT_HOME']);
-  return join(env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'sift');
+  const given = named(env, 'MILD_HOME');
+  if (given) return resolve(given);
+  const base = env['XDG_CONFIG_HOME'] || join(homedir(), '.config');
+  const home = join(base, 'mild');
+  const before = join(base, 'sift');
+  return !existsSync(home) && existsSync(before) ? before : home;
 }
 
 export function loadConfig(env: Env = process.env): Config {
@@ -127,11 +133,11 @@ export function loadEnvFiles(home: string, cwd: string = process.cwd()): void {
   for (const path of new Set([join(home, '.env'), join(cwd, '.env')])) if (existsSync(path)) process.loadEnvFile(path);
 }
 
-/** Add `SIFT_KEY` to the `.env` in `dir`, keeping what the file already holds, and make it owner-only. Returns its path. */
+/** Add `MILD_KEY` to the `.env` in `dir`, keeping what the file already holds, and make it owner-only. Returns its path. */
 export function saveKeyFile(dir: string, key: string): string {
   const path = join(dir, '.env');
   const before = existsSync(path) ? readFileSync(path, 'utf8') : '';
-  writeFileSync(path, `${before}${before === '' || before.endsWith('\n') ? '' : '\n'}SIFT_KEY=${key}\n`, { mode: 0o600 });
+  writeFileSync(path, `${before}${before === '' || before.endsWith('\n') ? '' : '\n'}MILD_KEY=${key}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;
 }
@@ -146,16 +152,16 @@ export function readSettings(env: Env): Settings {
   const settings: Settings = { ...DEFAULT_SETTINGS };
   const bad = (variable: Variable, expected: string) => new Error(`${variable} must be ${expected}.`);
   for (const variable of Object.keys(ENVIRONMENT) as Variable[]) {
-    const text = env[variable]?.trim();
+    const text = named(env, variable)?.trim();
     if (!text) continue;
     switch (variable) {
-      case 'SIFT_DASHBOARD_PORT': {
+      case 'MILD_DASHBOARD_PORT': {
         const port = Number(text);
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw bad(variable, 'a port number');
         settings.dashboardPort = port;
         break;
       }
-      case 'SIFT_URL': {
+      case 'MILD_URL': {
         const url = URL.parse(text);
         if (!url || !['https:', 'http:'].includes(url.protocol) || url.username || url.password || `${url.pathname}${url.search}${url.hash}` !== '/') {
           throw bad(variable, 'an address starting https:// or http://, with no path');
@@ -173,7 +179,7 @@ export function readSettings(env: Env): Settings {
         if (!/^rediss?:\/\//.test(text)) throw bad(variable, 'an address starting redis:// or rediss://');
         settings.redisUrl = text;
         break;
-      case 'SIFT_CHATGPT_SIGN_IN':
+      case 'MILD_CHATGPT_SIGN_IN':
         if (text !== 'device-code' && text !== 'redirect') throw bad(variable, '"device-code" or "redirect"');
         settings.chatgptSignIn = text;
         break;
@@ -181,7 +187,7 @@ export function readSettings(env: Env): Settings {
         if (!/^https?:\/\/[^@\s/]+@[^@\s/]+\/\S+$/.test(text)) throw bad(variable, "a Sentry DSN, as the project's Client Keys page gives it (https://…@…/…)");
         settings.sentryDsn = text;
         break;
-      case 'SIFT_CLOUD':
+      case 'MILD_CLOUD':
         if (!/^(true|false|1|0)$/i.test(text)) throw bad(variable, 'true or false');
         settings.cloud = /^(true|1)$/i.test(text);
         break;
@@ -192,11 +198,13 @@ export function readSettings(env: Env): Settings {
 
 /**
  * Set one setting in the home's `.env`, or take it out, keeping every other line; and in `config`. A
- * variable set in the environment still wins over the file when sift next starts.
+ * variable set in the environment still wins over the file when Mild next starts.
  */
 export function saveSetting(config: Config, variable: Variable, value: string | undefined): void {
   const before = existsSync(config.envPath) ? readFileSync(config.envPath, 'utf8').split('\n') : [];
-  const kept = before.filter((line) => line !== '' && !line.startsWith(`${variable}=`));
+  // A line under the variable's name from before the rename (src/env.ts) goes too, or it would come back when this one is taken out.
+  const names = [variable, variable.replace(/^MILD_/, 'SIFT_')];
+  const kept = before.filter((line) => line !== '' && !names.some((name) => line.startsWith(`${name}=`)));
   writeFileSync(config.envPath, [...kept, ...(value === undefined ? [] : [`${variable}=${value}`])].map((line) => `${line}\n`).join(''), { mode: 0o600 });
   chmodSync(config.envPath, 0o600);
   const given: Env = {};

@@ -34,7 +34,7 @@ import {
   useToast,
 } from '@/system';
 
-/** Whether sift is on for the reader's own mail: what they come to Settings for first. */
+/** Whether Mild is on for the reader's own mail: what they come to Settings for first. */
 function Active({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
   const { active, activity } = state;
@@ -44,13 +44,13 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
       () => api.setActive(active),
       () => {
         reload();
-        // What is already in the inbox stays as it was unless Sift goes through it now.
+        // What is already in the inbox stays as it was unless Mild goes through it now.
         if (active && !state.inbox.going) setGoingThrough(true);
       },
     );
 
   return (
-    <SettingsGroup title="Active" note="Whether Sift changes your Gmail.">
+    <SettingsGroup title="Active" note="Whether Mild changes your Gmail.">
       {activity.problems.length > 0 ? (
         <Note tone="failure" title="Not working">
           {activity.problems.map((problem) => (
@@ -64,10 +64,10 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
           note={
             active ? (
               <>
-                Sift carries out its decisions in Gmail as each label says. Each change can be undone from <TextLink href="/activity">Activity</TextLink>.
+                Mild carries out its decisions in Gmail as each label says. Each change can be undone from <TextLink href="/activity">Activity</TextLink>.
               </>
             ) : (
-              'Nothing in Gmail changes. Sift suggests, and learns from your answers.'
+              'Nothing in Gmail changes. Mild suggests, and learns from your answers.'
             )
           }
         >
@@ -108,21 +108,21 @@ function Active({ state, reload }: { state: ManageState; reload: () => void }) {
   );
 }
 
-/** Inbox: reading and handling mail in Sift, with what Sift thinks of each message beside it. */
+/** Inbox: reading and handling mail in Mild, with what Mild thinks of each message beside it. */
 function Mail({ state, reload }: { state: ManageState; reload: () => void }) {
   const { busy, error, run } = useAction();
   const [changing, setChanging] = useState(false);
   const now = useNow(10_000);
   const { copying } = state;
   return (
-    <SettingsGroup title="Inbox" note="Read and handle your mail in Sift.">
+    <SettingsGroup title="Inbox" note="Read and handle your mail in Mild.">
       <Sheet>
         <SettingRow
           title={state.mail ? 'On' : 'Off'}
           note={
             state.mail
-              ? 'Sift keeps a copy of your mail to show it here. Turning Inbox off deletes that copy.'
-              : 'Sift keeps the text only of mail waiting on you, and of the mail you answered for.'
+              ? 'Mild keeps a copy of your mail to show it here. Turning Inbox off deletes that copy.'
+              : 'Mild keeps the text only of mail waiting on you, and of the mail you answered for.'
           }
         >
           {state.mail ? (
@@ -395,7 +395,7 @@ function RemoveMailbox({
       {...(last ? { why: 'You cannot delete your only remaining mailbox.' } : {})}
       says={
         <>
-          Sift stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions and answers. Your labels and rules
+          Mild stops reading it, revokes its access at Google, and deletes everything it recorded about its mail: decisions and answers. Your labels and rules
           stay, for your other mailboxes.
           {signedIn ? ' You are signed in as it, so you will be signed out.' : ''}
           {FILTERS_STAY}
@@ -472,7 +472,7 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
         </Sheet>
       ) : null}
       {notRevoked ? (
-        <Note tone="failure" title="Sift still has access at Google">
+        <Note tone="failure" title="Mild still has access at Google">
           <p>{notRevoked}</p>
         </Note>
       ) : null}
@@ -480,15 +480,15 @@ function Mailboxes({ state, signedInAs, reload }: { state: ManageState; signedIn
   );
 }
 
-/** Said after a removal when Google could not be reached: sift's access there stays until they take it away. */
+/** Said after a removal when Google could not be reached: Mild's access there stays until they take it away. */
 const notRevoked = (reply: Removed) =>
   reply.notRevoked.length === 0
     ? null
-    : `Google could not be reached, so ${reply.notRevoked.join(' and ')} still lists Sift as having access. Remove it under Third-party connections in your Google Account.`;
+    : `Google could not be reached, so ${reply.notRevoked.join(' and ')} still lists Mild as having access. Remove it under Third-party connections in your Google Account.`;
 
-/** Said under what a removal deletes: Sift does not take its Gmail filters or labels with it. */
+/** Said under what a removal deletes: Mild does not take its Gmail filters or labels with it. */
 const FILTERS_STAY =
-  ' The filters Sift made in Gmail stay there, as do its labels on your mail; delete the filters in Gmail’s settings if you no longer want them.';
+  ' The filters Mild made in Gmail stay there, as do its labels on your mail; delete the filters in Gmail’s settings if you no longer want them.';
 
 /** A mailbox or the account gone: off to the start when that ended the session, else what Google could not be told. */
 async function removed(sent: Promise<Removed>, onDone?: (notRevoked: string | null) => void): Promise<void> {
@@ -507,7 +507,7 @@ function Account({ state, signedInAs }: { state: ManageState; signedInAs: string
       <Sheet>
         <SettingRow
           title="Delete your account"
-          note={`Sift stops reading every mailbox, and everything it recorded is deleted.${state.owner ? ' Others signed in to this Sift keep theirs.' : ''}`}
+          note={`Mild stops reading every mailbox, and everything it recorded is deleted.${state.owner ? ' Others signed in to this Mild keep theirs.' : ''}`}
         >
           <DeleteButton
             question="Delete your account?"
@@ -515,7 +515,7 @@ function Account({ state, signedInAs }: { state: ManageState; signedInAs: string
             typed={email}
             says={
               <>
-                Sift stops reading every mailbox, revokes its access at Google, and deletes everything it recorded: decisions, answers, rules, labels and your
+                Mild stops reading every mailbox, revokes its access at Google, and deletes everything it recorded: decisions, answers, rules, labels and your
                 model sign-in.{FILTERS_STAY}
               </>
             }
@@ -533,7 +533,7 @@ function Account({ state, signedInAs }: { state: ManageState; signedInAs: string
 function Keys() {
   const on = useShortcutsOn();
   return (
-    <SettingsGroup title="This browser" note="Kept here, not in Sift.">
+    <SettingsGroup title="This browser" note="Kept here, not in Mild.">
       <Sheet>
         <SettingRow
           title="Keyboard shortcuts"
@@ -550,7 +550,7 @@ function Keys() {
   );
 }
 
-/** How sift runs, most used first. What it does with mail is under Labels and Rules. */
+/** How mild runs, most used first. What it does with mail is under Labels and Rules. */
 /** Settings, over whatever is showing. Opened from the account menu, or from the setting-up page, so nothing has to be set up first. */
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);

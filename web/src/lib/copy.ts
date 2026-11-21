@@ -19,7 +19,7 @@ export interface Copied {
   newestAt: number;
   inbox: boolean;
   unread: boolean;
-  /** What Sift thinks of its newest message: its label, and what Sift would do. */
+  /** What Mild thinks of its newest message: its label, and what Mild would do. */
   labelId: string | null;
   disposition: string | null;
   conversation: SyncedConversation;
@@ -87,7 +87,7 @@ const DATABASE = 'sift-copy';
 const CHANNEL = 'sift-copy';
 /** Drawn first from the disk, before the rest is decrypted: about a screen of the inbox. */
 const FIRST = 50;
-/** How often the page asks for what changed while it is in view. Mail reaches Sift at the minute tick's pace. */
+/** How often the page asks for what changed while it is in view. Mail reaches Mild at the minute tick's pace. */
 const ASK_MS = 30_000;
 /** How long a press waits for the copy to hold its change before letting go of the rows it hid. */
 const HOLD_MS = 10_000;

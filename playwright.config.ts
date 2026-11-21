@@ -8,7 +8,7 @@ const middayZone = () => {
 // Midday wherever the run is: a day boundary is twelve hours away, so the seed's mail, decided just now, stays
 // "today" for the whole run. Chosen once: the workers load this file again, and inherit the choice. The seed and
 // each server read it as TZ; the browser as its `timezoneId`.
-const zone = (process.env['SIFT_E2E_TZ'] ??= middayZone());
+const zone = (process.env['MILD_E2E_TZ'] ??= middayZone());
 process.env['TZ'] = zone;
 
 export default defineConfig({

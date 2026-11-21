@@ -1,18 +1,18 @@
 /**
- * Preloaded into the Next.js server `serve.ts` starts (`NODE_OPTIONS=--import`), before any of Sift loads. Everything is
- * the real app on the seeded home, Sift's own Gmail client among it, but for what Sift reaches outside this machine for:
+ * Preloaded into the Next.js server `serve.ts` starts (`NODE_OPTIONS=--import`), before any of Mild loads. Everything is
+ * the real app on the seeded home, Mild's own Gmail client among it, but for what Mild reaches outside this machine for:
  *
  * - Google: the fake the unit tests use (tests/google.ts), answering Google's own addresses in this process. It starts
- *   from what the seed left in the file `SIFT_STAND_INS` names, Gmail as the seed's last pass left it, and is written
+ *   from what the seed left in the file `MILD_STAND_INS` names, Gmail as the seed's last pass left it, and is written
  *   back there after each request that changes it, so a test reads what Gmail holds, and what was sent, from that file.
- *   With `SIFT_STAND_INS_LISTING` set, me@example.org's inbox also holds 1,200 sales from the Store from before Sift,
+ *   With `MILD_STAND_INS_LISTING` set, me@example.org's inbox also holds 1,200 sales from the Store from before Mild,
  *   `Found in Gmail 1` the newest, and Gmail never answers a search's second page, so applying a rule to them stays
  *   under way until it is stopped.
  * - The model that suggests labels, drafts rules and asks Inbox (`StandIns`, src/sift/sift.ts). Drafting looks up the second
  *   line of its prompt (the words the person typed), then fills in a rule archiving and marking read mail from the
  *   first sender found, with a note naming the second; nothing found fills in `nobody@example.com`. Asking looks up
  *   the words before any "about" the same way and narrows Inbox to the first sender found, searching for the words after it,
- *   or with neither says Sift cannot tell which mail you have answered. Suggesting gives Sales pitches when
+ *   or with neither says Mild cannot tell which mail you have answered. Suggesting gives Sales pitches when
  *   the words name pitches, Build results (Digest) when they name builds, and notes that Receipts and transactions
  *   covers receipts already when they name receipts; words naming none of these are an unusable answer. A pass is given no model.
  */
@@ -24,15 +24,15 @@ import { FILL_TOOL, FIND_TOOL } from '../../../../src/triage/rule-draft.ts';
 import { ASK_TOOL } from '../../../../src/triage/mail-ask.ts';
 import { FakeGoogle, serveGoogle } from '../../../../tests/google.ts';
 
-const file = process.env['SIFT_STAND_INS'];
-if (!file) throw new Error('SIFT_STAND_INS names no file of what Google holds');
+const file = process.env['MILD_STAND_INS'];
+if (!file) throw new Error('MILD_STAND_INS names no file of what Google holds');
 const google = FakeGoogle.restore(JSON.parse(readFileSync(file, 'utf8')) as ReturnType<FakeGoogle['save']>);
 // Whole or not at all, for a test reading it meanwhile.
 const save = () => {
   writeFileSync(`${file}.next`, JSON.stringify(google.save()));
   renameSync(`${file}.next`, file);
 };
-if (process.env['SIFT_STAND_INS_LISTING']) {
+if (process.env['MILD_STAND_INS_LISTING']) {
   const gmail = google.mailbox('me@example.org');
   const before = Date.now() - 2 * 86_400_000;
   for (let i = 1; i <= 1200; i++)
@@ -98,7 +98,7 @@ const answer = (context: Context) => {
     const sender = found()[0];
     const words = about(context);
     const narrow = { reading: '', from: sender ? [sender] : [], domains: [], label: '', view: '', unread: false, since: '', words };
-    const note = sender || words.length > 0 ? '' : 'Sift cannot tell which mail you have answered.';
+    const note = sender || words.length > 0 ? '' : 'Mild cannot tell which mail you have answered.';
     return fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...narrow, note })], { stopReason: 'toolUse' });
   }
   if (tools.has(FILL_TOOL) && context.messages.at(-1)?.role === 'toolResult') {

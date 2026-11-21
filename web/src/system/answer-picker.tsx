@@ -16,7 +16,7 @@ export interface Pick {
 }
 
 /**
- * Saying what something is: a dropdown that starts on sift's answer, and a check that agrees with it.
+ * Saying what something is: a dropdown that starts on Mild's answer, and a check that agrees with it.
  * Picking from the list is the answer, so agreeing is one press and a change is two. `groups` run most
  * likely first; `empty` is what shows, in quiet ink, when there is no answer yet, and the check is off.
  */
@@ -32,7 +32,7 @@ export function AnswerPicker({
 }: {
   /** Names the dropdown for a screen reader: "What this message is". */
   label: string;
-  /** sift's answer, where the dropdown starts. */
+  /** Mild's answer, where the dropdown starts. */
   value: string | null;
   groups: readonly (readonly Pick[])[];
   empty: string;
@@ -93,7 +93,7 @@ export function AnswerPicker({
 }
 
 /**
- * What something is, down a list where most rows are left as they are (Inbox): Sift's label as plain words, or
+ * What something is, down a list where most rows are left as they are (Inbox): Mild's label as plain words, or
  * nothing where it gave none, the dropdown only when its row is pointed at. Picking saves it at once, with no check, since there is nothing to agree
  * to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back.
  */

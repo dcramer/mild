@@ -14,7 +14,7 @@ const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
 
 const ACCOUNT = 'me@example.com';
-const KEYS = loadKeyring({ SIFT_KEY: 'draft-key' });
+const KEYS = loadKeyring({ MILD_KEY: 'draft-key' });
 const LABELS = SAMPLE_LABELS.filter((l) => l.id === 'newsletter' || l.id === 'marketing');
 const DOMAIN = [{ by: 'from', value: 'example.org' }];
 const BLANK = {

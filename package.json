@@ -1,15 +1,16 @@
 {
-  "name": "sift",
+  "name": "mild",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "description": "Self-hosted inbox triage: labels, archives, filters and unsubscribes, using inference only when cheaper tiers abstain.",
   "bin": {
+    "mild": "src/cli/main.ts",
     "sift": "src/cli/main.ts"
   },
   "scripts": {
     "prepare": "simple-git-hooks",
-    "sift": "node --disable-warning=ExperimentalWarning src/cli/main.ts",
+    "mild": "node --disable-warning=ExperimentalWarning src/cli/main.ts",
     "typecheck": "tsc --noEmit && next typegen && tsc --noEmit -p tsconfig.web.json",
     "lint": "oxlint",
     "format": "oxlint --fix && oxfmt src tests web/src app proxy.ts instrumentation.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
@@ -24,10 +25,10 @@
     "check:fast": "pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check",
     "check": "pnpm check:fast && pnpm test && pnpm e2e",
     "build:web": "NEXT_TELEMETRY_DISABLED=1 next build",
-    "start": "pnpm sift run",
-    "dev": "pnpm sift dev",
+    "start": "pnpm mild run",
+    "dev": "pnpm mild dev",
     "db:generate": "drizzle-kit generate",
-    "db:reset": "pnpm sift reset-db"
+    "db:reset": "pnpm mild reset-db"
   },
   "devDependencies": {
     "@base-ui/react": "^1.9.0",

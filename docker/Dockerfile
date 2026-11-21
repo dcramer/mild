@@ -20,7 +20,7 @@ RUN node --disable-warning=ExperimentalWarning --import ./docker/cli-modules.ts 
 # Stage 2: the runtime. The command line runs from its TypeScript sources (type stripping); it readies the
 # database and starts the standalone server beside it (src/cli/next.ts).
 FROM base
-ENV NODE_ENV=production SIFT_HOME=/data NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production MILD_HOME=/data NEXT_TELEMETRY_DISABLED=1
 # Nothing installs packages at run time. This takes npm out of reach; its bytes stay in the base layer.
 RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
   && mkdir /data && chown node:node /data

@@ -18,8 +18,8 @@ const pending = (db: Sql, accountId: string, limit: number) =>
 export const examplesDue = async (db: Sql, accountId: string): Promise<boolean> => (await pending(db, accountId, 1)).length > 0;
 
 /**
- * Store the text and HTML of messages the user has marked with their answer, as evaluation and training data: what Sift holds
- * of each, or for one it has never read, one read through `reader`, which keeps it. One read before whose text Sift no longer holds (read more
+ * Store the text and HTML of messages the user has marked with their answer, as evaluation and training data: what Mild holds
+ * of each, or for one it has never read, one read through `reader`, which keeps it. One read before whose text Mild no longer holds (read more
  * than `READ_KEEP_DAYS` ago), or that no longer exists, keeps the answer alone (`gone`) rather than reading Gmail again. A failed
  * read leaves the example pending for the next pass. Returns how many were captured.
  */

@@ -42,7 +42,7 @@ function headerText(value: string, what: string): string {
 }
 
 function address(value: string): string {
-  if (!ADDRESS.test(value)) throw new Refusal(`${JSON.stringify(value)} is not an address Sift can send to.`);
+  if (!ADDRESS.test(value)) throw new Refusal(`${JSON.stringify(value)} is not an address Mild can send to.`);
   return value;
 }
 
@@ -124,7 +124,7 @@ type SendDeps = { db: Sql; mailbox: Mailbox; now?: () => number };
 
 /**
  * Send what the person wrote, as them, and return Gmail's id for it and its conversation. Only for someone with Inbox on,
- * from a mailbox Google let Sift send from, as one of that mailbox's own addresses. Written to the audit log before the call
+ * from a mailbox Google let Mild send from, as one of that mailbox's own addresses. Written to the audit log before the call
  * and settled from Gmail's answer. A try before this one whose answer never came is looked for by `id`, its Message-ID, so
  * mail that went is not sent twice. What went is kept in the record (`recordSent`), by whichever try finds it went.
  */
@@ -135,8 +135,8 @@ export async function sendMail(
   const { db, mailbox } = deps;
   const now = deps.now ?? Date.now;
   const { accountId, id, mail } = sending;
-  if (!(await preferences(db)).mail) throw new Refusal('Turn Inbox on to send mail from Sift.');
-  if (!(await canSend(db, accountId))) throw new Refusal(`Google has not let Sift send from ${accountId}.`);
+  if (!(await preferences(db)).mail) throw new Refusal('Turn Inbox on to send mail from Mild.');
+  if (!(await canSend(db, accountId))) throw new Refusal(`Google has not let Mild send from ${accountId}.`);
   const own = [accountId, ...(await mailboxAliases(db, accountId))];
   if (!own.includes(mail.from.address.toLowerCase())) throw new Refusal(`${mail.from.address} is not an address of ${accountId}.`);
   const at = now();
@@ -151,7 +151,7 @@ export async function sendMail(
   if (earlier.length > 0) {
     const found = await mailbox.findByMessageId(id);
     if (!found && earlier.some((t) => t.status === 'pending' || at - t.at < SETTLE_MS))
-      throw new Refusal('Sift cannot tell yet whether this went. Try again in a couple of minutes.');
+      throw new Refusal('Mild cannot tell yet whether this went. Try again in a couple of minutes.');
     for (const action of earlier) await finishAction(db, action.id, found ? 'done' : 'failed', null, found ? null : 'not in Gmail', now());
     if (found) return await keep({ ...found, labelIds: ['SENT'] });
   }

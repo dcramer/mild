@@ -3,7 +3,7 @@
  * with. The web app imports only their types, so zod stays out of the page; keep this file's imports to
  * zod and the pure triage types.
  *
- * What Sift stores encrypted is `held` here: a string in the JSON, `Confidential` to the type checker
+ * What Mild stores encrypted is `held` here: a string in the JSON, `Confidential` to the type checker
  * (src/confidential.ts), so the page draws it only through `reveal`, in the browser.
  */
 import { z } from 'zod';
@@ -32,13 +32,13 @@ export const RuleFacts = z.strictObject(
       key,
       z
         .unknown()
-        .refine((want) => factCondition(key, want) !== null, { error: `is not an answer Sift has for ${key}` })
+        .refine((want) => factCondition(key, want) !== null, { error: `is not an answer Mild has for ${key}` })
         .optional(),
     ]),
   ),
 ) as unknown as z.ZodType<Conditions>;
 export type RuleFacts = Conditions;
-/** Text Sift stores encrypted: what came from mail, what names a sender, and the person's words to the models. */
+/** Text Mild stores encrypted: what came from mail, what names a sender, and the person's words to the models. */
 const held = z.custom<Confidential>((value) => typeof value === 'string', { error: 'is not text' });
 const values = z.array(z.string()).optional();
 const match = z.object({
@@ -53,7 +53,7 @@ const match = z.object({
 });
 export type RuleMatch = z.infer<typeof match>;
 const heldValues = z.array(held).optional();
-/** A rule's conditions as a reply carries them. Its facts are Sift's own words for what it checked. */
+/** A rule's conditions as a reply carries them. Its facts are Mild's own words for what it checked. */
 const heldMatch = z.object({
   from: heldValues,
   fromDomain: heldValues,
@@ -65,7 +65,7 @@ const heldMatch = z.object({
   facts: RuleFacts.optional(),
 });
 
-/** The facts For review and Activity can be narrowed by (`?fact=`), each a condition on what sift recorded about the message. */
+/** The facts For review and Activity can be narrowed by (`?fact=`), each a condition on what Mild recorded about the message. */
 export const FACT_FILTERS = {
   reply: { isReply: true },
   list: { listId: true },
@@ -95,7 +95,7 @@ export const DecisionRow = z.object({
   receivedAt: z.number(),
   stage,
   disposition: z.string(),
-  /** What sift said the mail is, or null if it could not place it. */
+  /** What Mild said the mail is, or null if it could not place it. */
   labelId: z.string().nullable(),
   labelName: z.string().nullable(),
   gmailLabel: z.string().nullable(),
@@ -112,11 +112,11 @@ export const DecisionRow = z.object({
   carryOut: z.boolean(),
   /** Null for a suggestion, and while a decision to carry out is waiting for a pass. */
   outcome: z.string().nullable(),
-  /** Why Sift left it alone (`skipped`), in its own words. Never an error's. */
+  /** Why Mild left it alone (`skipped`), in its own words. Never an error's. */
   outcomeDetail: z.string().nullable(),
   actionId: z.number().nullable(),
   actionStatus: z.string().nullable(),
-  /** The user's own answer, not sift's decision. */
+  /** The user's own answer, not Mild's decision. */
   byUser: z.boolean(),
 });
 export type DecisionRow = z.infer<typeof DecisionRow>;
@@ -129,7 +129,7 @@ export type Contact = z.infer<typeof Contact>;
 const ListedDecision = DecisionRow.extend({ contact: Contact });
 export type ListedDecision = z.infer<typeof ListedDecision>;
 
-/** Mail Sift took out of the inbox, and the seconds that saved the reader (`saved`, src/dashboard/queries/saved.ts). */
+/** Mail Mild took out of the inbox, and the seconds that saved the reader (`saved`, src/dashboard/queries/saved.ts). */
 export const Saved = z.object({ messages: z.number(), seconds: z.number() });
 export type Saved = z.infer<typeof Saved>;
 
@@ -139,7 +139,7 @@ export const Summary = z.object({
   totals: z.object({
     /** Messages received in the window. */
     messages: z.number(),
-    /** Messages sift first decided in the window. */
+    /** Messages Mild first decided in the window. */
     decided: z.number(),
     /** Of those, how many it decided without a model. */
     withoutInference: z.number(),
@@ -165,7 +165,7 @@ export const Summary = z.object({
   ),
   topSenders: z.array(z.object({ address: held, messages: z.number(), lastDisposition: z.string().nullable() })),
   /**
-   * What Sift took out of the inbox in the window, less the digests it put back, by the label it gave, most first;
+   * What Mild took out of the inbox in the window, less the digests it put back, by the label it gave, most first;
    * and the senders it unsubscribed from, with what they sent in the month before.
    */
   saved: Saved.extend({
@@ -175,17 +175,17 @@ export const Summary = z.object({
   /** The ten latest decisions in the window. */
   recent: z.array(ListedDecision),
   /**
-   * How often sift's suggestion was what the user wanted, from the answers given in the window. Answers
-   * to mail sift could not place are not counted.
+   * How often Mild's suggestion was what the user wanted, from the answers given in the window. Answers
+   * to mail Mild could not place are not counted.
    */
   accuracy: z.object({
     reviewed: z.number(),
     right: z.number(),
     /** Every tier, in cascade order. */
     byStage: z.array(z.object({ stage, reviewed: z.number(), right: z.number() })),
-    /** Per label sift gave, most answers first. */
+    /** Per label Mild gave, most answers first. */
     byLabel: z.array(z.object({ labelId: z.string(), labelName: z.string(), reviewed: z.number(), right: z.number() })),
-    /** What sift called one label when the user said another, commonest first. */
+    /** What Mild called one label when the user said another, commonest first. */
     confusion: z.array(z.object({ suggested: z.string(), correct: z.string(), count: z.number() })),
   }),
 });
@@ -197,7 +197,7 @@ export const Usage = z.object({
   week: z.number(),
   month: z.number(),
   daily: z.array(z.number()),
-  /** What Sift took out of the inbox over the same windows; `daily` in seconds. `wouldHave`: 30 days of what it would have, had it been on. */
+  /** What Mild took out of the inbox over the same windows; `daily` in seconds. `wouldHave`: 30 days of what it would have, had it been on. */
   saved: z.object({ day: Saved, week: Saved, month: Saved, daily: z.array(z.number()), wouldHave: Saved }),
 });
 export type Usage = z.infer<typeof Usage>;
@@ -208,7 +208,7 @@ export type DecisionPage = z.infer<typeof DecisionPage>;
 
 const authentication = z.enum(['pass', 'fail', 'none']);
 
-/** What sift checked about one message. Mirrors `Facts` in src/triage/facts.ts, which says what each means. */
+/** What Mild checked about one message. Mirrors `Facts` in src/triage/facts.ts, which says what each means. */
 const MessageFactSet = z.object({
   unsubscribe: z.enum(['none', 'header', 'one-click']),
   listId: held.nullable(),
@@ -222,7 +222,7 @@ const MessageFactSet = z.object({
   addressed: z.enum(['to', 'cc', 'neither']),
   isReply: z.boolean(),
   category: z.enum(['personal', 'social', 'promotions', 'updates', 'forums']).nullable(),
-  /** Absent for mail recorded before sift read it. */
+  /** Absent for mail recorded before Mild read it. */
   important: z.boolean().optional(),
   /** These five are known only once a model has been asked about the message; the last four only for mail with HTML. */
   hasAttachments: z.boolean().optional(),
@@ -236,7 +236,7 @@ const MessageFactSet = z.object({
 });
 type MessageFactSet = z.infer<typeof MessageFactSet>;
 
-/** What sift knows about one sender, or about everyone at one domain, to judge their mail by. */
+/** What Mild knows about one sender, or about everyone at one domain, to judge their mail by. */
 /** A standing the owner gives a sender or domain: a rule for exactly them that says only what happens to their mail. */
 export const Given = z.enum(GIVEN);
 export type Given = z.infer<typeof Given>;
@@ -250,7 +250,7 @@ export const SenderProfile = z.object({
   lastSeenAt: z.number().nullable(),
   /** Messages in the last 30 days. */
   recent: z.number(),
-  /** Their mail Sift took out of the inbox, ever. */
+  /** Their mail Mild took out of the inbox, ever. */
   saved: Saved,
   /** For a domain: how many addresses have written from it. */
   senders: z.number(),
@@ -296,17 +296,17 @@ export const MessageDetail = z.object({
   /** Triage headers as synced. */
   headers: z.record(z.string(), held),
   /**
-   * The readable text, where sift holds it: while the message is waiting on the user (and sift would move it or
+   * The readable text, where Mild holds it: while the message is waiting on the user (and Mild would move it or
    * could not place it), or for good once the user has answered for it. Null otherwise. Its HTML is held with it.
    */
   body: held.nullable(),
-  /** Whether sift holds its HTML, beside the text, to show in a frame (`/api/message/html`). */
+  /** Whether Mild holds its HTML, beside the text, to show in a frame (`/api/message/html`). */
   hasHtml: z.boolean(),
   facts: MessageFactSet,
   sender: SenderProfile,
   /**
-   * Whether sift could leave the list this message came from. `available`: yes, with one request to the sender.
-   * `done`: it already has. `manual`: the message has an unsubscribe link sift will not use (it needs an
+   * Whether Mild could leave the list this message came from. `available`: yes, with one request to the sender.
+   * `done`: it already has. `manual`: the message has an unsubscribe link Mild will not use (it needs an
    * email sent or a page opened, or the message did not prove who sent it). `none`: it offers no way.
    */
   unsubscribe: z.enum(['available', 'done', 'manual', 'none']),
@@ -409,12 +409,12 @@ export const SuggestionDetail = z.object({
 });
 export type SuggestionDetail = z.infer<typeof SuggestionDetail>;
 
-/** A rule's standing as a Gmail filter, which runs in Gmail itself and so applies when sift is off. */
+/** A rule's standing as a Gmail filter, which runs in Gmail itself and so applies when Mild is off. */
 export const RuleFilter = z.object({
   /**
-   * `none`: not in Gmail. `active`: sift wrote it and it is still there. `changed`: it was edited in Gmail,
-   * and sift leaves it alone. `gone`: it was deleted in Gmail. `outdated`: the rule no longer says what the
-   * filter does; sift replaces or removes it once it is on. `RuleSummary.filterId` says whether Gmail still has one.
+   * `none`: not in Gmail. `active`: Mild wrote it and it is still there. `changed`: it was edited in Gmail,
+   * and Mild leaves it alone. `gone`: it was deleted in Gmail. `outdated`: the rule no longer says what the
+   * filter does; Mild replaces or removes it once it is on. `RuleSummary.filterId` says whether Gmail still has one.
    */
   state: z.enum(['none', 'active', 'changed', 'gone', 'outdated']),
   /** Whether the rule as it stands can be written as a filter. */
@@ -432,9 +432,9 @@ export const RuleFilter = z.object({
     .nullable(),
   /** Where Gmail will not do exactly what the rule does. To show before the user asks for the filter. */
   differs: z.array(z.string()),
-  /** When sift last compared it with Gmail. */
+  /** When Mild last compared it with Gmail. */
   checkedAt: z.number().nullable(),
-  /** Each time sift wrote the filter to a mailbox's Gmail (`filter`) or took it out, and how that went, oldest first: one press is one per mailbox. */
+  /** Each time Mild wrote the filter to a mailbox's Gmail (`filter`) or took it out, and how that went, oldest first: one press is one per mailbox. */
   history: z.array(z.object({ type: z.enum(['filter', 'unfilter']), status: z.string(), error: z.string().nullable(), at: z.number(), mailbox: z.string() })),
 });
 export type RuleFilter = z.infer<typeof RuleFilter>;
@@ -464,7 +464,7 @@ export const RuleSummary = z.object({
   unsubscribe: z.boolean(),
   /** A plain-language condition only the model can apply. */
   when: z.string().nullable(),
-  /** `user`: written by the user. `correction`: made by correcting sift. `learned`: made by sift when it blocked the sender. */
+  /** `user`: written by the user. `correction`: made by correcting sift. `learned`: made by Mild when it blocked the sender. */
   source: z.string(),
   hits: z.number(),
   lastHitAt: z.number().nullable(),
@@ -481,7 +481,7 @@ export type RuleSummary = z.infer<typeof RuleSummary>;
 const InboxMessage = z.object({ accountId: z.string(), messageId: z.string(), subject: held, receivedAt: z.number() });
 
 /**
- * What a rule decided and Sift has not moved: the newest of them, and how many in all. `applying`: how far
+ * What a rule decided and Mild has not moved: the newest of them, and how many in all. `applying`: how far
  * applying it to the inbox has got (`listed` false: still finding them, so `total` is how many so far).
  */
 export const RuleWaiting = z.object({
@@ -492,7 +492,7 @@ export const RuleWaiting = z.object({
 export type RuleWaiting = z.infer<typeof RuleWaiting>;
 
 /**
- * What a rule decided each day, oldest first: `changed` was carried out in Gmail, `left` was not (Sift was
+ * What a rule decided each day, oldest first: `changed` was carried out in Gmail, `left` was not (Mild was
  * off, or it never landed). `costUsd` is the model calls that checked its condition that day, met or not.
  */
 export const RuleUsage = z.object({
@@ -517,12 +517,12 @@ export const RuleInbox = z.object({
 });
 export type RuleInbox = z.infer<typeof RuleInbox>;
 
-/** What Sift thinks of a message: its current decision, as For review's rows and Inbox's show it. */
+/** What Mild thinks of a message: its current decision, as For review's rows and Inbox's show it. */
 const Thinks = z.object({
   decisionId: z.number(),
-  /** What sift would do. `review` without a label means it could not place the mail. */
+  /** What Mild would do. `review` without a label means it could not place the mail. */
   disposition: z.string(),
-  /** What sift says the mail is, or null if it could not place it. */
+  /** What Mild says the mail is, or null if it could not place it. */
   labelId: z.string().nullable(),
   labelName: z.string().nullable(),
   /** Which tier decided, and how sure a model was (0 to 1); null when no model was asked. */
@@ -530,7 +530,7 @@ const Thinks = z.object({
   confidence: z.number().nullable(),
 });
 
-/** One waiting suggestion: what sift proposes for one message, which the user has not answered. */
+/** One waiting suggestion: what Mild proposes for one message, which the user has not answered. */
 export const SuggestionItem = z.object({
   accountId: z.string(),
   messageId: z.string(),
@@ -542,15 +542,15 @@ export const SuggestionItem = z.object({
   ...Thinks.shape,
   /**
    * What else it might be, most likely first: the labels the sender's other mail has had, with the share
-   * of it each had. Until the model ranks its own guesses, this is the best second opinion sift holds.
+   * of it each had. Until the model ranks its own guesses, this is the best second opinion Mild holds.
    */
   alternatives: z.array(z.object({ id: z.string(), name: z.string(), share: z.number() })),
-  /** The start of the message's text, on one line, where sift holds it: enough to tell what it is without opening it. */
+  /** The start of the message's text, on one line, where Mild holds it: enough to tell what it is without opening it. */
   preview: held.nullable(),
 });
 export type SuggestionItem = z.infer<typeof SuggestionItem>;
 
-/** A rule Sift thinks is worth having, for the user to accept or dismiss. */
+/** A rule Mild thinks is worth having, for the user to accept or dismiss. */
 const ProposalSummary = z.object({
   id: z.number(),
   accountId: z.string(),
@@ -574,11 +574,11 @@ export const Suggestions = z.object({
   waiting: z.number(),
   /** From the user's answers so far. */
   accuracy: answered,
-  /** The labels the user can say something is, with what sift does for each. */
+  /** The labels the user can say something is, with what Mild does for each. */
   labels: z.array(z.object({ id: z.string(), name: z.string(), disposition: z.string() })),
-  /** Whether Sift is on for the viewer. Off, nothing listed has been done in Gmail. */
+  /** Whether Mild is on for the viewer. Off, nothing listed has been done in Gmail. */
   active: z.boolean(),
-  /** Sift is going through the inbox, or mail it found there waits for the model: more suggestions are coming. */
+  /** Mild is going through the inbox, or mail it found there waits for the model: more suggestions are coming. */
   importing: z.boolean(),
 });
 export type Suggestions = z.infer<typeof Suggestions>;
@@ -600,7 +600,7 @@ export type FeedbackRequest = z.infer<typeof FeedbackRequest>;
 
 /** What POST /api/feedback answers. */
 export const FeedbackReply = z.object({
-  /** Why sift's own change to the corrected message could not be taken back in Gmail. The answer is saved either way. */
+  /** Why Mild's own change to the corrected message could not be taken back in Gmail. The answer is saved either way. */
   notFixed: z.string().nullable(),
 });
 export type FeedbackReply = z.infer<typeof FeedbackReply>;
@@ -628,12 +628,12 @@ export const SendRequest = z.union([
 ]);
 export type SendRequest = z.infer<typeof SendRequest>;
 
-/** A label: what mail is, and what sift does with it. */
+/** A label: what mail is, and what Mild does with it. */
 export const LabelSummary = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
-  /** What sift does with it: `keep`, `archive`, `spam`, `block` (spam, and the sender's later mail too) or `digest` (archive, and list it once a day). */
+  /** What Mild does with it: `keep`, `archive`, `spam`, `block` (spam, and the sender's later mail too) or `digest` (archive, and list it once a day). */
   disposition: z.string(),
   /** Also mark the mail read. Only with `keep` and `archive`. */
   markRead: z.boolean(),
@@ -645,7 +645,7 @@ export const LabelSummary = z.object({
   rules: z.number(),
   /** Messages whose current decision carries this label. */
   messages: z.number(),
-  /** Of the suggestions for this label the user has answered, how many sift had right. */
+  /** Of the suggestions for this label the user has answered, how many Mild had right. */
   record: answered,
 });
 export type LabelSummary = z.infer<typeof LabelSummary>;
@@ -711,7 +711,7 @@ export const InboxEstimate = z.object({
 });
 export type InboxEstimate = z.infer<typeof InboxEstimate>;
 
-/** Which conversations Inbox lists: all, those Sift would leave in the inbox or could not place, or those it would move out. */
+/** Which conversations Inbox lists: all, those Mild would leave in the inbox or could not place, or those it would move out. */
 export const MAIL_VIEWS = ['all', 'needs', 'sorted'] as const;
 export type MailView = (typeof MAIL_VIEWS)[number];
 
@@ -723,17 +723,17 @@ export const MailThread = z.object({
   subject: held,
   /** Its newest message's sender's address, which an answer about it names. */
   from: held,
-  /** Who wrote the messages Sift has of it, oldest first, each once: a name, or the address of a sender without one; the reader's own mailboxes as "me". */
+  /** Who wrote the messages Mild has of it, oldest first, each once: a name, or the address of a sender without one; the reader's own mailboxes as "me". */
   who: z.array(held),
-  /** The messages Sift has recorded of it, oldest first; the newest is the one the reader opens. Sync records mail that arrives, not what the person sent. */
+  /** The messages Mild has recorded of it, oldest first; the newest is the one the reader opens. Sync records mail that arrives, not what the person sent. */
   messageIds: z.array(z.string()),
   unread: z.boolean(),
   newestAt: z.number(),
   /** Where it is, for a search that looks past the inbox: in it, out of it, or only what the person sent. */
   place: z.enum(['inbox', 'archived', 'sent']),
-  /** The start of its newest message's text, on one line, where Sift holds it. */
+  /** The start of its newest message's text, on one line, where Mild holds it. */
   preview: held.nullable(),
-  /** About its newest message; null when Sift has not decided it. */
+  /** About its newest message; null when Mild has not decided it. */
   thinks: Thinks.nullable(),
 });
 export type MailThread = z.infer<typeof MailThread>;
@@ -746,7 +746,7 @@ export const MailThreads = z.object({
 });
 export type MailThreads = z.infer<typeof MailThreads>;
 
-/** GET /api/mail/thread: the messages Sift has of one conversation, oldest first, each as its folded row shows it. A message's text is `/api/message`'s. */
+/** GET /api/mail/thread: the messages Mild has of one conversation, oldest first, each as its folded row shows it. A message's text is `/api/message`'s. */
 export const MailConversation = z.object({
   accountId: z.string(),
   threadId: z.string(),
@@ -763,7 +763,7 @@ export const MailConversation = z.object({
 });
 export type MailConversation = z.infer<typeof MailConversation>;
 
-/** A conversation as the page's copy holds it (docs/sync.md): its recorded messages, oldest first, and what Sift thinks of its newest. */
+/** A conversation as the page's copy holds it (docs/sync.md): its recorded messages, oldest first, and what Mild thinks of its newest. */
 export const SyncedConversation = z.object({
   accountId: z.string(),
   threadId: z.string(),
@@ -779,7 +779,7 @@ export const SyncedConversation = z.object({
       preview: held.nullable(),
     }),
   ),
-  /** About its newest message, as Inbox's list says it; the label by id alone, named from the person's labels. Null when Sift has not decided it. */
+  /** About its newest message, as Inbox's list says it; the label by id alone, named from the person's labels. Null when Mild has not decided it. */
   thinks: Thinks.omit({ labelName: true }).nullable(),
 });
 export type SyncedConversation = z.infer<typeof SyncedConversation>;
@@ -845,9 +845,9 @@ export type MailReach = z.infer<typeof MailReach>;
 export const ManageState = z.object({
   /** Whether the viewer owns the install, and so may change what applies to all of it. */
   owner: z.boolean(),
-  /** Whether sift is on for the viewer. Off, it only suggests for their mail; on, it carries its decisions out in Gmail. */
+  /** Whether Mild is on for the viewer. Off, it only suggests for their mail; on, it carries its decisions out in Gmail. */
   active: z.boolean(),
-  /** Whether Inbox is on for the viewer: Sift keeps a copy of their mail, and may send as them. */
+  /** Whether Inbox is on for the viewer: Mild keeps a copy of their mail, and may send as them. */
   mail: z.boolean(),
   mailWindow: MailWindow,
   /** Copying the viewer's mailboxes for Inbox, all of them together: `total` is what counting has found so far until `counted`. Null when none is going. */
@@ -861,7 +861,7 @@ export const ManageState = z.object({
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
   }),
   activity: z.object({ running: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
-  /** `canSend`: Google let Sift send from it (`/auth/login?grant=send&mailbox=…` asks). `aliases`: its other addresses in Gmail, which it may send as. */
+  /** `canSend`: Google let Mild send from it (`/auth/login?grant=send&mailbox=…` asks). `aliases`: its other addresses in Gmail, which it may send as. */
   accounts: z.array(
     z.object({
       id: z.string(),
@@ -878,7 +878,7 @@ export const ManageState = z.object({
   labels: z.array(LabelSummary),
   /** How many labels a person may have. */
   labelLimit: z.number(),
-  /** Mail waiting on the viewer that Sift would move or could not place: For review's count. */
+  /** Mail waiting on the viewer that Mild would move or could not place: For review's count. */
   waiting: z.number(),
   inbox: InboxProgress,
   /** The hour of the viewer's day a label's digest arrives, and the zone it is read in: null when their browser never said, which is UTC. */
@@ -911,7 +911,7 @@ export const Session = z.object({
   reason: z.enum(['no-client', 'address']).nullable(),
   /** Addresses sign-in works at. */
   addresses: z.array(z.string()),
-  /** `SIFT_CLOUD`: this Sift is a service for other people. Someone's own copy has no terms, privacy policy or security page. */
+  /** `MILD_CLOUD`: this Mild is a service for other people. Someone's own copy has no terms, privacy policy or security page. */
   cloud: z.boolean(),
   /** Where the page sends how long it took and what failed in it: this server's Sentry project. Null when the server sends nothing. */
   telemetry: z.object({ dsn: z.string(), release: z.string().nullable(), environment: z.string().nullable() }).nullable(),

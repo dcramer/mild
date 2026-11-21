@@ -8,7 +8,7 @@ import { checkedIn, flushTelemetry, reportError, traced } from '../telemetry.ts'
 import type { Work } from '../work/run.ts';
 import { type Host, type Sift, createSift } from './sift.ts';
 
-/** The two hosts, one chosen per process: Vercel's from its environment, `sift run`'s from the home directory. */
+/** The two hosts, one chosen per process: Vercel's from its environment, `mild run`'s from the home directory. */
 const HOSTS = {
   vercel: { open: vercelHost, cronSecret: async () => vercelCronSecret() },
   local: { open: () => localHost(), cronSecret: async () => localCronSecret((await host()).sessionSecret) },
@@ -19,7 +19,7 @@ const HOST = Symbol.for('sift.host');
 const OFFERED = Symbol.for('sift.offered');
 /**
  * Next.js may load this module once for each bundle that imports it (a route, the flow route, instrumentation), so
- * the host, with its database and connections, is kept for the whole process. A test offers its own Sift for a
+ * the host, with its database and connections, is kept for the whole process. A test offers its own Mild for a
  * run's step to call, from a copy of `src/` Workflow's build bundled apart from its own.
  */
 const slots = globalThis as typeof globalThis & { [HOST]?: Promise<Host>; [OFFERED]?: Pick<Sift, 'work'> };
@@ -76,7 +76,7 @@ export async function respond(request: Request): Promise<Response> {
     if (error instanceof NotSetUp) return json(503, { error: error.message, missing: error.missing });
     // Opening failed: its words may name a path or a database.
     reportError(error);
-    return json(500, { error: 'Sift could not do that.' });
+    return json(500, { error: 'Mild could not do that.' });
   } finally {
     // An instance may be frozen once it has answered: what is waiting is sent first.
     waitUntil(flushTelemetry());
@@ -84,9 +84,9 @@ export async function respond(request: Request): Promise<Response> {
 }
 
 /**
- * `work`, the page's frame read for one request (src/sift/page-data.ts), as one span, begun once Sift is up: Sentry
+ * `work`, the page's frame read for one request (src/sift/page-data.ts), as one span, begun once Mild is up: Sentry
  * starts with it, so on a new instance a span begun before would not be sent. `sift.opened_ms` is how long this request
- * waited for Sift to open, which only the first on an instance does.
+ * waited for Mild to open, which only the first on an instance does.
  */
 export async function framed<T>(work: () => Promise<T>): Promise<T> {
   const cold = opened === undefined;
@@ -107,7 +107,7 @@ async function fromCron(request: Request): Promise<boolean> {
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
-/** `/api/cron`, each minute, from Vercel Cron or `sift run`: begins a run for each piece of what is due. */
+/** `/api/cron`, each minute, from Vercel Cron or `mild run`: begins a run for each piece of what is due. */
 export async function cron(request: Request): Promise<Response> {
   if (!(await fromCron(request))) return new Response(null, { status: 401 });
   try {
@@ -118,7 +118,7 @@ export async function cron(request: Request): Promise<Response> {
   return new Response(null, { status: 204 });
 }
 
-/** A Workflow run's step: its piece, done by this process's Sift, and what it left for Sentry sent before the instance can be frozen. */
+/** A Workflow run's step: its piece, done by this process's Mild, and what it left for Sentry sent before the instance can be frozen. */
 export async function work(piece: Work): Promise<void> {
   try {
     await (slots[OFFERED] ?? (await sift())).work(piece);
@@ -127,11 +127,11 @@ export async function work(piece: Work): Promise<void> {
   }
 }
 
-/** @public `tests/flow.workflow.test.ts` and `tests/restart.workflow.test.ts` give a run's step a Sift of their own. */
+/** @public `tests/flow.workflow.test.ts` and `tests/restart.workflow.test.ts` give a run's step a Mild of their own. */
 export const offerSift = (offered: Pick<Sift, 'work'>) => void (slots[OFFERED] = offered);
 
 /**
- * As the server starts (`instrumentation.ts`). Under `sift run` the host is opened first, which says where the
+ * As the server starts (`instrumentation.ts`). Under `mild run` the host is opened first, which says where the
  * World keeps its runs. Workflow's Local World keeps its queue in memory, so a run that a stop or a crash cut off
  * holds its key until the World is started: then it sends each such run again, and hands back the step that was
  * under way. On Vercel the platform's queue does this, and the host is opened by the first request.

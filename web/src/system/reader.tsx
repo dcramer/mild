@@ -14,7 +14,7 @@ const READING = 'max-w-[46rem]';
 
 /**
  * One message or conversation, opened from a list in the list's place, inside the frame: the bar (`ReaderBar`), the
- * subject as the page's heading, Sift's part (`AnswerRow`), then the conversation and whatever answers it. `side` is a
+ * subject as the page's heading, Mild's part (`AnswerRow`), then the conversation and whatever answers it. `side` is a
  * column beside the conversation on a wide screen, and under it narrower, for what is said about the message rather
  * than in it. It takes the focus as it opens, so Enter presses nothing and the keys are its own.
  */
@@ -142,8 +142,8 @@ function Step({ label, keys, onPress, icon }: { label: string; keys: readonly st
 }
 
 /**
- * Sift's part of the reader, on one line under the title: what the message is (an `AnswerPicker`, agreed in one
- * press), Why, and the presses that make a rule (`children`). Why opens what Sift said under the line; `whyOpen` starts
+ * Mild's part of the reader, on one line under the title: what the message is (an `AnswerPicker`, agreed in one
+ * press), Why, and the presses that make a rule (`children`). Why opens what Mild said under the line; `whyOpen` starts
  * it open, where answering is the job (For review). On a phone the picker takes what the presses leave.
  */
 export function AnswerRow({

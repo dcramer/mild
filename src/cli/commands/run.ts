@@ -30,15 +30,15 @@ async function preflight(config: ReturnType<typeof loadConfig>): Promise<void> {
     for (const user of users) if ((await preferences(await store.user(user.id))).active) on++;
     ui.heading(on === 0 ? 'off' : on === users.length ? 'on' : `on for ${on} of ${users.length}`);
     secrets();
-    if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('sift init')}.`);
+    if (!hasClientSecrets(config)) ui.warn(`No Google client yet. Run ${paint.cmd('mild init')}.`);
     else if ((await connectedAddresses(store.central)).length === 0) ui.warn('No Gmail account yet. Open the dashboard and sign in with Google.');
-    else if (on === 0) ui.info('Gmail is not changed while Sift is off. Each person turns it on in the dashboard, under Settings.');
+    else if (on === 0) ui.info('Gmail is not changed while Mild is off. Each person turns it on in the dashboard, under Settings.');
   } finally {
     await store.close();
   }
 }
 
-/** `sift run`, and with `dev` `sift dev`: Next.js serving the dashboard and doing the work, and its tick each minute. */
+/** `mild run`, and with `dev` `mild dev`: Next.js serving the dashboard and doing the work, and its tick each minute. */
 export async function run(args: string[], dev = false): Promise<void> {
   const { values } = parseArgs({ args, options: { port: { type: 'string' }, host: { type: 'string' } } });
   const config = loadConfig();
@@ -55,8 +55,8 @@ export async function run(args: string[], dev = false): Promise<void> {
       dev,
       port,
       hostname,
-      env: { SIFT_HOME: config.home },
-      inUse: `Port ${port} is already in use. Is Sift already running? If not, set SIFT_DASHBOARD_PORT in ${config.envPath}.`,
+      env: { MILD_HOME: config.home },
+      inUse: `Port ${port} is already in use. Is Mild already running? If not, set MILD_DASHBOARD_PORT in ${config.envPath}.`,
       print: (line) => ui.plain(`${time()}  ${line}`),
     });
     const { url } = config.settings;

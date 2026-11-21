@@ -114,13 +114,13 @@ class Refused extends Error {
   }
 }
 
-/** No answer at all: the network is down or sift is not running. */
+/** No answer at all: the network is down or Mild is not running. */
 class Unreachable extends Error {}
 
 let probing = false;
 
 /**
- * Marks sift unreachable, which pauses every query where it is with what it last loaded, and asks
+ * Marks Mild unreachable, which pauses every query where it is with what it last loaded, and asks
  * again until something answers. Coming back online resumes the paused queries and refreshes the rest.
  */
 function lost() {
@@ -145,8 +145,8 @@ function lost() {
 }
 
 /**
- * Sift answers every request itself, in JSON. A failure that is not (a proxy's 502 page, Vercel's
- * crashed function) is something in front of Sift saying it is not there.
+ * Mild answers every request itself, in JSON. A failure that is not (a proxy's 502 page, Vercel's
+ * crashed function) is something in front of Mild saying it is not there.
  */
 function fromSift(response: Response): boolean {
   return response.status < 500 || (response.headers.get('content-type') ?? '').startsWith('application/json');
@@ -184,7 +184,7 @@ async function get<T>(path: string, params: Record<string, string | number>, sig
   for (const [key, value] of Object.entries(params)) if (value !== '') query.set(key, String(value));
   const mailbox = narrowedBy.get(signal);
   if (mailbox) query.set('mailbox', mailbox);
-  const response = await send(`${path}?${query}`, { signal, headers: traceHeaders() }, 'Sift cannot be reached.');
+  const response = await send(`${path}?${query}`, { signal, headers: traceHeaders() }, 'Mild cannot be reached.');
   if (!response.ok) throw new Refused(response.status, await reason(response));
   return (await response.json()) as T;
 }
@@ -194,7 +194,7 @@ interface Said {
   missing?: string[];
 }
 
-/** What Sift said when it refused. A gateway's or a crash's page says nothing of the kind. */
+/** What Mild said when it refused. A gateway's or a crash's page says nothing of the kind. */
 async function reason(response: Response): Promise<Said> {
   try {
     return (await response.json()) as Said;
@@ -203,21 +203,21 @@ async function reason(response: Response): Promise<Said> {
   }
 }
 
-/** Told the person's counter after each write Sift took (`x-sift-seq`): the page's copy holds the change once it has read that far (docs/sync.md). */
+/** Told the person's counter after each write Mild took (`x-sift-seq`): the page's copy holds the change once it has read that far (docs/sync.md). */
 let wrote: (seq: number) => void = () => {};
 export const onWrite = (heard: (seq: number) => void) => void (wrote = heard);
 
 /**
  * A change. The headers mark it as coming from this page, which the server requires of every write.
- * Refused outright while sift is unreachable: a change is never queued to happen later, unseen.
+ * Refused outright while Mild is unreachable: a change is never queued to happen later, unseen.
  */
 /** `keepalive`: sent even as the page closes, for a write held back until then. */
 async function post<T = unknown>(path: string, body: unknown, keepalive = false): Promise<T> {
-  if (!onlineManager.isOnline()) throw new Unreachable('Sift cannot be reached, so nothing was changed. Try again when it is back.');
+  if (!onlineManager.isOnline()) throw new Unreachable('Mild cannot be reached, so nothing was changed. Try again when it is back.');
   const response = await send(
     path,
     { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1', ...traceHeaders() }, body: JSON.stringify(body), keepalive },
-    'Sift stopped answering, so this may not have been saved. Check when it is back.',
+    'Mild stopped answering, so this may not have been saved. Check when it is back.',
   );
   const result = (await response.json()) as T & Said;
   if (!response.ok) throw new Refused(response.status, result);
@@ -236,7 +236,7 @@ export interface RuleBody {
   match: RuleMatch;
   /** What the mail is. */
   label?: string;
-  /** Apply only once sift has said the mail is this label. */
+  /** Apply only once Mild has said the mail is this label. */
   whenLabel?: string;
   disposition?: string;
   markRead?: boolean;
@@ -258,7 +258,7 @@ export const api = {
     ),
   /** A message by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
   message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
-  /** Where a frame loads a message as the HTML Sift holds for it; `images` once the reader asked for its images. */
+  /** Where a frame loads a message as the HTML Mild holds for it; `images` once the reader asked for its images. */
   messageHtml: (id: string, mailbox: string, images: boolean) =>
     `/api/message/html?${new URLSearchParams(images ? { id, mailbox, images: '1' } : { id, mailbox })}`,
   /** Everyone the person has mail from, newest first, a page at a time. */
@@ -279,7 +279,7 @@ export const api = {
   manage: (signal: AbortSignal) => get<ManageState>('/api/manage', {}, signal),
   /** The models the reader's own sign-ins offer, and the one to suggest first. */
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
-  /** The reader's own: true, sift carries out its decisions in their Gmail. */
+  /** The reader's own: true, Mild carries out its decisions in their Gmail. */
   setActive: (active: boolean) => post('/api/active', { active }),
   /** Mail the person wrote, sent as them. */
   send: (mail: SendRequest) => post<{ id: string; threadId: string }>('/api/mail/send', mail),
@@ -321,7 +321,7 @@ export const api = {
   removeRule: (id: string) => post('/api/rules/remove', { id }),
   /** Write the rule to Gmail as a filter, or take its filter out. */
   ruleFilter: (id: string, on: boolean) => post('/api/rules/filter', { id, on }),
-  /** What the rule decided and Sift has not moved. */
+  /** What the rule decided and Mild has not moved. */
   ruleWaiting: (id: string, signal: AbortSignal) => get<RuleWaiting>('/api/rules/waiting', { id }, signal),
   ruleUsage: (id: string, signal: AbortSignal) => get<RuleUsage>('/api/rules/usage', { id }, signal),
   /** What applying the rule to the inbox would do, from a sample read from Gmail. */
@@ -360,7 +360,7 @@ export const api = {
     get<MailConversation>('/api/mail/thread', mailbox ? { thread, mailbox } : { thread }, signal),
   /** The reader's own press on mail in their inbox. `actions`: what landed, for Undo. */
   changeMail: (change: MailChange) => post<{ actions: number[]; missed: number }>('/api/mail/change', change),
-  /** Whether Sift keeps a copy of the person's mail, for Inbox, and how far back. */
+  /** Whether Mild keeps a copy of the person's mail, for Inbox, and how far back. */
   setMail: (on: boolean, window?: ManageState['mailWindow']) => post('/api/mail/on', window ? { on, window } : { on }),
   /** What copying the mail for each window would take, from Gmail's counts. */
   mailReach: (signal: AbortSignal) => get<MailReach>('/api/mail/reach', {}, signal),
@@ -403,7 +403,7 @@ const makeClient = (): QueryClient => {
     defaultOptions: {
       queries: {
         staleTime: 5000,
-        // Unreachable is retried for as long as it takes; a query waits, paused, while offline. Anything Sift answered will not change by asking again.
+        // Unreachable is retried for as long as it takes; a query waits, paused, while offline. Anything Mild answered will not change by asking again.
         retry: (_, error) => error instanceof Unreachable,
       },
     },
@@ -420,7 +420,7 @@ let browserClient: QueryClient | undefined;
  */
 export const queryClientFor = (): QueryClient => (environmentManager.isServer() ? makeClient() : (browserClient ??= makeClient()));
 
-/** False while sift cannot be reached. */
+/** False while Mild cannot be reached. */
 export function useOnline(): boolean {
   return useSyncExternalStore(
     (changed) => onlineManager.subscribe(changed),
@@ -444,7 +444,7 @@ export interface Loaded<T> {
 
 /**
  * Load `fetcher` now, again whenever `key` changes, every `refreshMs` while the tab is visible, when the
- * tab is returned to and when sift comes back after being unreachable. Views that share a `key` share
+ * tab is returned to and when Mild comes back after being unreachable. Views that share a `key` share
  * one request. A failed refresh keeps the last good data on screen and reports the error beside it.
  * Narrowed to the `Mailbox` it is drawn under, or to `mailbox` (`''` for all of them), and loaded again for another.
  */

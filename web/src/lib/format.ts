@@ -2,7 +2,7 @@ import type { FactFilter, RuleFacts, RuleMatch, StageKey } from './api.ts';
 import type { LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME } from '../../../src/triage/types.ts';
 
 /**
- * The dashboard's words. Each thing sift says about mail has exactly one name, used in every stamp,
+ * The dashboard's words. Each thing Mild says about mail has exactly one name, used in every stamp,
  * filter, select and column; sentences use the matching phrase from `willBe`. Add a word here, never in a view.
  */
 
@@ -13,7 +13,7 @@ export const TIERS: { key: StageKey; name: string; color: string }[] = [
   { key: 'model', name: 'Model', color: 'var(--tier-model)' },
   { key: 'fallback', name: 'Undecided', color: 'var(--tier-fallback)' },
 ];
-/** What became of the mail sift handled in a day, for Activity's chart, bottom to top. */
+/** What became of the mail Mild handled in a day, for Activity's chart, bottom to top. */
 export const HANDLED = [
   { key: 'changed', name: 'Changed in Gmail', color: 'var(--handled-changed)' },
   { key: 'left', name: 'Left alone', color: 'var(--handled-left)' },
@@ -26,7 +26,7 @@ export const labelSeries = (name: string) => [
 export const tier = (key: string) => TIERS.find((t) => t.key === key) ?? { key, name: key, color: 'var(--muted-foreground)' };
 
 /**
- * How sure sift is of a label, in three steps for a meter. Full means Sift does it by itself while it is on,
+ * How sure Mild is of a label, in three steps for a meter. Full means Mild does it by itself while it is on,
  * which for a model's label alone takes 0.9 (`SURE`, src/triage/stages/model.ts). Mail it would ask about is
  * never full, however sure the model was.
  */
@@ -35,7 +35,7 @@ export function sureness({ confidence, disposition }: { confidence: number | nul
   return confidence !== null && confidence >= 0.7 ? 2 : 1;
 }
 
-/** What a label can be set to do, and so what sift does with mail. The same word whether it is suggested, done or a setting. */
+/** What a label can be set to do, and so what Mild does with mail. The same word whether it is suggested, done or a setting. */
 export const ACTIONS = [
   ['keep', 'Keep'],
   ['archive', 'Archive'],
@@ -61,12 +61,12 @@ export const inboxFirst = (labels: Iterable<readonly [string, string]>): (readon
 
 /**
  * What mail is and what happens to it, in the words every list uses: "Archive", or "Leave in inbox" for mail
- * Sift leaves where it is without a label (Leave in inbox itself, or a rule that only keeps).
+ * Mild leaves where it is without a label (Leave in inbox itself, or a rule that only keeps).
  */
 export const doesName = (labelId: string | null, disposition: string) =>
   labelId === INBOX || (labelId === null && disposition === 'keep') ? INBOX_NAME : outcomeName(disposition);
 
-/** `review`: no tier was sure which label, so sift leaves the message alone and asks. Not a failure, so never drawn as one. */
+/** `review`: no tier was sure which label, so Mild leaves the message alone and asks. Not a failure, so never drawn as one. */
 const OUTCOMES: Record<string, string> = { ...Object.fromEntries(ACTIONS), review: 'Unlabelled' };
 export const outcomeName = (key: string) => OUTCOMES[key] ?? key;
 
@@ -94,7 +94,7 @@ export const willBe = (key: string) => WILL[key] ?? key;
 export const MADE_BY = [
   ['user', 'You'],
   ['correction', 'Your answers'],
-  ['learned', 'Sift, when it blocked them'],
+  ['learned', 'Mild, when it blocked them'],
 ] as const;
 export const madeBy = (source: string) => MADE_BY.find(([key]) => key === source)?.[1] ?? source;
 
@@ -208,7 +208,7 @@ export function ago(ms: number): string {
 export const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /**
- * What a rule can ask of what sift recorded about a message, each answer with its words after "mail that".
+ * What a rule can ask of what Mild recorded about a message, each answer with its words after "mail that".
  * The same answers and words as `RULE_FACTS` (src/triage/facts.ts); tests/facts.test.ts holds them together.
  */
 export const FACTS = {
@@ -226,7 +226,7 @@ export const FACTS = {
   ],
   bulkService: [
     [true, 'was sent through a bulk mail service'],
-    [false, 'was sent through no bulk mail service Sift knows'],
+    [false, 'was sent through no bulk mail service Mild knows'],
   ],
   dmarc: [
     ['pass', 'passed DMARC'],
@@ -355,7 +355,7 @@ export function describeMatch(match: RuleMatch): string {
 
 /** How the owner and a sender (or a domain) know each other, as pointing at its icon says it. */
 export const CONTACT_SAYS = {
-  new: 'The first time Sift has seen them',
+  new: 'The first time Mild has seen them',
   mutual: 'You have written to them',
   'one-way': 'They write often and you have never written back',
 } as const;
@@ -375,7 +375,7 @@ export const STANDINGS = [
   ['blocked', 'Block', 'Blocked'],
 ] as const;
 
-// Mail no tier could place is left in the inbox with Sift's own Gmail label: what Sift did there is ask.
+// Mail no tier could place is left in the inbox with Mild's own Gmail label: what Mild did there is ask.
 const DID: Record<string, string> = {
   archive: 'Archived',
   digest: 'Put in the digest',

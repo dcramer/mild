@@ -18,7 +18,7 @@ export default write({
   ),
   /**
    * `replaced`: a rule with exactly these conditions was there and now says this, so removing it would not put things back.
-   * `filter`: the Gmail filter the rule can also be, to offer next; null when it cannot be one, already has one, or Sift is off.
+   * `filter`: the Gmail filter the rule can also be, to offer next; null when it cannot be one, already has one, or Mild is off.
    */
   reply: z.object({ id: z.string(), replaced: z.boolean(), redecided: z.number(), filter: RuleFilter.nullable() }),
   touches: self,

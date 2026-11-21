@@ -111,7 +111,7 @@ describe('sending', () => {
   it('is only for someone with Inbox on, from a mailbox Google let send, as one of its own addresses', async () => {
     await expect(send()).rejects.toThrow('Turn Inbox on');
     await setMail(db, true);
-    await expect(send()).rejects.toThrow('Google has not let Sift send');
+    await expect(send()).rejects.toThrow('Google has not let Mild send');
     await setCanSend(db, ACCOUNT, true);
     await expect(send(ID, { from: { address: 'someone@example.com' } })).rejects.toThrow('is not an address of');
     expect(gmail.asked('users.messages.send')).toEqual([]);
@@ -263,13 +263,13 @@ describe('from the dashboard', () => {
     const call = await start();
     expect(await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi' })).toMatchObject({
       status: 409,
-      body: { error: 'Turn Inbox on to send mail from Sift.' },
+      body: { error: 'Turn Inbox on to send mail from Mild.' },
     });
     await setMail(db, true);
-    expect((await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi' })).body).toEqual({ error: `Google has not let Sift send from ${ACCOUNT}.` });
+    expect((await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi' })).body).toEqual({ error: `Google has not let Mild send from ${ACCOUNT}.` });
     await setCanSend(db, ACCOUNT, true);
     expect((await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi', to: [{ address: 'Ada <ada@example.com>' }] })).body).toEqual({
-      error: '"Ada <ada@example.com>" is not an address Sift can send to.',
+      error: '"Ada <ada@example.com>" is not an address Mild can send to.',
     });
     expect((await call('POST', '/api/mail/send', { ...NEW, subject: 'Hi', to: [] })).body).toEqual({ error: 'Say who the mail is to.' });
     expect(gmail.sent()).toEqual([]);

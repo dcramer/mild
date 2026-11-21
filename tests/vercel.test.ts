@@ -28,28 +28,28 @@ vi.mock('../src/sift/flow.ts', () => ({
 const SET_UP = {
   DATABASE_URL: 'postgres://nobody@db.invalid/sift',
   REDIS_URL: 'redis://redis.invalid',
-  SIFT_GOOGLE_CLIENT_ID: 'id',
-  SIFT_GOOGLE_CLIENT_SECRET: 'secret',
-  SIFT_SESSION_SECRET: 'synthetic-session',
+  MILD_GOOGLE_CLIENT_ID: 'id',
+  MILD_GOOGLE_CLIENT_SECRET: 'secret',
+  MILD_SESSION_SECRET: 'synthetic-session',
   CRON_SECRET: 'synthetic-cron',
   VERCEL_URL: 'sift-abc123.vercel.app',
   VERCEL_BRANCH_URL: 'sift-git-main.vercel.app',
   VERCEL_PROJECT_PRODUCTION_URL: 'sift.example.com',
-  SIFT_URL: 'https://mail.example.org',
+  MILD_URL: 'https://mail.example.org',
 };
 
 beforeEach(() => vi.stubEnv('VERCEL', '1'));
 
-/** A new Vercel instance of a project that is set up: Sift's modules loaded afresh, and nothing of the last kept in the process. */
+/** A new Vercel instance of a project that is set up: Mild's modules loaded afresh, and nothing of the last kept in the process. */
 async function instance(over: Record<string, string> = {}) {
-  for (const [name, value] of Object.entries({ ...SET_UP, SIFT_HOME: tempDir(), ...over })) vi.stubEnv(name, value);
+  for (const [name, value] of Object.entries({ ...SET_UP, MILD_HOME: tempDir(), ...over })) vi.stubEnv(name, value);
   deploy.begun = [];
   vi.resetModules();
   delete (globalThis as Record<symbol, unknown>)[Symbol.for('sift.host')];
   return await import('../src/sift/instance.ts');
 }
 
-/** `vercel.json`: what Vercel does without sift seeing the request. */
+/** `vercel.json`: what Vercel does without Mild seeing the request. */
 const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string }[] };
 /** Next.js's own routes under `/api/` (`app/api/`), by path. */
 const ownRoutes = globSync('app/api/*/route.ts').map((file) => `/${file.replace(/^app\//, '').replace(/\/route\.ts$/, '')}`);
@@ -79,7 +79,7 @@ describe('the Vercel host', () => {
   });
 
   it('until it is set up, says to whoever opens it every variable still missing, before opening anything', async () => {
-    vi.stubEnv('SIFT_HOME', tempDir());
+    vi.stubEnv('MILD_HOME', tempDir());
     const missing = async () => {
       const reply = await respond(new Request('https://sift.example.com/api/session'));
       expect(reply.status).toBe(503);
@@ -88,9 +88,9 @@ describe('the Vercel host', () => {
     const given = {
       DATABASE_URL: 'postgres://nobody@db.invalid/sift',
       REDIS_URL: 'redis://redis.invalid',
-      SIFT_GOOGLE_CLIENT_ID: 'id',
-      SIFT_GOOGLE_CLIENT_SECRET: 'secret',
-      SIFT_SESSION_SECRET: 'synthetic',
+      MILD_GOOGLE_CLIENT_ID: 'id',
+      MILD_GOOGLE_CLIENT_SECRET: 'secret',
+      MILD_SESSION_SECRET: 'synthetic',
     };
     expect(await missing()).toEqual([...Object.keys(given), 'CRON_SECRET']);
     for (const [name, value] of Object.entries(given)) vi.stubEnv(name, value);
@@ -116,9 +116,9 @@ describe('a Vercel instance of a project that is set up', () => {
     expect((await at('sift.example.net')).status).toBe(403);
   });
 
-  it('is opened at the production domain when SIFT_URL does not say', async () => {
+  it('is opened at the production domain when MILD_URL does not say', async () => {
     deploy.store = (await onePerson(ACCOUNT)).store;
-    const { respond } = await instance({ SIFT_URL: '' });
+    const { respond } = await instance({ MILD_URL: '' });
     const reply = await respond(new Request('https://sift.example.com/api/session', { headers: { host: 'sift.example.com' } }));
     expect(await reply.json()).toMatchObject({ addresses: ['https://sift.example.com'] });
   });
@@ -129,7 +129,7 @@ describe('a Vercel instance of a project that is set up', () => {
     const request = () => new Request('https://sift.example.com/api/session', { headers: { host: 'sift.example.com' } });
     // Its words name the database: they go to Sentry, never the page.
     const failed = await respond(request());
-    expect([failed.status, await failed.json()]).toEqual([500, { error: 'Sift could not do that.' }]);
+    expect([failed.status, await failed.json()]).toEqual([500, { error: 'Mild could not do that.' }]);
     deploy.store = (await onePerson(ACCOUNT)).store;
     expect((await respond(request())).status).toBe(200);
   });
@@ -148,7 +148,7 @@ describe('a Vercel instance of a project that is set up', () => {
     expect(deploy.begun).toEqual(due.map((piece) => [piece, runKey(piece)]));
   });
 
-  it("does a Workflow run's piece with the instance's own Sift", async () => {
+  it("does a Workflow run's piece with the instance's own Mild", async () => {
     const { store, db } = await onePerson(ACCOUNT);
     deploy.store = store;
     await recordSync(db, ACCOUNT, [facts({ messageId: 'waiting', receivedAt: 0 })], '1', 0);

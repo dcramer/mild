@@ -78,7 +78,7 @@ describe('making a rule', () => {
 });
 
 describe('a rule as a Gmail filter', () => {
-  it('is written to Gmail only with Sift on, taken out again, and goes with its rule', async () => {
+  it('is written to Gmail only with Mild on, taken out again, and goes with its rule', async () => {
     const { box, me } = await waiting();
     const { id } = (await me.call('POST', '/api/rules', { match: { from: [NEWS] }, label: 'receipts' })).body as { id: string };
     expect((await me.call('POST', '/api/rules/filter', { id, on: true })).status).toBe(409);
@@ -88,7 +88,7 @@ describe('a rule as a Gmail filter', () => {
     const on = await me.call('POST', '/api/rules/filter', { id, on: true });
     expect(on).toMatchObject({ status: 200, body: { filterId: box.filters[0]?.id, filter: { state: 'active' } } });
     expect(box.filters).toEqual([
-      { id: expect.any(String), criteria: { from: NEWS }, action: { addLabelIds: [box.labelId('sift/receipts')], removeLabelIds: ['INBOX'] } },
+      { id: expect.any(String), criteria: { from: NEWS }, action: { addLabelIds: [box.labelId('mild/receipts')], removeLabelIds: ['INBOX'] } },
     ]);
     expect(await rulesOf(me)).toMatchObject([{ id, filterId: box.filters[0]!.id }]);
 
@@ -109,7 +109,7 @@ describe('a rule as a Gmail filter', () => {
     vi.setSystemTime(Date.now() + FILTER_CHECK_MINUTES * 60_000);
     await me.call('POST', '/api/check', {});
     await sift.work();
-    expect(box.filters).toEqual([{ id: expect.any(String), criteria: { from: NEWS }, action: { addLabelIds: [box.labelId('sift/receipts')] } }]);
+    expect(box.filters).toEqual([{ id: expect.any(String), criteria: { from: NEWS }, action: { addLabelIds: [box.labelId('mild/receipts')] } }]);
   });
 
   it('is refused when Gmail refuses it, with nothing recorded, and written when tried again', async () => {
@@ -169,11 +169,11 @@ describe('applying a rule to the inbox', () => {
     expect(box.asked('users.messages.list')).toHaveLength(searched);
 
     expect((await me.call('POST', '/api/rules/apply', { id })).status).toBe(200);
-    expect(await me.call('POST', '/api/rules/apply', { id })).toMatchObject({ status: 409, body: { error: 'Sift is already applying this rule.' } });
+    expect(await me.call('POST', '/api/rules/apply', { id })).toMatchObject({ status: 409, body: { error: 'Mild is already applying this rule.' } });
     await sift.work();
     await sift.tick();
     for (const message of [before, after])
-      expect(box.message(message)!.labelIds).toEqual(['UNREAD', box.labelId('sift/receipts'), box.labelId('sift/did/archived')]);
+      expect(box.message(message)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts'), box.labelId('mild/did/archived')]);
   });
 
   it('changes nothing in Gmail once stopped', async () => {
@@ -189,7 +189,7 @@ describe('applying a rule to the inbox', () => {
 });
 
 describe('a rule drafted by the model', () => {
-  it('is filled in from the person’s words and the senders Sift has recorded, and makes nothing', async () => {
+  it('is filled in from the person’s words and the senders Mild has recorded, and makes nothing', async () => {
     const model = fauxModel();
     const { me } = await waiting(model);
     const blank = { facts: [], label: '', onlyOnceLabelled: false, when: '', markRead: false, unsubscribe: false, note: '', name: '' };
@@ -214,8 +214,8 @@ describe('a rule drafted by the model', () => {
   });
 });
 
-describe('a rule Sift proposes from answers', () => {
-  /** Two of `NEWS`'s mail the model read as Receipts, answered as staying in the inbox: a run Sift proposes a rule from. */
+describe('a rule Mild proposes from answers', () => {
+  /** Two of `NEWS`'s mail the model read as Receipts, answered as staying in the inbox: a run Mild proposes a rule from. */
   async function proposed() {
     const ready = await waiting();
     const second = ready.box.deliver({ from: `News <${NEWS}>`, subject: 'Next week' });

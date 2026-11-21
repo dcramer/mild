@@ -17,10 +17,10 @@ export async function status(): Promise<void> {
     if (error instanceof DatabaseInUse) return error;
     throw error;
   });
-  // PGlite is one process's alone: while sift runs, what it has recorded is in its dashboard.
+  // PGlite is one process's alone: while mild runs, what it has recorded is in its dashboard.
   if (store instanceof DatabaseInUse) {
     ui.heading('status', paint.path(config.home));
-    ui.info(`Sift is running (process ${store.pid}) with the database open. See the dashboard.`);
+    ui.info(`Mild is running (process ${store.pid}) with the database open. See the dashboard.`);
     ui.blank();
     return;
   }
@@ -49,7 +49,7 @@ export async function status(): Promise<void> {
     ['Rules', plural(await total(rules), 'rule')],
   ]);
   ui.blank();
-  if (!ready) ui.warn(`Setup is not finished. Run ${paint.cmd('sift init')}.`);
+  if (!ready) ui.warn(`Setup is not finished. Run ${paint.cmd('mild init')}.`);
   secrets();
   if (!ready || !config.keys.current) ui.blank();
   await store.close();

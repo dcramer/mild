@@ -19,7 +19,7 @@ export function ContactHint({ contact, said }: { contact: Contact; said?: boolea
   return <Hint icon={CONTACT_ICONS[contact]} says={CONTACT_SAYS[contact]} tone={contact === 'new' ? 'look' : 'plain'} said={said ?? false} />;
 }
 
-/** What sift's rules say about a sender, one per line. */
+/** What Mild's rules say about a sender, one per line. */
 function Rules({ rules }: { rules: SenderProfile['rules'] }) {
   return (
     <ul className="flex flex-col gap-1">
@@ -50,7 +50,7 @@ function Rules({ rules }: { rules: SenderProfile['rules'] }) {
 }
 
 /**
- * What sift knows about a sender or a domain, as facts: how much they send and what it is, whether the owner writes to
+ * What Mild knows about a sender or a domain, as facts: how much they send and what it is, whether the owner writes to
  * them, their domain and the rules about them. A preview (`card`) leaves out the rules and the domain; their own page
  * (`page`) says those, and how they know each other, elsewhere, and how much they sent lately here.
  */

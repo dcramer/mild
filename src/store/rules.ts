@@ -11,7 +11,7 @@ import type { Given } from '../triage/standing.ts';
 import { Refusal } from '../refusal.ts';
 import { plain } from '../plain.ts';
 
-/** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: sift made it when it blocked the sender. */
+/** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: Mild made it when it blocked the sender. */
 type RuleSource = (typeof RULE_SOURCES)[number];
 
 interface StoredRule extends Rule {
@@ -80,7 +80,7 @@ function leaveInInbox<T extends RuleSays>(rule: T): T {
   return { ...rest, labelId: LEAVE_IN_INBOX } as T;
 }
 
-/** Throws, with a sentence for the user, unless `rule` says something sift can act on with the person's labels. */
+/** Throws, with a sentence for the user, unless `rule` says something Mild can act on with the person's labels. */
 async function check(db: Sql, rule: RuleSays): Promise<void> {
   if (rule.labelId === undefined && rule.whenLabel === undefined && rule.disposition === undefined)
     throw new Refusal('A rule needs a label, an action, or both.');
@@ -180,7 +180,7 @@ export async function setRule(db: Sql, match: RuleMatch, says: RuleSays, source:
   return existing.id;
 }
 
-/** Whatever sift was proposing for this mail, in any mailbox, is settled by the user saying what it is. */
+/** Whatever Mild was proposing for this mail, in any mailbox, is settled by the user saying what it is. */
 async function settleProposals(db: Sql, match: RuleMatch, now: number): Promise<void> {
   await db
     .update(proposals)

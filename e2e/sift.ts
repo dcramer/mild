@@ -10,12 +10,12 @@ import { FakeGoogle } from '../tests/google.ts';
 const SCRIPTS = resolve(import.meta.dirname, '../.claude/skills/verify-sift/scripts');
 export const SEED = join(SCRIPTS, 'seed.ts');
 /** The environment variable, one per variant, global setup leaves each seeded home's place and cookie in. */
-export const TEMPLATES = 'SIFT_E2E_TEMPLATE';
+export const TEMPLATES = 'MILD_E2E_TEMPLATE';
 /** Where global setup leaves what the `full` seed holds encrypted, decrypted (`heldValues`, e2e/held.ts). */
-export const HELD = 'SIFT_E2E_HELD';
+export const HELD = 'MILD_E2E_HELD';
 /**
  * `full` is verify-sift's seed (its SKILL.md says what is in it); `bare` leaves the work mailbox without labels, so the page is the setting-up steps;
- * `on` has had a pass with Sift on (`--on` in the seed); `chatgpt` reaches its model through a ChatGPT plan; `inbox` has Inbox on, with the
+ * `on` has had a pass with Mild on (`--on` in the seed); `chatgpt` reaches its model through a ChatGPT plan; `inbox` has Inbox on, with the
  * text of the inbox's mail, and may send from its first mailbox (`--inbox`).
  */
 export type Variant = 'full' | 'bare' | 'on' | 'chatgpt' | 'inbox';
@@ -70,7 +70,7 @@ async function start(variant: Variant, cloud: boolean, listing: boolean, sentry:
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          SIFT_CLOUD: String(cloud),
+          MILD_CLOUD: String(cloud),
           ...(sentry ? { SENTRY_DSN: SENTRY_DSN } : {}),
         },
         // A group of its own, with the Next.js server it starts, to end together.
@@ -81,7 +81,7 @@ async function start(variant: Variant, cloud: boolean, listing: boolean, sentry:
     const started = await new Promise<boolean>((ready, fail) => {
       const read = (chunk: Buffer) => {
         log += chunk.toString();
-        if (log.includes('Sift is running on the seeded home')) ready(true);
+        if (log.includes('Mild is running on the seeded home')) ready(true);
       };
       child.stdout.on('data', read);
       child.stderr.on('data', read);
@@ -129,11 +129,11 @@ export const test = base.extend<{
   sift: Awaited<ReturnType<typeof start>>;
 }>({
   variant: ['full', { option: true }],
-  /** `SIFT_CLOUD`: a Sift run as a service. False is someone's own copy. */
+  /** `MILD_CLOUD`: a Mild run as a service. False is someone's own copy. */
   cloud: [false, { option: true }],
   /** The inbox also holding 1,200 of the Store's sales, and Gmail never answering a search's second page, so applying a rule to them goes on until stopped. */
   listing: [false, { option: true }],
-  /** A visitor nobody is signed in as, on a Sift that can sign them in. */
+  /** A visitor nobody is signed in as, on a Mild that can sign them in. */
   signedOut: [false, { option: true }],
   /** Sending to Sentry, at `SENTRY_DSN`: the page's reports are the test's to catch (`page.route`), and the server's go nowhere. */
   sentry: [false, { option: true }],
@@ -288,7 +288,7 @@ export const settings = (page: Page) => page.getByRole('dialog', { name: 'Settin
 /** Settings' Active section: This browser has a Turn on and Turn off of its own, for keyboard shortcuts. */
 export const settingsActive = (page: Page) => section(settings(page), 'Active');
 
-/** The question Turn on asks in Settings before Sift changes anything in Gmail. */
+/** The question Turn on asks in Settings before Mild changes anything in Gmail. */
 export const turnOnQuestion = (page: Page) => settingsActive(page).getByRole('group', { name: 'Archive, label and mark spam on new mail by itself?' });
 
 export const goThrough = (page: Page) => page.getByRole('dialog', { name: 'Go through your inbox?' });
@@ -313,7 +313,7 @@ export async function confirmTurnOn(page: Page) {
   await turnOnQuestion(page).getByRole('button', { name: 'Turn on', exact: true }).click();
 }
 
-/** Opens Settings, turns Sift on and says Not now to going through the inbox. */
+/** Opens Settings, turns Mild on and says Not now to going through the inbox. */
 export async function turnOn(page: Page) {
   await page.goto('/?settings=1');
   await confirmTurnOn(page);
@@ -335,7 +335,7 @@ export async function writeLabel(page: Page, name: string) {
 }
 
 /** The first step of setting up a mailbox: its heading, and the box its words go in. */
-export const WANT = 'What do you want from Sift?';
+export const WANT = 'What do you want from Mild?';
 
 /** Setting up, asks for labels for `words`, and waits for the step that offers them. */
 export async function suggestLabels(page: Page, words: string) {
@@ -391,7 +391,7 @@ export const settingsInbox = (page: Page) => section(settings(page), 'Inbox');
 /** The dialog that asks how far back Inbox keeps the mail: turning it on, or Change… while it is. */
 export const mailWindow = (page: Page) => page.getByRole('dialog', { name: /^Keep how much/ });
 
-/** Inbox's search, which looks through all the mail Sift keeps. */
+/** Inbox's search, which looks through all the mail Mild keeps. */
 export const inboxSearch = (page: Page) => page.getByRole('searchbox', { name: 'Search mail' });
 
 /** Inbox's rows, each a conversation with a check to select it. Not on a phone, which has no checks. */
@@ -401,7 +401,7 @@ export const inboxRows = (page: Page) => page.getByRole('row').filter({ has: pag
 export const inboxRow = (page: Page, subject: string) =>
   page.getByRole('row').filter({ has: page.getByRole('checkbox', { name: `Select ${subject}`, exact: true }) });
 
-/** A rule Sift proposes, as a row at the top of Inbox, by its words. */
+/** A rule Mild proposes, as a row at the top of Inbox, by its words. */
 export const proposedRule = (page: Page, words: string) =>
   page
     .getByRole('row')

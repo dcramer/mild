@@ -8,7 +8,7 @@ export default function GlobalError({ error }: { error: unknown }) {
   return (
     <html lang="en" className={`dark ${wordmark.variable} ${display.variable} ${text.variable} ${mono.variable}`}>
       <body>
-        <title>Sift</title>
+        <title>Mild</title>
         <Failed error={error} />
       </body>
     </html>

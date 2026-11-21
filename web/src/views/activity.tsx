@@ -26,7 +26,7 @@ import { usePlan } from '@/components/model-connect.tsx';
 import { costName } from '@/lib/prices.ts';
 
 const PAGE = 50;
-/** What the list shows. Changed: what sift did, or tried to do, in Gmail. Everything adds suggestions and mail left alone. */
+/** What the list shows. Changed: what Mild did, or tried to do, in Gmail. Everything adds suggestions and mail left alone. */
 const VIEWS = [
   ['', 'Changed'],
   ['all', 'Everything'],
@@ -54,7 +54,7 @@ export function ActivityPeriod() {
   );
 }
 
-/** What Sift took out of the inbox in the period, and from which labels; and who it unsubscribed from. Nothing when it did neither. */
+/** What Mild took out of the inbox in the period, and from which labels; and who it unsubscribed from. Nothing when it did neither. */
 function Saved({ saved, days }: { saved: Summary['saved']; days: Days }) {
   if (saved.messages === 0 && saved.unsubscribed.senders === 0) return null;
   return (
@@ -92,7 +92,7 @@ function Saved({ saved, days }: { saved: Summary['saved']; days: Days }) {
   );
 }
 
-/** What sift did to mail, by day, newest first, with a way to undo it. `loading` stands in for the rows until they come. */
+/** What Mild did to mail, by day, newest first, with a way to undo it. `loading` stands in for the rows until they come. */
 export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
   const plan = usePlan();
@@ -154,7 +154,7 @@ export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
         panel: (
           <>
             <FilterGroup label="Label" value={label} options={[['', 'Any'] as const, null, ...inboxFirst(labels)]} onChange={narrow('label')} />
-            <FilterGroup label="What Sift saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={narrow('fact')} />
+            <FilterGroup label="What Mild saw" value={fact} options={FACT_FILTER_OPTIONS} onChange={narrow('fact')} />
           </>
         ),
       }}
@@ -197,7 +197,7 @@ export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
           {search !== '' || fact !== '' || label !== ''
             ? 'Nothing matches.'
             : view === ''
-              ? 'Sift has changed nothing in Gmail in this period.'
+              ? 'Mild has changed nothing in Gmail in this period.'
               : 'Nothing in this period.'}
         </Empty>
       ) : (

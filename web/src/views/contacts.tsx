@@ -24,7 +24,7 @@ function Standing({ contact }: { contact: Contact }) {
   return contact.rules > 0 ? <span className="text-muted-foreground">{plural(contact.rules, 'rule')}</span> : null;
 }
 
-/** What Sift does with their next mail, as their page says it. */
+/** What Mild does with their next mail, as their page says it. */
 const Next = ({ contact }: { contact: Contact }) => (
   <>
     {contact.next.usually ? <span className="text-muted-foreground">Usually </span> : null}

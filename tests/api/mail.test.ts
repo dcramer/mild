@@ -269,7 +269,7 @@ describe('sending mail', () => {
   });
   const mail = (id: string, more: Record<string, unknown> = {}) => ({ ...written(id), subject: 'Friday', ...more });
 
-  /** `withInbox`, with Google letting Sift send from the mailbox. */
+  /** `withInbox`, with Google letting Mild send from the mailbox. */
   async function canSend() {
     const ready = await withInbox();
     await ready.me.signIn(ME, { send: true });
@@ -306,13 +306,13 @@ describe('sending mail', () => {
     const { box, me } = await withInbox();
     expect(await me.call('POST', '/api/mail/send', mail('<a.1@example.org>'))).toMatchObject({
       status: 409,
-      body: { error: `Google has not let Sift send from ${ME}.` },
+      body: { error: `Google has not let Mild send from ${ME}.` },
     });
     await me.signIn(ME, { send: true });
     await me.call('POST', '/api/mail/on', { on: false });
     expect(await me.call('POST', '/api/mail/send', mail('<a.1@example.org>'))).toMatchObject({
       status: 409,
-      body: { error: 'Turn Inbox on to send mail from Sift.' },
+      body: { error: 'Turn Inbox on to send mail from Mild.' },
     });
     expect(box.asked('users.messages.send')).toEqual([]);
   });
@@ -359,7 +359,7 @@ describe('sending mail', () => {
 });
 
 describe('asking Inbox in words', () => {
-  it('turns the words into a filter on the list, naming only senders Sift has recorded', async () => {
+  it('turns the words into a filter on the list, naming only senders Mild has recorded', async () => {
     const model = fauxModel();
     const { sift, box, me } = await withInbox(model);
     box.deliver({ from: 'Vendor <billing@vendor.example.com>', subject: 'Your invoice' });

@@ -1,7 +1,7 @@
 import { within } from '../telemetry.ts';
 import { Refusal } from '../refusal.ts';
 /**
- * What sift keeps only briefly and shares between every request and piece of work: sign-ins in progress, which pass
+ * What Mild keeps only briefly and shares between every request and piece of work: sign-ins in progress, which pass
  * holds a mailbox, Gmail quota, how the last pass went. Every key expires. Losing any of it costs a retry,
  * never part of the record, which is the database's alone (docs/runtime.md).
  */
@@ -77,7 +77,7 @@ interface Bucket {
 const MINUTE_MS = 60_000;
 
 /**
- * One process's memory. Right only while a single process uses it: `sift run` without Redis. Lost on
+ * One process's memory. Right only while a single process uses it: `mild run` without Redis. Lost on
  * restart, which the rule above allows.
  */
 export function memoryEphemeral(now: () => number = Date.now): Ephemeral {

@@ -105,7 +105,7 @@ describe('unsubscribe', () => {
     expect(await unsubscribe(deps(), ACCOUNT, 'versioned')).toMatchObject({ status: 'done' });
   });
 
-  it('cut short by sift stopping, is settled as unknown and waits a week like a failure, never taken as done', async () => {
+  it('cut short by Mild stopping, is settled as unknown and waits a week like a failure, never taken as done', async () => {
     await message('m', { ...ONE_CLICK, ...PROVEN });
     const { mailbox, gmail } = connectGmail(fake.google);
     gmail.deliver({ id: 'm', from: 'news@example.com', labelIds: ['INBOX'] });
@@ -152,7 +152,7 @@ describe('unsubscribe', () => {
     const later = () => (clock += RETRY_AFTER_MS + 1);
     status = 302;
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'failed', reason: expect.stringContaining('redirect') });
-    // sift calls this for every message from the sender; it does not try a failing address again straight away.
+    // Mild calls this for every message from the sender; it does not try a failing address again straight away.
     expect(await unsubscribe(deps(), ACCOUNT, 'm')).toMatchObject({ status: 'refused', reason: expect.stringContaining('failed recently') });
     expect(posts).toHaveLength(1);
 

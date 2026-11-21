@@ -16,7 +16,7 @@ const filter = async (page: Page, choice: string) => {
 };
 
 test.describe('Contacts', () => {
-  test('lists everyone who writes, newest first, with what Sift does with their next mail, the reader’s answers counted', async ({ page }) => {
+  test('lists everyone who writes, newest first, with what Mild does with their next mail, the reader’s answers counted', async ({ page }) => {
     await page.goto('/contacts');
     await expect(page.getByRole('heading', { name: 'Contacts', level: 1 })).toBeVisible();
     await expect(sections(page).getByRole('link', { name: 'Contacts' })).toHaveAttribute('aria-current', 'page');
@@ -24,7 +24,7 @@ test.describe('Contacts', () => {
     await expect(contacts(page).first()).toContainText('Weekly Digest');
     await expect(contact(page, 'Weekly Digest')).toContainText('Archive as Newsletters');
     await expect(contact(page, 'Weekly Digest')).toContainText('1 rule');
-    // Answered as Receipts and kept: that, and not Sift's own Unlabelled.
+    // Answered as Receipts and kept: that, and not Mild's own Unlabelled.
     await expect(contact(page, 'Utility')).toContainText('Keep as Receipts');
     await expect(contact(page, 'Dependabot')).toContainText('Usually Archive as Notifications');
     // Mail the person wrote is theirs, not a contact's.
@@ -126,7 +126,7 @@ test.describe('Contacts', () => {
   test.describe('On a phone', () => {
     test.use({ viewport: PHONE });
 
-    test('a contact is their name, address and what Sift does, and the list fits the screen', async ({ page }) => {
+    test('a contact is their name, address and what Mild does, and the list fits the screen', async ({ page }) => {
       await page.goto('/contacts');
       const ada = contact(page, 'Ada Lovelace');
       await expect(ada).toContainText('ada@example.org');
@@ -141,7 +141,7 @@ test.describe('Contacts', () => {
       await path(page).toBe(senderPage('ada@example.org'));
     });
 
-    test("a contact's page is one column: what Sift does with their mail, then their mail", async ({ page }) => {
+    test("a contact's page is one column: what Mild does with their mail, then their mail", async ({ page }) => {
       await page.goto(senderPage('ada@example.org'));
       const next = await boxOf(page.getByText('Their next mail', { exact: true }));
       const mail = await boxOf(page.getByRole('heading', { name: 'Their mail' }));

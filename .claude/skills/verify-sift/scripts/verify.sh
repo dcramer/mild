@@ -52,14 +52,14 @@ case "$cmd" in
     node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" "$dir/google.json" $variant $scale > "$dir/cookie"
     port="$(node -e 'const s=require("node:net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
     echo "$port" > "$dir/port"
-    # The real app on this home, as `sift run` starts it, with the fake Google and a stand-in model (stand-ins.ts says
+    # The real app on this home, as `mild run` starts it, with the fake Google and a stand-in model (stand-ins.ts says
     # what they answer) and no minute's tick, on a build of the code as it is now: Next.js's cache makes that seconds.
     cd "$ROOT"
     pnpm -s build:web > "$dir/build.log" 2>&1 || { tail -20 "$dir/build.log" >&2; exit 1; }
     nohup node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/serve.ts" "$dir/home" "$port" "$dir/google.json" $listing > "$dir/dashboard.log" 2>&1 &
     echo $! > "$dir/pid"
     for _ in $(seq 1 240); do
-      grep -q 'Sift is running on the seeded home' "$dir/dashboard.log" 2>/dev/null && break
+      grep -q 'Mild is running on the seeded home' "$dir/dashboard.log" 2>/dev/null && break
       kill -0 "$(cat "$dir/pid")" 2>/dev/null || { cat "$dir/dashboard.log" >&2; exit 1; }
       sleep 0.5
     done

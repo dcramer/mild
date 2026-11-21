@@ -5,7 +5,7 @@ import { useStale } from '@/lib/build.ts';
 import { goToQuery } from '@/lib/params.ts';
 import { LinkPending } from './loading-bar.tsx';
 
-/** Paths Sift's server answers itself (the API, signing in); a link to one loads it. */
+/** Paths Mild's server answers itself (the API, signing in); a link to one loads it. */
 const SERVER = /^\/(api|auth)(\/|$)/;
 
 /** A link to this page with another query (a name on its sender's page), which only narrows what it shows. */
@@ -18,7 +18,7 @@ const plainPress = (event: MouseEvent) => event.button === 0 && !event.metaKey &
  * page again, and fetches the screen ahead from the build's files: only the frame around it is drawn per request
  * (`app/(dashboard)/layout.tsx`); while one it had not fetched is on its way, the `LoadingBar` runs. A link that only changes the query (`?settings=1`) opens what it names over the
  * page, and Back closes it, without asking the server for anything. Anything else is a plain link. A press with a
- * modifier key, or on a link that opens a new tab, is the browser's. Once Sift has been updated under the page (`useStale`),
+ * modifier key, or on a link that opens a new tab, is the browser's. Once Mild has been updated under the page (`useStale`),
  * a link to a screen loads it whole. `replace`: the screen takes the place of the history entry the page is on.
  */
 export function Anchor({ href, onClick, replace, children, ...props }: ComponentProps<'a'> & { href: string; replace?: boolean }) {

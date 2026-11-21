@@ -5,7 +5,7 @@ export const HIGHLIGHT_TOOL = 'record_highlights';
 /** At most this many are worth a look: more, and the digest is the inbox again. */
 export const MAX_HIGHLIGHTS = 5;
 
-/** Its reason is printed under Sift's name, so it is a line, not a paragraph. */
+/** Its reason is printed under Mild's name, so it is a line, not a paragraph. */
 const MAX_WHY = 140;
 
 /** One message in the digest, as its headers say. The model is never shown a body. */
@@ -61,7 +61,7 @@ export function buildHighlightPrompt(input: HighlightInput): string {
   ].join('\n');
 }
 
-/** A link, an address, or a domain: what the digest must never print under Sift's name on a model's word. */
+/** A link, an address, or a domain: what the digest must never print under Mild's name on a model's word. */
 const LINKISH = /:\/\/|www\.|@|\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}\b/i;
 
 /**

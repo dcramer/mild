@@ -147,10 +147,10 @@ interface ContactFilter {
 const MONTH_MS = 30 * DAY_MS;
 
 /**
- * Everyone the person has mail from in the scope's mailboxes, newest first, with what Sift does with their next mail,
+ * Everyone the person has mail from in the scope's mailboxes, newest first, with what Mild does with their next mail,
  * where they stand and how they and the person know each other. Senders are found only by keyed hash, so a rule is
  * matched to them by hashing what it names, and a name or address is read only for the page shown, or for everyone
- * when searching. Mail the person sent from Sift, which is recorded too, is theirs and not a contact's.
+ * when searching. Mail the person sent from Mild, which is recorded too, is theirs and not a contact's.
  */
 export async function listContacts(db: Sql, scope: Scope, filter: ContactFilter, now: number): Promise<ContactPage> {
   if (scope.accounts.length === 0) return { total: 0, rows: [] };

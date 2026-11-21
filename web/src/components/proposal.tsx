@@ -4,7 +4,7 @@ import type { Suggestions } from '@/lib/api.ts';
 import { count, outcomeName } from '@/lib/format.ts';
 import { reveal } from '@/lib/reveal.ts';
 
-/** A rule Sift proposes: where the person keeps doing something other than what a label does. */
+/** A rule Mild proposes: where the person keeps doing something other than what a label does. */
 export type Proposal = Suggestions['proposals'][number];
 
 /** What the user has been doing to a label's mail, and what the label does instead: "You kept the last 2, but the label archives them". */
@@ -30,6 +30,6 @@ export function ProposalWords({ proposal }: { proposal: Proposal }) {
   );
 }
 
-/** Why Sift proposes it. */
+/** Why Mild proposes it. */
 export const proposalWhy = (proposal: Proposal) =>
   `You ${USER_DID[proposal.disposition]?.(count(proposal.agreed))}, but the label ${LABEL_DOES[proposal.labelDisposition]}.`;

@@ -4,7 +4,7 @@ import { stripVTControlCharacters, styleText } from 'node:util';
 import { ask, readLine, suspendReader } from './terminal.ts';
 
 /**
- * How sift looks in a terminal. The same language as the dashboard: plain ink, quiet secondary
+ * How Mild looks in a terminal. The same language as the dashboard: plain ink, quiet secondary
  * text, and one colour, a yellow highlighter, kept for the name and for what needs the reader.
  * Red is only for failures. Colour and motion switch off by themselves when output is not a
  * terminal (`styleText` honours NO_COLOR, FORCE_COLOR and pipes), so everything here still reads as plain text.
@@ -56,7 +56,7 @@ const TEXT = '    ';
 /** The wordmark, then what this screen is. */
 function heading(title: string, detail?: string): void {
   line();
-  line(`${PAD}${paint.mark(' sift ')} ${pc.bold(title)}${detail ? `  ${pc.dim(detail)}` : ''}`);
+  line(`${PAD}${paint.mark(' mild ')} ${pc.bold(title)}${detail ? `  ${pc.dim(detail)}` : ''}`);
   line();
 }
 

@@ -56,7 +56,7 @@ const refusedBy = (error: z.ZodError) => {
 };
 
 /**
- * A reply that does not match its route's schema is sift's own mistake: it is not sent, since what it
+ * A reply that does not match its route's schema is Mild's own mistake: it is not sent, since what it
  * would send is not what the page was promised.
  */
 const replied = (schema: z.ZodType, body: unknown): { status: number; body: unknown } => {
@@ -100,13 +100,13 @@ export interface DashboardOptions {
   ephemeral?: Ephemeral;
   /** Addresses Google can sign the user in at, to suggest when they opened the dashboard at one it cannot. */
   signInAddresses?: readonly string[];
-  /** `SIFT_CLOUD`: this Sift is a service for other people, with terms, a privacy policy and a security page. */
+  /** `MILD_CLOUD`: this Mild is a service for other people, with terms, a privacy policy and a security page. */
   cloud?: boolean;
-  /** Which build of the page this server came with (`SIFT_BUILD`, next.config.js), for a page left open across an update to notice. */
+  /** Which build of the page this server came with (`MILD_BUILD`, next.config.js), for a page left open across an update to notice. */
   build?: string | null;
-  /** What the dashboard can ask the rest of sift to do. Without it the page can look but not manage. */
+  /** What the dashboard can ask the rest of Mild to do. Without it the page can look but not manage. */
   controls?: Controls;
-  /** Where an error goes that is Sift's own, not a `Refusal`: the page is told only that something failed. */
+  /** Where an error goes that is Mild's own, not a `Refusal`: the page is told only that something failed. */
   log?: (line: string) => void;
   now?: () => number;
 }
@@ -123,7 +123,7 @@ const SESSION_DAYS = 30;
 const DEVICE_DAYS = 400;
 /** A device's id, as the server makes it. */
 const DEVICE_ID = /^[0-9a-f]{32}$/;
-/** A session in use is issued again once this old, so someone who opens Sift within the month is never signed out. */
+/** A session in use is issued again once this old, so someone who opens Mild within the month is never signed out. */
 const RENEW_MS = 86_400_000;
 const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64url');
 
@@ -165,16 +165,16 @@ const cookie = (request: Request, name: string) =>
 const hostname = (host: string | null | undefined) => (host ?? '').replace(/:\d+$/, '').toLowerCase();
 
 /**
- * The dashboard: where the user watches sift, teaches it and manages it.
+ * The dashboard: where the user watches Mild, teaches it and manages it.
  *
  * Who may use it: someone signed in with Google as a connected account. That one sign-in is also what
- * gives sift its access to the account. Requests must be addressed to localhost or one of this
+ * gives Mild its access to the account. Requests must be addressed to localhost or one of this
  * machine's own names (which stops another website reaching it through DNS rebinding), and every write
  * must come from the dashboard's own page. The page's static files, its app manifest and service worker
  * among them, are public, hold no data and are served by the adapter; everything under `/api/` needs the
  * session.
  *
- * What it may do: change what sift has been taught and how it is set up. It never reaches Gmail itself;
+ * What it may do: change what Mild has been taught and how it is set up. It never reaches Gmail itself;
  * the few things that do (signing in, undo, reading the inbox) are handed in and audited as usual.
  */
 export function createDashboard(people: People, options: DashboardOptions = {}): Dashboard {
@@ -196,7 +196,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     if (error instanceof Refusal) return { status: 409, error: error.message };
     report(request, error);
     reportError(error);
-    return { status: 500, error: 'Sift could not do that. Why is in its log.' };
+    return { status: 500, error: 'Mild could not do that. Why is in its log.' };
   };
   /**
    * A write must come from the dashboard's own page: a browser sends Origin on every cross-site request, and another site
@@ -240,7 +240,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     // The Host header, not the URL: a `node:http` adapter cannot always build a URL from it.
     const hostHeader = request.headers.get('host');
     if (!answers(hostHeader)) {
-      return new Response('The Sift dashboard does not answer to this address. Set SIFT_URL to it.', {
+      return new Response('The Mild dashboard does not answer to this address. Set MILD_URL to it.', {
         status: 403,
         headers: { 'content-type': 'text/plain' },
       });
@@ -307,7 +307,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       );
     }
     if (signIn && method === 'GET' && url.pathname === '/auth/login') {
-      // Letting Sift send is for a mailbox of whoever is signed in.
+      // Letting Mild send is for a mailbox of whoever is signed in.
       const send = query.get('grant') === 'send' ? (query.get('mailbox') ?? '') : null;
       if (!signIn.hasClient() || !googleCanReturnHere || (send !== null && !person?.accounts.includes(send))) return redirect('/');
       const state = randomBytes(16).toString('hex');
@@ -338,7 +338,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       if (!same(cookie(request, 'sift_signin') ?? '', state)) return fail('That sign-in was started in another browser. Start it again here.');
       // A mailbox joins whoever started adding it, so that person must still be the one signed in here.
       if (entry.addTo !== null && session !== entry.addTo) return fail('Sign in again, then add the mailbox.');
-      if (entry.send !== null && !person?.accounts.includes(entry.send)) return fail('Sign in again, then let Sift send.');
+      if (entry.send !== null && !person?.accounts.includes(entry.send)) return fail('Sign in again, then let Mild send.');
       if (!code) return fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
       try {
         const email = await signIn.complete(entry.redirectUri, code, entry.verifier, entry.addTo, entry.send);
@@ -348,7 +348,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         // A mailbox added joins whoever is signed in, who stays signed in as themselves, back in Settings where they added it.
         // One already someone else's never changes hands, and signing in as them instead is not what was asked.
         if (entry.addTo !== null)
-          return who.id === person?.id ? redirect('/?settings=1', signInCookie('', 0)) : fail(`${email} is already connected to Sift by someone else.`);
+          return who.id === person?.id ? redirect('/?settings=1', signInCookie('', 0)) : fail(`${email} is already connected to Mild by someone else.`);
         return redirect(entry.to, sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
       } catch (error) {
         if (error instanceof Refusal) return fail(error.message);

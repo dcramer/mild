@@ -36,8 +36,8 @@ function Happened({ row, stacked, labelled }: { row: DecisionRow; stacked?: bool
 }
 
 /**
- * What sift did to mail, newest first, under a heading for each day: who, the subject, what happened and
- * when. Undo where sift changed something. A row opens the message. `labelled` when every row is one label,
+ * What Mild did to mail, newest first, under a heading for each day: who, the subject, what happened and
+ * when. Undo where Mild changed something. A row opens the message. `labelled` when every row is one label,
  * so no row names it.
  */
 export function MailLog({

@@ -66,7 +66,7 @@ export function DiscardButton({ onClick }: { onClick: () => void }) {
 }
 
 /**
- * In a draft's place, what has to be allowed before it can be written (Google letting Sift send from a mailbox): what
+ * In a draft's place, what has to be allowed before it can be written (Google letting Mild send from a mailbox): what
  * is missing, as a name, and one line on how it is put right. The press that does it goes with the draft's actions.
  */
 export function DraftBlocked({ title, children }: { title: string; children: ReactNode }) {

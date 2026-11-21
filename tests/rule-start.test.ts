@@ -36,7 +36,7 @@ describe('where each way into the rule dialog starts it', () => {
     expect(proposalStart({ from: ['x@example.com'] }, 'unsure', 'review')).toMatchObject({ action: 'keep' });
   });
 
-  it("starts a message's Make a rule on its sender and the label sift gave it, if any", () => {
+  it("starts a message's Make a rule on its sender and the label Mild gave it, if any", () => {
     expect(messageStart('ada@example.org', 'personal')).toEqual({ conditions: [{ by: 'from', value: 'ada@example.org' }], facts: [], label: 'personal' });
     expect(messageStart('ada@example.org', null)).toEqual({ conditions: [{ by: 'from', value: 'ada@example.org' }], facts: [] });
   });
@@ -95,7 +95,7 @@ describe('where each way into the rule dialog starts it', () => {
     );
   });
 
-  it('starts keeping mail that is what sift says, as a rule that waits for its label', () => {
+  it('starts keeping mail that is what Mild says, as a rule that waits for its label', () => {
     expect(keepStart('x@example.com', 'marketing')).toEqual({
       conditions: [{ by: 'from', value: 'x@example.com' }],
       facts: [],

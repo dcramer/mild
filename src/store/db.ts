@@ -13,7 +13,7 @@ import type { Driver } from './sql.ts';
 // Not `new URL('./migrations/', import.meta.url)`: Next.js's bundler takes that for one file to bundle.
 export const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 
-/** Postgres sends 64-bit integers and `numeric` (what `sum()` of one gives) as text; sift's are small enough for a number. */
+/** Postgres sends 64-bit integers and `numeric` (what `sum()` of one gives) as text; Mild's are small enough for a number. */
 const { INT8, NUMERIC } = types.builtins;
 types.setTypeParser(INT8, Number);
 types.setTypeParser(NUMERIC, Number);
@@ -21,23 +21,23 @@ export const PARSERS = { [INT8]: Number, [NUMERIC]: Number };
 
 /**
  * Where the database is: a Postgres server, or PGlite in a folder of the home directory. `migrateWith`:
- * the same server as the role that owns the tables. sift migrates as it, lets the role in `url` act as
+ * the same server as the role that owns the tables. Mild migrates as it, lets the role in `url` act as
  * sift_app, and then runs as that role, which owns nothing and so cannot change the tables or their policies.
  */
 export type Where = { url: string; migrateWith?: string } | { dir: string };
 
 /**
- * On a server, `warning` is set when the role sift runs as could pass row-level security; with
+ * On a server, `warning` is set when the role mild runs as could pass row-level security; with
  * `migrateWith` set, such a role is refused instead. PGlite is not checked: it runs inside this process as
  * its superuser, with no other role to connect as, and whoever could run a statement on it could read its
- * folder anyway. sift's own queries still become sift_app there, so the policies hold them.
+ * folder anyway. Mild's own queries still become sift_app there, so the policies hold them.
  */
 export async function openDatabase(where: Where): Promise<Driver> {
   if ('url' in where) {
     const owner = new Pool({ connectionString: verified(where.migrateWith ?? where.url) });
     let bypass: string | null = null;
     try {
-      await refuseForeign(async (text) => (await owner.query<Record<string, unknown>>(text)).rows, 'Give Sift an empty database.');
+      await refuseForeign(async (text) => (await owner.query<Record<string, unknown>>(text)).rows, 'Give Mild an empty database.');
       await migratePg(overPg(owner), { migrationsFolder: MIGRATIONS });
       if (where.migrateWith) {
         const role = decodeURIComponent(new URL(where.url).username);
@@ -48,14 +48,14 @@ export async function openDatabase(where: Where): Promise<Driver> {
       throw error;
     }
     if (!where.migrateWith) {
-      const warning = `${bypass}, so row-level security does not hold Sift. Set DATABASE_MIGRATION_URL to that role, and DATABASE_URL to one that owns nothing.`;
+      const warning = `${bypass}, so row-level security does not hold Mild. Set DATABASE_MIGRATION_URL to that role, and DATABASE_URL to one that owns nothing.`;
       return bypass ? { ...server(owner), warning } : server(owner);
     }
     await owner.end();
     const pool = new Pool({ connectionString: verified(where.url) });
     try {
       bypass = await roleBypass(async (text) => (await pool.query<Record<string, unknown>>(text)).rows);
-      if (bypass) throw new Error(`${bypass}, so row-level security would not hold Sift. Give DATABASE_URL a role that owns nothing and cannot bypass it.`);
+      if (bypass) throw new Error(`${bypass}, so row-level security would not hold Mild. Give DATABASE_URL a role that owns nothing and cannot bypass it.`);
     } catch (error) {
       await pool.end();
       throw error;
@@ -65,7 +65,7 @@ export async function openDatabase(where: Where): Promise<Driver> {
   const release = lock(where.dir);
   const file = new PGlite(where.dir, { parsers: PARSERS });
   try {
-    await refuseForeign(async (text) => (await file.query<Record<string, unknown>>(text)).rows, 'Run sift reset-db to move it aside and start a new one.');
+    await refuseForeign(async (text) => (await file.query<Record<string, unknown>>(text)).rows, 'Run mild reset-db to move it aside and start a new one.');
     await migratePglite(overPglite(file), { migrationsFolder: MIGRATIONS });
   } catch (error) {
     await file.close();
@@ -79,7 +79,7 @@ export async function openDatabase(where: Where): Promise<Driver> {
 /**
  * pg 8 treats `sslmode` `prefer`, `require` and `verify-ca` as `verify-full`, with a warning that pg 9 will
  * give them libpq's meaning, under which `require` (what Neon's addresses carry) checks no certificate.
- * Asking for `verify-full` by name keeps what sift has now through that upgrade. An address that opts into
+ * Asking for `verify-full` by name keeps what Mild has now through that upgrade. An address that opts into
  * libpq's meaning (`uselibpqcompat`) is left as it is.
  */
 export function verified(url: string): string {
@@ -104,11 +104,11 @@ export async function roleBypass(query: (text: string) => Promise<Record<string,
   return reason && `The database role ${String(row!['role'])} ${reason}`;
 }
 
-/** Another sift process has the database open. */
+/** Another Mild process has the database open. */
 export class DatabaseInUse extends Error {
   readonly pid: number;
   constructor(pid: number) {
-    super(`Another Sift (process ${pid}) has the database open. Stop it first, or use the dashboard it serves.`);
+    super(`Another Mild (process ${pid}) has the database open. Stop it first, or use the dashboard it serves.`);
     this.pid = pid;
   }
 }
@@ -148,7 +148,7 @@ function lock(dir: string): () => void {
   return release;
 }
 
-/** Move a PGlite folder aside, so the next open makes a new one. Refused while a sift has it open. Returns where it went. */
+/** Move a PGlite folder aside, so the next open makes a new one. Refused while a Mild has it open. Returns where it went. */
 export function moveAside(dir: string): string {
   const release = lock(dir);
   const to = `${dir}.${new Date().toISOString().replaceAll(':', '-')}`;
@@ -217,7 +217,7 @@ function server(pool: Pool): Driver {
 
 /**
  * Throws unless every migration the database has had is one of this build's. One made after our newest
- * means a newer sift opened it, and older code would misread it. Any other is from before the migrations
+ * means a newer Mild opened it, and older code would misread it. Any other is from before the migrations
  * were last started over: Drizzle compares only when each was made, so it would run ours again over the
  * tables already there. `fresh` says how to start over.
  */
@@ -230,8 +230,8 @@ async function refuseForeign(query: (text: string) => Promise<Record<string, unk
   const foreign = (await query('SELECT hash, created_at FROM drizzle.__drizzle_migrations')).filter((row) => !known.has(String(row['hash'])));
   if (foreign.some((row) => Number(row['created_at']) > latest))
     throw new Error(
-      'This database was last opened by a newer Sift, with migrations this version does not have. Upgrade Sift, or restore a backup from before the upgrade.',
+      'This database was last opened by a newer Mild, with migrations this version does not have. Upgrade Mild, or restore a backup from before the upgrade.',
     );
   if (foreign.length)
-    throw new Error(`This database was made by an earlier Sift whose migrations have since been replaced, so it cannot be brought up to date. ${fresh}`);
+    throw new Error(`This database was made by an earlier Mild whose migrations have since been replaced, so it cannot be brought up to date. ${fresh}`);
 }

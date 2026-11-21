@@ -84,7 +84,7 @@ describe('what the model suggests', () => {
 
 describe('asking for labels', () => {
   async function person() {
-    const store = await freshStore(loadKeyring({ SIFT_KEY: 'proposal-key' }));
+    const store = await freshStore(loadKeyring({ MILD_KEY: 'proposal-key' }));
     return await store.user(await connectAccount(store, ACCOUNT, '1', 0));
   }
   const usage = { model: 'p/m', inputTokens: 10, outputTokens: 20, costUsd: 0.01 };

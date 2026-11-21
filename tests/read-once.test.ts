@@ -129,7 +129,7 @@ describe('with Inbox off, each message is read from Gmail once', () => {
 });
 
 describe('applying a rule to mail already there', () => {
-  it('reads from Gmail only mail Sift never recorded, once, however often it is looked at', async () => {
+  it('reads from Gmail only mail Mild never recorded, once, however often it is looked at', async () => {
     gmail.gmail.deliver(mail('seen', 'News <news@example.com>'));
     await runOnce(db, options());
     for (const [id, from, hoursAgo] of [
@@ -190,7 +190,7 @@ describe('counts only Gmail knows', () => {
   it('are asked of it once in five minutes, however often a page opens on them', async () => {
     gmail.gmail.deliver(mail('news', 'News <news@example.com>'));
     const rule = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    const config = loadConfig({ SIFT_HOME: tempDir() });
+    const config = loadConfig({ MILD_HOME: tempDir() });
     installClient(config, JSON.stringify({ web: { client_id: SECRETS.clientId, client_secret: SECRETS.clientSecret } }));
     await (await credentials(db, 'gmail')).write(ACCOUNT, fake.google.grant(ACCOUNT));
     const controls = await buildControls(config, { ephemeral: memoryEphemeral(), deviceId: 'device', kick: async () => {} });

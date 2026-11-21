@@ -12,17 +12,17 @@ export interface FilterProposal {
   action: {
     addLabelIds?: string[];
     removeLabelIds?: string[];
-    /** Present only so validation can reject it. sift never forwards mail. */
+    /** Present only so validation can reject it. Mild never forwards mail. */
     forward?: string;
   };
   /**
-   * The conditions on what sift found in the message, of the rule the filter is made for. Present only so
+   * The conditions on what Mild found in the message, of the rule the filter is made for. Present only so
    * validation can reject them: a filter without them would match more mail than the rule does.
    */
   facts?: RuleFacts;
 }
 
-/** A filter as it stands in Gmail, with every criterion and action Gmail reports, not only the ones sift writes. */
+/** A filter as it stands in Gmail, with every criterion and action Gmail reports, not only the ones Mild writes. */
 export interface ExistingFilter {
   id: string;
   criteria: Record<string, string | number | boolean>;
@@ -59,7 +59,7 @@ export function validateFilter(filter: FilterProposal): string[] {
   const { criteria, action } = filter;
 
   if (action.forward !== undefined) problems.push('forwarding filters are never allowed');
-  if (filter.facts && Object.values(filter.facts).some((v) => v !== undefined)) problems.push('Gmail cannot match what Sift found in a message');
+  if (filter.facts && Object.values(filter.facts).some((v) => v !== undefined)) problems.push('Gmail cannot match what Mild found in a message');
 
   const positive = [criteria.from, criteria.to, criteria.subject, criteria.query].filter((v) => v !== undefined && v.trim() !== '');
   if (positive.length === 0) problems.push('criteria must include at least one of from, to, subject or query');

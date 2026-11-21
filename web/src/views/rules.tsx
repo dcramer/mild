@@ -65,7 +65,7 @@ export function AddRule() {
   );
 }
 
-/** Everything sift knows without asking a model: the user's rules and the ones it learned. `loading` stands in for the rows until they come. */
+/** Everything Mild knows without asking a model: the user's rules and the ones it learned. `loading` stands in for the rows until they come. */
 export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
   const plan = usePlan();

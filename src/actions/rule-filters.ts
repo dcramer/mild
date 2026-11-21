@@ -74,7 +74,7 @@ export async function writeRuleFilter(deps: ActionDeps, ruleId: string, accountI
 
 /**
  * How many times in a row a filter change the user asked for is sent to Gmail. The press said when it did not
- * take; Gmail failing is almost always passing, so Sift asks again rather than leave the rule marked.
+ * take; Gmail failing is almost always passing, so Mild asks again rather than leave the rule marked.
  */
 const FILTER_TRIES = 3;
 
@@ -98,7 +98,7 @@ export async function filterRetries(db: Sql, accountId: string): Promise<{ ruleI
   return due;
 }
 
-/** Ask Gmail again for each of `filterRetries`. Only while Sift is on, as writing a filter needs. */
+/** Ask Gmail again for each of `filterRetries`. Only while Mild is on, as writing a filter needs. */
 export async function retryRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
   await settleRuleFilters(deps, accountId);
   for (const { ruleId, add, tries } of await filterRetries(deps.db, accountId)) {
@@ -173,10 +173,10 @@ export const openFilterChanges = (db: Sql, accountId: string) =>
     .orderBy(asc(actions.id));
 
 /**
- * Settle the account's filter changes that were never read back (Gmail errored after the call, or sift
+ * Settle the account's filter changes that were never read back (Gmail errored after the call, or Mild
  * stopped), by finding them in Gmail. A filter that landed goes on its rule if the rule has none and still
  * asks for exactly it; otherwise it is taken out, since a filter with no rule keeps acting on mail with
- * nothing in sift to show or remove it. An action stays open until that is done, so it is tried again.
+ * nothing in Mild to show or remove it. An action stays open until that is done, so it is tried again.
  */
 async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<void> {
   const open = await openFilterChanges(deps.db, accountId);
@@ -220,14 +220,14 @@ async function settleRuleFilters(deps: ActionDeps, accountId: string): Promise<v
 export interface FilterCheck {
   /** Filters the user deleted in Gmail. */
   gone: number;
-  /** Filters the user edited in Gmail. sift leaves them as they are. */
+  /** Filters the user edited in Gmail. Mild leaves them as they are. */
   changed: number;
   /** Filters that no longer did what their rule says. Replaced or removed when fixing, only marked otherwise. */
   outdated: number;
 }
 
 /**
- * Compare the filters sift wrote with what Gmail holds now, and record on each rule what was found.
+ * Compare the filters Mild wrote with what Gmail holds now, and record on each rule what was found.
  * A filter whose rule has since changed would keep doing what the rule used to say, so when `fix` is
  * set it is replaced, or removed if the rule can no longer be a filter. Counts are of what changed
  * since the last check. Null when the account has no such rules, in which case Gmail is asked only if a

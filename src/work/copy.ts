@@ -54,7 +54,7 @@ async function recorded(db: Sql, accountId: string, ids: readonly string[]) {
 /**
  * Go on copying one mailbox for Inbox, a page of Gmail's listing at a time, newest first, starting nothing after `until`.
  * Each message new to the record is read whole once (60 units) and recorded with its text, never triaged (`recordKept`);
- * one recorded without its text has the text read, unless Sift read it in the last month. What is in the inbox and recorded is left to the pass, which keeps its
+ * one recorded without its text has the text read, unless Mild read it in the last month. What is in the inbox and recorded is left to the pass, which keeps its
  * text newest first too (`keepMailBodies`), so the two never read the same message. First it counts what the listing holds
  * by listing it, for how far it has got. A page cut short is listed again and what it recorded is passed over, so a crash
  * or a failed step loses nothing. Stops once Inbox is off: every write checks.
