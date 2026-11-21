@@ -320,7 +320,7 @@ test.describe('Who sent it is a link wherever it is named', () => {
 
   test('the sender in a rule For review offers goes to the sender', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('listitem').filter({ hasText: 'Make a rule…' }).getByRole('link', { name: 'billing@utility.example.net' }).click();
+    await page.getByRole('row').filter({ hasText: 'Make a rule…' }).getByRole('link', { name: 'billing@utility.example.net' }).click();
     await path(page).toBe(senderPage('billing@utility.example.net'));
   });
 });

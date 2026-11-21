@@ -1,5 +1,5 @@
 'use client';
-import { PlusIcon } from 'lucide-react';
+import { PlusIcon, WorkflowIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
@@ -22,7 +22,6 @@ import {
   ListView,
   Meter,
   OnPhone,
-  Sub,
   RowActions,
   Reserve,
   Rope,
@@ -43,26 +42,48 @@ import { reveal } from '@/lib/reveal.ts';
 const UNSURE = '-';
 
 /**
- * A rule worth having: the user keeps doing something other than what a label does to a sender's mail of
- * that label, which the model cannot learn. Nothing changes until the user has seen the rule and said yes.
+ * A rule worth having: the user keeps doing something other than what a label does to a sender's mail of that label,
+ * which the model cannot learn. A row from Sift at the top of the list, its presses out as every row's answer is.
+ * Nothing changes until the user has seen the rule in its dialog and said yes.
  */
 function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
   const { hide } = useAction();
   const [open, setOpen] = useState(false);
   return (
-    <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-      <p className="min-w-0 flex-1 basis-80">
-        <span className="font-semibold">
-          <ProposalWords proposal={proposal} />
-        </span>{' '}
-        <span className="text-muted-foreground">{proposalWhy(proposal)}</span>
-      </p>
-      <span className="flex items-center gap-1.5">
-        <Button onClick={() => setOpen(true)}>Make a rule…</Button>
-        <Button variant="quiet" onClick={() => hide([proposalKey(proposal)], 'Could not dismiss it', () => api.dismissProposal(proposal.id))}>
-          Dismiss
-        </Button>
-      </span>
+    <Tr onOpen={() => setOpen(true)}>
+      <Td className="max-w-0 md:w-[24%] md:min-w-52">
+        <span className="flex items-center gap-1.5 font-semibold text-foreground">
+          <WorkflowIcon aria-hidden className="size-3.5 text-muted-foreground" />
+          Sift
+        </span>
+        <OnPhone>
+          <span className="w-full truncate text-base text-foreground">
+            <ProposalWords proposal={proposal} />
+          </span>
+          <span className="w-full truncate">{proposalWhy(proposal)}</span>
+        </OnPhone>
+      </Td>
+      <Td phone="hide" className="max-w-0 md:w-full">
+        <span className="block truncate">
+          <span className="font-semibold text-foreground">
+            <ProposalWords proposal={proposal} />
+          </span>
+          <span className="text-muted-foreground"> — {proposalWhy(proposal)}</span>
+        </span>
+      </Td>
+      <Td phone="hide" num quiet>
+        {count(proposal.agreed)} in a row
+      </Td>
+      <RowActions>
+        <span className="flex w-60 items-center justify-end gap-1.5">
+          <Button variant="quiet" onClick={() => setOpen(true)}>
+            Make a rule…
+          </Button>
+          <Button variant="quiet" onClick={() => hide([proposalKey(proposal)], 'Could not dismiss it', () => api.dismissProposal(proposal.id))}>
+            Dismiss
+          </Button>
+        </span>
+      </RowActions>
       {open ? (
         <RuleDialog
           labels={labels}
@@ -71,7 +92,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
           onClose={() => setOpen(false)}
         />
       ) : null}
-    </li>
+    </Tr>
   );
 }
 
@@ -117,6 +138,8 @@ function SuggestionRow({
         address={reveal(item.sender)}
         name={reveal(item.senderName)}
         contact={item.contact}
+        line
+        messages={rest.length + 1}
         aside={
           <span className="shrink-0 text-sm text-muted-foreground tabular-nums md:hidden">
             <Arrived at={item.receivedAt} />
@@ -144,17 +167,10 @@ function SuggestionRow({
       </SenderCell>
       {/* What it is about, and as much of what it says as fits: enough to answer without opening it. */}
       <Td phone="hide" className="max-w-0 md:w-full">
-        {folded ? (
-          <>
-            <span className="block truncate">{plural(rest.length + 1, 'message')}</span>
-            <Sub>{subjects}</Sub>
-          </>
-        ) : (
-          <>
-            <span className="block truncate">{reveal(item.subject) || '(no subject)'}</span>
-            {item.preview ? <Sub>{reveal(item.preview)}</Sub> : null}
-          </>
-        )}
+        <span className="block truncate">
+          <span className="font-semibold text-foreground">{folded ? plural(rest.length + 1, 'message') : reveal(item.subject) || '(no subject)'}</span>
+          {folded || item.preview ? <span className="text-muted-foreground"> — {folded ? subjects : reveal(item.preview)}</span> : null}
+        </span>
       </Td>
       <Td phone="hide" num quiet>
         <Arrived at={item.receivedAt} />
@@ -284,13 +300,7 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
       }
     >
       {error ? <ErrorNote message={error} /> : null}
-      {data && proposals.length > 0 ? (
-        <ul className="sheet flex flex-col">
-          {proposals.map((proposal) => (
-            <ProposalRow key={proposal.id} proposal={proposal} labels={data.labels} />
-          ))}
-        </ul>
-      ) : null}
+
       {loading ? (
         loadingRows
       ) : shown.length === 0 ? (
@@ -321,13 +331,20 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
           <Empty>Nothing is waiting on you.</Empty>
         )
       ) : (
-        <Table keys>
+        <Table keys dense>
           <Heads>
             <Th>Sender</Th>
             <Th phone="hide">Subject</Th>
             <Th phone="hide">Received</Th>
             <Th>Label</Th>
           </Heads>
+          {data && proposals.length > 0 ? (
+            <tbody>
+              {proposals.map((proposal) => (
+                <ProposalRow key={proposal.id} proposal={proposal} labels={data.labels} />
+              ))}
+            </tbody>
+          ) : null}
           {periods.map(({ title, rows }) => (
             <tbody key={title ?? ''}>
               {title ? <TrGroup title={title} span={4} /> : null}

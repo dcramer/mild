@@ -180,11 +180,11 @@ test.describe('Inbox', () => {
     await expect(proposal).toHaveCount(0);
   });
 
-  test('Make rule… on a proposed rule opens the rule dialog started on it', async ({ page }) => {
+  test('Make a rule… on a proposed rule opens the rule dialog started on it', async ({ page }) => {
     await page.goto('/inbox');
     const proposal = proposedRule(page, 'Keep Receipts from billing@utility.example.net?');
     await pointAt(proposal);
-    await proposal.getByRole('button', { name: 'Make rule…' }).click();
+    await proposal.getByRole('button', { name: 'Make a rule…' }).click();
     await expect(page.getByRole('dialog', { name: /rule/i })).toBeVisible();
   });
 

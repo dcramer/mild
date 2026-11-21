@@ -5,6 +5,7 @@ import { type Contact, type RuleMatch, type SenderProfile, api, useLoaded } from
 import { CONTACT_SAYS, INBOX, MATCH_WORDS, type Said, count, doesName, factAnswers, factWords, outcomeName, plural, saidOf, shortDate } from '@/lib/format.ts';
 import { Ago, Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td } from '@/system';
 import { reveal } from '@/lib/reveal.ts';
+import { cn } from '@/lib/utils';
 
 /** A sender's page; with `name`, their mail under that name. */
 export const senderHref = (address: string, name?: string | null) => `/sender/${encodeURIComponent(address)}${name ? `?name=${encodeURIComponent(name)}` : ''}`;
@@ -191,13 +192,16 @@ const SENDER_CELL = 'max-w-0 md:w-[24%] md:min-w-52';
 /**
  * The first cell of a row of mail: who sent it, by name and address, since a name alone could be anyone.
  * The same in every list of mail. The address drops on a phone; `aside` ends the name's line there, and
- * `children` go under it (an `OnPhone`). `term` marks a search match.
+ * `children` go under it (an `OnPhone`). `term` marks a search match. `line`: the address after the name on one line,
+ * for a list of one-line rows (For review), with `messages`, how many the row stands for, after it.
  */
 export function SenderCell({
   address,
   name,
   contact,
   term,
+  line = false,
+  messages,
   aside,
   children,
 }: {
@@ -205,28 +209,29 @@ export function SenderCell({
   name: string | null;
   contact?: Contact;
   term?: string;
+  line?: boolean;
+  messages?: number;
   aside?: ReactNode;
   children?: ReactNode;
 }) {
   const marked = (text: string) => <Marked text={text} {...(term ? { term } : {})} />;
+  const at = name ? <SenderLink address={address}>{marked(address)}</SenderLink> : null;
   return (
     <Td className={SENDER_CELL}>
       <span className="flex items-baseline gap-3">
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="name min-w-0 truncate">
+        <span className={cn('flex min-w-0 flex-1 gap-2', line ? 'items-baseline' : 'items-center')}>
+          <span className="name min-w-0 shrink-0 truncate md:max-w-[60%]">
             <SenderLink address={address} name={name}>
               {marked(name ?? address)}
             </SenderLink>
           </span>
           {contact ? <ContactHint contact={contact} /> : null}
+          {line && at ? <span className="hidden min-w-0 truncate text-sm text-muted-foreground md:inline">{at}</span> : null}
+          {messages !== undefined && messages > 1 ? <span className="text-muted-foreground tabular-nums">{messages}</span> : null}
         </span>
         {aside}
       </span>
-      {name ? (
-        <Sub className="hidden md:block">
-          <SenderLink address={address}>{marked(address)}</SenderLink>
-        </Sub>
-      ) : null}
+      {!line && at ? <Sub className="hidden md:block">{at}</Sub> : null}
       {children}
     </Td>
   );
