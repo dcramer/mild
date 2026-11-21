@@ -1,4 +1,6 @@
 import type { Page } from '@playwright/test';
+import { mailDocument } from '../src/dashboard/mail-html.ts';
+import { FRAME_POLICY } from '../src/dashboard/policy.ts';
 import { addRule, makeRule, ruleDialog, rulePanel, writeRule } from './rule.ts';
 import {
   addLabelsDialog,
@@ -108,6 +110,98 @@ test.describe('A message as its HTML', () => {
     expect(card.x + card.width).toBeLessThanOrEqual(paper.x + paper.width);
     await sideScroll(page).toBe(0);
   });
+});
+
+const RELEASE = `/?${messageQuery('m21')}`;
+const RELEASE_SUBJECT = 'Re: Fix the release script (#412)';
+
+/** How far the frame's height is from that of the message in it, asked again until it matches: the frame takes its height once the message has said it. */
+const frameMisfit = (page: Page, subject: string) =>
+  expect.poll(async () =>
+    Math.abs((await boxOf(page.locator(`iframe[title="${subject}"]`))).height - (await boxOf(mailFrame(page, subject).locator('html'))).height),
+  );
+
+test.describe('A message read as part of the page', () => {
+  test('a letter is in the page’s own ink, as tall as it is, with the history it quotes folded behind •••', async ({ page }) => {
+    await page.goto(RELEASE);
+    const frame = mailFrame(page, RELEASE_SUBJECT);
+    await expect(frame.getByText('I pushed a fix for the tag step.')).toBeVisible();
+    await expect(frame.locator('body')).toHaveCSS('color', 'rgb(240, 238, 232)');
+    await expect(frame.locator('html')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(frame.getByRole('link', { name: 'before Friday' })).toBeVisible();
+    const quoted = frame.getByText('The release script stops at the tag step.');
+    await expect(quoted).toBeHidden();
+    await frameMisfit(page, RELEASE_SUBJECT).toBeLessThanOrEqual(1);
+    // Nothing on the page says images were blocked: the letter asked for none.
+    await expect(reader(page).getByText('Remote images are blocked')).toHaveCount(0);
+
+    const closed = await boxOf(page.locator('iframe'));
+    await frame.getByLabel('Show the quoted text').click();
+    await expect(quoted).toBeVisible();
+    await expect(frame.getByLabel('Hide the quoted text')).toBeVisible();
+    await expect.poll(async () => (await boxOf(page.locator('iframe'))).height).toBeGreaterThan(closed.height);
+    await frameMisfit(page, RELEASE_SUBJECT).toBeLessThanOrEqual(1);
+  });
+
+  test('its text folds the same history', async ({ page }) => {
+    await page.goto(RELEASE);
+    const open = reader(page);
+    await open.getByRole('radio', { name: 'Text' }).click();
+    await expect(open.getByText(/^I pushed a fix for the tag step\./)).toBeVisible();
+    await expect(open.getByText(/The release script stops at the tag step\./)).toHaveCount(0);
+    await open.getByRole('button', { name: 'Show the quoted text' }).click();
+    await expect(open.getByText(/> The release script stops at the tag step\./)).toBeVisible();
+    await expect(open.getByRole('button', { name: 'Hide the quoted text' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  test('designed mail is on its paper, as tall as it is, so the page scrolls as one', async ({ page }) => {
+    await page.goto(DEALS);
+    const frame = mailFrame(page, '48 hours only: 30% off');
+    await expect(frame.getByRole('heading', { name: '30% off everything' })).toBeVisible();
+    await expect(frame.locator('html')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await frameMisfit(page, '48 hours only: 30% off').toBeLessThanOrEqual(1);
+  });
+});
+
+/** Ada's reply shown as `html` instead, cleaned and sent as Sift sends any message's frame. */
+const replyAs = (page: Page, html: string) =>
+  page.route('**/api/message/html?**', (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', headers: { 'content-security-policy': FRAME_POLICY }, body: mailDocument(html) }),
+  );
+
+const ASKED = 'Shall we meet at the lake?';
+const REPLIED = 'Works for me.';
+
+test.describe('The history a reply quotes, as each mail program writes it', () => {
+  const folded = {
+    'Outlook on the web': `<div>${REPLIED}</div><div id="appendonsend"></div><hr style="display:inline-block;width:98%"><div id="divRplyFwdMsg"><b>From:</b> Ada<br><b>Sent:</b> Monday</div><div>${ASKED}</div>`,
+    Outlook: `<div class="WordSection1"><p class="MsoNormal">${REPLIED}</p><div style="border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0in 0in 0in"><p class="MsoNormal"><b>From:</b> Ada<br><b>Sent:</b> Monday</p></div><p class="MsoNormal">${ASKED}</p></div>`,
+    'Apple Mail': `<div dir="ltr">${REPLIED}</div><div dir="ltr"><br><blockquote type="cite">On Nov 2, 2026, at 09:14, Ada wrote:<br><br><div>${ASKED}</div></blockquote></div>`,
+    Thunderbird: `<p>${REPLIED}</p><div class="moz-cite-prefix">On 02/11/2026 09:14, Ada wrote:<br></div><blockquote type="cite">${ASKED}</blockquote><br>`,
+  };
+  for (const [program, html] of Object.entries(folded))
+    test(`folds under a reply from ${program}`, async ({ page }) => {
+      await replyAs(page, html);
+      await page.goto(RELEASE);
+      const frame = mailFrame(page, RELEASE_SUBJECT);
+      await expect(frame.getByText(REPLIED)).toBeVisible();
+      await expect(frame.getByText(ASKED)).toBeHidden();
+      await frame.getByLabel('Show the quoted text').click();
+      await expect(frame.getByText(ASKED)).toBeVisible();
+    });
+
+  const open = {
+    'a reply written between the lines it quotes': `<div>On Mon, Ada wrote:</div><blockquote type="cite">Lunch?</blockquote><div>${REPLIED}</div><blockquote type="cite">${ASKED}</blockquote><div>Yes.</div>`,
+    'a forward': `<div dir="ltr">${REPLIED}<br><div class="gmail_quote"><div dir="ltr" class="gmail_attr">---------- Forwarded message ---------<br>From: Ada</div><div>${ASKED}</div></div></div>`,
+  };
+  for (const [kind, html] of Object.entries(open))
+    test(`stays open in ${kind}`, async ({ page }) => {
+      await replyAs(page, html);
+      await page.goto(RELEASE);
+      const frame = mailFrame(page, RELEASE_SUBJECT);
+      await expect(frame.getByText(ASKED)).toBeVisible();
+      await expect(frame.getByLabel('Show the quoted text')).toHaveCount(0);
+    });
 });
 
 test.describe('Who a message went to', () => {

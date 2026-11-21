@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { type MessageDetail, api } from '@/lib/api.ts';
 import { FACTS, type FactAnswer, capitalised, factWords } from '@/lib/format.ts';
 import { type RuleStart, factStart, listStart } from '@/lib/rule-start.ts';
-import { Button, ChoiceGroup, Heads, MailFrame, RowActions, Section, Sub, Table, Td, Th, Tr } from '@/system';
+import { Button, ChoiceGroup, Heads, MailFrame, Quoted, RowActions, Section, Sub, Table, Td, Th, Tr } from '@/system';
+import { splitQuoted } from '@/lib/quoted.ts';
 import { reveal } from '@/lib/reveal.ts';
 
 type View = 'text' | 'html';
@@ -22,9 +23,27 @@ function storedView(): View {
   }
 }
 
+const TEXT = 'text-reading leading-relaxed break-words whitespace-pre-wrap';
+
+/** A message's text, with the history it quotes folded. */
+function Letter({ text }: { text: string }) {
+  const { own, quoted } = splitQuoted(text);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className={TEXT}>{own}</div>
+      {quoted ? (
+        <Quoted>
+          <div className={TEXT}>{quoted}</div>
+        </Quoted>
+      ) : null}
+    </div>
+  );
+}
+
 /** A message as Sift holds it: its HTML when it has one, or its text when it has none or the reader chose text. */
 export function MessageBody({ detail }: { detail: MessageDetail }) {
   const [view, setView] = useState(storedView);
+  const [blocked, setBlocked] = useState(false);
   const html = detail.hasHtml && view === 'html';
   const choose = (next: View | null) => {
     if (!next) return;
@@ -40,11 +59,15 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
       {detail.hasHtml ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />
-          {html ? <p className="text-sm text-muted-foreground">Remote images are blocked</p> : null}
+          {html && blocked ? <p className="text-sm text-muted-foreground">Remote images are blocked</p> : null}
         </div>
       ) : null}
       {html ? (
-        <MailFrame src={api.messageHtml(detail.messageId, detail.accountId)} title={reveal(detail.subject) || '(no subject)'} />
+        <MailFrame
+          src={api.messageHtml(detail.messageId, detail.accountId)}
+          title={reveal(detail.subject) || '(no subject)'}
+          onBlocked={() => setBlocked(true)}
+        />
       ) : detail.body === null ? (
         <p className="text-muted-foreground">
           Sift does not hold this message’s text. It keeps it only while the message waits on you, and for good once you have answered for it.
@@ -52,7 +75,7 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
       ) : reveal(detail.body) === '' ? (
         <p className="text-muted-foreground">This message has no readable text, or is no longer in Gmail.</p>
       ) : (
-        <div className="text-reading leading-relaxed break-words whitespace-pre-wrap">{reveal(detail.body)}</div>
+        <Letter text={reveal(detail.body)} />
       )}
     </div>
   );

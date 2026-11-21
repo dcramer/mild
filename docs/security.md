@@ -53,7 +53,7 @@ Decided 2026-11-16: mail is not sealed to a key only the person's browser holds 
 - **A server under someone else's control.** It holds the key and the credentials, and a Gmail token reads the whole mailbox.
 - **Mail while it is being classified.** Sift reads it from Gmail, and the model provider is sent what the model needs: to judge a message, the message; for a digest, the sender and subject of each message in it.
 - **A digest once it is in Gmail.** It lists the senders and subjects of mail Sift archived, in the person's own mailbox, as Gmail holds any other mail.
-- **Mail being read in the dashboard.** A message shown as its HTML passes through the server on its way to the browser, like the rest of the page's data. The browser shows it in a sandboxed frame that runs no script and loads nothing from anywhere, so opening it tells no sender it was read.
+- **Mail being read in the dashboard.** A message shown as its HTML passes through the server on its way to the browser, like the rest of the page's data. The browser shows it in a sandboxed frame that runs none of the mail's script and loads nothing from anywhere, so opening it tells no sender it was read. The one script the frame runs is Sift's, allowed by its hash: it folds quoted history, fits wide mail to the column and tells the page how tall the message is. The frame has no origin of its own and no network, so a script that got past the cleaner and the policy both could reach neither the dashboard nor anywhere else.
 
 ## What follows from it
 

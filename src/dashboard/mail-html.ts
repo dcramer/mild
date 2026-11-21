@@ -1,3 +1,5 @@
+import { FRAME_SCRIPT } from './frame-script.ts';
+
 /**
  * A message's HTML made fit to show in the dashboard's frame. The frame's own policy is what keeps it
  * harmless (no script runs, nothing loads from elsewhere: `FRAME_HEADERS` in server.ts); this is the second
@@ -188,22 +190,63 @@ export function cleanHtml(html: string): string {
   return out;
 }
 
-/**
- * Under the message's own styles: email is written for white paper, whatever the dashboard's colours. On a
- * frame narrower than mail is written for, a full-width table is laid out to the frame's width rather than its
- * content's, so a 600px card inside it marked `max-width: 100%` shrinks as its sender meant: in a table sized by
- * its content, a percentage resolves against nothing and the card keeps its 600px, wider than a phone.
- */
-const PAPER =
-  '<style>:root{color-scheme:light;background:#fff;color:#000;scrollbar-width:thin}@media (max-width:640px){table[width="100%"]{table-layout:fixed}}</style>';
+/** The dashboard's colours (`--foreground`, `--muted-foreground`, `--border` in web/src/index.css), which the frame cannot read from the page. */
+export const INK = { foreground: '#f0eee8', muted: '#b5b3aa', border: '#2b2b27' };
 
-/** The document the frame shows: the cleaned message, on white. */
+/** Laid out as tall as what it holds, so the frame can be as tall as that: a template's `height: 100%` would be the frame's. */
+const OWN_HEIGHT = 'html,body{height:auto!important;min-height:0!important}';
+
+/** The ••• that history a reply quotes is folded behind (`FRAME_SCRIPT`), drawn as the dashboard's quiet press. */
+const quotePill = (ink: string, rest: string, fill: string) =>
+  `details[data-sift-quote]{margin-top:.5em}details[data-sift-quote]>summary{display:inline-block;list-style:none;cursor:pointer;padding:0 .5em;border-radius:3px;font:600 14px/1.6 ui-sans-serif,system-ui,sans-serif;letter-spacing:.1em;background:transparent!important;color:${rest}!important}details[data-sift-quote]>summary::-webkit-details-marker{display:none}details[data-sift-quote]>summary:hover{background:${fill}!important;color:${ink}!important}details[data-sift-quote]>summary:focus-visible{outline:2px solid ${ink};outline-offset:2px}details[data-sift-quote][open]>summary{margin-bottom:.5em}`;
+
+/**
+ * Mail written as a letter, read as the dashboard's own text: its ink, its size, no box around it. Colours and faces the
+ * letter names are its program's defaults far more often than anyone's choice (Outlook's black Aptos), and black on the
+ * dashboard would not read. The frame loads no font, so the face is the system's, not the dashboard's.
+ */
+const LETTER = `<style>:root{color-scheme:dark;background:transparent;color:${INK.foreground};font:17px/1.625 ui-sans-serif,system-ui,sans-serif;overflow-wrap:break-word}${OWN_HEIGHT}body{margin:0}body *{color:inherit!important;background-color:transparent!important;font-family:inherit!important;border-color:${INK.border}!important}body :is(pre,code,tt,kbd,samp){font-family:ui-monospace,monospace!important}a{text-decoration:underline;text-decoration-color:rgb(240 238 232/.35);text-underline-offset:.2em}a:hover{text-decoration-color:currentColor}body blockquote{margin:0 0 0 .25em!important;padding:0 0 0 1em!important;border-left:2px solid ${INK.border}!important;color:${INK.muted}!important}${quotePill(INK.foreground, 'rgb(240 238 232/.75)', 'rgb(240 238 232/.1)')}</style>`;
+
+/**
+ * Mail with a design of its own, on the white paper it is written for. On a frame narrower than mail is written for, a
+ * full-width table is laid out to the frame's width rather than its content's, so a 600px card inside it marked
+ * `max-width: 100%` shrinks as its sender meant: in a table sized by its content, a percentage resolves against nothing
+ * and the card keeps its 600px. Mail that still does not fit is scaled down by `FRAME_SCRIPT`.
+ */
+const PAPER = `<style>:root{color-scheme:light;background:#fff;color:#000;overflow-wrap:break-word;scrollbar-width:thin}${OWN_HEIGHT}@media (max-width:640px){table[width="100%"]{table-layout:fixed}}${quotePill('#000', 'rgb(0 0 0/.6)', 'rgb(0 0 0/.07)')}</style>`;
+
+const SCRIPT = `<script>${FRAME_SCRIPT}</script>`;
+
+/** A background that leaves the dashboard showing through, or white, which a letter written in Gmail or Outlook sets on itself. */
+const PLAIN_BACKGROUND =
+  /^(?:transparent|none|inherit|initial|unset|white|#fff(?:fff)?|rgba?\(\s*255\s*,\s*255\s*,\s*255\s*(?:,\s*1(?:\.0*)?\s*)?\)|rgba\([^)]*,\s*0\s*\))$/i;
+/** Wider than this, a table or block is a layout, not a letter's paragraph. */
+const LAID_OUT_PX = 400;
+
+/**
+ * Whether cleaned HTML is a letter rather than a design: it has no background but white, no box laid out to a width,
+ * and no styles for screen sizes. A reply written in Gmail, Outlook or Apple Mail is a letter; a newsletter, a receipt
+ * or a notification with its sender's colours is not.
+ */
+export function isLetter(cleaned: string): boolean {
+  if (/@media\b/i.test(cleaned)) return false;
+  for (const [, value = ''] of cleaned.matchAll(/background(?:-color|-image)?\s*:\s*([^;"}]+)/gi)) {
+    const plain = value.replace(/!important/i, '').trim();
+    if (/url\(/i.test(plain) || !PLAIN_BACKGROUND.test(plain)) return false;
+  }
+  for (const [, value = ''] of cleaned.matchAll(/\sbgcolor="([^"]*)"/gi)) if (!PLAIN_BACKGROUND.test(value.trim())) return false;
+  for (const [, value = '0'] of cleaned.matchAll(/\swidth="(\d+)/gi)) if (Number(value) >= LAID_OUT_PX) return false;
+  for (const [, value = '0'] of cleaned.matchAll(/(?:^|[\s;"{])(?:min-|max-)?width\s*:\s*(\d+(?:\.\d+)?)px/gi)) if (Number(value) >= LAID_OUT_PX) return false;
+  return true;
+}
+
+/** The document the frame shows: the cleaned message, as a letter or on paper, with the frame's own script. */
 export function mailDocument(html: string): string {
   const cleaned = cleanHtml(html);
   const doctype = /^\s*<!doctype[^<>]*>/i.exec(cleaned)?.[0] ?? '';
-  return `${doctype.trim()}${PAPER}${cleaned.slice(doctype.length)}`;
+  return `${doctype.trim()}${isLetter(cleaned) ? LETTER : PAPER}${SCRIPT}${cleaned.slice(doctype.length)}`;
 }
 
-/** A sentence in the frame in place of the message. */
+/** A sentence in the frame in place of the message, as the dashboard says one. */
 export const frameNote = (sentence: string) =>
-  `<!doctype html>${PAPER}<style>body{font:15px/1.5 system-ui,sans-serif;color:#555;margin:16px}</style><p>${sentence.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p>`;
+  `<!doctype html>${LETTER}${SCRIPT}<p style="color:${INK.muted}!important;margin:0">${sentence.replaceAll('&', '&amp;').replaceAll('<', '&lt;')}</p>`;

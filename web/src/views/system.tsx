@@ -72,6 +72,7 @@ import {
   Loading,
   LoadingBar,
   MailFrame,
+  Quoted,
   Marked,
   MailboxSwitch,
   Masthead,
@@ -1200,8 +1201,15 @@ export function SystemView() {
           )}
         </Section>
 
-        <Section title="Mail frame" meta="a message as its own HTML, in the reader; this one has nothing to load">
+        <Section title="Mail frame" meta="a message as its own HTML, in the reader; this one has nothing to load, so it scrolls in a frame of its own">
           <MailFrame title="An empty message" />
+        </Section>
+
+        <Section title="Quoted" meta="the history a reply quotes, in a message’s text, folded">
+          <p className="text-reading leading-relaxed">See you at noon.</p>
+          <Quoted>
+            <p className="text-reading leading-relaxed whitespace-pre-wrap">{'On Mon, Ada wrote:\n> Lunch on Thursday?'}</p>
+          </Quoted>
         </Section>
 
         <Section title="Dialog and panel" meta="a form or a question; one item of a list">
