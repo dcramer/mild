@@ -35,6 +35,7 @@ const loadPanels = () => Promise.all([loadSettings(), loadComposer()]);
 const SettingsPanel = dynamic(() => loadPanels().then(([m]) => m.SettingsPanel), { ssr: false });
 const Composer = dynamic(() => loadPanels().then(([, m]) => m.Composer), { ssr: false });
 const MessageReader = dynamic(() => loadReader().then((m) => m.MessageReader), { ssr: false, loading: () => <Loading rows={6} /> });
+const ProposalReader = dynamic(() => import('@/views/proposal.tsx').then((m) => m.ProposalReader), { ssr: false, loading: () => <Loading rows={6} /> });
 
 /** What the reader's Back says, by the section a list is in; a sender's or a domain's page by its address. */
 const LISTS: Record<string, string> = { '': 'For review', inbox: 'Inbox', activity: 'Activity', rules: 'Rules', labels: 'Labels' };
@@ -155,14 +156,18 @@ function Opening() {
  */
 function useStartsOn(inbox: boolean | null) {
   const router = useRouter();
+  const path = usePathname();
   const [start] = useParam('start');
   useEffect(() => {
     if (inbox === null) return;
     keepStart(inbox);
-    if (!start) return;
-    if (inbox) router.replace('/inbox');
-    else setParams({ start: '' });
-  }, [inbox, start, router]);
+    // For review is not a section while Inbox is on: `/` is Inbox, with the rest of its address.
+    if (inbox && path === '/') {
+      const query = new URLSearchParams(window.location.search);
+      query.delete('start');
+      router.replace(`/inbox${query.size > 0 ? `?${query}` : ''}`);
+    } else if (start) setParams({ start: '' });
+  }, [inbox, start, path, router]);
 }
 
 /** While Inbox is on, the copy of it starts as the page does, so it is there before Inbox is opened (docs/sync.md). */
@@ -193,6 +198,8 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   // A conversation, opened on its newest message; the server finds which mailbox holds it, as it does a message.
   const [threadId] = useParam('thread');
   const [compose] = useParam('compose');
+  // A rule Sift proposes, opened from Inbox in its place, as a message is.
+  const [proposal] = useParam('proposal');
   const [to] = useParam('to');
   const listed = list.findIndex((item) => item.messageId === messageId);
   const open =
@@ -257,7 +264,12 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const going = useGoing();
   const fetching = useIsFetching(firstLoad);
   // Inbox is a section only while it is on.
-  const items = SECTIONS.filter((s) => s.to !== 'inbox' || manage.data?.mail).map((s) => ({ ...s, ...(s.to === '' && waiting ? { count: waiting } : {}) }));
+  // For review while Inbox is off, Inbox while it is on: there, what waits on the reader is answered as they handle their mail.
+  const inbox = manage.data?.mail === true;
+  const items = SECTIONS.filter((s) => (s.to === 'inbox' ? inbox : s.to === '' ? !inbox : true)).map((s) => ({
+    ...s,
+    ...(s.to === (inbox ? 'inbox' : '') && waiting ? { count: waiting } : {}),
+  }));
   const notice = !online ? (
     <Notice>Sift cannot be reached</Notice>
   ) : expired.length > 0 ? (
@@ -325,7 +337,10 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
               <BarSlot value={slot}>
                 <main className="pb-16">
                   {/* Kept while the reader is open, as it was, and deaf: its keys and effects stop until it shows again. */}
-                  <Activity mode={open ? 'hidden' : 'visible'}>{children}</Activity>
+                  <Activity mode={open || proposal ? 'hidden' : 'visible'}>{children}</Activity>
+                  {proposal && !open ? (
+                    <ProposalReader id={proposal} onBack={() => (panelEntry() ? window.history.back() : setParams({ proposal: '' }))} />
+                  ) : null}
                   {open ? (
                     <MessageReader
                       key={opened}

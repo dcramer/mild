@@ -3,9 +3,10 @@ import { PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
-import { MatchWords, SenderCell } from '@/components/sender.tsx';
+import { SenderCell } from '@/components/sender.tsx';
+import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { messageKey, proposalKey, useParam } from '@/lib/params.ts';
-import { type SuggestionItem, type Suggestions, api, useLoaded } from '@/lib/api.ts';
+import { type SuggestionItem, api, useLoaded } from '@/lib/api.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
 import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, duration, factFilterName, outcomeName, period, plural, sureness } from '@/lib/format.ts';
 import {
@@ -41,22 +42,6 @@ import { reveal } from '@/lib/reveal.ts';
 
 const UNSURE = '-';
 
-type Proposal = Suggestions['proposals'][number];
-
-/** What the user has been doing to a label's mail, and what the label does instead: "You kept the last 2, but the label archives them". */
-const USER_DID: Record<string, (n: string) => string> = {
-  keep: (n) => `kept the last ${n}`,
-  archive: (n) => `archived the last ${n}`,
-  spam: (n) => `marked the last ${n} as spam`,
-};
-const LABEL_DOES: Record<string, string> = {
-  keep: 'keeps them',
-  archive: 'archives them',
-  digest: 'puts them in the daily digest',
-  spam: 'marks them spam',
-  block: 'marks them spam and blocks the sender',
-};
-
 /**
  * A rule worth having: the user keeps doing something other than what a label does to a sender's mail of
  * that label, which the model cannot learn. Nothing changes until the user has seen the rule and said yes.
@@ -64,16 +49,13 @@ const LABEL_DOES: Record<string, string> = {
 function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
   const { hide } = useAction();
   const [open, setOpen] = useState(false);
-  const n = count(proposal.agreed);
   return (
     <li className="row flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
       <p className="min-w-0 flex-1 basis-80">
         <span className="font-semibold">
-          {outcomeName(proposal.disposition)} {proposal.labelName} <MatchWords match={reveal(proposal.match)} />?
+          <ProposalWords proposal={proposal} />
         </span>{' '}
-        <span className="text-muted-foreground">
-          You {USER_DID[proposal.disposition]?.(n)}, but the label {LABEL_DOES[proposal.labelDisposition]}.
-        </span>
+        <span className="text-muted-foreground">{proposalWhy(proposal)}</span>
       </p>
       <span className="flex items-center gap-1.5">
         <Button onClick={() => setOpen(true)}>Make a rule…</Button>
