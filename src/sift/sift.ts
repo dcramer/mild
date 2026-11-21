@@ -130,19 +130,23 @@ export async function createSift(host: Host): Promise<Sift> {
     connect: async (db, account) => await gmailFor(config, ephemeral, db, account.email),
   };
   const { begin } = host;
+  // Each piece is begun beside the others, under keys of its own: a press that kicks (turning Inbox on) waits on the
+  // slowest beginning, not on all of them one after another, each slower than the last as the runs begun before it go.
   const tick = async (who?: readonly number[]) => {
     if (!who) await store.analyze();
-    for (const piece of await dueWork(store, options, who)) {
-      // What is not begun is due again at the next tick.
-      const beginning = await begin(piece, runKey(piece)).catch((error: unknown) => {
-        reportError(error);
-        log(`Could not begin ${piece.kind}, will retry: ${error instanceof Error ? error.message : String(error)}`);
-      });
-      if (!beginning || beginning.begun || beginning.since === undefined || Date.now() - beginning.since < STUCK_MS) continue;
-      const minutes = Math.round((Date.now() - beginning.since) / 60_000);
-      reportError(new Error(`A ${piece.kind} run has held its key for ${minutes} minutes`));
-      log(`${describeWork(piece)} is held back by a run begun ${minutes} minutes ago that has not ended`);
-    }
+    await Promise.all(
+      (await dueWork(store, options, who)).map(async (piece) => {
+        // What is not begun is due again at the next tick.
+        const beginning = await begin(piece, runKey(piece)).catch((error: unknown) => {
+          reportError(error);
+          log(`Could not begin ${piece.kind}, will retry: ${error instanceof Error ? error.message : String(error)}`);
+        });
+        if (!beginning || beginning.begun || beginning.since === undefined || Date.now() - beginning.since < STUCK_MS) return;
+        const minutes = Math.round((Date.now() - beginning.since) / 60_000);
+        reportError(new Error(`A ${piece.kind} run has held its key for ${minutes} minutes`));
+        log(`${describeWork(piece)} is held back by a run begun ${minutes} minutes ago that has not ended`);
+      }),
+    );
   };
   const controls = await buildControls(config, {
     ephemeral,
