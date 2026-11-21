@@ -172,7 +172,14 @@ async function send(path: string, init: RequestInit, unreachable: string): Promi
 /** The mailbox a read is narrowed to, by the signal `useLoaded` gave it, so no read has to pass it along. */
 const narrowedBy = new WeakMap<AbortSignal, string>();
 
+/**
+ * Set as sign-out begins: the page is still up while it signs out and clears what it kept, and anything it read then (a
+ * row read ahead of a press, as the pointer lands on it) would be refused as nobody's.
+ */
+let signingOut = false;
+
 async function get<T>(path: string, params: Record<string, string | number>, signal: AbortSignal): Promise<T> {
+  if (signingOut) throw new DOMException('Signing out', 'AbortError');
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (value !== '') query.set(key, String(value));
   const mailbox = narrowedBy.get(signal);
@@ -368,7 +375,16 @@ export const api = {
   device: (signal: AbortSignal) => get<{ key: string | null }>('/api/device', {}, signal),
   /** Make this browser a key for its copy, the first time: after that the page is drawn with it. */
   makeDevice: () => post<{ key: string }>('/api/device', {}),
-  signOut: () => post('/api/signout', {}),
+  signOut: async () => {
+    signingOut = true;
+    await queryClientFor().cancelQueries();
+    try {
+      await post('/api/signout', {});
+    } catch (error) {
+      signingOut = false;
+      throw error;
+    }
+  },
   /** `address` is what the person typed to confirm. */
   removeMailbox: (address: string) => post<Removed>('/api/mailbox/remove', { address }),
   makePrimary: (address: string) => post('/api/mailbox/primary', { address }),
