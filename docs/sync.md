@@ -1,6 +1,6 @@
 # Sync
 
-Not built yet: this is the design the work follows. Until it lands, [architecture.md](architecture.md#dashboard) describes the page as it is.
+The server's side is built: the feed, the numbers its writes are given, and each browser's key. The browser's copy is not yet; until it is, [architecture.md](architecture.md#dashboard) describes the page as it is.
 
 The dashboard keeps a copy of the person's mail summaries, labels, rules and settings in the browser, encrypted, and draws every screen from it. The server sends what changed since the copy was last brought up to date. A screen opened, a conversation opened, J and K, a filter changed or a press made waits on nothing; the network only reconciles.
 
@@ -24,51 +24,51 @@ A message's HTML is still a frame loaded from the server under its own policy (`
 
 ## Records
 
-| Kind | Key | What it holds |
-| --- | --- | --- |
-| `conversation` | `<accountId>/<threadId>` | Its recorded messages, oldest first, each as Inbox and the reader's folded rows show it: id, sender's name and address, subject, preview, when, Gmail's label ids, unread, and what Sift thinks of it (the current decision, or the person's answer where they gave one) |
-| `text` | `<accountId>/<messageId>` | A message's readable text, and whether Sift holds its HTML |
-| `label`, `rule`, `proposal` | their ids | As `/api/manage` and `/api/rules` send them |
-| `settings` | `settings` | What `/api/manage` sends besides labels |
+A conversation is one record, `SyncedConversation` (`src/dashboard/types.ts`): its recorded messages, oldest first, each as Inbox and the reader's folded rows show it (sender's name and address, subject, preview, when, Gmail's label ids), and what Sift thinks of its newest (the current decision, or the person's answer where they gave one; the label by its id, named from the person's labels so renaming one changes no conversation). It is one record because an archive in Gmail that takes its last message out of the inbox takes all of it out of the window, including messages that did not change.
 
-What is `held` in a reply today is `held` in these too, and the page draws it through `reveal` as before. A conversation is one record because an archive in Gmail that takes its last message out of the inbox takes all of it out of the window, including messages that did not change.
+A message's text is not in the feed: it never changes, so the page asks for it by id, 50 at a time (`GET /api/mail/texts`), and keeps it. Labels, rules, proposals and settings stay server reads for now (they are drawn with the page already, `src/sift/page-data.ts`); each gets a kind of its own in the feed when a screen needs it.
+
+What is `held` in a reply is `held` in these too, and the page draws it through `reveal` as before.
 
 ## The feed
 
-`GET /api/sync?since=<cursor>` answers:
+`GET /api/sync?since=<cursor>` (`syncPage`, `src/dashboard/queries/sync.ts`) answers `SyncPage`:
 
 ```
-{ cursor, reset, more, changes: [{ kind, key, value }] }
+{ cursor, reset, more, mailboxes, conversations: [{ accountId, threadId, conversation }] }
 ```
 
-- `changes` in the order they were made, at most 500 a reply; `more` is true when there are others, and the page asks again at once with the new `cursor`.
-- `value` null: gone, deleted or out of the window.
-- `reset` true: drop everything held first, then take what follows as the whole window. The page gets it with no cursor, with a cursor older than the oldest deletion the server still remembers, and when what a record holds has changed since the cursor was given (the cursor carries the version of the shapes).
-- A conversation is sent whole, read at the time of the request, so a record changed several times since the cursor comes once.
+- `conversation` null: gone, or out of the window.
+- `reset` true: drop everything held first, then take what follows, with the pages after it, as the whole window, newest first, 200 conversations a page. The page gets it with no cursor, with one it cannot read or of an older shape (`SHAPE`: a cursor carries the version of what a record holds), with one older than `purgedThrough`, and with one ahead of the counter (a database restored from a backup).
+- After that, the conversations changed since the cursor, in the order they changed, at most 500 a reply, each read whole at the time of the request, so one changed several times comes once.
+- `more` true: ask again at once from the new `cursor`.
+- `mailboxes`: the person's mailboxes. Removing one deletes its mail by cascades from the central handle, where nothing is marked, so the page drops any conversation of a mailbox not listed.
 
 Behind it:
 
-- **One counter per person.** Each write to a table the window is built from (messages, decisions, feedback, labels, rules, proposals, preferences, mailboxes, the text of mail kept) bumps the counter and records the record's kind, key and the number, one row per record, by triggers in a custom migration. Triggers, so no write path can forget it. A decision or an answer marks its message's conversation.
+- **One counter per person** (`sync_heads`). Triggers (`0073_conversations_sync_triggers.sql`) mark a conversation whenever a message of it is recorded, forgotten, or changes its labels or headers, and whenever a decision, an answer or kept text of one of its messages is written or deleted, giving it the next number (`conversation_changes`, one row a conversation). Triggers, so no write path can forget it. A write through the central handle marks nothing.
 - **Numbers in the order they commit.** The trigger takes the next number by updating the person's counter row, which stays locked until the write commits, so a page that has seen 12 has seen everything before it. A Postgres sequence would not do: it can give 12 to a write that commits before the one given 11, and a page that read in between never sees 11. The lock holds the person's writes one after another; Sift's transactions wait only on the database, so this costs little.
-- **Deletions are remembered 30 days**, then dropped, and the person's counter remembers the newest number it dropped (`purgedThrough`): a cursor older than that gets a reset, never a partial answer.
-- **The rekey marks nothing.** It rewrites every encrypted row without changing what any says; the triggers pass over its writes.
+- **Gone is remembered 30 days.** Upkeep drops the row of a conversation with no message left 30 days after it went (`pruneGone`, `src/store/sync.ts`) and moves `purgedThrough` past its number: a cursor older than that gets a reset, never an answer missing that it went.
+- **Turning Inbox on or off** changes which conversations the window holds without changing any, so it moves `purgedThrough` to the counter: every page starts again.
+- **A preview is kept with the text** (`mail_bodies.preview`, sealed), so a page of 200 conversations never opens their whole text; the pass that indexes text kept before there was a search index gives such text its preview too (`indexKept`).
+- **A new key** rewrites every record's headers, which marks every conversation: each page reads them all again once.
 
 ## Writes
 
-Every write's reply carries the person's counter after it, in a header (`x-sift-seq`), set by the server for every write route. The page shows the change at once, sends it, and the change is done when the copy has been brought up to that number: the page asks the feed straight away. A refusal or a failure undoes the change on the page and says why, as now. Nothing is queued while Sift is unreachable.
+Every write's reply carries the person's counter after it, in a header (`x-sift-seq`), set in `src/dashboard/server.ts` for every write route. The page shows the change at once, sends it, and the change is done when the copy has been brought up to that number: the page asks the feed straight away. A refusal or a failure undoes the change on the page and says why, as now. Nothing is queued while Sift is unreachable.
 
 ## On the device
 
 Proton Mail's web client keeps a random key on the server for each session and releases it only to that session, so what is on the disk cannot be read without a live sign-in. Sift does the same:
 
-- **A key per browser.** A row of its own in the person's database (`devices`): a random 256-bit key sealed through `src/secrets.ts` like every other secret (the rekey covers it), when it was made and last used, and an HttpOnly cookie, `sift_device`, naming the row. A signed-in page without one is given one.
-- **In the page, not a request.** The dashboard's frame is drawn on the server for whoever asked (`src/sift/page-data.ts`), and it carries the device's key beside the session. That page is never kept (`no-store`), and the service worker keeps only pages drawn for everyone. It is a key, not mail: it unlocks only this browser's copy.
+- **A key per browser.** A random 256-bit key kept as one of the person's sign-ins (`credentials`, kind `device`), sealed through `src/secrets.ts` like the others, so the rekey covers it, and an HttpOnly cookie, `sift_device`, naming it for 400 days, the most a browser keeps one. A page drawn by Next.js cannot set a cookie, so the page makes its key the first time (`POST /api/device`, answered in `src/dashboard/server.ts`).
+- **In the page after that, not a request.** The dashboard's frame is drawn on the server for whoever asked (`src/sift/page-data.ts`), and it carries the device's key beside the session (`GET /api/device`, read in that draw). That page is never kept (`no-store`), and the service worker keeps only pages drawn for everyone. It is a key, not mail: it unlocks only this browser's copy.
 - **In the browser**, the key is imported so it cannot be exported and held in memory only. The copy is in IndexedDB, each record's value encrypted with AES-GCM and a random 12-byte IV through WebCrypto. Readable on the disk: ids, times and Gmail's label ids, what the server keeps unencrypted too, which is enough to find the newest 50 inbox conversations and decrypt them first.
-- **Signing out** deletes the device's row, so a copy left behind can never be read, answers with `Clear-Site-Data: "storage"`, and the page deletes its database. Removing a mailbox or deleting the account deletes their devices; a device unused for 30 days is deleted and its copy starts again.
+- **Signing out** deletes the device's key, so a copy left behind can never be read, answers with `Clear-Site-Data: "storage"`, and the page deletes its database. Deleting the account deletes every key with it.
 - **Unreachable,** the page cannot get its key and shows nothing it holds, as it shows nothing now.
 - **Safari** deletes a site's storage after 7 days without a visit unless it is installed to the home screen; the copy starts again. Installed, the page asks for storage that is kept (`navigator.storage.persist()`).
 
-It holds against a lost, stolen or copied disk, another user of the machine, and a device after sign-out. It does not hold against a script injected into the page or malware running as the person while they are signed in: both can read the API now. [security.md](security.md) says so once it is built.
+It holds against a lost, stolen or copied disk as far as the session does (a disk with a live session cookie on it reads the API too), against another user of the machine, and against a device after sign-out. It does not hold against a script injected into the page or malware running as the person while they are signed in: both can read the API now. [security.md](security.md) lists it.
 
 ## In the browser
 
@@ -80,16 +80,16 @@ It holds against a lost, stolen or copied disk, another user of the machine, and
 ## What it costs
 
 - **Requests.** An open Inbox asks about three times a minute now (its list, settings, usage); the feed asks twice. An answer with nothing new is the session and one indexed read.
-- **Writes.** One more row written for each record changed, and the counter. Copying 100,000 messages writes 100,000 rows of a key and a number, about 10 MB.
+- **Writes.** For each change to a conversation, the counter and its row written again: two small updates. Copying 100,000 messages in 33,000 conversations leaves 33,000 rows of a key and a number, a few MB.
 - **A device's first copy.** About 600 bytes a message summary: a 2,000-message inbox is 1.2 MB, about 0.5 MB compressed, once per browser; after that only what changed.
 - **The page.** TanStack DB adds about 84 KB compressed to the first load (337 KB now).
 
-These go in [runtime.md](runtime.md#what-it-costs) as they are built.
+They are in [runtime.md](runtime.md#what-it-costs) too.
 
 ## Order of work
 
-1. The server: the migration (the counter, the records' numbers, the triggers, `devices`, a sealed preview kept with each message so a summary is not cut from its whole text), `GET /api/sync`, `x-sift-seq` on writes, the device key in the frame and its end at sign-out. Tests: two people; writes at the same moment; a conversation leaving the inbox; a cursor too old; the rekey marking nothing.
-2. The browser: the encrypted copy, the one tab that asks, the collections, and Inbox and the reader on them, against a stand-in feed until the server's lands.
+1. The server. Built: `tests/api/sync.test.ts`, `tests/sync.test.ts`.
+2. The browser: the encrypted copy, the one tab that asks, the collections, and Inbox and the reader on them.
 3. For review on the copy.
 4. Remove what it replaces: each screen's polling, and what the server answered only for lists the copy now draws.
 

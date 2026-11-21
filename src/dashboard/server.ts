@@ -1,5 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { People } from '../store/people.ts';
+import { credentials } from '../store/credentials.ts';
+import { headOf } from '../store/sync.ts';
 import type { z } from 'zod';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { FRAMES, READS, WRITES } from './api/index.ts';
@@ -24,7 +26,7 @@ const FRAME_HEADERS = {
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 /** Answered here rather than by a route module. */
-const SIGN_IN_PATHS = new Set(['/auth/login', '/auth/callback', '/api/session', '/api/signout']);
+const SIGN_IN_PATHS = new Set(['/auth/login', '/auth/callback', '/api/session', '/api/signout', '/api/device']);
 /** A sign-in in flight: the PKCE verifier, whose mailbox it adds or lets send, and where to return to. */
 type PendingSignIn = { verifier: string; redirectUri: string; addTo: string | null; send: string | null; to: string; expires: number };
 
@@ -117,6 +119,10 @@ export interface Dashboard {
 }
 
 const SESSION_DAYS = 30;
+/** A browser's key outlives any one session: the copy it encrypts is kept across sign-ins until one signs out. 400 days is the most a browser keeps a cookie. */
+const DEVICE_DAYS = 400;
+/** A device's id, as the server makes it. */
+const DEVICE_ID = /^[0-9a-f]{32}$/;
 /** A session in use is issued again once this old, so someone who opens Sift within the month is never signed out. */
 const RENEW_MS = 86_400_000;
 const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64url');
@@ -192,6 +198,24 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     reportError(error);
     return { status: 500, error: 'Sift could not do that. Why is in its log.' };
   };
+  /**
+   * A write must come from the dashboard's own page: a browser sends Origin on every cross-site request, and another site
+   * cannot set a custom header or a JSON content type without a preflight this server never approves.
+   */
+  const fromOwnPage = (request: Request) => {
+    let origin: string | null = null;
+    try {
+      origin = new URL(request.headers.get('origin') ?? '').hostname.toLowerCase();
+    } catch {
+      origin = null;
+    }
+    return (
+      origin !== null &&
+      hosts.has(origin.includes(':') ? `[${origin}]` : origin) &&
+      request.headers.get('x-sift') === '1' &&
+      (request.headers.get('content-type') ?? '').startsWith('application/json')
+    );
+  };
   /** A sign-in in flight, by the state Google echoes back: the PKCE verifier and where to return to. */
   const pendingKey = (state: string) => `signin:google:${state}`;
 
@@ -255,6 +279,9 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
     // started the sign-in also holds it here, so a consent link sent to someone else completes nothing.
     const signInCookie = (state: string, maxAge: number) =>
       `sift_signin=${state}; Path=/auth; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
+    const deviceCookie = (value: string, maxAge: number) => `sift_device=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
+    const given = cookie(request, 'sift_device') ?? '';
+    const device = DEVICE_ID.test(given) ? given : null;
     const { method } = request;
 
     if (signIn && method === 'GET' && url.pathname === '/api/session') {
@@ -330,26 +357,33 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       }
     }
     if (signIn && session === null && url.pathname.startsWith('/api/')) return json(401, { error: 'Sign in to use the dashboard.' });
-    if (signIn && method === 'POST' && url.pathname === '/api/signout') return json(200, { ok: true }, { 'set-cookie': sessionCookie('', 0) });
+    if (signIn && method === 'POST' && url.pathname === '/api/signout') {
+      // The browser's key goes, so a copy left on the device can never be read again, and the browser is told to delete it.
+      if (person && device) await (await credentials(ctx.db, 'device')).remove(device);
+      const headers = new Headers({ ...NOSNIFF, 'content-type': 'application/json', 'cache-control': 'no-store', 'clear-site-data': '"storage"' });
+      headers.append('set-cookie', sessionCookie('', 0));
+      headers.append('set-cookie', deviceCookie('', 0));
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+    }
+    // The key this browser's copy of the person's mail is encrypted with (docs/sync.md): read by the page's frame, and made
+    // by the page the first time, since a page drawn by Next.js cannot set a cookie.
+    if (url.pathname === '/api/device' && person) {
+      if (method === 'GET') return json(200, { key: device ? await (await credentials(ctx.db, 'device')).read(device) : null });
+      if (method === 'POST') {
+        if (!fromOwnPage(request)) return json(403, { error: 'This request did not come from the dashboard.' });
+        const id = randomBytes(16).toString('hex');
+        const key = randomBytes(32).toString('base64url');
+        await (await credentials(ctx.db, 'device')).write(id, key);
+        return json(200, { key }, { 'set-cookie': deviceCookie(id, DEVICE_DAYS * 86_400) });
+      }
+    }
     if (!signIn && method === 'GET' && url.pathname === '/api/session')
       return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], cloud, telemetry: forThePage(), build });
 
     if (method === 'POST') {
       const handler = writes.get(url.pathname);
-      // A write must come from the dashboard's own page: a browser sends Origin on every cross-site
-      // request, and another site cannot set a custom header or a JSON content type without a preflight
-      // this server never approves.
-      let origin: string | null = null;
-      try {
-        origin = new URL(request.headers.get('origin') ?? '').hostname.toLowerCase();
-      } catch {
-        origin = null;
-      }
-      const fromOwnPage = origin !== null && hosts.has(origin.includes(':') ? `[${origin}]` : origin);
       if (!handler) return json(405, { error: 'Not something this dashboard does.' });
-      if (!fromOwnPage || request.headers.get('x-sift') !== '1' || !(request.headers.get('content-type') ?? '').startsWith('application/json')) {
-        return json(403, { error: 'This request did not come from the dashboard.' });
-      }
+      if (!fromOwnPage(request)) return json(403, { error: 'This request did not come from the dashboard.' });
       try {
         const raw = await readJson(request);
         if (raw === null) return json(400, { error: 'That request is not well formed.' });
@@ -361,7 +395,8 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         if (result === null) return json(400, { error: 'That request is not well formed.' });
         const reply = replied(handler.reply, result);
         if (reply.status === 200 && handler.endsSession?.(reply.body)) return json(200, reply.body, { 'set-cookie': sessionCookie('', 0) });
-        return json(reply.status, reply.body);
+        // How far this write brought the person's copy: the page's copy holds its change once it has read that far.
+        return json(reply.status, reply.body, person ? { 'x-sift-seq': String((await headOf(ctx.db)).seq) } : {});
       } catch (error) {
         const { status, ...body } = failed(request, error);
         return json(status, body);

@@ -26,6 +26,7 @@ import { listAccounts } from '../../store/accounts.ts';
 import { listLabels } from '../../store/labels.ts';
 import { hashOf, openEnvelope, openPart } from '../../store/content.ts';
 import { mayMatch, searchedWords } from '../../store/search.ts';
+import { previewOf } from '../../store/kept.ts';
 import { type Search, matches, searchOf } from '../../search.ts';
 import { type Scope, within } from '../scope.ts';
 import { Refusal } from '../../refusal.ts';
@@ -40,7 +41,6 @@ const PAGE = 50;
  * drop those that do not. Fewer than a page matched by then answers what it has, with `next` to go on from.
  */
 const SEARCH_REACH = 200;
-const PREVIEW_CHARS = 400;
 
 const has = (labelIds: SQL | AnyColumn, label: string) => sql<boolean>`${labelIds} @> ${JSON.stringify([label])}::jsonb`;
 
@@ -201,6 +201,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
   const mine = new Set((await listAccounts(db)).map((a) => a.id));
   const previews = await previewsOf(
     db,
+    scope,
     shown.map((r) => [r.accountId, r.newestId] as const),
   );
   return {
@@ -306,22 +307,34 @@ async function threadMessages(db: Sql, scope: Scope, threads: readonly (readonly
 }
 
 /** The start of each message's text, on one line: Inbox's whole copy, or else the copy kept while it waits on the reader. */
-async function previewsOf(db: Sql, wanted: readonly (readonly [string, string])[]) {
+export async function previewsOf(db: Sql, scope: Scope, wanted: readonly (readonly [string, string])[]) {
   const previews = new Map<string, Confidential>();
   if (wanted.length === 0) return previews;
   const ids = [...new Set(wanted.map(([, id]) => id))];
   const keys = new Set(wanted.map(([account, id]) => `${account}\n${id}`));
-  for (const table of [readBodies, mailBodies]) {
-    const rows = await db
-      .select({ accountId: table.accountId, messageId: table.messageId, text: table.bodyText })
-      .from(table)
-      .where(inArray(table.messageId, ids));
-    for (const r of rows) {
-      const key = `${r.accountId}\n${r.messageId}`;
-      if (!keys.has(key)) continue;
-      const text = plain(openPart(db, r.accountId, r.messageId, 'text', r.text) ?? '');
-      previews.set(key, seal(text.slice(0, PREVIEW_CHARS).replace(/\s+/g, ' ').trim()));
-    }
+  const read = await db
+    .select({ accountId: readBodies.accountId, messageId: readBodies.messageId, text: readBodies.bodyText, preview: sql<string | null>`NULL` })
+    .from(readBodies)
+    .where(and(within(scope, readBodies.accountId), inArray(readBodies.messageId, ids)));
+  // Inbox's copy has its preview sealed beside the text, but for text kept before there were previews, until the pass gives it one.
+  const kept = await db
+    .select({
+      accountId: mailBodies.accountId,
+      messageId: mailBodies.messageId,
+      text: sql<string | null>`CASE WHEN ${mailBodies.preview} IS NULL THEN ${mailBodies.bodyText} END`,
+      preview: mailBodies.preview,
+    })
+    .from(mailBodies)
+    .where(and(within(scope, mailBodies.accountId), inArray(mailBodies.messageId, ids)));
+  for (const r of [...read, ...kept]) {
+    const key = `${r.accountId}\n${r.messageId}`;
+    if (!keys.has(key)) continue;
+    previews.set(
+      key,
+      r.preview === null
+        ? seal(previewOf(plain(openPart(db, r.accountId, r.messageId, 'text', r.text) ?? '')))
+        : openPart(db, r.accountId, r.messageId, 'preview', r.preview)!,
+    );
   }
   return previews;
 }
@@ -347,6 +360,7 @@ export async function conversation(db: Sql, scope: Scope, threadId: string): Pro
   if (listed.length === 0) return null;
   const previews = await previewsOf(
     db,
+    scope,
     listed.map((m) => [accountId, m.messageId] as const),
   );
   return {

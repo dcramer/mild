@@ -34,7 +34,7 @@ import { searchIndex } from './search.ts';
 import type { Sql } from './sql.ts';
 
 /** What Sift holds of a message that came from the message: its body, and the headers its record keeps. */
-type Part = 'text' | 'html' | 'headers' | 'reason';
+type Part = 'text' | 'html' | 'preview' | 'headers' | 'reason';
 
 /** Each is encrypted for its person, message and part, so one copied into another row does not open. */
 const nameOf = (db: Sql, accountId: string, messageId: string, part: Part) => `person ${db.person} ${part} of ${accountId} ${messageId}`;
@@ -438,6 +438,7 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
         messageId: mailBodies.messageId,
         text: mailBodies.bodyText,
         html: mailBodies.bodyHtml,
+        preview: mailBodies.preview,
         indexed: sql<boolean>`${mailBodies.search} IS NOT NULL`,
         headers: messages.headers,
       })
@@ -463,6 +464,7 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
           ...r,
           text: sealPart(db, r.accountId, r.messageId, 'text', text)!,
           html: sealPart(db, r.accountId, r.messageId, 'html', forRekey(db, r.accountId, r.messageId, 'html', r.html)),
+          preview: sealPart(db, r.accountId, r.messageId, 'preview', forRekey(db, r.accountId, r.messageId, 'preview', r.preview)),
           search: r.indexed ? searchIndex(db, { text, fromName: envelope.fromName, fromAddress: envelope.fromAddress, subject: envelope.subject }) : null,
         };
       });
@@ -472,7 +474,7 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
         for (const r of resealed)
           await tx
             .update(mailBodies)
-            .set({ bodyText: r.text, bodyHtml: r.html, search: r.search })
+            .set({ bodyText: r.text, bodyHtml: r.html, preview: r.preview, search: r.search })
             .where(and(eq(mailBodies.accountId, r.accountId), eq(mailBodies.messageId, r.messageId)));
       });
     const last: { accountId: string; messageId: string } = rows.at(-1)!;

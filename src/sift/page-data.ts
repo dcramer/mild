@@ -11,6 +11,8 @@ interface Drawn {
   session: Session;
   manage: ManageState;
   usage: Usage;
+  /** The key this browser's copy of the person's mail is encrypted with (docs/sync.md); null until the page has made one. */
+  device: { key: string | null };
 }
 
 /**
@@ -21,6 +23,7 @@ const PATHS: { [K in keyof Drawn]: Holds<Drawn[K]> extends true ? never : string
   session: '/api/session',
   manage: '/api/manage',
   usage: '/api/usage',
+  device: '/api/device',
 };
 
 /**
@@ -41,6 +44,6 @@ async function drawn(asked: Headers): Promise<DehydratedState> {
     return body;
   };
   const session = await read('session');
-  if (session && !(session.required && session.email === null)) await Promise.all([read('manage'), read('usage')]);
+  if (session && !(session.required && session.email === null)) await Promise.all([read('manage'), read('usage'), read('device')]);
   return dehydrate(client);
 }

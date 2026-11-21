@@ -3,6 +3,7 @@ import { reconcile, reconcileDue } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { READ_KEEP_DAYS, indexKept, purgeRead, searchDue } from '../store/kept.ts';
+import { pruneGone } from '../store/sync.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
@@ -450,4 +451,5 @@ export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>):
   const { mail, mailWindow } = await preferences(db);
   const since = mail ? windowStart(mailWindow, now) : null;
   if (since !== null) await dropTextBefore(db, since);
+  await pruneGone(db, now);
 }
