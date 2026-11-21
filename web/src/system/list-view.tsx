@@ -7,11 +7,12 @@ import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
 import { useShortcut } from './keys.tsx';
 import { Menu } from './menu.tsx';
+import { Mailbox } from '@/lib/narrowed.ts';
 import { Narrowed } from './mailbox.tsx';
 import { BarSlot, ToBar } from './nav.tsx';
 
-/** Where a list's views go on a phone, in place of its name, and the name to draw there. */
-const Views = createContext<{ at: HTMLElement | null; title: string }>({ at: null, title: '' });
+/** Where a list's views go on a phone, in place of its name, and the name to draw there; and the page's own action, which a desktop draws beside the list's search. */
+const Views = createContext<{ at: HTMLElement | null; title: string; actions?: ReactNode }>({ at: null, title: '' });
 
 /** Draws the list's views in its head on a phone, given the page's name. */
 function ToViews({ children }: { children: (title: string) => ReactNode }) {
@@ -22,21 +23,24 @@ function ToViews({ children }: { children: (title: string) => ReactNode }) {
 /**
  * A `ListPage`'s head: its name, the mailbox it is narrowed to, and the page's own action on the right. On a phone it
  * is one line under the top bar, the name at a section heading's size, and a list with views makes the name a menu of
- * them.
+ * them. A desktop draws none of it: the rail already names the page, so the name is for screen readers, and the
+ * mailbox and the action go beside the list's search (`ListView`).
  */
 export function ListHead({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
   const [at, setAt] = useState<HTMLElement | null>(null);
   return (
     <section className="flex flex-col gap-6 phone:gap-3">
-      <header className="flex flex-wrap items-center gap-x-6 gap-y-3 phone:min-h-11 phone:flex-nowrap phone:gap-x-2">
+      <header className="flex flex-wrap items-center gap-x-6 gap-y-3 phone:min-h-11 phone:flex-nowrap phone:gap-x-2 md:sr-only">
         <div className="flex min-w-0 flex-1 basis-40 flex-wrap items-center gap-x-3 gap-y-1">
           <span ref={setAt} className="peer flex min-w-0 empty:hidden md:hidden" />
           <h1 className="statement list-title min-w-0 wrap-anywhere phone:peer-[:not(:empty)]:sr-only">{title}</h1>
-          <Narrowed />
+          <span className="md:hidden">
+            <Narrowed />
+          </span>
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2 md:hidden">{actions}</div> : null}
       </header>
-      <Views value={{ at, title }}>{children}</Views>
+      <Views value={{ at, title, actions }}>{children}</Views>
     </section>
   );
 }
@@ -57,6 +61,9 @@ interface ActiveFilter {
  * The filter button opens a panel on the right that pushes the list left; closing it puts the list
  * back. While closed, the button shows how many filters are on and each is listed under the search
  * box with a way to clear it, so a narrowed list never looks like the whole of it.
+ *
+ * A desktop names the page only in its rail: the page's own action, and the mailbox it is narrowed to, end the bar,
+ * or sit on a line of their own at the top where `intro` comes before the bar or the list has none.
  *
  * On a phone the search and the filter button are the top bar (`ToBar`), and the views a menu on the list's name
  * (`ListHead`), so the rows start under one line.
@@ -85,6 +92,18 @@ export function ListView({
   const slash = useShortcut('/', 'Search', () => searchBox.current?.focus(), { enabled: search !== undefined && !(selected && selected.count > 0) });
   const on = filters?.active.length ?? 0;
   const bar = useContext(BarSlot);
+  const { actions } = useContext(Views);
+  const mailbox = useContext(Mailbox);
+  // A desktop's only head: the mailbox and the page's action, at the top of the page. Beside the search when it comes
+  // first; on a line of their own over what the page shows before it, which they govern too (Activity's period), or over
+  // a list with no search.
+  const aside =
+    actions || mailbox ? (
+      <div className="hidden shrink-0 items-center justify-end gap-2 md:flex">
+        <Narrowed />
+        {actions}
+      </div>
+    ) : null;
   return (
     <>
       {view ? (
@@ -106,6 +125,7 @@ export function ListView({
           )}
         </ToViews>
       ) : null}
+      {intro ? aside : null}
       {intro}
       {/* On a phone the search is the top bar. */}
       {search ? (
@@ -149,85 +169,88 @@ export function ListView({
       <div className="flex flex-col gap-3">
         {search || filters || view ? (
           <div className="flex flex-col gap-2">
-            {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. On a phone they are the top bar. */}
-            <div
-              className={cn(
-                'flex flex-wrap items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 md:flex-nowrap',
-                search && bar !== undefined && 'phone:hidden',
-              )}
-            >
-              {selected && selected.count > 0 ? (
-                <div role="toolbar" aria-label="Selected rows" className="flex h-9 min-w-0 flex-1 items-center gap-1 pr-1 pl-3">
-                  <span className="mr-2 text-sm font-semibold tabular-nums">{selected.count} selected</span>
-                  {selected.actions.map((action) => (
-                    <Button key={action.label} variant="quiet" shortcut={action.key} onClick={action.onPress}>
-                      {action.label}
+            <div className="flex items-center gap-3">
+              {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. On a phone they are the top bar. */}
+              <div
+                className={cn(
+                  'flex min-w-0 flex-1 flex-wrap items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 md:flex-nowrap',
+                  search && bar !== undefined && 'phone:hidden',
+                )}
+              >
+                {selected && selected.count > 0 ? (
+                  <div role="toolbar" aria-label="Selected rows" className="flex h-9 min-w-0 flex-1 items-center gap-1 pr-1 pl-3">
+                    <span className="mr-2 text-sm font-semibold tabular-nums">{selected.count} selected</span>
+                    {selected.actions.map((action) => (
+                      <Button key={action.label} variant="quiet" shortcut={action.key} onClick={action.onPress}>
+                        {action.label}
+                      </Button>
+                    ))}
+                    <Button variant="quiet" size="icon" className="ml-auto" aria-label="Select none" onClick={selected.clear}>
+                      <XIcon aria-hidden />
                     </Button>
-                  ))}
-                  <Button variant="quiet" size="icon" className="ml-auto" aria-label="Select none" onClick={selected.clear}>
-                    <XIcon aria-hidden />
-                  </Button>
-                </div>
-              ) : search ? (
-                <label className="flex h-9 min-w-0 flex-1 items-center gap-2.5 px-3">
-                  <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-                  <input
-                    ref={searchBox}
-                    type="search"
-                    className="focus-within-shown min-w-0 flex-1 bg-transparent text-base placeholder:text-muted-foreground"
-                    aria-label={search.placeholder}
-                    aria-keyshortcuts="/"
-                    placeholder={search.placeholder}
-                    value={search.value}
-                    onChange={(event) => search.onChange(event.target.value)}
-                    // Escape hands the keys back to the list.
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') event.currentTarget.blur();
-                      else if (event.key === 'Enter' && search.ask && search.value.trim() !== '' && !search.ask.busy) search.ask.onAsk();
-                    }}
-                  />
-                  {slash}
-                  {search.ask && search.value.trim() !== '' ? (
-                    <Button variant="quiet" className="-mr-2" busy={search.ask.busy} onClick={search.ask.onAsk}>
-                      Ask
-                    </Button>
-                  ) : null}
-                </label>
-              ) : (
-                <span className="h-9 flex-1" />
-              )}
-              {view ? (
-                <div role="radiogroup" aria-label={view.label} className="hidden h-9 shrink-0 border-l border-(--frame) md:flex">
-                  {view.options.map(([key, text]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      role="radio"
-                      aria-checked={key === view.value}
-                      className="flex-1 cursor-pointer px-3 text-sm font-medium text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:bg-(--fill-strong) aria-checked:text-foreground md:flex-none"
-                      onClick={() => view.onChange(key)}
-                    >
-                      {text}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {filters ? (
-                <button
-                  type="button"
-                  aria-label={on > 0 ? `Filters, ${on} on` : 'Filters'}
-                  aria-expanded={open}
-                  className={cn(
-                    'flex h-9 shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-sm font-semibold',
-                    open ? 'bg-(--fill-strong)' : 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
-                  )}
-                  onClick={() => setOpen(!open)}
-                >
-                  <SlidersHorizontalIcon aria-hidden className="size-4" />
-                  Filters
-                  {on > 0 ? <span className="hl mx-0 px-1.5 py-0 text-sm tabular-nums">{on}</span> : null}
-                </button>
-              ) : null}
+                  </div>
+                ) : search ? (
+                  <label className="flex h-9 min-w-0 flex-1 items-center gap-2.5 px-3">
+                    <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                    <input
+                      ref={searchBox}
+                      type="search"
+                      className="focus-within-shown min-w-0 flex-1 bg-transparent text-base placeholder:text-muted-foreground"
+                      aria-label={search.placeholder}
+                      aria-keyshortcuts="/"
+                      placeholder={search.placeholder}
+                      value={search.value}
+                      onChange={(event) => search.onChange(event.target.value)}
+                      // Escape hands the keys back to the list.
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') event.currentTarget.blur();
+                        else if (event.key === 'Enter' && search.ask && search.value.trim() !== '' && !search.ask.busy) search.ask.onAsk();
+                      }}
+                    />
+                    {slash}
+                    {search.ask && search.value.trim() !== '' ? (
+                      <Button variant="quiet" className="-mr-2" busy={search.ask.busy} onClick={search.ask.onAsk}>
+                        Ask
+                      </Button>
+                    ) : null}
+                  </label>
+                ) : (
+                  <span className="h-9 flex-1" />
+                )}
+                {view ? (
+                  <div role="radiogroup" aria-label={view.label} className="hidden h-9 shrink-0 border-l border-(--frame) md:flex">
+                    {view.options.map(([key, text]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        role="radio"
+                        aria-checked={key === view.value}
+                        className="flex-1 cursor-pointer px-3 text-sm font-medium text-muted-foreground hover:bg-(--fill) hover:text-foreground aria-checked:bg-(--fill-strong) aria-checked:text-foreground md:flex-none"
+                        onClick={() => view.onChange(key)}
+                      >
+                        {text}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {filters ? (
+                  <button
+                    type="button"
+                    aria-label={on > 0 ? `Filters, ${on} on` : 'Filters'}
+                    aria-expanded={open}
+                    className={cn(
+                      'flex h-9 shrink-0 cursor-pointer items-center gap-2 border-l border-(--frame) px-3 text-sm font-semibold',
+                      open ? 'bg-(--fill-strong)' : 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
+                    )}
+                    onClick={() => setOpen(!open)}
+                  >
+                    <SlidersHorizontalIcon aria-hidden className="size-4" />
+                    Filters
+                    {on > 0 ? <span className="hl mx-0 px-1.5 py-0 text-sm tabular-nums">{on}</span> : null}
+                  </button>
+                ) : null}
+              </div>
+              {intro ? null : aside}
             </div>
             {on > 0 && !open ? (
               <ul className="flex flex-wrap items-center gap-1.5" aria-label="Filters that are on">
@@ -247,7 +270,9 @@ export function ListView({
               </ul>
             ) : null}
           </div>
-        ) : null}
+        ) : intro ? null : (
+          aside
+        )}
 
         <div className={cn('grid grid-cols-[minmax(0,1fr)] gap-4', open && 'md:grid-cols-[minmax(0,1fr)_15rem]')}>
           <div className="flex min-w-0 flex-col gap-3 md:order-1">{children}</div>

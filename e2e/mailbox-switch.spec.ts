@@ -1,8 +1,12 @@
+import type { Page } from '@playwright/test';
 import { PHONE, WORK, expect, mailboxSwitch, mailboxesAsked, reviewRows, switchMailbox, test } from './sift.ts';
+
+// A desktop and a phone each name it in a place of their own.
+const named = (page: Page) => page.getByRole('main').getByText(WORK, { exact: true }).filter({ visible: true });
 
 const NOTHING_WAITING = 'Nothing is waiting on you.';
 
-test('one mailbox chosen in the rail narrows For review to it, names it beside the title, and outlasts a reload', async ({ page }) => {
+test('one mailbox chosen in the rail narrows For review to it, names it at the top of the page, and outlasts a reload', async ({ page }) => {
   const asked = mailboxesAsked(page, '/api/suggestions');
   await page.goto('/');
   await expect(reviewRows(page).first()).toBeVisible();
@@ -11,17 +15,17 @@ test('one mailbox chosen in the rail narrows For review to it, names it beside t
   await switchMailbox(page, WORK);
   await expect(page.getByText(NOTHING_WAITING)).toBeVisible();
   await expect(reviewRows(page)).toHaveCount(0);
-  await expect(page.getByRole('main').getByText(WORK, { exact: true })).toBeVisible();
+  await expect(named(page)).toBeVisible();
   expect(asked.at(-1)).toBe(WORK);
 
   await page.reload();
   await expect(page.getByText(NOTHING_WAITING)).toBeVisible();
-  await expect(page.getByRole('main').getByText(WORK, { exact: true })).toBeVisible();
+  await expect(named(page)).toBeVisible();
   await expect(mailboxSwitch(page)).toHaveAccessibleName(`Mailbox, ${WORK}`);
 
   await switchMailbox(page, 'All mailboxes');
   await expect(reviewRows(page).first()).toBeVisible();
-  await expect(page.getByRole('main').getByText(WORK, { exact: true })).toHaveCount(0);
+  await expect(named(page)).toHaveCount(0);
   expect(asked.at(-1)).toBeNull();
 });
 
@@ -46,5 +50,5 @@ test('on a phone the switch is in the menu, under the account, and choosing clos
   await switchMailbox(page, WORK);
   await expect(menu).toHaveCount(0);
   await expect(page.getByText(NOTHING_WAITING)).toBeVisible();
-  await expect(page.getByRole('main').getByText(WORK, { exact: true })).toBeVisible();
+  await expect(named(page)).toBeVisible();
 });
