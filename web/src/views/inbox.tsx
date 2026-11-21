@@ -264,7 +264,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
         presses={
           <>
             <Button variant="bare" className="h-7 px-2" onClick={() => setMaking(true)}>
-              Make rule…
+              Make a rule…
             </Button>
             <Button
               variant="bare"

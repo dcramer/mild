@@ -69,6 +69,8 @@ test.describe('Working through For review', () => {
   test('J and K move through the rows, Enter opens one, / goes to the search', async ({ page }) => {
     await page.goto('/');
     await expect(reviewRows(page)).toHaveCount(9);
+    // The rule Sift proposes is the first row; the mail starts after it.
+    await page.keyboard.press('j');
     await page.keyboard.press('j');
     await expect(row(page, '48 hours only: 30% off')).toBeFocused();
     await page.keyboard.press('j');
@@ -90,6 +92,8 @@ test.describe('Working through For review', () => {
   test('the arrows move through the rows, and step the panel left and right', async ({ page }) => {
     await page.goto('/');
     await expect(reviewRows(page)).toHaveCount(9);
+    // The rule Sift proposes is the first row; the mail starts after it.
+    await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
     await expect(row(page, '48 hours only: 30% off')).toBeFocused();
     await page.keyboard.press('ArrowDown');
@@ -150,6 +154,8 @@ test.describe('Working through For review', () => {
   test('closing the panel leaves the list on the message it was showing', async ({ page }) => {
     await page.goto('/');
     await expect(reviewRows(page)).toHaveCount(9);
+    // The rule Sift proposes is the first row; the mail starts after it.
+    await page.keyboard.press('j');
     await page.keyboard.press('j');
     await page.keyboard.press('Enter');
     await expect(readerHeading(page, '48 hours only: 30% off')).toBeVisible();

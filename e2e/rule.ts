@@ -73,7 +73,7 @@ export async function removeRule(within: Locator) {
 export const removeQuestion = (page: Page) => page.getByRole('dialog', { name: 'Remove this rule?' });
 
 /** The rule For review proposes from what the seed's user has been doing. */
-export const proposal = (page: Page) => page.getByRole('listitem').filter({ hasText: 'Keep Receipts from billing@utility.example.net?' });
+export const proposal = (page: Page) => page.getByRole('row').filter({ hasText: 'Keep Receipts from billing@utility.example.net?' });
 
 /** A standing button (Trust, Unwanted, Block) in the group for `who`; `aria-pressed` says whether it is theirs. */
 export const standing = (page: Page, who: string, name: string) =>
