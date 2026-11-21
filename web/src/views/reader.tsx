@@ -9,7 +9,7 @@ import { useMailPress } from '@/components/mail.tsx';
 import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { useAction } from '@/lib/action.ts';
-import { type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, readAhead, useLoaded } from '@/lib/api.ts';
+import { type Confidential, type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, readAhead, useLoaded } from '@/lib/api.ts';
 import { conversationOf, conversations, copied, copiedKey } from '@/lib/copy.ts';
 import { type Writing, closeReply, useCompose, writing } from '@/lib/compose.ts';
 import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
@@ -303,13 +303,7 @@ function Messages({
     onRead();
   });
   const messages = conversation
-    ? conversation.messages.map((m) => ({
-        id: m.messageId,
-        from: reveal(m.fromAddress) === conversation.accountId ? 'me' : (reveal(m.fromName) ?? reveal(m.fromAddress)),
-        preview: m.preview ? reveal(m.preview) : null,
-        at: <Heard at={m.receivedAt} />,
-        unread: m.unread,
-      }))
+    ? stacked(conversation)
     : [{ id: newest.messageId, from: reveal(newest.fromName) ?? reveal(newest.fromAddress), preview: null, at: <Arrived at={newest.receivedAt} /> }];
   const toggle = (id: string) => {
     const next = new Set(open);
@@ -320,6 +314,55 @@ function Messages({
     <MessageStack messages={messages} open={open} onToggle={toggle}>
       {(id) => <OpenOne id={id} newest={newest} onAnswer={onAnswer} />}
     </MessageStack>
+  );
+}
+
+/** A conversation's messages as the stack draws them, folded or open. */
+const stacked = (conversation: MailConversation) =>
+  conversation.messages.map((m) => ({
+    id: m.messageId,
+    from: reveal(m.fromAddress) === conversation.accountId ? 'me' : (reveal(m.fromName) ?? reveal(m.fromAddress)),
+    preview: m.preview ? reveal(m.preview) : null,
+    at: <Heard at={m.receivedAt} />,
+    unread: m.unread,
+  }));
+
+/**
+ * A conversation the copy holds, drawn while its newest message loads: its subject, a place for Sift's row, and its
+ * messages, the newest and the unread open on their text to come, as the conversation draws once it has.
+ */
+function Arriving({ conversation, subject, bar }: { conversation: MailConversation; subject: Confidential; bar: ReactNode }) {
+  const messages = stacked(conversation);
+  const open = new Set([messages.at(-1)!.id, ...conversation.messages.filter((m) => m.unread).map((m) => m.messageId)]);
+  return (
+    <Reader bar={bar} title={reveal(subject) || '(no subject)'} answer={<Blank className="h-(--control) w-60 py-0" />}>
+      <MessageStack messages={messages} open={open} onToggle={() => {}}>
+        {(id) => {
+          const m = conversation.messages.find((one) => one.messageId === id)!;
+          const address = reveal(m.fromAddress);
+          const name = reveal(m.fromName);
+          const mine = address === conversation.accountId;
+          return (
+            <>
+              <MessageHead
+                from={
+                  mine ? (
+                    'me'
+                  ) : (
+                    <SenderLink address={address} name={name}>
+                      {name ?? address}
+                    </SenderLink>
+                  )
+                }
+                {...(name && !mine ? { address: <SenderLink address={address} /> } : {})}
+                at={<Heard at={m.receivedAt} />}
+              />
+              <Loading rows={2} />
+            </>
+          );
+        }}
+      </MessageStack>
+    </Reader>
   );
 }
 
@@ -630,9 +673,11 @@ export function MessageReader({
   const next = () => (index < items.length - 1 ? go(index + 1) : onBack());
   const fromCopy = inCopy.data?.[0];
   const conversation = threadId ? (fromCopy ? conversationOf(fromCopy) : thread.data) : null;
+  // The copy has all a press needs before the message has loaded.
+  const subject = data?.subject ?? fromCopy?.conversation.messages.at(-1)?.subject;
   const pressed =
-    conversation && data
-      ? { accountId: conversation.accountId, threadId: conversation.threadId, messageIds: conversation.messages.map((m) => m.messageId), subject: data.subject }
+    conversation && subject
+      ? { accountId: conversation.accountId, threadId: conversation.threadId, messageIds: conversation.messages.map((m) => m.messageId), subject }
       : null;
   const listed = data && !picked ? messageKey(data) : null;
   useEffect(() => {
@@ -656,6 +701,7 @@ export function MessageReader({
       onNext={index < items.length - 1 ? () => go(index + 1) : undefined}
     />
   );
+  if (loading && fromCopy && conversation) return <Arriving conversation={conversation} subject={subject!} bar={bar} />;
   if (loading || (threadId && !conversation && thread.loading))
     return (
       <Reader bar={bar} title={<Blank />}>
