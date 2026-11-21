@@ -1,5 +1,18 @@
 'use client';
-import { ActivityIcon, ArrowRightIcon, ListChecksIcon, MegaphoneIcon, PlusIcon, ReplyIcon, SparkleIcon, TagIcon, Trash2Icon, WorkflowIcon } from 'lucide-react';
+import {
+  ActivityIcon,
+  ArchiveIcon,
+  ArrowRightIcon,
+  ListChecksIcon,
+  MailOpenIcon,
+  MegaphoneIcon,
+  PlusIcon,
+  ReplyIcon,
+  SparkleIcon,
+  TagIcon,
+  Trash2Icon,
+  WorkflowIcon,
+} from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint } from '@/components/sender.tsx';
@@ -84,6 +97,7 @@ import {
   Rope,
   RowActions,
   RowCheck,
+  RowPresses,
   More,
   Pager,
   Section,
@@ -735,7 +749,7 @@ export function SystemView() {
 
         <Section
           title="Rows to select"
-          meta="a check on each row, X on the one the keys are on; what to do with them takes the search's place; more rows load as the end is reached; words typed can be asked"
+          meta="dense: a line of small type each; a check on each row (X on the one the keys are on), which fills it; what to do with them takes the search's place; pointed at, a row's presses take its time's place; more rows load as the end is reached; words typed can be asked"
         >
           <Sheet className="p-5">
             <ListPage title="Inbox">
@@ -755,15 +769,16 @@ export function SystemView() {
                   ],
                 }}
               >
-                <Table keys>
+                <Table keys dense>
                   <Heads>
                     <Th phone="hide">Select</Th>
                     <Th>From</Th>
                     <Th phone="hide">Subject</Th>
+                    <Th phone="hide">Received</Th>
                   </Heads>
                   <tbody>
-                    {ROWS.map((row) => (
-                      <Tr key={row.address} onOpen={() => setPanel(true)}>
+                    {ROWS.map((row, index) => (
+                      <Tr key={row.address} selected={picked.has(row.address)} onOpen={() => setPanel(true)}>
                         <RowCheck
                           label={`Select ${row.subject}`}
                           checked={picked.has(row.address)}
@@ -775,6 +790,24 @@ export function SystemView() {
                         <Td phone="hide" className="max-w-0 md:w-full">
                           <span className="block truncate">{row.subject}</span>
                         </Td>
+                        <RowPresses
+                          presses={
+                            <>
+                              <Tooltip says="Archive">
+                                <Button variant="bare" size="tray" aria-label="Archive" onClick={() => toast(`Archived ${row.subject}`)}>
+                                  <ArchiveIcon aria-hidden />
+                                </Button>
+                              </Tooltip>
+                              <Tooltip says="Mark read">
+                                <Button variant="bare" size="tray" aria-label="Mark read" onClick={() => toast(`Marked ${row.subject} read`)}>
+                                  <MailOpenIcon aria-hidden />
+                                </Button>
+                              </Tooltip>
+                            </>
+                          }
+                        >
+                          {`${9 - index}:12 AM`}
+                        </RowPresses>
                       </Tr>
                     ))}
                   </tbody>

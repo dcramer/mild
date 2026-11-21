@@ -50,9 +50,9 @@ export function Blank({ word, className }: { word?: boolean; className?: string 
 /**
  * Stands in for rows that are on their way. Given `children`, they are one row's cells, set like the real
  * row's (the same `Td`s, with a `Blank` for each piece of text), and the table repeats them. Without, lines
- * of text, for what is not a list.
+ * of text, for what is not a list. `dense` for a `dense` table's rows.
  */
-export function Loading({ rows = 6, children }: { rows?: number; children?: ReactNode }) {
+export function Loading({ rows = 6, dense = false, children }: { rows?: number; dense?: boolean; children?: ReactNode }) {
   const each = Array.from({ length: rows }, (_, index) => index);
   if (!children)
     return (
@@ -64,7 +64,7 @@ export function Loading({ rows = 6, children }: { rows?: number; children?: Reac
     );
   return (
     <div aria-busy="true" aria-label="Loading">
-      <Table>
+      <Table dense={dense}>
         <tbody aria-hidden>
           {each.map((index) => (
             <Tr key={index}>{children}</Tr>

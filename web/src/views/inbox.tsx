@@ -1,4 +1,5 @@
 'use client';
+import { ArchiveIcon, MailIcon, MailOpenIcon } from 'lucide-react';
 import { type ReactNode, useDeferredValue, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
@@ -24,10 +25,11 @@ import {
   More,
   Note,
   RowCheck,
-  Sub,
+  RowPresses,
   Table,
   Td,
   Th,
+  Tooltip,
   Tr,
   TrGroup,
   useNow,
@@ -49,24 +51,37 @@ function Place({ thread }: { thread: MailThread }) {
 }
 
 /**
- * One conversation: who wrote, how many messages, the subject and the start of the newest, what Sift thinks the newest
- * is, and when. Unread is in bold. On a phone it reads as For review's rows do: who and when, the subject, then a line of
- * the text with what Sift thinks.
+ * One conversation, on one line as Gmail lists it: who wrote and how many messages, the subject and the start of the
+ * newest, the label Sift gave it, and when; pointed at, Archive and read or unread take the time's place. Unread is bold
+ * and bright, read is plain and dimmer. On a phone it reads as For review's rows do: who and when, the subject, then a
+ * line of the text with the label.
  */
-function ThreadRow({ thread, selected, onSelect, onOpen }: { thread: MailThread; selected: boolean; onSelect: (on: boolean) => void; onOpen: () => void }) {
+function ThreadRow({
+  thread,
+  selected,
+  onSelect,
+  onOpen,
+  press,
+}: {
+  thread: MailThread;
+  selected: boolean;
+  onSelect: (on: boolean) => void;
+  onOpen: () => void;
+  press: (threads: readonly MailThread[], what: 'archive' | 'read' | 'unread') => void;
+}) {
   const subject = reveal(thread.subject) || '(no subject)';
   const who = whoWrote(thread.who);
   const many = thread.messageIds.length > 1 ? <span className="font-normal text-muted-foreground tabular-nums">{thread.messageIds.length}</span> : null;
-  const strong = thread.unread ? 'font-semibold text-foreground' : '';
+  const ink = thread.unread ? 'font-semibold text-foreground' : 'text-foreground/70';
   return (
-    <Tr onOpen={onOpen} holds={thread.messageIds.map((messageId) => messageKey({ accountId: thread.accountId, messageId }))}>
+    <Tr selected={selected} onOpen={onOpen} holds={thread.messageIds.map((messageId) => messageKey({ accountId: thread.accountId, messageId }))}>
       <RowCheck checked={selected} onChange={onSelect} label={`Select ${subject}`} />
-      <Td className="max-w-0 phone:py-2 md:w-[22%] md:min-w-48">
-        <span className={`flex min-w-0 items-baseline gap-1.5 phone:hidden ${thread.unread ? 'name' : ''}`}>
+      <Td className="max-w-0 phone:py-2 md:w-[18%] md:min-w-40">
+        <span className={`flex min-w-0 items-baseline gap-1.5 phone:hidden ${ink}`}>
           <span className="truncate">{who}</span>
           {many}
         </span>
-        {/* On a phone, a mail app's three lines set close: who and when, the subject, the start of the text with what Sift thinks. Unread is bold and bright, read is plain. */}
+        {/* On a phone, a mail app's three lines set close: who and when, the subject, the start of the text with the label. */}
         <span className="flex flex-col leading-snug md:hidden">
           <span className="flex items-baseline gap-3">
             <span className={`flex min-w-0 flex-1 items-baseline gap-1.5 ${thread.unread ? 'name leading-snug' : 'text-foreground/85'}`}>
@@ -90,18 +105,43 @@ function ThreadRow({ thread, selected, onSelect, onOpen }: { thread: MailThread;
         </span>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-full">
-        <span className={`block truncate ${strong}`}>
+        <span className="block truncate">
           <Place thread={thread} />
-          {subject}
+          <span className={ink}>{subject}</span>
+          {thread.preview ? <span className="text-muted-foreground"> — {reveal(thread.preview)}</span> : null}
         </span>
-        {thread.preview ? <Sub>{reveal(thread.preview)}</Sub> : null}
       </Td>
       <Td phone="hide" quiet className="whitespace-nowrap">
         <Thinks thinks={thread.thinks} />
       </Td>
-      <Td phone="hide" num quiet>
-        <Arrived at={thread.newestAt} />
-      </Td>
+      <RowPresses
+        presses={
+          <>
+            <Tooltip says="Archive">
+              <Button variant="bare" size="tray" aria-label="Archive" onClick={() => press([thread], 'archive')}>
+                <ArchiveIcon aria-hidden />
+              </Button>
+            </Tooltip>
+            {thread.unread ? (
+              <Tooltip says="Mark read">
+                <Button variant="bare" size="tray" aria-label="Mark read" onClick={() => press([thread], 'read')}>
+                  <MailOpenIcon aria-hidden />
+                </Button>
+              </Tooltip>
+            ) : (
+              <Tooltip says="Mark unread">
+                <Button variant="bare" size="tray" aria-label="Mark unread" onClick={() => press([thread], 'unread')}>
+                  <MailIcon aria-hidden />
+                </Button>
+              </Tooltip>
+            )}
+          </>
+        }
+      >
+        <span className={thread.unread ? 'font-semibold text-foreground' : undefined}>
+          <Arrived at={thread.newestAt} />
+        </span>
+      </RowPresses>
     </Tr>
   );
 }
@@ -204,7 +244,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
         <Empty>{q !== '' || ask.narrowed ? 'No mail matches.' : narrowed ? 'Nothing in your inbox matches.' : 'Nothing is in your inbox.'}</Empty>
       ) : (
         <>
-          <Table keys>
+          <Table keys dense>
             <Heads>
               <Th phone="hide">Select</Th>
               <Th>From</Th>
@@ -229,6 +269,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
                       })
                     }
                     onOpen={() => onOpen(refs, threads.indexOf(thread))}
+                    press={press}
                   />
                 ))}
               </tbody>

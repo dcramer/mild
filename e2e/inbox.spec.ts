@@ -9,12 +9,14 @@ import {
   mailWindow,
   param,
   path,
+  pointAt,
   reader,
   settings,
   settingsInbox,
   test,
   failureToast,
   toast,
+  tooltip,
 } from './sift.ts';
 
 test.describe('Inbox, off', () => {
@@ -114,6 +116,34 @@ test.describe('Inbox', () => {
     await expect(open).toHaveCount(0);
     await page.goto('/inbox?unread=1');
     await expect(inboxRow(page, 'Widgets, part two')).toBeVisible();
+  });
+
+  test('pointed at, a row puts Archive and Mark read in place of its time, which act on it alone', async ({ page }) => {
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Widgets, part two');
+    await expect(row.getByRole('button', { name: 'Archive' })).toBeHidden();
+    await expect(row.getByRole('cell').last()).toHaveText(/\d:\d\d [AP]M/);
+    await pointAt(row);
+    await expect(row.getByRole('cell').last().locator('time')).toBeHidden();
+    await pointAt(row.getByRole('button', { name: 'Mark read' }));
+    await expect(tooltip(page)).toHaveText('Mark read');
+    await row.getByRole('button', { name: 'Mark read' }).click();
+    await expect(row.getByRole('button', { name: 'Mark unread' })).toBeVisible();
+    await expect(row).toHaveCount(1);
+    await expect(reader(page)).toHaveCount(0);
+
+    // A row whose check was pressed keeps the focus, but shows its presses no longer once the pointer moves on.
+    const other = inboxRow(page, 'This week in widgets');
+    await other.getByRole('checkbox').check();
+    await pointAt(row);
+    await expect(other.getByRole('button', { name: 'Archive' })).toBeHidden();
+    await row.getByRole('button', { name: 'Archive' }).click();
+    await expect(toast(page, 'Widgets, part two')).toBeVisible();
+    await expect(row).toHaveCount(0);
+    await expect(inboxRows(page)).toHaveCount(18);
+    await page.goto('/inbox?unread=1');
+    await expect(inboxRow(page, 'This week in widgets')).toBeVisible();
+    await expect(inboxRow(page, 'Widgets, part two')).toHaveCount(0);
   });
 
   test('X selects, E archives what is selected, and Undo puts it back', async ({ page }) => {

@@ -23,15 +23,21 @@ const VARIANT = {
   danger: `text-destructive hover:bg-(--fill) ${UNPRESSABLE}`,
   /** The press that does the destroying, once asked: red, with dark words, as a failure's toast has (light words on that red cannot be read). */
   destroy: `bg-destructive font-semibold text-background hover:brightness-110 ${UNPRESSABLE}`,
+  /** An icon press in a row's `RowPresses`, shown only while the row is pointed at: filled only when pointed at itself. */
+  bare: 'text-foreground/75 hover:bg-(--fill-strong) hover:text-foreground disabled:opacity-45 aria-disabled:opacity-45',
   /** Actions that repeat down a list (they firm up when their row is pointed at), and ways out. */
   quiet:
     'text-foreground/75 hover:bg-(--fill) hover:text-foreground group-hover/row:bg-(--fill-strong) group-hover/row:text-foreground disabled:opacity-45 aria-disabled:opacity-45',
 } as const;
 
-/** `md` everywhere a control sits in a row or a toolbar; `lg` for the one action a screen is about; `icon` for an icon alone, with an `aria-label`. */
+/**
+ * `md` everywhere a control sits in a row or a toolbar; `lg` for the one action a screen is about; `icon` for an icon alone,
+ * with an `aria-label`; `tray` for one on the block a row's presses sit on (`RowPresses`), a little smaller than the row.
+ */
 const SIZE = {
   md: 'h-(--control) px-3 text-sm',
   icon: 'size-(--control) text-sm',
+  tray: 'size-7 text-sm',
   lg: 'h-12 px-5 text-base',
 } as const;
 
