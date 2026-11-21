@@ -120,22 +120,23 @@ test.describe('with Inbox on', () => {
     await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Half written');
   });
 
-  test('from a mailbox Google has not let Sift send from, it says so and offers the press that asks', async ({ page, sift }) => {
+  test('from a mailbox Google has not let Sift send from, there is nothing to write in, only the press that asks', async ({ page, sift }) => {
     await page.goto('/');
     await switchMailbox(page, WORK);
     await page.keyboard.press('c');
     const writing = composer(page, 'New message');
-    await expect(writing.getByText(`Sift may not send from ${WORK} yet`)).toBeVisible();
+    await expect(writing.getByText(`Sift can’t send from ${WORK} yet`)).toBeVisible();
     await expect(writing.getByRole('link', { name: 'Let Sift send' })).toHaveAttribute(
       'href',
       `/auth/login?${new URLSearchParams({ grant: 'send', mailbox: WORK, to: '/?compose=new' }).toString()}`,
     );
-    await writing.getByRole('textbox', { name: 'To' }).fill('ada@example.org');
-    await expect(writing.getByRole('button', { name: /^Send/ })).toBeDisabled();
+    await expect(writing.getByRole('textbox')).toHaveCount(0);
+    await expect(writing.getByRole('button', { name: /^Send/ })).toHaveCount(0);
 
     await writing.getByRole('combobox', { name: 'From' }).click();
     await page.getByRole('option', { name: ME, exact: true }).click();
     await expect(writing.getByRole('link', { name: 'Let Sift send' })).toHaveCount(0);
+    await writing.getByRole('textbox', { name: 'To' }).fill('ada@example.org');
     await expect(writing.getByRole('button', { name: /^Send/ })).toBeEnabled();
     expect(sift.sent()).toEqual([]);
   });

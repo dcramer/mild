@@ -6,24 +6,41 @@ import { cn } from '@/lib/utils';
 const FIELD =
   'border border-(--frame) bg-transparent placeholder:text-muted-foreground/70 hover:border-foreground/30 focus:border-foreground/45 disabled:opacity-45';
 
+/** Inside something already framed as the place to type (a draft's lines and text), the outline would be a second edge. */
+const BARE = 'border-transparent hover:border-transparent focus:border-transparent';
+
 /**
  * A line of text typed by the reader. Inside a `Field` it takes the field's label; on its own give it an `aria-label`.
  * Its words are a select's size, so the two read as one row; on a touch screen 16px, below which a phone zooms in on a tap.
+ * `bare` on a `DraftLine`.
  */
-export function Input({ className, ...props }: ComponentProps<'input'>) {
+export function Input({ bare = false, className, ...props }: ComponentProps<'input'> & { bare?: boolean }) {
   return (
     <input
-      className={cn('field focus-within-shown h-(--control) min-w-0 rounded-(--corner) px-3 text-sm pointer-coarse:text-base', FIELD, className)}
+      className={cn(
+        'field focus-within-shown h-(--control) min-w-0 rounded-(--corner) px-3 text-sm pointer-coarse:text-base',
+        FIELD,
+        bare && BARE,
+        bare && 'px-0',
+        className,
+      )}
       {...props}
     />
   );
 }
 
-/** Longer text. */
-export function TextArea({ className, ...props }: ComponentProps<'textarea'>) {
+/** Longer text. `bare` inside a draft (`DraftText`). */
+export function TextArea({ bare = false, className, ...props }: ComponentProps<'textarea'> & { bare?: boolean }) {
   return (
     <textarea
-      className={cn('block min-h-48 w-full resize-y rounded-(--corner) px-3 py-2.5 text-base leading-relaxed', FIELD, 'focus-within-shown', className)}
+      className={cn(
+        'block min-h-48 w-full resize-y rounded-(--corner) px-3 py-2.5 text-base leading-relaxed',
+        FIELD,
+        bare && BARE,
+        bare && 'resize-none rounded-none px-(--gutter) py-3 text-reading',
+        'focus-within-shown',
+        className,
+      )}
       {...props}
     />
   );

@@ -8,7 +8,7 @@ With Inbox on, the person writes new mail in a panel over whatever is open, and 
 - `compose-addresses` checks each address in To and Cc once the reader has moved past it.
 - `compose-send` sends with `Send` or Ctrl+Enter (⌘↵ on a Mac), then says `Sent` in a toast.
 - `compose-draft` keeps what is written through closing and reloading; `Discard` drops it, with Undo.
-- `compose-grant` says Sift may not send from a mailbox yet, and offers `Let Sift send`.
+- `compose-grant` says Sift can’t send from a mailbox yet, with nothing to write in, and offers `Let Sift send`.
 - `compose-reply` answers a message from the mailbox it came to, the newest or any other of its conversation; sent from the reader, it joins the conversation there, open.
 - `compose-forward` sends a message on as new mail, `Fwd: ` and its subject, quoted under what is written.
 
@@ -27,7 +27,7 @@ Preconditions:
 - **Addresses.** `ab keyboard type "ada@example.org, nope"`, then click `Subject`: `“nope” is not an address.` under To. `ab find role textbox fill "Ada <ada@example.org>" --name "To"` clears it.
 - **Draft.** Fill `Subject` and `Message`, `ab reload`: the same dialog with the same words (`?compose=new`).
 - **Send.** Click `Message`, `ab press Control+Enter`. The dialog goes, a toast says `Sent` over the subject. Gmail holds it in `me@example.org`, labelled `SENT` (`jq '.mailboxes[0].messages[] | select(.labelIds == ["SENT"]) | .raw' "$RUN/google.json"`, the last being it; the first is the seed's `s1`); `SELECT id, thread_id, label_ids, decided FROM messages WHERE label_ids = '["SENT"]'` is the id Gmail gave it, its own thread, `["SENT"]`, `true`, and `mail_bodies` has its text.
-- **Grant.** Switch the mailbox to `me@work.example.org`, `ab press c`: `Sift may not send from me@work.example.org yet` with `Let Sift send` (`/auth/login?grant=send&mailbox=…&to=/?compose=new`), `Send` disabled.
+- **Grant.** Switch the mailbox to `me@work.example.org`, `ab press c`: `Sift can’t send from me@work.example.org yet` with `Let Sift send` (`/auth/login?grant=send&mailbox=…&to=/?compose=new`), From, and no To, text or `Send` until From is an address Sift may send from.
 - **Reply.** `ab open "$B/?message=m6&compose=reply"`: the reader on Ada's `Lunch on Thursday?`, and under her message the region `Reply`: From `me@example.org` whatever the switch shows, To `Ada Lovelace <ada@example.org>`, no Subject. Sent, Gmail's copy is in thread `t6` with `In-Reply-To: <thursday@example.org>`.
 - **From the reader.** `ab open "$B/inbox?message=m6&thread=t6"`, wait for `Reply all`, `ab press r`, type (the conversation stays above the reply, and the address gains `&compose=reply` in place), `ab press Control+Enter`: the reader stays, and under Ada's message an open one from `me@example.org` with what was typed; Inbox's row is `Ada, me 2`.
 - **An earlier message.** `ab open "$B/inbox?message=m11&thread=bills"`: the three bills, open (unread). `ab find role button click --name "Reply to Utility"` takes the first, May's (`m13`): the region `Reply` at the foot, `Replying to Utility, <time>` over its fields, and `&compose=reply&answering=m13` in the address, which a reload keeps. Sent, Gmail's copy has `Subject: Re: Your May bill` and `In-Reply-To: <may@utility.example.net>`.

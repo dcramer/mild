@@ -23,10 +23,14 @@ import {
   Code,
   ConfirmButton,
   DeleteButton,
+  DiscardButton,
   Copyable,
   Dialog,
   Clause,
   Disclosure,
+  DraftBlocked,
+  DraftLine,
+  DraftText,
   Document,
   Empty,
   Entry,
@@ -1288,6 +1292,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
   const [from, setFrom] = useState<'inbox' | 'review'>('inbox');
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set([NEWEST.id]));
   const [replying, setReplying] = useState<{ title: string; to: (typeof THREAD)[number] } | null>(null);
+  const [sending, setSending] = useState<'allowed' | 'not yet'>('allowed');
   const inbox = from === 'inbox';
   const toggle = (id: string) => {
     const next = new Set(open);
@@ -1297,6 +1302,15 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
   const answer = (title: string, to: (typeof THREAD)[number] = NEWEST) => setReplying({ title, to });
   return (
     <div className="flex flex-col gap-6">
+      <ChoiceGroup
+        label="Sending"
+        value={sending}
+        options={[
+          ['allowed', 'Allowed'],
+          ['not yet', 'Not yet'],
+        ]}
+        onChange={(next) => next && setSending(next)}
+      />
       <ChoiceGroup
         label="Opened from"
         value={from}
@@ -1393,18 +1407,39 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                       : `Replying to ${replying.to.from}, ${replying.to.at}`,
                 })}
             actions={
-              <>
-                <Finish onClick={() => setReplying(null)}>Send</Finish>
-                <Button variant="quiet" onClick={() => setReplying(null)}>
-                  Discard
-                </Button>
-              </>
+              sending === 'allowed' ? (
+                <>
+                  <Finish onClick={() => setReplying(null)}>Send</Finish>
+                  <DiscardButton onClick={() => setReplying(null)} />
+                </>
+              ) : (
+                <>
+                  <Button variant="mark" onClick={() => setSending('allowed')}>
+                    Let Sift send
+                  </Button>
+                  <Button variant="quiet" onClick={() => setReplying(null)}>
+                    Not now
+                  </Button>
+                </>
+              )
             }
           >
-            <Field inline label="To">
-              <Input aria-label="To" className="flex-1" defaultValue={replying.title === 'Forward' ? '' : `${replying.to.from} <${replying.to.address}>`} />
-            </Field>
-            <TextArea aria-label="Message" className="min-h-44" />
+            {sending === 'allowed' ? (
+              <>
+                <DraftLine label="To">
+                  <Input
+                    bare
+                    aria-label="To"
+                    className="flex-1"
+                    defaultValue={replying.title === 'Forward' ? '' : `${replying.to.from} <${replying.to.address}>`}
+                  />
+                  <Button variant="quiet">Cc</Button>
+                </DraftLine>
+                <DraftText aria-label="Message" className="min-h-48" />
+              </>
+            ) : (
+              <DraftBlocked title="Sift can’t send from ada@example.org yet">Google asks you once before Sift can send as you.</DraftBlocked>
+            )}
           </ReplyBox>
         ) : (
           <Presses
