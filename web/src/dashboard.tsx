@@ -131,7 +131,7 @@ function Signed({ drawnForEveryone = false, children }: { drawnForEveryone?: boo
 
 /** The screen beside the rail, clear of the notch, the status bar and the home indicator in an installed app. */
 const COLUMN =
-  'mx-auto flex min-h-svh w-full max-w-7xl min-w-0 flex-col pr-[max(1rem,var(--safe-right))] pb-(--safe-bottom) pl-[max(1rem,var(--safe-left))] md:pt-[calc(1.5rem+var(--safe-top))] md:pr-[max(1.5rem,var(--safe-right))] md:pl-6';
+  'flex min-h-svh w-full min-w-0 flex-col pr-[max(1rem,var(--safe-right))] pb-(--safe-bottom) pl-[max(1rem,var(--safe-left))] md:pt-[calc(1.5rem+var(--safe-top))] md:pr-[max(1.5rem,var(--safe-right))] md:pl-6';
 
 /**
  * The page while the server draws its frame, or the browser asks who is signed in: the name where the rail, the
