@@ -94,7 +94,7 @@ test.describe('The reader, from Inbox', () => {
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
     const open = reader(page);
     const opened = open.getByRole('article');
-    const folded = open.getByRole('row', { name: /^Utility/ });
+    const folded = open.getByRole('button', { name: /^Utility/, expanded: false });
     await expect(opened).toHaveCount(3);
     await expect(opened.getByText('Your bill is ready.', { exact: true })).toHaveCount(3);
 
@@ -150,7 +150,7 @@ test.describe('The reader, from Inbox', () => {
       expect(next.y + next.height / 2).toBeCloseTo(archive.y + archive.height / 2, 0);
       const head = open.getByRole('article').first();
       const sender = await boxOf(head.getByRole('link', { name: 'Utility', exact: true }));
-      const more = await boxOf(head.getByRole('button', { name: 'Reply all or forward' }));
+      const more = await boxOf(head.getByRole('button', { name: 'Reply all, forward and more' }));
       expect(more.y + more.height / 2).toBeCloseTo(sender.y + sender.height / 2, 0);
       const forward = await boxOf(open.getByRole('button', { name: 'Forward', exact: true }));
       expect(forward.y).toBe(reply.y);
@@ -186,9 +186,10 @@ test.describe('A long conversation', () => {
     await page.goto('/system');
     await page.getByRole('button', { name: 'Open a message' }).click();
     const conversation = page.getByRole('region', { name: 'Lunch on Thursday?' });
-    await expect(conversation.getByRole('row', { name: /^(Ada|me|Grace)/ })).toHaveCount(2);
-    await conversation.getByRole('row', { name: '4 more' }).click();
-    await expect(conversation.getByRole('row', { name: /^(Ada|me|Grace)/ })).toHaveCount(6);
+    const folded = conversation.getByRole('button', { name: /^(Ada|me|Grace)/, expanded: false });
+    await expect(folded).toHaveCount(2);
+    await conversation.getByRole('button', { name: '4 more' }).click();
+    await expect(folded).toHaveCount(6);
     await expect(conversation.getByRole('article')).toHaveCount(1);
   });
 });

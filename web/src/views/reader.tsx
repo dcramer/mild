@@ -3,7 +3,7 @@ import { PlusIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
-import { MessageBody, SeenFacts } from '@/components/message-parts.tsx';
+import { MessageBody, SeenFacts, useMessageView } from '@/components/message-parts.tsx';
 import { useMailPress } from '@/components/mail.tsx';
 import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
@@ -209,9 +209,11 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
   const name = reveal(detail.fromName);
   const id = detail.messageId;
   const mine = address === detail.accountId;
+  const { html, more } = useMessageView(detail);
   return (
     <>
       <MessageHead
+        more={more}
         from={
           mine ? (
             'me'
@@ -237,7 +239,7 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
             }
           : {})}
       />
-      <MessageBody key={id} detail={detail} />
+      <MessageBody key={id} detail={detail} html={html} />
     </>
   );
 }
@@ -303,6 +305,7 @@ function Messages({
         from: reveal(m.fromAddress) === conversation.accountId ? 'me' : (reveal(m.fromName) ?? reveal(m.fromAddress)),
         preview: m.preview ? reveal(m.preview) : null,
         at: <Heard at={m.receivedAt} />,
+        unread: m.unread,
       }))
     : [{ id: newest.messageId, from: reveal(newest.fromName) ?? reveal(newest.fromAddress), preview: null, at: <Arrived at={newest.receivedAt} /> }];
   const toggle = (id: string) => {

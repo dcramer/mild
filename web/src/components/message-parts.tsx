@@ -3,15 +3,11 @@ import { useState } from 'react';
 import { type MessageDetail, api } from '@/lib/api.ts';
 import { FACTS, type FactAnswer, capitalised, factWords } from '@/lib/format.ts';
 import { type RuleStart, factStart, listStart } from '@/lib/rule-start.ts';
-import { Button, ChoiceGroup, Heads, MailFrame, Quoted, RowActions, Section, Sub, Table, Td, Th, Tr } from '@/system';
+import { Button, Heads, MailFrame, Quoted, RowActions, Section, Sub, Table, Td, Th, Tr } from '@/system';
 import { splitQuoted } from '@/lib/quoted.ts';
 import { reveal } from '@/lib/reveal.ts';
 
 type View = 'text' | 'html';
-const VIEWS = [
-  ['text', 'Text'],
-  ['html', 'HTML'],
-] as const;
 /** How this reader last chose to read a message, kept in their browser. HTML until they choose text, as a mail client shows it. */
 const VIEW_KEY = 'sift:message-view';
 
@@ -40,13 +36,14 @@ function Letter({ text }: { text: string }) {
   );
 }
 
-/** A message as Sift holds it: its HTML when it has one, or its text when it has none or the reader chose text. */
-export function MessageBody({ detail }: { detail: MessageDetail }) {
+/**
+ * Whether a message shows as its HTML or its text, and the item of its ⋮ menu that changes that (`MessageHead`'s
+ * `more`), none when Sift holds no HTML for it. The choice is kept in the browser for every message after.
+ */
+export function useMessageView(detail: MessageDetail): { html: boolean; more: { label: string; onSelect: () => void }[] } {
   const [view, setView] = useState(storedView);
-  const [blocked, setBlocked] = useState(false);
   const html = detail.hasHtml && view === 'html';
-  const choose = (next: View | null) => {
-    if (!next) return;
+  const choose = (next: View) => {
     setView(next);
     try {
       window.localStorage.setItem(VIEW_KEY, next);
@@ -54,14 +51,15 @@ export function MessageBody({ detail }: { detail: MessageDetail }) {
       // Not remembered; this message still shows it.
     }
   };
+  return { html, more: detail.hasHtml ? [{ label: html ? 'Show as text' : 'Show as HTML', onSelect: () => choose(html ? 'text' : 'html') }] : [] };
+}
+
+/** A message as Sift holds it: its HTML (`html`, from `useMessageView`), or its text when it has none or the reader chose text. */
+export function MessageBody({ detail, html }: { detail: MessageDetail; html: boolean }) {
+  const [blocked, setBlocked] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {detail.hasHtml ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <ChoiceGroup label="Read it as" value={html ? 'html' : 'text'} options={VIEWS} onChange={choose} />
-          {html && blocked ? <p className="text-sm text-muted-foreground">Remote images are blocked</p> : null}
-        </div>
-      ) : null}
+      {html && blocked ? <p className="text-sm text-muted-foreground">Remote images are blocked</p> : null}
       {html ? (
         <MailFrame
           src={api.messageHtml(detail.messageId, detail.accountId)}

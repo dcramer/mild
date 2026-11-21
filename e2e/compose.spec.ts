@@ -176,7 +176,7 @@ test.describe('with Inbox on', () => {
     await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
     const open = reader(page);
     // Its key is bound once the press is drawn.
-    await expect(open.getByRole('button', { name: /^Reply all(?! or)/ })).toBeVisible();
+    await expect(open.getByRole('button', { name: /^Reply all(?!,)/ })).toBeVisible();
     await page.keyboard.press('r');
     const writing = composer(page, 'Reply');
     await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('Ada Lovelace <ada@example.org>');
@@ -206,8 +206,8 @@ test.describe('with Inbox on', () => {
     // The row is the conversation's newest message now: the reply.
     await inboxRow(page, 'Re: Lunch on Thursday?').getByRole('cell').nth(2).click();
     await expect(reader(page).getByText('Thursday works.')).toBeVisible();
-    await expect(reader(page).getByRole('row').filter({ hasText: 'Thursday works.' })).toHaveCount(0);
-    await expect(reader(page).getByRole('row').filter({ hasText: 'Ada' })).toHaveCount(1);
+    await expect(reader(page).getByRole('button', { expanded: false }).filter({ hasText: 'Thursday works.' })).toHaveCount(0);
+    await expect(reader(page).getByRole('button', { name: /^Ada/, expanded: false })).toHaveCount(1);
   });
 
   test('the Reply under the conversation answers its newest, in the box at its foot', async ({ page, sift }) => {
@@ -271,7 +271,7 @@ test.describe('with Inbox on', () => {
     await page.goto('/inbox');
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
     const open = reader(page);
-    await open.getByRole('article').first().getByRole('button', { name: 'Reply all or forward' }).click();
+    await open.getByRole('article').first().getByRole('button', { name: 'Reply all, forward and more' }).click();
     await page.getByRole('menuitem', { name: 'Forward' }).click();
     const writing = composer(page, 'Forward');
     await expect(writing.getByText(/^Forwarding Utility’s message, /)).toBeVisible();
