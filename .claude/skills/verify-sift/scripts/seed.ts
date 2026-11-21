@@ -99,6 +99,16 @@ const DEALS_HTML = `<!DOCTYPE html><html><head><title>Deals</title><meta http-eq
 <script>document.body.dataset.ran = 'yes'</script>
 </body></html>`;
 
+/**
+ * Ada's reply about the release script, as Gmail writes one: a letter in HTML, with what it answers quoted under it in
+ * Gmail's markup, and the same in its text, so the reader shows it in the dashboard's ink with the quote folded.
+ */
+const RELEASE = {
+  subject: 'Re: Fix the release script (#412)',
+  text: 'I pushed a fix for the tag step. Can you try it before Friday?\n\nAda\n\nOn Mon, Nov 2, 2026 at 9:14 AM Me <me@example.org>\nwrote:\n\n> The release script stops at the tag step.\n> Could you take a look?\n',
+  html: `<div dir="ltr">I pushed a fix for the tag step. Can you try it <a href="https://code.example.com/sift/pull/412">before Friday</a>?<div><br></div><div>Ada</div></div><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">On Mon, Nov 2, 2026 at 9:14 AM Me &lt;<a href="mailto:me@example.org">me@example.org</a>&gt; wrote:<br></div><blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex"><div dir="ltr">The release script stops at the tag step.<div>Could you take a look?</div></div></blockquote></div>`,
+};
+
 const inbox = [
   mail('Weekly Digest <digest@news.example.com>', 'This week in widgets', 'Five stories about widgets.', list('news.example.com')),
   mail('Weekly Digest <digest@news.example.com>', 'Widgets, part two', 'More stories about widgets.', list('news.example.com')),
@@ -151,7 +161,11 @@ const inbox = [
       ['github-actions[bot]', 'Run failed: Deploy on main'],
       ['Ada Lovelace', 'Re: Fix the release script (#412)'],
     ] as const
-  ).map(([name, subject]) => mail(`${name} <notifications@code.example.com>`, subject, subject)),
+  ).map(([name, subject]) =>
+    subject === RELEASE.subject
+      ? { ...mail(`${name} <notifications@code.example.com>`, subject, RELEASE.text), html: RELEASE.html }
+      : mail(`${name} <notifications@code.example.com>`, subject, subject),
+  ),
 ];
 
 const google = new FakeGoogle();

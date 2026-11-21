@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { cleanHtml, mailDocument } from '../src/dashboard/mail-html.ts';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { FRAME_SCRIPT } from '../src/dashboard/frame-script.ts';
+import { INK, cleanHtml, isLetter, mailDocument } from '../src/dashboard/mail-html.ts';
 import { readContent } from '../src/gmail/body.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { readBodies } from '../src/store/query.ts';
@@ -67,11 +70,38 @@ describe('cleaning a message for the frame', () => {
     expect(performance.now() - started).toBeLessThan(2_000);
   });
 
-  it('puts the message on white paper, after its doctype', () => {
+  it('puts designed mail on white paper, after its doctype, with the frame script before the message', () => {
     const document = mailDocument(HTML);
-    expect(document).toMatch(/^<!DOCTYPE html><style>:root\{color-scheme:light;background:#fff;color:#000;[^<]*<\/style><html>/);
-    expect(document).not.toMatch(/script|refresh|<base|<title|hero\.png|https:\/\/tracker/);
+    expect(document).toMatch(
+      /^<!DOCTYPE html><style>:root\{color-scheme:light;background:#fff;color:#000;[^<]*<\/style><script>\(\(\) => \{[\s\S]*\}\)\(\);<\/script><html>/,
+    );
+    expect(document.replace(`<script>${FRAME_SCRIPT}</script>`, '')).not.toMatch(/script|refresh|<base|<title|hero\.png|https:\/\/tracker/);
     expect(document).toContain('background:url(https://cdn.example.com/bg.png)');
+  });
+
+  it('reads a letter in the dashboard’s ink, and a design on its paper', () => {
+    const gmail =
+      '<div dir="ltr">See you then.<div><br></div></div><div class="gmail_quote"><blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex">Lunch?</blockquote></div>';
+    const outlook =
+      '<html><head><style>p.MsoNormal{margin:0}</style></head><body><div class="elementToProof" style="font-family:Aptos,sans-serif;font-size:12pt;color:rgb(0,0,0);background-color:rgb(255, 255, 255)">Works for me.</div><div id="appendonsend"></div><hr style="display:inline-block;width:98%"></body></html>';
+    for (const letter of [gmail, outlook, '<p>Hi</p><img alt="Signature">', '<table width="100%" bgcolor="#ffffff"><tr><td>Hi</td></tr></table>'])
+      expect(isLetter(cleanHtml(letter)), letter).toBe(true);
+    for (const design of [
+      HTML,
+      '<div style="background:#f4efe6">Sale</div>',
+      '<table width="600"><tr><td>Sale</td></tr></table>',
+      '<div style="max-width: 600px">Sale</div>',
+      '<style>@media (max-width:600px){td{display:block}}</style><p>Sale</p>',
+      '<td style="background-image:url(https://cdn.example.com/a.png)">Sale</td>',
+    ])
+      expect(isLetter(cleanHtml(design)), design).toBe(false);
+    expect(mailDocument(gmail)).toMatch(new RegExp(`^<style>:root\\{color-scheme:dark;background:transparent;color:${INK.foreground};`));
+  });
+
+  it('draws a letter in the colours the dashboard has', () => {
+    const css = readFileSync(new URL('../web/src/index.css', import.meta.url), 'utf8');
+    const token = (name: string) => new RegExp(`\\s--${name}:\\s*([^;]+);`).exec(css)?.[1];
+    expect({ foreground: token('foreground'), muted: token('muted-foreground'), border: token('border') }).toEqual(INK);
   });
 
   it("reads a message's text and its HTML part, each as it is", () => {
@@ -106,22 +136,23 @@ describe('the frame route', () => {
     ]);
   });
 
-  it('sends the HTML Sift holds, cleaned, under a strict policy of its own, in a sandbox, loading nothing', async () => {
+  it('sends the HTML Sift holds, cleaned, under a strict policy of its own, in a sandbox, running only its own script and loading nothing', async () => {
     const { call } = await startDashboard(people(store));
     const reply = await call('GET', `/api/message/html?id=m1`);
     expect(reply.status).toBe(200);
     expect(reply.text).toContain(MARKER);
-    expect(reply.text).not.toContain('<script');
+    expect(reply.text.replace(`<script>${FRAME_SCRIPT}</script>`, '')).not.toContain('<script');
     expect(reply.headers).toMatchObject({
-      'content-security-policy':
-        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-popups allow-popups-to-escape-sandbox",
+      'content-security-policy': `default-src 'none'; script-src 'sha256-${createHash('sha256').update(FRAME_SCRIPT).digest('base64')}'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox`,
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'no-referrer',
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
     });
+    // Sift's own script runs, by its hash alone, in a frame with no origin of its own that reaches nowhere.
     const policy = String(reply.headers['content-security-policy']);
-    expect(policy).not.toMatch(/allow-scripts|allow-same-origin|script-src|connect-src|https?:/);
+    expect(policy).not.toMatch(/allow-same-origin|unsafe-eval|connect-src|https?:/);
+    expect(/script-src ([^;]*)/.exec(policy)?.[1]).toMatch(/^'sha256-[\w+/]+=*'$/);
   });
 
   it('says so, in the frame, when Sift holds no HTML for it', async () => {
