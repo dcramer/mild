@@ -11,6 +11,7 @@ import { serverBuild } from '@/lib/build.ts';
 import { useKeptPlace } from '@/lib/place.ts';
 import { signOut } from '@/lib/sign-out.ts';
 import { keepStart } from '@/lib/start.ts';
+import { conversations } from '@/lib/copy.ts';
 import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
@@ -165,6 +166,13 @@ function useStartsOn(inbox: boolean | null) {
   }, [inbox, start, router]);
 }
 
+/** While Inbox is on, the copy of it starts as the page does, so it is there before Inbox is opened (docs/sync.md). */
+function useCopy(on: boolean) {
+  useEffect(() => {
+    if (on) conversations();
+  }, [on]);
+}
+
 /** How long before Google ends a sign-in the page says so: two days, so someone who looks in once a day sees it. */
 const SIGN_IN_WARNING_MS = 2 * 86_400_000;
 
@@ -279,6 +287,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
     : undefined;
   const choice = { mailboxes, value: mailbox, onChange: chooseMailbox };
   useStartsOn(manage.data ? manage.data.mail : null);
+  useCopy(manage.data?.mail === true);
   // Writing mail is offered only with Inbox on.
   const composer = manage.data?.mail ? openComposer : null;
   // A reply and a forward are written in the reader.

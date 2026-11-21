@@ -26,6 +26,8 @@
     "import/no-unassigned-import": "off",
     "no-shadow": "off",
     "unicorn/consistent-function-scoping": "off",
+    // It takes every postMessage for a window's; the page posts only on a BroadcastChannel, which has no target origin (web/src/lib/copy.ts).
+    "unicorn/require-post-message-target-origin": "off",
     "no-await-in-loop": "off"
   },
   "overrides": [

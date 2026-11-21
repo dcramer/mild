@@ -1,4 +1,5 @@
 'use client';
+import { eq, useLiveQuery } from '@tanstack/react-db';
 import { PlusIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAnswer, useRecordAnswer } from '@/components/answer.tsx';
@@ -8,7 +9,8 @@ import { useMailPress } from '@/components/mail.tsx';
 import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { useAction } from '@/lib/action.ts';
-import { type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, useLoaded } from '@/lib/api.ts';
+import { type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, readAhead, useLoaded } from '@/lib/api.ts';
+import { conversationOf, conversations, copied, copiedKey } from '@/lib/copy.ts';
 import { type Writing, closeReply, useCompose, writing } from '@/lib/compose.ts';
 import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import type { MessageRef } from '@/lib/open-messages.ts';
@@ -16,6 +18,7 @@ import { messageKey, useParam } from '@/lib/params.ts';
 import { AT_API_PRICES } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
+import { useStarted } from '@/system/started.ts';
 import { InlineComposer } from '@/views/composer.tsx';
 import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
@@ -596,7 +599,24 @@ export function MessageReader({
   );
   const threadId = picked ? undefined : item.threadId;
   const threadLoad = `thread/${item.accountId}/${threadId ?? ''}`;
-  const thread = useLoaded(threadLoad, (signal) => (threadId ? api.mailThread(threadId, signal, item.accountId) : Promise.resolve(null)), 30_000, '');
+  // A conversation in the inbox is in this browser's copy already (docs/sync.md); the server is asked for one that is not.
+  const key = threadId && item.accountId ? copiedKey(item.accountId, threadId) : null;
+  const started = useStarted();
+  const inCopy = useLiveQuery({ query: (from) => (key && started ? from.from({ c: conversations() }).where(({ c }) => eq(c.key, key)) : undefined) });
+  const thread = useLoaded(
+    threadLoad,
+    (signal) => {
+      const held = key ? copied(key) : undefined;
+      return held ? Promise.resolve(conversationOf(held)) : threadId ? api.mailThread(threadId, signal, item.accountId) : Promise.resolve(null);
+    },
+    30_000,
+    '',
+  );
+  // The conversations either side are read ahead, so previous and next wait on nothing.
+  useEffect(() => {
+    for (const near of [items[index + 1], items[index - 1]])
+      if (near?.accountId) readAhead(`message/${near.accountId}/${near.messageId}`, (signal) => api.message(near.messageId, signal, near.accountId));
+  }, [items, index]);
   const { press } = useMailPress();
   // Each message starts at its top, as a page does.
   const go = (to: number) => {
@@ -608,7 +628,8 @@ export function MessageReader({
     window.scrollTo(0, 0);
   };
   const next = () => (index < items.length - 1 ? go(index + 1) : onBack());
-  const conversation = threadId ? thread.data : null;
+  const fromCopy = inCopy.data?.[0];
+  const conversation = threadId ? (fromCopy ? conversationOf(fromCopy) : thread.data) : null;
   const pressed =
     conversation && data
       ? { accountId: conversation.accountId, threadId: conversation.threadId, messageIds: conversation.messages.map((m) => m.messageId), subject: data.subject }
@@ -635,7 +656,7 @@ export function MessageReader({
       onNext={index < items.length - 1 ? () => go(index + 1) : undefined}
     />
   );
-  if (loading || (threadId && thread.loading))
+  if (loading || (threadId && !conversation && thread.loading))
     return (
       <Reader bar={bar} title={<Blank />}>
         <Loading rows={6} />

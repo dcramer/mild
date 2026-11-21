@@ -1,8 +1,8 @@
 # Sync
 
-The server's side is built: the feed, the numbers its writes are given, and each browser's key. The browser's copy is not yet; until it is, [architecture.md](architecture.md#dashboard) describes the page as it is.
+Built for Inbox: its list and the reader's conversation are drawn from the copy. For review, labels, rules and settings still read the server as [architecture.md](architecture.md#dashboard) describes, until each moves onto it.
 
-The dashboard keeps a copy of the person's mail summaries, labels, rules and settings in the browser, encrypted, and draws every screen from it. The server sends what changed since the copy was last brought up to date. A screen opened, a conversation opened, J and K, a filter changed or a press made waits on nothing; the network only reconciles.
+The dashboard keeps a copy of the person's mail in the browser, encrypted, and draws the screens from it. The server sends what changed since the copy was last brought up to date. A screen opened, a conversation opened, J and K, a filter changed or a press made waits on nothing; the network only reconciles.
 
 The shape follows what mail clients built for this do: Fastmail's offline web client on JMAP (a counter per account, "changes since", a fresh start when a cursor is too old, the inbox's listing worked out from what is held), Linear's sync engine (a write confirmed when the client has applied the log through its number), and Proton Mail's web client for the device's key (held by the server, released to a live session). Sources are at the end.
 
@@ -26,7 +26,7 @@ A message's HTML is still a frame loaded from the server under its own policy (`
 
 A conversation is one record, `SyncedConversation` (`src/dashboard/types.ts`): its recorded messages, oldest first, each as Inbox and the reader's folded rows show it (sender's name and address, subject, preview, when, Gmail's label ids), and what Sift thinks of its newest (the current decision, or the person's answer where they gave one; the label by its id, named from the person's labels so renaming one changes no conversation). It is one record because an archive in Gmail that takes its last message out of the inbox takes all of it out of the window, including messages that did not change.
 
-A message's text is not in the feed: it never changes, so the page asks for it by id, 50 at a time (`GET /api/mail/texts`), and keeps it. Labels, rules, proposals and settings stay server reads for now (they are drawn with the page already, `src/sift/page-data.ts`); each gets a kind of its own in the feed when a screen needs it.
+A message's text is not in the feed: the reader reads it with the rest of the message (`GET /api/message`), ahead of a press that opens it. Labels, rules, proposals and settings stay server reads for now (they are drawn with the page already, `src/sift/page-data.ts`); each gets a kind of its own in the feed when a screen needs it.
 
 What is `held` in a reply is `held` in these too, and the page draws it through `reveal` as before.
 
@@ -72,10 +72,17 @@ It holds against a lost, stolen or copied disk as far as the session does (a dis
 
 ## In the browser
 
-- **TanStack DB** (`@tanstack/react-db`, pinned: it is a release candidate, `1.0.0-rc.1.5`), one collection a kind, each with its own sync function: it fills from the device's copy, says it is ready, then takes the feed (`begin`, `write`, `commit`; `truncate` on a reset). Its own storage is not used: it is not encrypted. Its write handlers call the routes the page calls now and resolve once the copy reaches the write's number; a throw undoes the change. Screens read through `useLiveQuery`.
+All of it is `web/src/lib/copy.ts`.
+
+- **TanStack DB** (`@tanstack/react-db`, pinned: it is a release candidate, `1.0.0-rc.1.5`). One collection, `conversations`, with a sync function of its own: it fills from the device's copy, newest first, says it is ready once the first 50 are in (or, with nothing on the device, once the whole copy has arrived), then takes the feed (`begin`, `write`, `commit`; a reset is one transaction with `snapshot: true`). Its own storage is not used: it is not encrypted. Started as the dashboard is drawn while Inbox is on, so it is there before Inbox is opened.
+- **Inbox's list** is a live query on it (`useLiveQuery`, `web/src/views/inbox.tsx`): the views, the label and unread filters and the mailbox switch narrow it in the browser. A search, or what Ask made of one, still asks the server, which alone holds what is outside the inbox and the index. The list says the inbox is empty only once the whole copy is here (`useWhole`). Its query is kept 30 minutes once nothing shows it, so going back from the reader draws it as it was.
+- **The reader** takes a conversation the copy holds from it; the message itself (`/api/message`, with its text) is read ahead when a row is pointed at or reached by the keys, and for the conversations either side of the one open.
+- **Presses.** Every write's `x-sift-seq` is heard by `onWrite` (`web/src/lib/api.ts`), which asks the feed at once. Read and unread show at once (`markCopied`, a TanStack DB optimistic action) and are undone if Gmail refuses; Archive hides its rows as before, and keeps them hidden until the copy holds the change (`caughtUp`), so they do not come back meanwhile.
 - **One tab asks.** The tabs pick one with the Web Locks API (`navigator.locks`); it asks the feed, writes the device's copy and hands each reply to the others over a `BroadcastChannel`. Another takes over when it closes.
 - **When it asks:** every 30 seconds while the page is visible, when it is returned to, when Sift answers again after being unreachable, and straight after a write. Mail reaches Sift at the minute tick's pace, so asking more often brings little sooner.
-- TanStack Query stays for what is read from the server.
+- **Where the browser cannot encrypt** (a plain-HTTP address, where WebCrypto is not offered) nothing is kept on the device: the copy is fetched whole each time the page opens and held in memory.
+
+Measured on verify-sift's seed with Inbox on, 60 ms of network and 150 ms more for each server reply, against the page without the copy: Inbox opened again from 861 ms to 690 ms until its rows show; a conversation opened from 357 ms to 237 ms; J to the next from 272 ms to 88 ms. Most of what is left of opening the page is the dashboard's frame: React holds back showing a Suspense boundary's content until 300 ms after its fallback showed, and the frame is one, so the page waits about 300 ms with nothing to do ([TODO.md](../TODO.md)).
 
 ## What it costs
 
@@ -89,7 +96,7 @@ They are in [runtime.md](runtime.md#what-it-costs) too.
 ## Order of work
 
 1. The server. Built: `tests/api/sync.test.ts`, `tests/sync.test.ts`.
-2. The browser: the encrypted copy, the one tab that asks, the collections, and Inbox and the reader on them.
+2. The browser: the encrypted copy, the one tab that asks, the collection, and Inbox and the reader on it. Built: `e2e/inbox.spec.ts`.
 3. For review on the copy.
 4. Remove what it replaces: each screen's polling, and what the server answered only for lists the copy now draws.
 

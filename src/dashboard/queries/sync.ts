@@ -1,11 +1,11 @@
-import { and, asc, conversationChanges, decisions, desc, eq, feedback, gt, inArray, lt, mailBodies, max, messages, or, sql } from '../../store/query.ts';
+import { and, asc, conversationChanges, decisions, desc, eq, feedback, gt, inArray, lt, max, messages, or, sql } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { preferences } from '../../store/preferences.ts';
 import { headOf } from '../../store/sync.ts';
-import { openEnvelope, openPart } from '../../store/content.ts';
+import { openEnvelope } from '../../store/content.ts';
 import { type Scope, within } from '../scope.ts';
-import type { MailTexts, SyncPage, SyncedConversation } from '../types.ts';
+import type { SyncPage, SyncedConversation } from '../types.ts';
 import { previewsOf } from './mail.ts';
 
 /**
@@ -59,6 +59,7 @@ export async function syncPage(db: Sql, scope: Scope, since: string | undefined)
       cursor: write({ seq: from.seq, ...(more && last ? { after: { at: last.at, accountId: last.accountId, threadId: last.threadId } } : {}) }),
       reset: behind,
       more,
+      seq: from.seq,
       mailboxes,
       conversations: await conversations(db, scope, page.slice(0, SNAPSHOT)),
     };
@@ -74,6 +75,7 @@ export async function syncPage(db: Sql, scope: Scope, since: string | undefined)
     cursor: write({ seq: shown.at(-1)?.seq ?? cursor.seq }),
     reset: false,
     more: changed.length > CHANGES,
+    seq: shown.at(-1)?.seq ?? cursor.seq,
     mailboxes,
     conversations: await conversations(db, scope, shown),
   };
@@ -212,24 +214,4 @@ async function thinksOf(db: Sql, newest: readonly (readonly [string, string])[])
     });
   }
   return thinks;
-}
-
-/** Up to 50 messages' text from Inbox's copy, by `accountId/messageId`. */
-export async function texts(db: Sql, scope: Scope, wanted: readonly { accountId: string; messageId: string }[]): Promise<MailTexts> {
-  if (wanted.length === 0) return { texts: [] };
-  const keys = new Set(wanted.map((w) => key(w.accountId, w.messageId)));
-  const rows = await db
-    .select({
-      accountId: mailBodies.accountId,
-      messageId: mailBodies.messageId,
-      text: mailBodies.bodyText,
-      hasHtml: sql<boolean>`${mailBodies.bodyHtml} IS NOT NULL`,
-    })
-    .from(mailBodies)
-    .where(and(within(scope, mailBodies.accountId), inArray(mailBodies.messageId, [...new Set(wanted.map((w) => w.messageId))])));
-  return {
-    texts: rows
-      .filter((r) => keys.has(key(r.accountId, r.messageId)))
-      .map((r) => ({ accountId: r.accountId, messageId: r.messageId, text: openPart(db, r.accountId, r.messageId, 'text', r.text)!, hasHtml: r.hasHtml })),
-  };
 }

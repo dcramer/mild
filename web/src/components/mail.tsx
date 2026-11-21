@@ -1,6 +1,7 @@
 'use client';
-import { type Confidential, type MailThread, api } from '@/lib/api.ts';
+import { type MailThread, api } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
+import { caughtUp, copied, copiedKey, markCopied } from '@/lib/copy.ts';
 import { outcomeName, sureness } from '@/lib/format.ts';
 import { threadKey } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -29,6 +30,8 @@ export function useMailPress(): { press: (threads: readonly Pressed[], what: Pre
           api.changeMail({ accountId, messageIds: mine.flatMap((t) => (what === 'unread' ? t.messageIds.slice(-1) : t.messageIds)), change: what }),
         ),
       );
+      // What a press hid stays hidden until the copy of the inbox holds the change, so it does not come back meanwhile.
+      await caughtUp();
       return { actions: replies.flatMap((reply) => reply.actions), missed: replies.some((reply) => reply.missed > 0) };
     });
     pressing = sent.catch(() => undefined);
@@ -43,10 +46,14 @@ export function useMailPress(): { press: (threads: readonly Pressed[], what: Pre
     press: (threads, what, then) => {
       if (threads.length === 0) return;
       if (what !== 'archive') {
-        run(async () => {
+        const work = async () => {
           const { missed } = await send(threads, what);
           unless(missed, threads);
-        }, then);
+        };
+        const keys = threads.map((t) => copiedKey(t.accountId, t.threadId));
+        // Shown at once where the copy holds them all, and undone if Gmail refuses.
+        if (keys.every((key) => copied(key))) run(async () => await markCopied({ keys, unread: what === 'unread', work }).when('settled'), then);
+        else run(work, then);
         return;
       }
       hide(threads.map(threadKey), threads.length === 1 ? 'Could not archive it' : 'Could not archive them', async () => {
@@ -64,8 +71,7 @@ export function useMailPress(): { press: (threads: readonly Pressed[], what: Pre
 }
 
 /** Who wrote in a conversation, as a mail app lists them: one name whole, several by first name. */
-export function whoWrote(who: readonly Confidential[]): string {
-  const names = who.map((w) => reveal(w));
+export function whoWrote(names: readonly string[]): string {
   if (names.length === 1) return names[0];
   return names.map((name) => (name.includes('@') ? name.split('@')[0] : name.split(/\s+/)[0])).join(', ');
 }
