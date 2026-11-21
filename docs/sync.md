@@ -82,7 +82,7 @@ All of it is `web/src/lib/copy.ts`.
 - **When it asks:** every 30 seconds while the page is visible, when it is returned to, when Sift answers again after being unreachable, and straight after a write. Mail reaches Sift at the minute tick's pace, so asking more often brings little sooner.
 - **Where the browser cannot encrypt** (a plain-HTTP address, where WebCrypto is not offered) nothing is kept on the device: the copy is fetched whole each time the page opens and held in memory.
 
-Measured on verify-sift's seed with Inbox on, 60 ms of network and 150 ms more for each server reply, against the page without the copy: Inbox opened again from 861 ms to 690 ms until its rows show; a conversation opened from 357 ms to 237 ms; J to the next from 272 ms to 88 ms. Most of what is left of opening the page is the dashboard's frame: React holds back showing a Suspense boundary's content until 300 ms after its fallback showed, and the frame is one, so the page waits about 300 ms with nothing to do ([TODO.md](../TODO.md)).
+Measured on verify-sift's seed with Inbox on, 60 ms of network and 150 ms more for each server reply, against the page without the copy: Inbox opened again from 861 ms to 690 ms until its rows show; a conversation opened from 357 ms to 237 ms; J to the next from 272 ms to 88 ms. The dashboard's frame was a Suspense boundary, which React shows no sooner than 300 ms after the page first paints; it blocks now ([architecture.md](architecture.md#dashboard)), and Inbox opened again shows its rows at 129 ms on localhost where it took 407.
 
 ## What it costs
 

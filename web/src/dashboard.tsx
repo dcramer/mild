@@ -137,7 +137,7 @@ const COLUMN =
  * The page while the server draws its frame, or the browser asks who is signed in: the name where the rail, the
  * masthead and the sign-in page have it, and the loading bar. Built once for everyone, so nothing that only someone signed in sees.
  */
-export function Opening() {
+function Opening() {
   return (
     <div className="md:flex">
       <Rail current="" items={[]} />
