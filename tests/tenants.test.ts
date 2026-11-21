@@ -195,6 +195,8 @@ const READS = (account: string, mark: string) => [
   `/api/mail/threads?q=${mark}&view=needs&unread=1`,
   `/api/mail/threads?from=sender@${mark}.example.com&domain=${mark}.example.com&since=0`,
   `/api/mail/thread?thread=t1&mailbox=${encodeURIComponent(account)}`,
+  '/api/sync',
+  `/api/mail/texts?ids=${encodeURIComponent(`${account}/m-${mark}`)}`,
 ];
 
 describe('users and their mailboxes', () => {

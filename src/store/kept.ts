@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull, lt, mailBodies, messages, notExists, preferences, readBodies, sql } from './query.ts';
+import { and, count, eq, inArray, isNull, lt, mailBodies, messages, notExists, or, preferences, readBodies, sql } from './query.ts';
 import type { Sql } from './sql.ts';
 import { openEnvelope, openPart, sealFacts, sealMessage, sealPart } from './content.ts';
 import { type Searched, searchIndex } from './search.ts';
@@ -27,11 +27,17 @@ export interface Text {
 }
 
 /** `from` and `subject` are the message's, for its search index with the text. */
+const PREVIEW_CHARS = 400;
+
+/** The start of a message's text on one line, as a list shows it under the subject. */
+export const previewOf = (text: string): string => text.slice(0, PREVIEW_CHARS).replace(/\s+/g, ' ').trim();
+
 const bodyOf = (db: Sql, accountId: string, messageId: string, text: Text, envelope: Omit<Searched, 'text'>, now: number) => ({
   accountId,
   messageId,
   bodyText: sealPart(db, accountId, messageId, 'text', text.text)!,
   bodyHtml: sealPart(db, accountId, messageId, 'html', text.html),
+  preview: sealPart(db, accountId, messageId, 'preview', previewOf(text.text)),
   search: searchIndex(db, { ...envelope, text: text.text }),
   fetchedAt: now,
 });
@@ -217,43 +223,51 @@ export async function exampleText(db: Sql, accountId: string, messageId: string)
 /** Read at once, a pass at a time: each is its text decrypted and a few thousand keyed hashes, about 3 ms. */
 const INDEX_BATCH = 100;
 
-/** Whether text kept before there was a search index waits for one. */
+/** Text kept before there was a search index or a preview: what the pass fills in. */
+const unfinished = () => or(isNull(mailBodies.search), isNull(mailBodies.preview));
+
+/** Whether text kept before there was a search index or a preview waits for one. */
 export async function searchDue(db: Sql, accountId: string): Promise<boolean> {
   const [row] = await db
     .select({ one: sql`1` })
     .from(mailBodies)
-    .where(and(eq(mailBodies.accountId, accountId), isNull(mailBodies.search)))
+    .where(and(eq(mailBodies.accountId, accountId), unfinished()))
     .limit(1);
   return row !== undefined;
 }
 
 /**
- * Index up to `most` messages whose text was kept before there was a search index, stopping once `over`. Safe to repeat:
- * a row is written only while it has none. Returns how many it indexed.
+ * Index, and give a preview to, up to `most` messages whose text was kept before there was a search index or a preview,
+ * stopping once `over`. Safe to repeat: each is written only while it has none. Returns how many it went through.
  */
 export async function indexKept(db: Sql, accountId: string, most: number, over: () => boolean): Promise<number> {
   let done = 0;
   while (done < most && !over()) {
     const rows = await db
-      .select({ messageId: mailBodies.messageId, text: mailBodies.bodyText, headers: messages.headers })
+      .select({
+        messageId: mailBodies.messageId,
+        text: mailBodies.bodyText,
+        indexed: sql<boolean>`${mailBodies.search} IS NOT NULL`,
+        previewed: sql<boolean>`${mailBodies.preview} IS NOT NULL`,
+        headers: messages.headers,
+      })
       .from(mailBodies)
       .innerJoin(messages, and(eq(messages.accountId, mailBodies.accountId), eq(messages.id, mailBodies.messageId)))
-      .where(and(eq(mailBodies.accountId, accountId), isNull(mailBodies.search)))
+      .where(and(eq(mailBodies.accountId, accountId), unfinished()))
       .limit(Math.min(INDEX_BATCH, most - done));
     if (rows.length === 0) break;
     await db.transaction(async (tx) => {
       for (const r of rows) {
-        const opened = openEnvelope(tx, accountId, r.messageId, { headers: r.headers });
-        const search = searchIndex(tx, {
-          text: plain(openPart(tx, accountId, r.messageId, 'text', r.text)) ?? '',
-          fromName: plain(opened.fromName),
-          fromAddress: plain(opened.fromAddress),
-          subject: plain(opened.subject),
-        });
+        const text = plain(openPart(tx, accountId, r.messageId, 'text', r.text)) ?? '';
+        const opened = r.indexed ? null : openEnvelope(tx, accountId, r.messageId, { headers: r.headers });
+        const search = opened
+          ? searchIndex(tx, { text, fromName: plain(opened.fromName), fromAddress: plain(opened.fromAddress), subject: plain(opened.subject) })
+          : undefined;
+        const preview = r.previewed ? undefined : sealPart(tx, accountId, r.messageId, 'preview', previewOf(text));
         await tx
           .update(mailBodies)
-          .set({ search })
-          .where(and(eq(mailBodies.accountId, accountId), eq(mailBodies.messageId, r.messageId), isNull(mailBodies.search)));
+          .set({ ...(search ? { search } : {}), ...(preview ? { preview } : {}) })
+          .where(and(eq(mailBodies.accountId, accountId), eq(mailBodies.messageId, r.messageId), unfinished()));
       }
     });
     done += rows.length;

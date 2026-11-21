@@ -453,7 +453,7 @@ export async function startSift(google: FakeGoogle, options: { model?: ChosenMod
       } catch {
         parsed = { text };
       }
-      return { status: response.status, body: parsed, location: response.headers.get('location') };
+      return { status: response.status, body: parsed, location: response.headers.get('location'), headers: response.headers };
     };
     /** Through Google's consent screen as `address`: `add` a mailbox to whoever is signed in, or `send` let it send. */
     const signIn = async (address: string, how: { add?: boolean; send?: boolean } = {}) => {

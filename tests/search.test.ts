@@ -158,6 +158,8 @@ describe('Inbox’s search', () => {
     expect(results[0]).toMatchObject({ indexed: 1 });
     expect(await searchDue(db, ACCOUNT)).toBe(false);
     expect(await found('soot chimney')).toEqual([['old', 'inbox']]);
+    expect(plain(await listThreads(db, scope, { view: 'all' })).threads.find((t) => t.threadId === 'old')?.preview).toBe('Soot everywhere.');
+    expect(await raw(db).all("SELECT preview IS NOT NULL AS previewed FROM mail_bodies WHERE message_id = 'old'")).toEqual([{ previewed: true }]);
     expect(await indexKept(db, ACCOUNT, 10, () => false)).toBe(0);
   });
 

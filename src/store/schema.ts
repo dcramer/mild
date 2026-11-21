@@ -38,7 +38,8 @@ import { MAIL_WINDOWS } from '../mail-window.ts';
 import type { Facts } from '../triage/facts.ts';
 import { DECIDED, DISPOSITIONS, LEAVE_IN_INBOX, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
 
-export const CREDENTIAL_KINDS = ['gmail', 'model'] as const;
+/** `device`: the key one browser's copy of the person's mail is encrypted with (docs/sync.md), by the id its cookie holds. */
+export const CREDENTIAL_KINDS = ['gmail', 'model', 'device'] as const;
 export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'] as const;
 /**
  * `digest`: a digest put into the mailbox, which changes no message Sift recorded. `send`: mail the person sent through Sift.
@@ -603,6 +604,9 @@ export const mailBodies = pgTable(
     messageId: text('message_id').notNull(),
     bodyText: text('body_text').notNull(), // all of its readable text, up to `MAX_MAIL_CHARS` (src/gmail/body.ts)
     bodyHtml: text('body_html'), // its HTML part as Gmail holds it, cleaned only when shown; null when it has none
+    // The start of its text on one line, sealed, so a list never opens the whole text for it. Null until the pass writes one
+    // for text kept before there were previews.
+    preview: text('preview'),
     fetchedAt: time('fetched_at').notNull(),
     // What search finds it by: a keyed Bloom filter of its words, its sender's and its subject's (src/store/search.ts).
     // Null until the pass indexes text kept before there was one. Kept in the row (STORAGE MAIN), where a search scans it.
@@ -617,6 +621,34 @@ export const mailBodies = pgTable(
       .where(sql`${t.search} IS NULL`),
     own(),
   ],
+).enableRLS();
+
+/**
+ * The change counter of a person's synced copy (docs/sync.md): `seq`, the number of the latest change to what the page
+ * holds, taken by the triggers that mark a change while the row stays locked until the write commits, so numbers commit in
+ * order; `purgedThrough`, below which a cursor no longer says what changed, and gets everything again.
+ */
+export const syncHeads = pgTable(
+  'sync_heads',
+  {
+    userId: userId().primaryKey(),
+    seq: bigint('seq', { mode: 'number' }).notNull().default(0),
+    purgedThrough: bigint('purged_through', { mode: 'number' }).notNull().default(0),
+  },
+  () => [own()],
+).enableRLS();
+
+/** The number each conversation last changed at, written by triggers on what it is drawn from (docs/sync.md). */
+export const conversationChanges = pgTable(
+  'conversation_changes',
+  {
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    threadId: text('thread_id').notNull(),
+    seq: bigint('seq', { mode: 'number' }).notNull(),
+    changedAt: time('changed_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.threadId] }), mailbox(t), index('conversation_changes_seq').on(t.userId, t.seq), own()],
 ).enableRLS();
 
 /**

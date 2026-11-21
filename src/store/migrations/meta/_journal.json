@@ -505,6 +505,20 @@
       "when": 1795283622750,
       "tag": "0071_copy_counts_its_mail",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1795290334950,
+      "tag": "0072_conversations_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1795290337365,
+      "tag": "0073_conversations_sync_triggers",
+      "breakpoints": true
     }
   ]
 }

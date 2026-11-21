@@ -52,6 +52,9 @@ export async function credentials(db: Sql, kind: CredentialKind): Promise<Creden
   };
 }
 
+/** How a credential brought under a new key is named to whoever runs Sift. */
+const SAID: Record<CredentialKind, string> = { gmail: 'Gmail access for', model: 'Model sign-in for', device: 'The key of the copy kept by browser' };
+
 /**
  * Bring every credential in `db` under the current key, as `rekeySecrets` does for files. Throws if one
  * does not open with the handle's keys; nothing is rewritten then. `write: false` only checks. Returns what
@@ -71,5 +74,5 @@ export async function rekeyCredentials(db: Sql, write = true): Promise<string[]>
           .set({ value: sealSecret(name(row.kind, row.key), row.text, keys) })
           .where(and(eq(credentialRows.kind, row.kind), eq(credentialRows.key, row.key)));
     });
-  return stale.map((row) => `${row.kind === 'gmail' ? 'Gmail access for' : 'Model sign-in for'} ${row.key}`);
+  return stale.map((row) => `${SAID[row.kind]} ${row.key}`);
 }

@@ -759,6 +759,48 @@ export const MailConversation = z.object({
 });
 export type MailConversation = z.infer<typeof MailConversation>;
 
+/** A conversation as the page's copy holds it (docs/sync.md): its recorded messages, oldest first, and what Sift thinks of its newest. */
+export const SyncedConversation = z.object({
+  accountId: z.string(),
+  threadId: z.string(),
+  messages: z.array(
+    z.object({
+      messageId: z.string(),
+      fromAddress: held,
+      fromName: held.nullable(),
+      subject: held,
+      receivedAt: z.number(),
+      /** Gmail's, as sync last read them: `INBOX`, `UNREAD`, `SENT` and the rest. */
+      labelIds: z.array(z.string()),
+      preview: held.nullable(),
+    }),
+  ),
+  /** About its newest message, as Inbox's list says it; the label by id alone, named from the person's labels. Null when Sift has not decided it. */
+  thinks: Thinks.omit({ labelName: true }).nullable(),
+});
+export type SyncedConversation = z.infer<typeof SyncedConversation>;
+
+/** GET /api/sync: what changed in the page's copy since `since` (docs/sync.md). */
+export const SyncPage = z.object({
+  /** Where to ask from next. */
+  cursor: z.string(),
+  /** Drop everything held first: what follows, with the pages after it, is the whole copy. */
+  reset: z.boolean(),
+  /** There is more: ask again at once from `cursor`. */
+  more: z.boolean(),
+  /** The person's mailboxes: a conversation of any other is gone, since removing a mailbox marks none of its own. */
+  mailboxes: z.array(z.string()),
+  /** Each changed conversation as it is now; null when it is gone or out of the copy. */
+  conversations: z.array(z.object({ accountId: z.string(), threadId: z.string(), conversation: SyncedConversation.nullable() })),
+});
+export type SyncPage = z.infer<typeof SyncPage>;
+
+/** GET /api/mail/texts: the readable text Inbox keeps of each message asked for, and whether it keeps its HTML; a message it keeps none of is left out. */
+export const MailTexts = z.object({
+  texts: z.array(z.object({ accountId: z.string(), messageId: z.string(), text: held, hasHtml: z.boolean() })),
+});
+export type MailTexts = z.infer<typeof MailTexts>;
+
 /** The body of POST /api/mail/change: the person's own press on messages in their inbox. */
 export const MailChange = z.strictObject({
   accountId: z.string(),
