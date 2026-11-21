@@ -36,7 +36,7 @@ test.describe('For review', () => {
   });
 
   test('draws a long list a hundred rows at a time, the next as the end of the list comes near', async ({ page }) => {
-    // 150 messages Sift could not place, which are never folded together.
+    // 150 messages Mild could not place, which are never folded together.
     await patchJson(page, '**/api/suggestions*', (waiting) => {
       const item = waiting.items.find((i: { labelId: string | null }) => i.labelId === null);
       const items = Array.from({ length: 150 }, (_, i) => ({ ...item, messageId: `many-${i}`, receivedAt: item.receivedAt - i * 60_000 }));
@@ -48,7 +48,7 @@ test.describe('For review', () => {
     await expect(reviewRows(page)).toHaveCount(150);
   });
 
-  test('while Sift is off, says what it would have kept out of the inbox', async ({ page }) => {
+  test('while Mild is off, says what it would have kept out of the inbox', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText(/^On, it would have kept \d+ emails out of your inbox in the last 30 days: about \d+ (s|min)\.$/)).toBeVisible();
   });
@@ -85,10 +85,10 @@ test.describe('For review', () => {
   });
 });
 
-test.describe('For review, with Sift on', () => {
+test.describe('For review, with Mild on', () => {
   test.use({ variant: 'on' });
 
-  test('a rule made for mail Sift asked about settles it, and it leaves For review', async ({ page }) => {
+  test('a rule made for mail Mild asked about settles it, and it leaves For review', async ({ page }) => {
     await page.goto('/');
     await expect(row(page, 'Quick question')).toBeVisible();
     await page.goto('/rules');
@@ -108,7 +108,7 @@ test.describe('For review, with nothing waiting', () => {
     await patchJson(page, '**/api/suggestions*', (suggestions) => ({ ...suggestions, items: [], proposals: [] }));
   });
 
-  test('is the rope over the words, with nothing to search, and says Sift is off with the press that turns it on', async ({ page }) => {
+  test('is the rope over the words, with nothing to search, and says Mild is off with the press that turns it on', async ({ page }) => {
     await page.goto('/');
     const words = page.getByText('Nothing is waiting on you.');
     const drawing = words.locator('xpath=..').locator('svg');
@@ -120,9 +120,9 @@ test.describe('For review, with nothing waiting', () => {
     await expect(page.getByRole('button', { name: 'Filters' })).toHaveCount(0);
 
     // The callout's key explains rows, and there are none: what is left of it is under the words.
-    await expect(page.getByText('Sift is off. Nothing it suggests is done in Gmail until you turn it on.')).toBeVisible();
-    await expect(page.getByText('Sift is off', { exact: true })).toHaveCount(0);
-    await page.getByRole('link', { name: 'Turn Sift on…' }).click();
+    await expect(page.getByText('Mild is off. Nothing it suggests is done in Gmail until you turn it on.')).toBeVisible();
+    await expect(page.getByText('Mild is off', { exact: true })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Turn Mild on…' }).click();
     await expect(settings(page)).toBeVisible();
   });
 
@@ -144,20 +144,20 @@ test('a search that matches nothing says so in words alone', async ({ page }) =>
   await expect(page.getByText('Nothing waiting matches.').locator('xpath=..').locator('svg')).toHaveCount(0);
 });
 
-test.describe('For review, with Sift on', () => {
+test.describe('For review, with Mild on', () => {
   // A service worker's page is out of reach of page.route, which holds the list back here.
   test.use({ variant: 'on', serviceWorkers: 'block' });
 
-  test('with nothing waiting, says nothing about turning Sift on', async ({ page }) => {
+  test('with nothing waiting, says nothing about turning Mild on', async ({ page }) => {
     await patchJson(page, '**/api/suggestions*', (suggestions) => ({ ...suggestions, items: [], proposals: [] }));
-    // Whether Sift is on comes with the page, so it is known before the list arrives.
+    // Whether Mild is on comes with the page, so it is known before the list arrives.
     await page.goto('/');
     await expect(page.getByText('Nothing is waiting on you.')).toBeVisible();
-    await expect(page.getByText('Sift kept 1 out of your inbox this week: about 10 s you didn’t spend on them.')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Turn Sift on…' })).toHaveCount(0);
+    await expect(page.getByText('Mild kept 1 out of your inbox this week: about 10 s you didn’t spend on them.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Turn Mild on…' })).toHaveCount(0);
   });
 
-  test('once seen on, holds no room for "Sift is off" while the list loads, so the list does not move when it arrives', async ({ page }) => {
+  test('once seen on, holds no room for "Mild is off" while the list loads, so the list does not move when it arrives', async ({ page }) => {
     await page.goto('/');
     await expect(reviewRows(page).first()).toBeVisible();
     const loaded = await boxOf(reviewSearch(page));

@@ -25,7 +25,7 @@ try {
     await page.route('**/api/session*', () => {});
     await page.goto(`${sift.url}/sender`);
     await page.addStyleTag({ content: `:root { --safe-top: ${screen.top}px !important; } .loading-bar { visibility: hidden; }` });
-    await page.getByRole('link', { name: 'Sift' }).waitFor();
+    await page.getByRole('link', { name: 'Mild' }).waitFor();
     await page.evaluate('document.fonts.ready');
     await page.screenshot({ path: join(ROOT, 'public', startupImage(screen)) });
     await page.close();

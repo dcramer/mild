@@ -57,7 +57,7 @@ beforeEach(async () => {
 const list = async (query: Parameters<typeof listThreads>[2] = { view: 'all' }) => plain(await listThreads(db, scope, query));
 
 describe('Inbox’s list', () => {
-  it('is the conversations with mail in the inbox, newest first, each with who wrote, what Sift thinks of its newest and the start of its text', async () => {
+  it('is the conversations with mail in the inbox, newest first, each with who wrote, what Mild thinks of its newest and the start of its text', async () => {
     const { threads, next } = await list();
     expect(threads.map((t) => t.threadId)).toEqual(['lunch', 'news']);
     expect(threads[0]).toMatchObject({
@@ -73,7 +73,7 @@ describe('Inbox’s list', () => {
     expect(next).toBeNull();
   });
 
-  it('narrows by what Sift would do, by label and by unread', async () => {
+  it('narrows by what Mild would do, by label and by unread', async () => {
     const ids = async (query: Parameters<typeof listThreads>[2]) => (await list(query)).threads.map((t) => t.threadId);
     expect(await ids({ view: 'needs' })).toEqual(['lunch']);
     expect(await ids({ view: 'sorted' })).toEqual(['news']);
@@ -129,7 +129,7 @@ describe('the reader’s own press', () => {
       payload: { add: [], remove: ['INBOX'] },
       originalLabels: ['INBOX', 'UNREAD', mine],
     });
-    // Not Sift's change, so correcting what Sift said does not take it back.
+    // Not Mild's change, so correcting what Mild said does not take it back.
     expect(await lastStandingChange(db, ACCOUNT, 'reply')).toBeNull();
     expect((await undo(deps(), 1)).status).toBe('done');
     expect(gmail.message('reply')!.labelIds).toEqual(['UNREAD', mine, 'INBOX']);
@@ -160,7 +160,7 @@ describe('a message opened from Inbox', () => {
   });
 });
 
-describe('what Inbox says Sift thinks', () => {
+describe('what Inbox says Mild thinks', () => {
   it('is the reader’s own answer where they gave one', async () => {
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'newsletter', disposition: 'keep', messageId: 'reply', via: 'gmail' }, 400);
     const [lunch] = (await list({ view: 'all', label: 'newsletter' })).threads;

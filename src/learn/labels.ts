@@ -22,7 +22,7 @@ export async function proposeLabels(
   const usage = answer.usage ? { usage: answer.usage } : {};
   if ('failed' in answer) {
     await finishLabelProposal(db, request.accountId, id, { error: answer.failed, ...usage, now: now() });
-    // A refusal is the page's to show and is not reported, but a model that keeps failing is Sift's to fix.
+    // A refusal is the page's to show and is not reported, but a model that keeps failing is Mild's to fix.
     reportError(new Error(`Label suggestion failed: ${answer.failed}`));
     throw new Refusal(`The model could not suggest labels (${answer.failed}). Try again.`);
   }

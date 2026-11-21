@@ -55,7 +55,7 @@ const latest = alias(decisions, 'latest');
 
 /**
  * What a label's digest for `(since, until]` lists: mail whose decision still standing put it in the digest, was
- * Sift's own and not the person's answer, and was archived in Gmail in that window. An archive undone since is
+ * Mild's own and not the person's answer, and was archived in Gmail in that window. An archive undone since is
  * not, nor mail the person has answered for since.
  */
 const inWindow = (db: Sql, labelId: string, since: number, until: number) =>
@@ -177,7 +177,7 @@ export async function openDigests(db: Sql): Promise<DigestRecord[]> {
   return rows.map((r) => fromRow(db, r));
 }
 
-/** Of these messages in a mailbox, the digests Sift put there, once it knows Gmail's id for them. */
+/** Of these messages in a mailbox, the digests Mild put there, once it knows Gmail's id for them. */
 export async function knownDigests(db: Sql, accountId: string, ids: readonly string[]): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
   const rows = await db
@@ -187,7 +187,7 @@ export async function knownDigests(db: Sql, accountId: string, ids: readonly str
   return new Set(rows.map((r) => r.gmailId!));
 }
 
-/** Whether a message with these headers (lowercased names) is a digest Sift wrote, by the Message-ID it gave it. */
+/** Whether a message with these headers (lowercased names) is a digest Mild wrote, by the Message-ID it gave it. */
 export async function isOwnDigest(db: Sql, headers: Readonly<Record<string, string>>): Promise<boolean> {
   const id = headers['message-id']?.trim() ?? '';
   if (!DIGEST_ID.test(id)) return false;

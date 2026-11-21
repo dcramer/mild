@@ -82,7 +82,7 @@ export async function removeMailbox(store: Store, userId: number, email: string)
     .from(accounts)
     .where(and(eq(accounts.id, email), eq(accounts.userId, userId)));
   if (!theirs) return false;
-  // The token first: a crash in between leaves a mailbox sift cannot read, not a token for one it no longer has.
+  // The token first: a crash in between leaves a mailbox Mild cannot read, not a token for one it no longer has.
   await (await store.user(userId)).delete(credentials).where(and(eq(credentials.kind, 'gmail'), eq(credentials.key, email)));
   await store.central.transaction(async (tx) => {
     const [gone] = await tx
@@ -218,7 +218,7 @@ export async function listAccounts(db: Sql): Promise<Account[]> {
   return rows.map((r) => ({ id: r.id, number: r.number, email: r.id, historyId: r.historyId }));
 }
 
-/** Whether the sign-in Sift holds for this mailbox lets it send. */
+/** Whether the sign-in Mild holds for this mailbox lets it send. */
 export async function canSend(db: Sql, accountId: string): Promise<boolean> {
   const [row] = await db.select({ canSend: mailboxes.canSend }).from(mailboxes).where(eq(mailboxes.id, accountId));
   return row?.canSend ?? false;
@@ -304,7 +304,7 @@ export async function recordSynced(db: Sql, accountId: string, messages: readonl
 }
 
 /**
- * Record mail found in the inbox that Sift had not seen, read for a look that decides nothing (what a rule would do), so it
+ * Record mail found in the inbox that Mild had not seen, read for a look that decides nothing (what a rule would do), so it
  * is not read again. Out of the triage queue, as the copy's mail is: going through the inbox or applying a rule decides it.
  */
 export async function recordFound(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number): Promise<void> {
@@ -312,7 +312,7 @@ export async function recordFound(db: Sql, accountId: string, messages: readonly
 }
 
 /**
- * Record mail an inbox run found that Sift had not seen. It does not move the sync cursor. `suggestOnly`
+ * Record mail an inbox run found that Mild had not seen. It does not move the sync cursor. `suggestOnly`
  * when the run only suggests, so a pass that decides it first never carries it out either. Returns how many were not already known.
  */
 export async function recordFromInbox(

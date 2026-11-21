@@ -51,10 +51,10 @@ const startLabel = (rule: { label?: string; whenLabel?: string; action?: Action 
 
 /** Every answer a fact can have, as one choice each: `isReply:0` is "is a reply". */
 const ANSWERS = (Object.keys(FACTS) as FactKey[]).flatMap((key) => FACTS[key].map((_, index): FactAnswer => ({ key, index })));
-/** Only what the whole message shows: sift reads each message to check these. */
+/** Only what the whole message shows: Mild reads each message to check these. */
 const READ = new Set<FactKey>(['hasAttachments', 'trackingPixel']);
 
-/** One line of the rule's conditions: a value of some kind, or an answer about what Sift saw in the message. */
+/** One line of the rule's conditions: a value of some kind, or an answer about what Mild saw in the message. */
 type Row = Condition | { fact: FactAnswer };
 const isNamed = (row: Row): row is Condition => 'by' in row;
 const rowsOf = (conditions: readonly Condition[], facts: readonly FactAnswer[]): Row[] =>
@@ -98,8 +98,8 @@ const bodyOf = (rule: RuleSummary): RuleBody => ({
 });
 
 /**
- * A rule in the order sift applies it: which mail (an address, a domain, a list, a recipient or words in
- * the subject, and what sift saw in it), only when it is something in the reader's words, and the label it
+ * A rule in the order Mild applies it: which mail (an address, a domain, a list, a recipient or words in
+ * the subject, and what Mild saw in it), only when it is something in the reader's words, and the label it
  * is, which brings what that label does. With no label, the rule is an action alone, and says which.
  * Once added, a rule Gmail could run by itself is offered as a filter, showing the filter.
  *
@@ -209,7 +209,7 @@ export function RuleDialog({
     ? `Another rule has exactly these conditions${twin.name ? `: ${reveal(twin.name)}` : ''}. Change that one, or remove it first.`
     : nameAlone
       ? 'Anyone can send under any name, so give an address or domain too.'
-      : [readBack, facts.some((f) => READ.has(f.key)) ? 'Sift reads each message to check this.' : undefined].filter(Boolean).join(' ') || undefined;
+      : [readBack, facts.some((f) => READ.has(f.key)) ? 'Mild reads each message to check this.' : undefined].filter(Boolean).join(' ') || undefined;
   // What a line can be: any kind of value, or an answer about a fact no other line asks.
   const kinds = (row: Row) => [
     ...BY,
@@ -306,7 +306,7 @@ export function RuleDialog({
       <DescribeStep
         title="Add a rule"
         question="What should it do?"
-        hint="Name a sender as you know them: Sift finds their address in your mail. You see the rule before it is added."
+        hint="Name a sender as you know them: Mild finds their address in your mail. You see the rule before it is added."
         placeholder="Archive receipts from example.com and mark them read"
         value={goal}
         onChange={setGoal}

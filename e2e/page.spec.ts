@@ -15,7 +15,7 @@ test("the page cannot be framed by another site, sends no referrer, and holds no
   await expect(page.getByRole('navigation').first()).toBeVisible();
 });
 
-test('every screen calls it Sift, and only its wordmark sift', async ({ page }) => {
+test('every screen calls it Mild, and only its wordmark mild', async ({ page }) => {
   for (const [path, heading] of [
     ['/', 'For review'],
     ['/contacts', 'Contacts'],
@@ -25,10 +25,10 @@ test('every screen calls it Sift, and only its wordmark sift', async ({ page }) 
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
-    // A word of its own: a command, a path or a Gmail label (`sift/digest`) keeps its spelling.
+    // A word of its own: a command, a path or a Gmail label (`mild/digest`) keeps its spelling.
     await expect(page.locator('main'), path).not.toContainText(/(?<![\w/.@~$-])sift(?![\w/.@-])/);
-    await expect(page.locator('.wordmark').filter({ visible: true }), path).toHaveText('sift');
-    await expect(page.locator('[aria-label="sift"]'), path).toHaveCount(0);
+    await expect(page.locator('.wordmark').filter({ visible: true }), path).toHaveText('mild');
+    await expect(page.locator('[aria-label="mild"]'), path).toHaveCount(0);
   }
 });
 
@@ -57,7 +57,7 @@ test('each screen is an address of its own, and anything else is missing', async
     expect((await request.get(path)).status(), path).toBe(404);
   expect((await request.get('/api/rules/nope')).status()).toBe(404);
   expect((await request.get('/_next/static/missing.js')).status()).toBe(404);
-  // Nothing uses next/image, and Sift makes no Workflow webhook.
+  // Nothing uses next/image, and Mild makes no Workflow webhook.
   expect((await request.get('/_next/image?url=%2Ficons%2Fapple-touch-icon.png&w=64&q=75')).status()).toBe(404);
   expect((await request.post('/.well-known/workflow/v1/webhook/token')).status()).toBe(404);
 });
@@ -89,7 +89,7 @@ test('the service worker keeps only the built files a page it keeps names', asyn
   // What the page as served names. Next also prefetches other screens' files, which are kept until a prune drops them.
   const html = await (await page.request.get('/sender')).text();
   const current = (await kept()).filter((path) => path === '/sender' || html.includes(path));
-  // What an older build of Sift left.
+  // What an older build of Mild left.
   await page.evaluate(`(async () => (await caches.open((await caches.keys())[0])).put('/_next/static/chunks/older-build.js', new Response('')))()`);
   await expect.poll(kept).toContain('/_next/static/chunks/older-build.js');
 
@@ -116,7 +116,7 @@ test('built files are kept by the browser for good, read only as what they say t
   expect((await page.request.get(`${script}.map`)).status()).toBe(404);
 });
 
-test("a screen's HTML is drawn for whoever asked, with what Sift does not encrypt and nothing it does", async ({ page }) => {
+test("a screen's HTML is drawn for whoever asked, with what Mild does not encrypt and nothing it does", async ({ page }) => {
   const { request } = page;
   const held = JSON.parse(process.env[HELD] ?? '[]') as string[];
   expect(held).toEqual(expect.arrayContaining(['Ada Lovelace', 'ada@example.org', 'Replica lag on db-3']));

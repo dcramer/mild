@@ -14,7 +14,7 @@ import { openStore } from '../src/store/store.ts';
  * addresses are stored plain, and are left out.
  */
 export async function heldValues(home: string): Promise<string[]> {
-  const store = await openStore(loadConfig({ SIFT_HOME: home }));
+  const store = await openStore(loadConfig({ MILD_HOME: home }));
   try {
     const owner = (await people(store).owner())!;
     const db = await owner.open(owner.id);

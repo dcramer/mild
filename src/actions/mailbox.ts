@@ -1,6 +1,6 @@
 import type { ExistingFilter, FilterProposal } from './filters.ts';
 
-/** The only way the rest of sift reaches a mail provider. Implemented by src/gmail. No forward or delete. */
+/** The only way the rest of Mild reaches a mail provider. Implemented by src/gmail. No forward or delete. */
 export interface Mailbox {
   /** Current label ids, read fresh, or null if the message no longer exists. Must not mark the message read. */
   getLabelIds(messageId: string): Promise<string[] | null>;
@@ -16,7 +16,7 @@ export interface Mailbox {
   deleteFilter(filterId: string): Promise<void>;
   /** Every filter in the account, the user's own included. */
   listFilters(): Promise<ExistingFilter[]>;
-  /** Puts a message Sift wrote into the mailbox, as if it had arrived: not sent, so it reaches no one else. `raw` is RFC 2822. */
+  /** Puts a message Mild wrote into the mailbox, as if it had arrived: not sent, so it reaches no one else. `raw` is RFC 2822. */
   insertMessage(raw: string, labelIds: readonly string[]): Promise<{ id: string; labelIds: string[] }>;
   /** The message with this RFC 822 Message-ID, wherever it is in the mailbox, or null. */
   findByMessageId(messageId: string): Promise<{ id: string; threadId: string } | null>;

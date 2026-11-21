@@ -244,7 +244,7 @@ test.describe('Rules', () => {
     await expect(news.getByRole('button', { name: 'Previous' })).toBeDisabled();
     await expect(fact(news, 'Then')).toHaveText('Archive as Newsletters');
     await expect(fact(news, 'Matched, 30 days')).toHaveText('2');
-    // Today's column: decided while Sift was off, so not changed in Gmail. No model read them, so no cost.
+    // Today's column: decided while Mild was off, so not changed in Gmail. No model read them, so no cost.
     await expect(news.getByRole('listitem', { name: /: 0 changed in gmail, 2 left alone$/ })).toHaveCount(1);
     await expect(news.getByText('Model cost, 30 days')).toHaveCount(0);
     await expect(news.getByRole('cell', { name: 'This week in widgets' })).toBeVisible();

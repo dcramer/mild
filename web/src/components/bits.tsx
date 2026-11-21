@@ -3,9 +3,9 @@ import { INBOX_NAME, type Status, STATUS_NAMES, doesName, outcomeName, status } 
 import { Does, Note, Sub, Tooltip } from '@/system';
 
 /**
- * What sift says mail is and does with it, the same words everywhere: "Archive as Marketing", or "Leave in
+ * What Mild says mail is and does with it, the same words everywhere: "Archive as Marketing", or "Leave in
  * inbox", which is said alone. In a table cell (`stacked`) the label goes on a quieter second line. With no
- * label and nothing done, sift was not sure, which is the reader's to answer, so it is the yellow one.
+ * label and nothing done, Mild was not sure, which is the reader's to answer, so it is the yellow one.
  */
 export function Verdict({
   labelId,
@@ -47,7 +47,7 @@ export function StatusWord({ row }: { row: Pick<DecisionRow, 'carryOut' | 'outco
   );
 }
 
-/** Sift refused or failed; what was on screen stays. Sift not answering at all is the masthead's. */
+/** Mild refused or failed; what was on screen stays. Mild not answering at all is the masthead's. */
 export function ErrorNote({ message }: { message: string }) {
   return (
     <Note tone="failure" title="Could not refresh">

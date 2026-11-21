@@ -1,7 +1,7 @@
 import { createClient } from 'redis';
 import type { Ephemeral } from './ephemeral.ts';
 
-/** Keys are prefixed, so one Redis can serve sift beside other things. */
+/** Keys are prefixed, so one Redis can serve Mild beside other things. */
 const PREFIX = 'sift:';
 
 /** Delete the key only if it still holds this token. */

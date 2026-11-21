@@ -34,7 +34,7 @@ beforeEach(async () => {
 describe('execute', () => {
   it('archives with an audit label, preserving unread state and other labels', async () => {
     const outcome = await execute(deps, ACCOUNT, 'm1', { type: 'archive' });
-    const archived = labelId('sift/did/archived');
+    const archived = labelId('mild/did/archived');
     expect(outcome).toMatchObject({ status: 'done', finalLabels: ['UNREAD', mine, archived] });
     const action = await getAction(db, 1);
     expect(action).toMatchObject({
@@ -45,9 +45,9 @@ describe('execute', () => {
     });
   });
 
-  it('adds both labels when archiving: what the mail is, and what sift did', async () => {
-    await execute(deps, ACCOUNT, 'm1', { type: 'archive', labels: ['sift/newsletters'] });
-    expect(labelsOf('m1')).toEqual(['UNREAD', mine, labelId('sift/newsletters'), labelId('sift/did/archived')]);
+  it('adds both labels when archiving: what the mail is, and what Mild did', async () => {
+    await execute(deps, ACCOUNT, 'm1', { type: 'archive', labels: ['mild/newsletters'] });
+    expect(labelsOf('m1')).toEqual(['UNREAD', mine, labelId('mild/newsletters'), labelId('mild/did/archived')]);
   });
 
   it('reads the labels once, before the change, and takes the labels Gmail answers the change with', async () => {
@@ -63,8 +63,8 @@ describe('execute', () => {
   });
 
   it('labels without moving the message', async () => {
-    await execute(deps, ACCOUNT, 'm1', { type: 'label', labels: ['sift/review'] });
-    expect(labelsOf('m1')).toEqual(['INBOX', 'UNREAD', mine, labelId('sift/review')]);
+    await execute(deps, ACCOUNT, 'm1', { type: 'label', labels: ['mild/review'] });
+    expect(labelsOf('m1')).toEqual(['INBOX', 'UNREAD', mine, labelId('mild/review')]);
   });
 
   it('never touches a message that is not in the inbox or no longer exists', async () => {
@@ -76,14 +76,14 @@ describe('execute', () => {
   });
 
   it('skips when the message already has the label', async () => {
-    setLabels('m1', ['INBOX', gmail.label('sift/review')]);
-    expect(await execute(deps, ACCOUNT, 'm1', { type: 'label', labels: ['sift/review'] })).toMatchObject({ status: 'skipped' });
+    setLabels('m1', ['INBOX', gmail.label('mild/review')]);
+    expect(await execute(deps, ACCOUNT, 'm1', { type: 'label', labels: ['mild/review'] })).toMatchObject({ status: 'skipped' });
     expect(modified()).toBe(0);
   });
 
   it('marks spam with an audit label', async () => {
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'spam' })).toMatchObject({ status: 'done' });
-    expect(labelsOf('m1')).toEqual(['UNREAD', mine, labelId('sift/did/spam'), 'SPAM']);
+    expect(labelsOf('m1')).toEqual(['UNREAD', mine, labelId('mild/did/spam'), 'SPAM']);
   });
 
   it('refuses spam for a sender the user has written to, an unknown sender, or a failed lookup', async () => {
@@ -106,7 +106,7 @@ describe('execute', () => {
     expect(await getAction(db, 1)).toMatchObject({ status: 'unknown', error: (outcome as { reason: string }).reason });
 
     expect(await reconcile(deps)).toBe(1);
-    expect(await getAction(db, 1)).toMatchObject({ status: 'done', finalLabels: ['UNREAD', mine, labelId('sift/did/archived')] });
+    expect(await getAction(db, 1)).toMatchObject({ status: 'done', finalLabels: ['UNREAD', mine, labelId('mild/did/archived')] });
     expect(modified()).toBe(1);
   });
 
@@ -123,7 +123,7 @@ describe('execute', () => {
     await raw(db).run(
       `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at) VALUES (?, 'm1', 'archive', ?, '["INBOX"]', 'pending', 0)`,
       ACCOUNT,
-      JSON.stringify({ add: [gmail.label('sift/did/archived')], remove: ['INBOX'] }),
+      JSON.stringify({ add: [gmail.label('mild/did/archived')], remove: ['INBOX'] }),
     );
     await reconcile(deps);
     expect(await getAction(db, 1)).toMatchObject({ status: 'failed', error: 'change was not applied' });
@@ -147,8 +147,8 @@ describe('execute', () => {
 
 describe('marking read', () => {
   it('marks read while archiving or keeping, and undo puts unread back', async () => {
-    await execute(deps, ACCOUNT, 'm1', { type: 'archive', labels: ['sift/newsletters'], markRead: true });
-    expect(labelsOf('m1')).toEqual([mine, labelId('sift/newsletters'), labelId('sift/did/archived')]);
+    await execute(deps, ACCOUNT, 'm1', { type: 'archive', labels: ['mild/newsletters'], markRead: true });
+    expect(labelsOf('m1')).toEqual([mine, labelId('mild/newsletters'), labelId('mild/did/archived')]);
     await undo(deps, 1);
     expect(labelsOf('m1')?.toSorted()).toEqual(['INBOX', mine, 'UNREAD'].toSorted());
 
@@ -174,7 +174,7 @@ describe('undo', () => {
   it('keeps changes the user made afterwards', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'archive' });
     const later = gmail.label('later');
-    setLabels('m1', ['INBOX', labelId('sift/did/archived'), later]);
+    setLabels('m1', ['INBOX', labelId('mild/did/archived'), later]);
     await undo(deps, 1);
     expect(labelsOf('m1')).toEqual(['INBOX', later]);
   });
@@ -204,19 +204,19 @@ describe('planAction', () => {
 
   it('maps decisions to actions, always carrying the label for what the mail is', () => {
     expect(planAction({ ...base, disposition: 'keep' })).toBeNull();
-    expect(planAction({ ...base, disposition: 'keep', gmailLabel: 'sift/personal' })).toEqual({ type: 'label', labels: ['sift/personal'] });
-    expect(planAction({ ...base, disposition: 'archive', gmailLabel: 'sift/news' })).toEqual({ type: 'archive', labels: ['sift/news'] });
-    expect(planAction({ ...base, disposition: 'spam', gmailLabel: 'sift/junk' })).toEqual({ type: 'spam', labels: ['sift/junk'] });
-    expect(planAction({ ...base, disposition: 'review' })).toEqual({ type: 'label', labels: ['sift/review'] });
+    expect(planAction({ ...base, disposition: 'keep', gmailLabel: 'mild/personal' })).toEqual({ type: 'label', labels: ['mild/personal'] });
+    expect(planAction({ ...base, disposition: 'archive', gmailLabel: 'mild/news' })).toEqual({ type: 'archive', labels: ['mild/news'] });
+    expect(planAction({ ...base, disposition: 'spam', gmailLabel: 'mild/junk' })).toEqual({ type: 'spam', labels: ['mild/junk'] });
+    expect(planAction({ ...base, disposition: 'review' })).toEqual({ type: 'label', labels: ['mild/review'] });
     expect(planAction({ ...base, disposition: 'keep', markRead: true })).toEqual({ type: 'label', labels: [], markRead: true });
-    expect(planAction({ ...base, disposition: 'archive', gmailLabel: 'sift/news', markRead: true })).toEqual({
+    expect(planAction({ ...base, disposition: 'archive', gmailLabel: 'mild/news', markRead: true })).toEqual({
       type: 'archive',
-      labels: ['sift/news'],
+      labels: ['mild/news'],
       markRead: true,
     });
-    expect(planAction({ ...base, disposition: 'review', gmailLabel: 'sift/cold-outreach' })).toEqual({
+    expect(planAction({ ...base, disposition: 'review', gmailLabel: 'mild/cold-outreach' })).toEqual({
       type: 'label',
-      labels: ['sift/cold-outreach', 'sift/review'],
+      labels: ['mild/cold-outreach', 'mild/review'],
     });
   });
 });

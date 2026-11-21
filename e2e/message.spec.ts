@@ -121,7 +121,7 @@ test.describe('A message as its HTML', () => {
     await expect(reader(page).getByRole('button', { name: 'More' })).toHaveCount(0);
 
     await page.goto(`/activity?show=all&${messageQuery('m1')}`);
-    await expect(reader(page).getByText('Sift does not hold this message’s text.')).toBeVisible();
+    await expect(reader(page).getByText('Mild does not hold this message’s text.')).toBeVisible();
     await expect(reader(page).getByRole('button', { name: 'More' })).toHaveCount(0);
   });
 
@@ -190,7 +190,7 @@ test.describe('A message read as part of the page', () => {
   });
 });
 
-/** Ada's reply shown as `html` instead, cleaned and sent as Sift sends any message's frame. */
+/** Ada's reply shown as `html` instead, cleaned and sent as Mild sends any message's frame. */
 const replyAs = (page: Page, html: string) =>
   page.route('**/api/message/html?**', (route) =>
     route.fulfill({
@@ -263,7 +263,7 @@ test.describe('Who a message went to', () => {
   });
 });
 
-test.describe('What Sift saw', () => {
+test.describe('What Mild saw', () => {
   const seen = (page: Page) =>
     reader(page)
       .getByRole('table')
@@ -277,7 +277,7 @@ test.describe('What Sift saw', () => {
     await expect(seen(page)).toHaveCount(6);
     for (const words of [
       'Came through a mailing list promo.example.com',
-      'Has a one-click unsubscribe Sift can use it',
+      'Has a one-click unsubscribe Mild can use it',
       'Was sent through a bulk mail service Mailchimp',
       'Has replies going elsewhere',
       'Is in Promotions',

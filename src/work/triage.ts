@@ -29,9 +29,9 @@ type Sources = Omit<EvidenceSources, 'db' | 'now'>;
 
 export type TriageDeps = {
   db: Sql;
-  /** Null while sift is off: decisions are recorded and nothing in the mailbox changes. */
+  /** Null while Mild is off: decisions are recorded and nothing in the mailbox changes. */
   mailbox: Mailbox | null;
-  /** While sift is off: the mailbox to carry out the user's own answers in. Nothing else is done with it. */
+  /** While Mild is off: the mailbox to carry out the user's own answers in. Nothing else is done with it. */
   answers?: Mailbox | null;
   /**
    * Leaves a mailing list. Called for a decision that says to unsubscribe, after its mailbox change has
@@ -208,7 +208,7 @@ function carrier(deps: TriageDeps, account: Account, report: TriageReport) {
 }
 
 /**
- * What a message was decided before, for deciding it again: `carriedOut` when Sift's change to it stands in
+ * What a message was decided before, for deciding it again: `carriedOut` when Mild's change to it stands in
  * Gmail, which is taken back before a different decision is carried out.
  */
 export interface Prior {
@@ -272,7 +272,7 @@ export async function deciderFor(
   const unjudged = (decision: Decision | Unfinished): Decision | Unfinished =>
     'unfinished' in decision || decision.stage !== 'fallback' ? decision : { ...decision, reason: 'the model failed on it each time it was asked' };
 
-  // Sift's change from before stands: take it back first, unless the new decision would make the same one.
+  // Mild's change from before stands: take it back first, unless the new decision would make the same one.
   const carryOver = async (decisionId: number, messageId: string, decision: Decision, into: Mailbox, prior: Prior | undefined) => {
     if (!prior?.carriedOut) return await carryOut(decisionId, messageId, decision, into);
     const { disposition, labelId, markRead } = prior.decision;
@@ -306,7 +306,7 @@ export async function deciderFor(
     // With no model, mail no rule covers is not anyone's to answer yet: it stays in the queue, unrecorded, for a
     // model once one is connected, or a rule added meanwhile. A model's own "unsure" is recorded and asked about.
     if (decision.stage === 'fallback' && !model && !outOfTries) return 'waits';
-    // The user applied this rule to their inbox and the model has now said what the mail is: theirs to carry out, Sift on or off.
+    // The user applied this rule to their inbox and the model has now said what the mail is: theirs to carry out, Mild on or off.
     const pressed = applyRule !== null && decision.ruleId === applyRule && Boolean(box);
     const into = pressed ? box : suggestOnly ? null : mailbox;
     const act = Boolean(into);

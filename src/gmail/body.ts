@@ -72,7 +72,7 @@ function hasAttachment(part: BodyPart): boolean {
   return (part.parts ?? []).some(hasAttachment);
 }
 
-/** What sift takes from a whole message: its readable text, its HTML part, and facts about the rest. */
+/** What Mild takes from a whole message: its readable text, its HTML part, and facts about the rest. */
 export interface MessageContent {
   text: string;
   /** More of the text than `text` holds, up to `MAX_MAIL_CHARS`, for Inbox; absent when `text` is all of it. */

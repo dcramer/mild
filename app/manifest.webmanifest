@@ -1,6 +1,6 @@
 {
-  "name": "Sift",
-  "short_name": "Sift",
+  "name": "Mild",
+  "short_name": "Mild",
   "description": "Inbox triage that suggests first and acts second.",
   "id": "/",
   "start_url": "/?start=1",

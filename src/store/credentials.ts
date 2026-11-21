@@ -52,7 +52,7 @@ export async function credentials(db: Sql, kind: CredentialKind): Promise<Creden
   };
 }
 
-/** How a credential brought under a new key is named to whoever runs Sift. */
+/** How a credential brought under a new key is named to whoever runs Mild. */
 const SAID: Record<CredentialKind, string> = { gmail: 'Gmail access for', model: 'Model sign-in for', device: 'The key of the copy kept by browser' };
 
 /**

@@ -50,18 +50,18 @@ const same = (
  * a model. Call it after a rule or a label changes. For each one:
  *
  * - a rule now decides it: that decision is recorded (a rule of the user's settles it, so it stops
- *   being a suggestion; a rule sift learned only counts if the outcome differs);
+ *   being a suggestion; a rule Mild learned only counts if the outcome differs);
  * - no rule does by itself, and its label now has a different outcome, or a rule waiting for that label now
  *   says what happens: the same label is recorded with the new outcome. The label is still the tier's
  *   word; only what follows from it is worked out again;
  * - the rule that decided it has gone: it goes back to what a tier said before the rule, or to review.
  *
- * Mail Sift marked for review in Gmail while on is settled only by a rule of the user's that decides it by itself,
- * no model needed: that is recorded as the user's press, to be carried out, and the review mark Sift put on it
+ * Mail Mild marked for review in Gmail while on is settled only by a rule of the user's that decides it by itself,
+ * no model needed: that is recorded as the user's press, to be carried out, and the review mark Mild put on it
  * is returned in `marks` to take back. Nothing else changes it.
  *
  * Mail a rule decided only because of an earlier call here is included, so removing that rule brings
- * the suggestion back. So is all a rule Sift made decided (`learnedGone`, just removed). Mail the user answered for
+ * the suggestion back. So is all a rule Mild made decided (`learnedGone`, just removed). Mail the user answered for
  * is never touched, including while this runs: it is one transaction, and each message is checked again just
  * before its decision is recorded.
  */
@@ -133,7 +133,7 @@ async function redecide(db: Sql, accountId: string, now: number, learnedGone: st
         ),
       ),
     );
-  // A rule Sift made decides suggestions, but once it is gone nothing says it was Sift's, and its mail would read
+  // A rule Mild made decides suggestions, but once it is gone nothing says it was Mild's, and its mail would read
   // as decided by a rule of the user's: so what it decided and nothing carried out is brought back here, at once.
   const released: Pick<Suggestion, 'decisionId' | 'messageId'>[] =
     learnedGone === undefined
@@ -217,7 +217,7 @@ async function redecide(db: Sql, accountId: string, now: number, learnedGone: st
           stage: base.stage,
           ...(base.confidence === null ? {} : { confidence: base.confidence }),
           reason: held
-            ? `${label.name} is now ${WILL[outcome.disposition]}, but ${unsure ? 'Sift was not sure enough to act on it' : known ? 'you have written to this sender' : 'whether you have written to this sender is not known'}. Before: ${before}`
+            ? `${label.name} is now ${WILL[outcome.disposition]}, but ${unsure ? 'Mild was not sure enough to act on it' : known ? 'you have written to this sender' : 'whether you have written to this sender is not known'}. Before: ${before}`
             : outcome.ruleId
               ? outcome.reason
               : `${label.name} is now ${WILL[outcome.disposition]}. Before: ${before}`,

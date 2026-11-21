@@ -13,7 +13,7 @@ import { Arrived, Empty, Heads, Loading, Reader, ReaderBar, Section, Table, Td, 
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 
 /**
- * A rule Sift proposes, opened from Inbox in the list's place: the rule, why Sift proposes it, and the mail in the inbox it
+ * A rule Mild proposes, opened from Inbox in the list's place: the rule, why Mild proposes it, and the mail in the inbox it
  * would apply to, from the copy in this browser. Make the rule opens the rule dialog started on it; Dismiss goes back.
  */
 export function ProposalReader({ id, onBack }: { id: string; onBack: () => void }) {
@@ -46,7 +46,7 @@ export function ProposalReader({ id, onBack }: { id: string; onBack: () => void 
   );
   if (!proposal)
     return (
-      <Reader bar={bar} title="Sift no longer proposes it">
+      <Reader bar={bar} title="Mild no longer proposes it">
         {suggestions.loading ? <Loading rows={3} /> : <Empty>It was made into a rule or dismissed.</Empty>}
       </Reader>
     );

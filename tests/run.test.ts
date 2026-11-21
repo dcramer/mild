@@ -58,7 +58,7 @@ let logs: string[];
 const labelsOf = (id: string) => box.message(id)?.labelIds.map((l) => box.labels.get(l)!.name);
 /** What was read of messages whole. */
 const readWhole = () => box.asked(READ).flatMap((r) => (r.format === 'full' && r.id ? [r.id] : []));
-/** Mail the owner sent `address` before Sift, which Gmail's search finds. */
+/** Mail the owner sent `address` before Mild, which Gmail's search finds. */
 const wroteTo = (address: string) => box.deliver({ from: ACCOUNT, to: address, labelIds: ['SENT'] }, { quietly: true });
 /** Where Gmail's history is now for `address`, as signing in leaves its cursor. */
 
@@ -67,7 +67,7 @@ const connect: RunOptions['connect'] = (_db, account) => {
   return connectGmail(fake.google, account.id);
 };
 
-/** A model that can place nothing. Mail sift asks about comes from a model's "unsure"; with no model, nothing is asked. */
+/** A model that can place nothing. Mail Mild asks about comes from a model's "unsure"; with no model, nothing is asked. */
 const unsure = async () => testModel();
 
 const options = (): RunOptions => ({
@@ -76,7 +76,7 @@ const options = (): RunOptions => ({
   log: (line) => logs.push(line),
   now: () => 5000,
 });
-/** The person's database, with sift on or off for them. */
+/** The person's database, with Mild on or off for them. */
 const active = async (on: boolean) => {
   await setActive(db, on);
   return db;
@@ -152,9 +152,9 @@ describe('runOnce', () => {
     await addRule(db, { match: { from: ['ada@example.org'] }, labelId: 'personal' }, 'user');
     await runOnce(await active(true), options());
 
-    // Both get the label for what they are; only the archived one gets the label for what sift did.
-    expect(labelsOf('news')).toEqual(['UNREAD', 'sift/newsletters', 'sift/did/archived']);
-    expect(labelsOf('ada')).toEqual(['INBOX', 'UNREAD', 'sift/personal']);
+    // Both get the label for what they are; only the archived one gets the label for what Mild did.
+    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters', 'mild/did/archived']);
+    expect(labelsOf('ada')).toEqual(['INBOX', 'UNREAD', 'mild/personal']);
     expect(await decisions()).toMatchObject([
       { message_id: 'ada', disposition: 'keep', carry_out: true, outcome: 'done' },
       { message_id: 'news', disposition: 'archive', carry_out: true, outcome: 'done', rule_id: ruleId },
@@ -168,7 +168,7 @@ describe('runOnce', () => {
 
   it('labels undecided mail for review and leaves it in the inbox', async () => {
     await runOnce(await active(true), { ...options(), model: unsure });
-    expect(labelsOf('ada')).toEqual(['INBOX', 'UNREAD', 'sift/review']);
+    expect(labelsOf('ada')).toEqual(['INBOX', 'UNREAD', 'mild/review']);
   });
 
   it('with no model, leaves what no rule covers in the queue: no decision, no question, nothing changed', async () => {
@@ -228,7 +228,7 @@ describe('runOnce', () => {
 
     await runOnce(await active(true), options());
     expect(await decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
-    expect(labelsOf('news')).toEqual(['UNREAD', 'sift/newsletters', 'sift/did/archived']);
+    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters', 'mild/did/archived']);
   });
 });
 
@@ -374,7 +374,7 @@ describe('teaching from Gmail', () => {
       ),
     );
   const count = async (table: string) => (await raw(db).get<{ n: number }>(`SELECT count(*) AS n FROM ${table}`))!.n;
-  // Time moves between passes: which of its own changes sift expects in a history depends on when they were made.
+  // Time moves between passes: which of its own changes Mild expects in a history depends on when they were made.
   let clock: number;
   const run = async (on: boolean) => {
     const [result] = await runOnce(await active(on), { ...options(), now: () => clock });
@@ -445,12 +445,12 @@ describe('teaching from Gmail', () => {
     expect(await run(true)).toBe(1);
     expect(await latest('ada')).toMatchObject({ disposition: 'spam', label_id: 'personal' });
     // The user's answers are not carried out again by sift.
-    expect(labelsOf('ada')).toEqual(['UNREAD', 'sift/personal', 'SPAM']);
+    expect(labelsOf('ada')).toEqual(['UNREAD', 'mild/personal', 'SPAM']);
   });
 
-  it('takes a different sift label as a correction of what the mail is, wherever the message was left', async () => {
+  it('takes a different Mild label as a correction of what the mail is, wherever the message was left', async () => {
     await run(true);
-    box.change('news', { remove: [box.labelId('sift/newsletters')!], add: [box.label('sift/receipts')] });
+    box.change('news', { remove: [box.labelId('mild/newsletters')!], add: [box.label('mild/receipts')] });
     expect(await run(true)).toBe(1);
     expect(await feedback()).toEqual([{ message_id: 'news', verdict: 'wrong', disposition: 'archive', label_id: 'transactional', via: 'gmail' }]);
     // Receipts are kept, but the user left this one archived.
@@ -458,14 +458,21 @@ describe('teaching from Gmail', () => {
     expect(labelsOf('news')).not.toContain('INBOX');
   });
 
-  it('knows a sift label whose case was changed in Gmail', async () => {
+  it('knows a Mild label whose case was changed in Gmail', async () => {
     await run(true);
-    box.change('news', { remove: [box.labelId('sift/newsletters')!], add: [box.label('Sift/Receipts')] });
+    box.change('news', { remove: [box.labelId('mild/newsletters')!], add: [box.label('Mild/Receipts')] });
     expect(await run(true)).toBe(1);
     expect(await feedback()).toEqual([{ message_id: 'news', verdict: 'wrong', disposition: 'archive', label_id: 'transactional', via: 'gmail' }]);
   });
 
-  it("ignores labels that are not sift's, stars, and messages that are gone or in the trash", async () => {
+  it('knows a label of its own still named as it was when Mild was Sift', async () => {
+    await run(true);
+    box.change('news', { remove: [box.labelId('mild/newsletters')!], add: [box.label('sift/receipts')] });
+    expect(await run(true)).toBe(1);
+    expect(await feedback()).toEqual([{ message_id: 'news', verdict: 'wrong', disposition: 'archive', label_id: 'transactional', via: 'gmail' }]);
+  });
+
+  it("ignores labels that are not Mild's, stars, and messages that are gone or in the trash", async () => {
     await run(true);
     box.change('news', { add: [box.label('travel'), 'STARRED'] });
     box.change('ada', { remove: ['INBOX'], add: ['TRASH'] });
@@ -479,7 +486,7 @@ describe('teaching from Gmail', () => {
     expect(await feedback()).toEqual([]);
   });
 
-  it("does not mistake sift's own changes for the user's: changing Gmail, undoing, and putting right after an answer in the dashboard", async () => {
+  it("does not mistake Mild's own changes for the user's: changing Gmail, undoing, and putting right after an answer in the dashboard", async () => {
     await run(true);
     expect(await run(true)).toBe(0);
 
@@ -495,11 +502,11 @@ describe('teaching from Gmail', () => {
     expect(await raw(db).get(`SELECT count(*) AS n FROM feedback WHERE via = 'gmail'`)).toEqual({ n: 0 });
   });
 
-  it('tells the user moving mail back from sift archiving it, when both are in the same history', async () => {
+  it('tells the user moving mail back from Mild archiving it, when both are in the same history', async () => {
     await run(true);
     await undo({ db, mailbox, now: () => clock }, (await lastStandingChange(db, ACCOUNT, 'news'))!.id);
     clock += 1;
-    // sift put it back in the inbox, and then the user archived it by hand.
+    // Mild put it back in the inbox, and then the user archived it by hand.
     box.change('news', { remove: ['INBOX'] });
     box.change('news', { add: ['INBOX'] });
     box.change('news', { remove: ['INBOX'] });
@@ -510,7 +517,7 @@ describe('teaching from Gmail', () => {
     expect(await latest('news')).toMatchObject({ disposition: 'keep' });
   });
 
-  it('while off, counts the user doing what sift suggested as agreement, and doing otherwise as the answer', async () => {
+  it('while off, counts the user doing what Mild suggested as agreement, and doing otherwise as the answer', async () => {
     await raw(db).run(`UPDATE rules SET source = 'learned'`);
     await run(false);
     const replay = await again();
@@ -529,7 +536,7 @@ describe('teaching from Gmail', () => {
     expect(await count('decisions')).toBe(2);
   });
 
-  it('skips mail sift could not place unless the user gave it a sift label', async () => {
+  it('skips mail Mild could not place unless the user gave it a Mild label', async () => {
     await raw(db).run('DELETE FROM rules');
     await runOnce(await active(true), { ...options(), now: () => clock, model: unsure });
     clock += 1000;
@@ -537,14 +544,14 @@ describe('teaching from Gmail', () => {
     box.change('news', { remove: ['INBOX'] });
     expect(await run(true)).toBe(0);
 
-    box.change('ada', { add: [box.label('sift/personal')] });
+    box.change('ada', { add: [box.label('mild/personal')] });
     expect(await run(true)).toBe(1);
     expect(await latest('ada')).toMatchObject({ disposition: 'keep', label_id: 'personal', rule_id: null });
     expect(await feedback()).toEqual([{ message_id: 'ada', verdict: 'answered', disposition: 'keep', label_id: 'personal', via: 'gmail' }]);
   });
 });
 
-describe('telling the user from sift in history', () => {
+describe('telling the user from Mild in history', () => {
   const act = async (messageId: string, payload: { add: string[]; remove: string[] }, status: string, at: number) =>
     await raw(db).run(
       `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at) VALUES (?, ?, 'archive', ?, '[]', ?, ?)`,
@@ -589,7 +596,7 @@ describe('telling the user from sift in history', () => {
 describe('read state', () => {
   const readAt = async (id: string) => (await raw(db).get<{ read_at: number | null }>('SELECT read_at FROM messages WHERE id = ?', id))!.read_at;
 
-  it('records when the user opened a message, and not when sift marked it read', async () => {
+  it('records when the user opened a message, and not when Mild marked it read', async () => {
     await updateLabel(db, 'newsletter', { markRead: true });
     await addRule(db, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'user');
     await runOnce(await active(true), options());
@@ -601,7 +608,7 @@ describe('read state', () => {
     expect(await readAt('ada')).toBe(6000);
   });
 
-  it('still sees the user open a message sift marked read, undid, and that they then read themselves', async () => {
+  it('still sees the user open a message Mild marked read, undid, and that they then read themselves', async () => {
     await updateLabel(db, 'newsletter', { markRead: true });
     await addRule(db, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'user');
     await runOnce(await active(true), options());
@@ -691,7 +698,7 @@ describe('inference tier', () => {
       cost_usd: 0.002,
       outcome: 'done',
     });
-    expect(labelsOf('news')).toEqual(['UNREAD', 'sift/newsletters', 'sift/did/archived']);
+    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters', 'mild/did/archived']);
   });
 
   it('proposes no rule for a sender the model keeps labelling the same way: it would do what already happens', async () => {
@@ -743,8 +750,8 @@ describe('inference tier', () => {
       rule_id: ruleId,
       reason: 'rule: from news@example.com: archive it',
     });
-    // Out of the inbox, marked as sift's doing, and given no label of what it is.
-    expect(labelsOf('g1')).toEqual(['UNREAD', 'sift/did/archived']);
+    // Out of the inbox, marked as Mild's doing, and given no label of what it is.
+    expect(labelsOf('g1')).toEqual(['UNREAD', 'mild/did/archived']);
   });
 
   it('applies a rule that waits for a label only to mail the model gives that label, and asks about the rest', async () => {
@@ -771,7 +778,7 @@ describe('inference tier', () => {
     expect(labelsOf('u2')).toContain('INBOX');
   });
 
-  it('gathers evidence and classifies while sift is off, without changing the mailbox', async () => {
+  it('gathers evidence and classifies while Mild is off, without changing the mailbox', async () => {
     judged.length = 0;
     inbox = [inbox[0]!];
     await runOnce(await active(false), { ...options(), model: model('marketing') });
@@ -789,7 +796,7 @@ describe('a failed model call', () => {
     (asked: string[] = []) =>
     async () =>
       testModel(async ({ evidence }) => (asked.push(evidence.facts.messageId), { failed: 'rate limited', usage }));
-  /** A model that answers, but never with a verdict sift can use. */
+  /** A model that answers, but never with a verdict Mild can use. */
   const unusable = async () => testModel(async () => ({ failed: 'the model did not return a usable verdict', usage, unusable: true as const }));
   /** A model that answers for every message but those in `failing`, where the provider errs. */
   const flaky =
@@ -937,7 +944,7 @@ describe('unsubscribing', () => {
     await raw(db).run('UPDATE messages SET decided = false');
     await runOnce(await active(true), withUnsubscribe());
     expect(asked).toEqual(['news']);
-    expect(labelsOf('news')).toContain('sift/did/archived');
+    expect(labelsOf('news')).toContain('mild/did/archived');
     expect(logs.at(-1)).toContain('unsubscribed from 1 sender');
   });
 
@@ -948,7 +955,7 @@ describe('unsubscribing', () => {
     await runOnce(await active(true), withUnsubscribe('refused'));
     expect(asked).toEqual(['ada']);
     // Kept, labelled, and marked read as the rule asks.
-    expect(labelsOf('ada')).toEqual(['INBOX', 'sift/security']);
+    expect(labelsOf('ada')).toEqual(['INBOX', 'mild/security']);
     expect(logs.at(-1)).not.toContain('unsubscribed');
   });
 
@@ -958,7 +965,7 @@ describe('unsubscribing', () => {
     await rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
     inbox = [inbox[0]!];
     await runOnce(await active(true), withUnsubscribe());
-    expect(labelsOf('news')).toContain('sift/did/archived');
+    expect(labelsOf('news')).toContain('mild/did/archived');
     expect(asked).toEqual([]);
 
     await raw(db).run('DELETE FROM actions');
@@ -972,12 +979,12 @@ describe('unsubscribing', () => {
   });
 });
 
-describe('correcting what sift did', () => {
+describe('correcting what Mild did', () => {
   it('takes the change back and carries out what the user said instead', async () => {
     await addRule(db, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'learned');
     inbox = [inbox[0]!];
     await runOnce(await active(true), options());
-    expect(labelsOf('news')).toEqual(['UNREAD', 'sift/newsletters', 'sift/did/archived']);
+    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters', 'mild/did/archived']);
 
     const result = await applyFeedback(db, {
       accountId: ACCOUNT,
@@ -987,13 +994,13 @@ describe('correcting what sift did', () => {
       carryOut: true,
     });
     expect(result.corrected).toBe('news');
-    // What the dashboard asks the running sift to do next.
+    // What the dashboard asks the running Mild to do next.
     const last = await lastStandingChange(db, ACCOUNT, 'news');
     await undo({ db, mailbox }, last!.id);
     expect(labelsOf('news')?.toSorted()).toEqual(['INBOX', 'UNREAD']);
 
     await runOnce(await active(true), options());
-    expect(labelsOf('news')?.toSorted()).toEqual(['INBOX', 'UNREAD', 'sift/personal']);
+    expect(labelsOf('news')?.toSorted()).toEqual(['INBOX', 'UNREAD', 'mild/personal']);
     expect(await raw(db).get(`SELECT disposition, outcome FROM decisions WHERE message_id = 'news' ORDER BY id DESC LIMIT 1`)).toEqual({
       disposition: 'keep',
       outcome: 'done',
@@ -1017,7 +1024,7 @@ describe('blocking', () => {
   it('marks the message spam and makes a rule for the sender, so their later mail needs no model', async () => {
     inbox = [phish('p1', true)];
     await runOnce(await active(true), { ...options(), model: phishing });
-    expect(labelsOf('p1')).toEqual(['sift/phishing', 'sift/did/spam', 'SPAM']);
+    expect(labelsOf('p1')).toEqual(['mild/phishing', 'mild/did/spam', 'SPAM']);
     expect(await listRules(db)).toMatchObject([{ match: { from: ['alerts@example.net'] }, labelId: 'phishing', source: 'learned' }]);
     expect(logs.at(-1)).toContain('blocked 1 sender');
 
@@ -1047,7 +1054,7 @@ describe('blocking', () => {
     wroteTo('alerts@example.net');
     inbox = [phish('p1', true)];
     await runOnce(await active(true), { ...options(), model: phishing });
-    expect(labelsOf('p1')).toEqual(['INBOX', 'sift/phishing', 'sift/review']);
+    expect(labelsOf('p1')).toEqual(['INBOX', 'mild/phishing', 'mild/review']);
     expect(await listRules(db)).toEqual([]);
   });
 });

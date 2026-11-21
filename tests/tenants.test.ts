@@ -18,7 +18,7 @@ import { startInboxRuns } from '../src/store/inbox.ts';
 import * as api from '../src/dashboard/api/index.ts';
 import { seal } from '../src/plain.ts';
 
-// Two people. Alpha set sift up and has two mailboxes; Bravo arrived later with one.
+// Two people. Alpha set Mild up and has two mailboxes; Bravo arrived later with one.
 const ALPHA = 'alpha@example.org';
 const ALPHA_WORK = 'alpha@work.example.com';
 const BRAVO = 'bravo@example.net';
@@ -467,7 +467,7 @@ describe("nobody sees or changes another person's mail", () => {
     ).toEqual([ALPHA, ALPHA_WORK]);
     expect((await call('POST', '/api/inbox/stop', ALPHA, {})).status).toBe(200);
     expect(await raw(await dbOf(BRAVO)).all('SELECT stopped, finished_at FROM inbox_runs')).toEqual([{ stopped: false, finished_at: null }]);
-    // Asking sift to look now is nobody's secret.
+    // Asking Mild to look now is nobody's secret.
     expect((await call('POST', '/api/check', BRAVO, {})).status).toBe(200);
   });
 

@@ -51,7 +51,7 @@ export async function modelSpend(db: Sql, scope: Scope, since: number): Promise<
 }
 
 /**
- * The ten senders with the most mail since `since`, each with its newest message and what Sift last did with its mail.
+ * The ten senders with the most mail since `since`, each with its newest message and what Mild last did with its mail.
  * Counted first, then looked up for those ten alone: gathering every sender's messages to keep one each took seconds.
  */
 async function topSenders(db: Sql, scope: Scope, since: number) {
@@ -96,8 +96,8 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     .from(mailboxes)
     .where(within(scope, mailboxes.id))
     .orderBy(asc(mailboxes.id));
-  // Each message once: where sift first decided it. Later decisions (an answer, a rule or label changed
-  // since) are about the same message, and one the user answered before sift decided it is not sift's.
+  // Each message once: where Mild first decided it. Later decisions (an answer, a rule or label changed
+  // since) are about the same message, and one the user answered before Mild decided it is not Mild's.
   const triagedSince = and(
     decidedSince,
     eq(

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 /**
- * The one script a message's frame runs, Sift's own: the frame's policy allows it by its hash and nothing else, and the
+ * The one script a message's frame runs, Mild's own: the frame's policy allows it by its hash and nothing else, and the
  * cleaner strips every script the mail brings. It runs in the sandbox, with no origin of its own and no network, so even
  * mail that got a script past both could reach neither the dashboard nor anywhere else.
  *

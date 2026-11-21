@@ -38,7 +38,7 @@ export function threadFacts(messages: readonly { id: string; labelIds: readonly 
  * mail "reads as AI-generated" or what language it is in are judgements, and belong to a model.
  */
 export interface Facts extends Partial<ContentFacts>, Partial<ThreadFacts> {
-  /** `one-click` is RFC 8058, the only kind sift will use itself. */
+  /** `one-click` is RFC 8058, the only kind Mild will use itself. */
   unsubscribe: 'none' | 'header' | 'one-click';
   listId: string | null;
   /** `Precedence: bulk`, `list` or `junk`. */
@@ -59,15 +59,15 @@ export interface Facts extends Partial<ContentFacts>, Partial<ThreadFacts> {
   /**
    * Who sent it, beside the owner: one of their own addresses, or someone at their own domain (a
    * subdomain counts; a domain anyone can get an address at never does). Only DMARC says it is true.
-   * Absent for mail recorded before sift read it.
+   * Absent for mail recorded before Mild read it.
    */
   origin?: 'owner' | 'own-domain' | 'outside';
   /** The inbox tab Gmail filed it under, from its `CATEGORY_*` label. Null: none recorded. */
   category: 'personal' | 'social' | 'promotions' | 'updates' | 'forums' | null;
   /**
-   * Gmail's importance marker, as it stood when sift recorded the message. Gmail sets it from how the owner
+   * Gmail's importance marker, as it stood when Mild recorded the message. Gmail sets it from how the owner
    * treats mail like it, and the owner can set it by hand; the API does not say which. Absent for mail
-   * recorded before sift read it.
+   * recorded before Mild read it.
    */
   important?: boolean;
 }
@@ -272,7 +272,7 @@ export const RULE_FACTS = {
   ],
   bulkService: [
     [true, 'was sent through a bulk mail service'],
-    [false, 'was sent through no bulk mail service Sift knows'],
+    [false, 'was sent through no bulk mail service Mild knows'],
   ],
   dmarc: [
     ['pass', 'passed DMARC'],

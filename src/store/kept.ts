@@ -54,7 +54,7 @@ async function envelopeOf(db: Sql, accountId: string, messageId: string): Promis
 }
 
 /**
- * Record mail Inbox copies and Sift does not triage, with its text: mail from before Sift was connected, mail that never
+ * Record mail Inbox copies and Mild does not triage, with its text: mail from before Mild was connected, mail that never
  * reached the inbox, the person's own. Decided already, so it is never in the triage queue; going through the inbox still
  * decides what of it is in the inbox. Only while Inbox is on. Safe to repeat. Returns false when Inbox was off.
  */
@@ -85,7 +85,7 @@ export async function recordKept(db: Sql, accountId: string, mail: { facts: Mess
   return kept === true;
 }
 
-/** Keep the text of a message Sift has recorded, and add what reading it whole showed to its facts. Only while Inbox is on. Returns false when Inbox was off. */
+/** Keep the text of a message Mild has recorded, and add what reading it whole showed to its facts. Only while Inbox is on. Returns false when Inbox was off. */
 export async function keepText(db: Sql, accountId: string, messageId: string, text: Text, now: number): Promise<boolean> {
   const kept = await whileInboxOn(db, async (tx) => {
     const envelope = await envelopeOf(tx, accountId, messageId);
@@ -109,7 +109,7 @@ export async function keepText(db: Sql, accountId: string, messageId: string, te
 export const READ_KEEP_DAYS = 30;
 
 /**
- * Keep the text of a message Sift read whole with Inbox off, for `READ_KEEP_DAYS`, and add what reading it showed to its facts,
+ * Keep the text of a message Mild read whole with Inbox off, for `READ_KEEP_DAYS`, and add what reading it showed to its facts,
  * which also says it was read (`neverRead`). Safe to repeat.
  */
 export async function keepRead(db: Sql, accountId: string, messageId: string, text: Text, now: number): Promise<void> {
@@ -137,7 +137,7 @@ export async function purgeRead(db: Sql, cutoff: number): Promise<number> {
 }
 
 /**
- * Of `ids`, the recorded messages Sift has never read whole: no text held, and no fact only the whole message gives. One read
+ * Of `ids`, the recorded messages Mild has never read whole: no text held, and no fact only the whole message gives. One read
  * of them is their first.
  */
 export async function neverRead(db: Sql, accountId: string, ids: readonly string[]): Promise<string[]> {
@@ -187,7 +187,7 @@ export async function keptSize(db: Sql): Promise<number | null> {
 const READ = ['hasAttachments', 'words', 'trackingPixel', 'linkHosts', 'trackedLinks', 'linksOffDomain'] as const;
 
 /**
- * The text Sift holds of a recorded message, so reading it costs Gmail nothing, with what reading it whole showed: Inbox's copy,
+ * The text Mild holds of a recorded message, so reading it costs Gmail nothing, with what reading it whole showed: Inbox's copy,
  * or else what it read with Inbox off in the last `READ_KEEP_DAYS`. Null when it holds none; empty when the message had gone.
  */
 export async function heldText(db: Sql, accountId: string, messageId: string): Promise<Text | null> {

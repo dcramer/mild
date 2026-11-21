@@ -42,23 +42,23 @@ import { DECIDED, DISPOSITIONS, LEAVE_IN_INBOX, STAGE_NAMES, SUBSCRIPTION_ACTION
 export const CREDENTIAL_KINDS = ['gmail', 'model', 'device'] as const;
 export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'] as const;
 /**
- * `digest`: a digest put into the mailbox, which changes no message Sift recorded. `send`: mail the person sent through Sift.
+ * `digest`: a digest put into the mailbox, which changes no message Mild recorded. `send`: mail the person sent through Mild.
  * `read` and `unread`: the person's own press in Inbox, as is an `archive` with no decision.
  */
 export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter', 'digest', 'send', 'read', 'unread'] as const;
 export const ACTION_STATUSES = ['pending', 'done', 'failed', 'unknown', 'undone'] as const;
-/** `learned`: sift made it (blocking a sender). */
+/** `learned`: Mild made it (blocking a sender). */
 export const RULE_SOURCES = ['user', 'learned', 'correction'] as const;
 /** `changed`: edited in Gmail. `gone`: deleted there. `outdated`: the rule no longer says what the filter does. */
 export const FILTER_STATES = ['active', 'changed', 'gone', 'outdated'] as const;
 const PROPOSAL_STATUSES = ['open', 'accepted', 'dismissed'] as const;
-/** right: sift's suggestion was what they wanted. wrong: it was not. answered: sift had no suggestion. */
+/** right: Mild's suggestion was what they wanted. wrong: it was not. answered: Mild had no suggestion. */
 export const VERDICTS = ['right', 'wrong', 'answered'] as const;
 const FEEDBACK_VIA = ['dashboard', 'gmail'] as const;
 export const EXAMPLE_STATUSES = ['pending', 'captured', 'gone'] as const;
 export const EVAL_STATUSES = ['running', 'done', 'failed'] as const;
 
-/** What sift's own queries run as: it owns nothing and cannot bypass row-level security. */
+/** What Mild's own queries run as: it owns nothing and cannot bypass row-level security. */
 export const siftApp = pgRole('sift_app', { createRole: false });
 
 // After a transaction that set it, the setting reads as '' for the rest of the session: that is nobody too.
@@ -133,7 +133,7 @@ export const mailboxes = pgTable(
     lastSyncedAt: time('last_synced_at'),
     filtersCheckedAt: time('filters_checked_at'),
     aliases: jsonb('aliases').$type<string[]>().notNull().default([]), // Gmail send-as addresses besides the id, as of the last sync that could read them
-    canSend: boolean('can_send').notNull().default(false), // Google granted `gmail.send` to the sign-in Sift holds for it
+    canSend: boolean('can_send').notNull().default(false), // Google granted `gmail.send` to the sign-in Mild holds for it
     signedInAt: time('signed_in_at'), // when its Gmail sign-in was given; null for one given before this was kept
     weeklySignIn: boolean('weekly_sign_in').notNull().default(false), // Google ended its last sign-in a week after it was given: the client is in Testing
   },
@@ -153,9 +153,9 @@ export const preferences = pgTable(
   'preferences',
   {
     userId: userId().primaryKey(),
-    // false (off): their decisions are only suggestions. true (on): sift carries them out in their mailboxes.
+    // false (off): their decisions are only suggestions. true (on): Mild carries them out in their mailboxes.
     active: boolean('active').notNull().default(false),
-    // Inbox: Sift keeps a copy of their mail (`messages`, `mail_bodies`), and may send as them where a mailbox lets it.
+    // Inbox: Mild keeps a copy of their mail (`messages`, `mail_bodies`), and may send as them where a mailbox lets it.
     mail: boolean('mail').notNull().default(false),
     // How far back that copy goes.
     mailWindow: text('mail_window', { enum: MAIL_WINDOWS }).notNull().default('year'),
@@ -187,7 +187,7 @@ export const credentials = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.kind, t.key] }), oneOf('credentials_kind', t.kind, CREDENTIAL_KINDS), own()],
 ).enableRLS();
 
-/** Every message sift has seen, without the body: enough to triage it again and show what sift did. */
+/** Every message Mild has seen, without the body: enough to triage it again and show what Mild did. */
 export const messages = pgTable(
   'messages',
   {
@@ -205,7 +205,7 @@ export const messages = pgTable(
     labelIds: jsonb('label_ids').$type<string[]>().notNull().default([]),
     syncedAt: time('synced_at').notNull(),
     suggestOnly: boolean('suggest_only').notNull().default(false), // first recorded by an inbox run that only suggests: a pass never carries it out
-    applyRule: text('apply_rule'), // pulled in by "Apply to inbox" on this rule: what it decides here is carried out, Sift on or off
+    applyRule: text('apply_rule'), // pulled in by "Apply to inbox" on this rule: what it decides here is carried out, Mild on or off
     facts: jsonb('facts').$type<Facts>().notNull(),
     readAt: time('read_at'), // when a sync saw the user had opened it
     // A decision has been recorded for it (`recordDecision`), or it is not mail to triage: the person's own, or copied for Inbox
@@ -235,7 +235,7 @@ export const messages = pgTable(
 const message = (t: { userId: AnyPgColumn; accountId: AnyPgColumn; messageId: AnyPgColumn }) =>
   foreignKey({ columns: [t.userId, t.accountId, t.messageId], foreignColumns: [messages.userId, messages.accountId, messages.id] });
 
-/** What mail can be, and what sift does with each: the person's, for every mailbox of theirs. */
+/** What mail can be, and what Mild does with each: the person's, for every mailbox of theirs. */
 export const labels = pgTable(
   'labels',
   {
@@ -328,7 +328,7 @@ export const decisions = pgTable(
     carryOut: boolean('carry_out').notNull().default(false),
     outcome: text('outcome', { enum: DECISION_OUTCOMES }),
     outcomeDetail: text('outcome_detail'),
-    // The user's own answer, from the dashboard or from what they did in Gmail. Carried out even while sift is off.
+    // The user's own answer, from the dashboard or from what they did in Gmail. Carried out even while Mild is off.
     byUser: boolean('by_user').notNull().default(false),
   },
   (t) => [
@@ -465,7 +465,7 @@ export const ruleFilters = pgTable(
   ],
 ).enableRLS();
 
-/** Rules sift thinks are worth having, waiting on the user. */
+/** Rules Mild thinks are worth having, waiting on the user. */
 export const proposals = pgTable(
   'proposals',
   {
@@ -576,7 +576,7 @@ export const examples = pgTable(
 ).enableRLS();
 
 /**
- * The text of a message Sift read whole with Inbox off (for the model, for mail waiting on the person, for an example), kept 30
+ * The text of a message Mild read whole with Inbox off (for the model, for mail waiting on the person, for an example), kept 30
  * days from reading whatever becomes of the message, so nothing reads it from Gmail again (`keepRead`, src/store/kept.ts).
  */
 export const readBodies = pgTable(
@@ -711,7 +711,7 @@ export const inboxRuns = pgTable(
     startedAt: time('started_at').notNull(),
     finishedAt: time('finished_at'), // null while it goes on
     stopped: boolean('stopped').notNull().default(false),
-    // Whether Sift was on at the press: what it decides is carried out only then, and only while Sift stays on.
+    // Whether Mild was on at the press: what it decides is carried out only then, and only while Mild stays on.
     acts: boolean('acts').notNull(),
     most: integer('most').notNull(),
     listed: boolean('listed').notNull().default(false), // every id it will go through is in `messages`
@@ -822,7 +822,7 @@ export const evalResults = pgTable(
 ).enableRLS();
 
 /**
- * One label's mail of a day, put into the person's primary mailbox as one message: what Sift archived from it in
+ * One label's mail of a day, put into the person's primary mailbox as one message: what Mild archived from it in
  * `(since, until]`, by when the archive was confirmed. Written before the model is asked and before the message
  * is put in, so a step run again finishes it rather than writing another.
  */
@@ -835,7 +835,7 @@ export const digests = pgTable(
     accountId: text('account_id').notNull(), // the mailbox it is put in
     since: time('since').notNull(),
     until: time('until').notNull(),
-    messageId: text('message_id').notNull(), // the Message-ID it is given, `<digest.…@sift.invalid>`: how sync tells it is Sift's own
+    messageId: text('message_id').notNull(), // the Message-ID it is given, `<digest.…@sift.invalid>`: how sync tells it is Mild's own
     gmailId: text('gmail_id'), // null until Gmail has it
     count: integer('count').notNull(),
     // What the model picked as worth a look, `{ id, why }[]`, encrypted: the reasons come from mail (src/store/content.ts).

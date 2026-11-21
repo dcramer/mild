@@ -31,7 +31,7 @@ export function InboxFigures({ estimate, model }: { estimate: InboxEstimate | nu
   );
 }
 
-/** Asked when Sift is turned on, and from Settings: go through what is already in the inbox, as if it had just arrived. */
+/** Asked when Mild is turned on, and from Settings: go through what is already in the inbox, as if it had just arrived. */
 export function GoThroughInbox({ model, onClose, onStarted }: { model: ManageState['model']; onClose: () => void; onStarted: () => void }) {
   const estimate = useInboxEstimate('inbox');
   const { busy, error, run } = useAction();

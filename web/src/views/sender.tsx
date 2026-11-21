@@ -48,7 +48,7 @@ function byMessage(rows: readonly ListedDecision[]): ListedDecision[] {
   return rows.filter((row) => !seen.has(row.messageId) && seen.add(row.messageId)).toSorted((a, b) => b.receivedAt - a.receivedAt);
 }
 
-/** Mail no rule placed that Sift has not carried out and the reader has not answered. */
+/** Mail no rule placed that Mild has not carried out and the reader has not answered. */
 const isWaiting = (row: ListedDecision) => !row.byUser && !row.carryOut && row.outcome === null && row.stage !== 'rules';
 
 const ruleWords = (rule: Rule) =>
@@ -58,7 +58,7 @@ const ruleWords = (rule: Rule) =>
       : `${rule.kind === 'when-label' ? ', when it is ' : ' is '}${rule.labelName ?? ''}`
   }`;
 
-/** What happens to their next message, and what says so: the rule that decides it, or their mail, with how often Sift has been right. */
+/** What happens to their next message, and what says so: the rule that decides it, or their mail, with how often Mild has been right. */
 function NextMail({ data }: { data: SenderPage }) {
   const { next } = data;
   const rule = data.profile.rules.find((r) => r.id === next.ruleId);
@@ -210,7 +210,7 @@ function Names({ data, onStart }: { data: SenderPage; onStart: (s: RuleStart) =>
 }
 
 /**
- * Their mail, one row per message: what it is, what Sift said, where it got to, when it came. Who sent each
+ * Their mail, one row per message: what it is, what Mild said, where it got to, when it came. Who sent each
  * comes first: on a domain's page the sender, as in every list of mail; for an address with several names, the name.
  */
 function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMessages; from: 'sender' | 'name' | null }) {
@@ -221,7 +221,7 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
       <Heads shown="always">
         {from === 'sender' ? <Th>Sender</Th> : from === 'name' ? <Th>From</Th> : null}
         <Th {...(oneSender ? {} : { phone: 'hide' as const })}>Message</Th>
-        <Th phone="hide">Sift said</Th>
+        <Th phone="hide">Mild said</Th>
         <Th phone="hide">Status</Th>
         <Th phone="hide" num>
           Received
@@ -280,7 +280,7 @@ function Mail({ rows, onOpen, from }: { rows: ListedDecision[]; onOpen: OpenMess
 }
 
 /**
- * Everything about one sender, or one domain: what Sift will do with their next mail and why, the one
+ * Everything about one sender, or one domain: what Mild will do with their next mail and why, the one
  * place to change that, how much they send and what it is, and their mail.
  */
 /**

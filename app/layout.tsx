@@ -7,12 +7,12 @@ import { STARTUP_SCREENS, startupImage, startupMedia } from '@/lib/startup.ts';
 import { Providers } from '@/providers.tsx';
 
 export const metadata: Metadata = {
-  title: { default: 'Sift', template: '%s · Sift' },
+  title: { default: 'Mild', template: '%s · Mild' },
   icons: { icon: { url: '/icons/icon.svg', type: 'image/svg+xml' }, apple: '/icons/apple-touch-icon.png' },
   // Installed on an iPhone: the page is drawn under the status bar, in its own colour (`--safe-top`, web/src/index.css).
   appleWebApp: {
     capable: true,
-    title: 'Sift',
+    title: 'Mild',
     statusBarStyle: 'black-translucent',
     startupImage: STARTUP_SCREENS.map((screen) => ({ url: startupImage(screen), media: startupMedia(screen) })),
   },

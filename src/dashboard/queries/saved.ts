@@ -24,7 +24,7 @@ import type { Saved } from '../types.ts';
 import { DAY_MS } from './decisions.ts';
 
 /**
- * What one message Sift took out of the inbox saved: about the time people spend on an email they open (Litmus's
+ * What one message Mild took out of the inbox saved: about the time people spend on an email they open (Litmus's
  * measure, 9 to 13 seconds since 2011). Not its reading time: most of this mail is never read through, and counting
  * it as read would make the figure one nobody believes. The words in each message the model reads are recorded
  * (`Facts.words`) for when reading is estimated too.
@@ -40,9 +40,9 @@ const latest = alias(actions, 'latest');
 const out = or(inArray(decisions.disposition, ['archive', 'spam']), eq(decisions.block, true))!;
 
 /**
- * Mail Sift itself took out of the inbox, decided since `since` (and before `until`), with the label it gave: each
+ * Mail Mild itself took out of the inbox, decided since `since` (and before `until`), with the label it gave: each
  * message once, by its latest change carried out, while that change stands and the reader never opened the
- * message. An answer of the reader's own is their attention, not Sift's; mail they opened anyway saved nothing.
+ * message. An answer of the reader's own is their attention, not Mild's; mail they opened anyway saved nothing.
  */
 export async function keptOut(
   db: Sql,
@@ -109,8 +109,8 @@ export const net = (rows: readonly { n: number }[]) =>
   );
 
 /**
- * What Sift would have taken out of the inbox since `since` had it been on: each message's latest decision of
- * Sift's own, recorded only. Mail it was not sure of is `review`, so it is not counted.
+ * What Mild would have taken out of the inbox since `since` had it been on: each message's latest decision of
+ * Mild's own, recorded only. Mail it was not sure of is `review`, so it is not counted.
  */
 export async function wouldKeepOut(db: Sql, scope: Scope, since: number): Promise<number> {
   const [row] = await db
@@ -138,7 +138,7 @@ export async function wouldKeepOut(db: Sql, scope: Scope, since: number): Promis
 const unsubscribedFrom = alias(messages, 'unsubscribed_from');
 
 /**
- * Senders Sift unsubscribed from since `since`, and how much they had sent in the 30 days before: the mail a
+ * Senders Mild unsubscribed from since `since`, and how much they had sent in the 30 days before: the mail a
  * month that stops coming.
  */
 export async function unsubscribed(db: Sql, scope: Scope, since: number): Promise<{ senders: number; monthly: number }> {

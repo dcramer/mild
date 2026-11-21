@@ -27,7 +27,7 @@ function Post({ x }: { x: number }) {
   );
 }
 
-/** Sift as a sieve on the door: shades on, arms folded. */
+/** Mild as a sieve on the door: shades on, arms folded. */
 function Bouncer({ cx, mesh }: { cx: number; mesh: string }) {
   const cy = 104;
   const bowl = `M${cx - 40},${cy} A40,48 0 0 0 ${cx + 40},${cy}`;
@@ -54,7 +54,7 @@ function Bouncer({ cx, mesh }: { cx: number; mesh: string }) {
 }
 
 /**
- * Mail queued at a velvet rope, Sift on the door. A margin doodle (docs/brand.md): one wobbly pen in the
+ * Mail queued at a velvet rope, Mild on the door. A margin doodle (docs/brand.md): one wobbly pen in the
  * page's ink, the rope in the highlighter. `queue` is how many envelopes wait; the drawing widens with it.
  */
 export function Rope({ queue = 3, className }: { queue?: number; className?: string }) {

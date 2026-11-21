@@ -15,12 +15,12 @@ test.describe('A rule as a Gmail filter', () => {
     await expect(ci.getByRole('button', { name: 'Remove filter…' })).toBeVisible();
 
     const news = await openRule(page, 'anyone at news.example.com');
-    await expect(news.getByText('Once Sift is on, Gmail could run this rule itself')).toBeVisible();
+    await expect(news.getByText('Once Mild is on, Gmail could run this rule itself')).toBeVisible();
     await expect(news.getByRole('listitem').last()).toContainText('Gmail did not take the filter');
     await expect(news.getByRole('button', { name: 'Add as a Gmail filter…' })).toHaveCount(0);
 
     const shop = await openRule(page, 'orders@shop.example.com');
-    await expect(shop.getByText('Its Gmail filter was deleted in Gmail. Sift will not put it back.')).toBeVisible();
+    await expect(shop.getByText('Its Gmail filter was deleted in Gmail. Mild will not put it back.')).toBeVisible();
     await expect(shop.getByRole('listitem').last()).toContainText('Filter deleted in Gmail');
     await expect(shop.getByRole('button', { name: /Gmail/ })).toHaveCount(0);
 
@@ -33,22 +33,22 @@ test.describe('A rule as a Gmail filter', () => {
     const ci = await openRule(page, CI);
     await ci.getByRole('button', { name: 'Remove filter…' }).click();
     const ask = page.getByRole('dialog', { name: 'Remove the Gmail filter?' });
-    await expect(ask).toContainText('The rule stays, and applies only while Sift is on.');
+    await expect(ask).toContainText('The rule stays, and applies only while Mild is on.');
     await ask.getByRole('button', { name: 'Remove filter', exact: true }).click();
     await expect(ask).toHaveCount(0);
     await expect(toast(page, 'Gmail filter removed')).toBeVisible();
-    await expect(ci.getByText('Once Sift is on, Gmail could run this rule itself')).toBeVisible();
+    await expect(ci.getByText('Once Mild is on, Gmail could run this rule itself')).toBeVisible();
     await expect(ci.getByRole('listitem').last()).toContainText('Filter removed');
 
     await page.reload();
-    await expect(ci.getByText('Once Sift is on, Gmail could run this rule itself')).toBeVisible();
+    await expect(ci.getByText('Once Mild is on, Gmail could run this rule itself')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(ci).toHaveCount(0);
     await expect(ruleRows(page)).toHaveCount(4);
     await expect(ruleRows(page).filter({ hasText: 'Gmail filter' })).toHaveCount(0);
   });
 
-  test('with Sift on, Add as a Gmail filter… shows the filter first, and adds it', async ({ page }) => {
+  test('with Mild on, Add as a Gmail filter… shows the filter first, and adds it', async ({ page }) => {
     await turnOn(page);
     const news = await openRule(page, 'anyone at news.example.com');
     await expect(news.getByText('Gmail could run this rule itself')).toBeVisible();
@@ -76,7 +76,7 @@ test.describe('A rule as a Gmail filter', () => {
     await expect(row(page, 'anyone at news.example.com')).toContainText('Gmail filter');
   });
 
-  test('with Sift on, a rule Gmail could run is offered as a filter once added', async ({ page }) => {
+  test('with Mild on, a rule Gmail could run is offered as a filter once added', async ({ page }) => {
     await turnOn(page);
     await page.goto('/rules');
     const dialog = await writeRule(page);

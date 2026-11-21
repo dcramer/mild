@@ -75,7 +75,7 @@ async function delivered() {
 
 /** A person's database with a key, so hashes are hashes. */
 async function keyedPerson() {
-  const { store, db } = await personWith(loadKeyring({ SIFT_KEY: 'telemetry-key' }), ACCOUNT);
+  const { store, db } = await personWith(loadKeyring({ MILD_KEY: 'telemetry-key' }), ACCOUNT);
   const other = await store.user(await connectAccount(store, 'you@example.org', '1', 0));
   return { db, other };
 }

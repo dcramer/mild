@@ -10,7 +10,7 @@ export default frame({
   run: async ({ db }, scope, { id, images }) => {
     const html = await storedHtml(db, scope, id);
     return html === null
-      ? { status: 404, html: frameNote('Sift does not hold this message’s HTML.') }
+      ? { status: 404, html: frameNote('Mild does not hold this message’s HTML.') }
       : { status: 200, html: mailDocument(html, images === '1'), images: images === '1' };
   },
 });

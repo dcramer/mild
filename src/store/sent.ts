@@ -3,7 +3,7 @@ import { recordKept } from './kept.ts';
 import { envelopeOf } from '../triage/features.ts';
 
 /**
- * Keep mail the person sent from Sift, so its conversation shows it: a record in `messages` with Gmail's labels for it,
+ * Keep mail the person sent from Mild, so its conversation shows it: a record in `messages` with Gmail's labels for it,
  * decided already (it is theirs, not mail to triage), and what they wrote in `mail_bodies`. `headers` are the headers it
  * went with, names lowercased. Only while Inbox is on (`recordKept`). Safe to repeat.
  */

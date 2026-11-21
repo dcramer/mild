@@ -71,7 +71,7 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
 /**
  * What a reply's thread shows: as an earlier read found it (a model call tried again); from the record, which holds every
  * message of it while Inbox has copied the mailbox, what the owner sent among them; and otherwise from Gmail, 40 units for the
- * labels of the thread's other messages, which Sift may never have recorded.
+ * labels of the thread's other messages, which Mild may never have recorded.
  */
 async function threadOf(sources: Pick<EvidenceSources, 'db' | 'api'>, facts: MessageFacts): Promise<ThreadFacts | null> {
   const { known } = facts;

@@ -30,10 +30,10 @@ test.describe('The reader, from For review', () => {
     await expect(row(page, 'Lunch on Thursday?')).toBeFocused();
   });
 
-  test('says what Sift saw, the sender, and the history beside the message', async ({ page }) => {
+  test('says what Mild saw, the sender, and the history beside the message', async ({ page }) => {
     await page.goto('/');
     const open = await openMessage(page, 'Winter sale starts now');
-    await expect(open.getByRole('complementary')).toContainText('What Sift saw');
+    await expect(open.getByRole('complementary')).toContainText('What Mild saw');
     await expect(open.getByRole('complementary')).toContainText('Sender');
     await expect(open.getByRole('complementary').getByText(/^History · \d+$/)).toBeVisible();
     // Why is open from the start: answering is the job here.
@@ -144,12 +144,12 @@ test.describe('The reader, from Inbox', () => {
   test.describe('on a phone', () => {
     test.use({ viewport: PHONE });
 
-    test('reads top to bottom: the title, Sift’s row, the conversation, the replies; nothing wraps or scrolls sideways', async ({ page }) => {
+    test('reads top to bottom: the title, Mild’s row, the conversation, the replies; nothing wraps or scrolls sideways', async ({ page }) => {
       await page.goto('/inbox');
       await page.getByRole('row').filter({ hasText: 'Your March bill' }).click();
       const open = reader(page);
       // An open message's text arrives after the conversation, and is shorter than the rows standing in for it. The
-      // reader is found by Sift's row, which comes with the conversation: before that, no rows are found because no reader is.
+      // reader is found by Mild's row, which comes with the conversation: before that, no rows are found because no reader is.
       await expect(readerHeading(page, 'Your March bill')).toBeVisible();
       await expect(open.getByLabel('Loading')).toHaveCount(0);
       const title = await boxOf(readerHeading(page, 'Your March bill'));
@@ -160,7 +160,7 @@ test.describe('The reader, from Inbox', () => {
       expect(answer.y).toBeLessThan(first.y);
       expect(first.y).toBeLessThan(reply.y);
 
-      // Sift's row, the bar's presses and each message's head each keep to one line.
+      // Mild's row, the bar's presses and each message's head each keep to one line.
       const rule = await boxOf(open.getByRole('button', { name: 'Make a rule…' }));
       expect(rule.y + rule.height / 2).toBeCloseTo(answer.y + answer.height / 2, 0);
       const archive = await boxOf(open.getByRole('button', { name: 'Archive', exact: true }));
@@ -185,7 +185,7 @@ test.describe('The reader, from Inbox', () => {
 test.describe('The reader, from For review on a phone', () => {
   test.use({ viewport: PHONE });
 
-  test('puts what Sift saw and the sender under the message, and nothing scrolls sideways', async ({ page }) => {
+  test('puts what Mild saw and the sender under the message, and nothing scrolls sideways', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('row').filter({ hasText: 'Winter sale starts now' }).click();
     const open = reader(page);

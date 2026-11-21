@@ -152,7 +152,7 @@
         // A Confidential (src/confidential.ts) is opaque to React, but a template literal or String() would take it as text unrevealed.
         "typescript/restrict-template-expressions": ["error", { "allowNumber": true, "allowBoolean": true, "allowNullish": true }],
         "typescript/no-base-to-string": "error",
-        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." }, { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." }, { "group": ["@sentry/*"], "message": "Only web/src/lib/telemetry.ts talks to Sentry from the page, so that what leaves the browser passes its scrubber." }] }]
+        "no-restricted-imports": ["error", { "patterns": [{ "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." }, { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." }, { "group": ["@sentry/*"], "message": "Only web/src/lib/telemetry.ts talks to Sentry from the page, so that what leaves the browser passes its scrubber." }] }]
       }
     },
     {
@@ -167,7 +167,7 @@
           "error",
           {
             "patterns": [
-              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
+              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
               { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
               { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." },
               { "group": ["@sentry/*"], "message": "Only web/src/lib/telemetry.ts talks to Sentry from the page, so that what leaves the browser passes its scrubber." }
@@ -184,7 +184,7 @@
           "error",
           {
             "patterns": [
-              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
+              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
               { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
               { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." }
             ]
@@ -201,7 +201,7 @@
           "error",
           {
             "patterns": [
-              { "group": ["**/plain.ts"], "message": "src/plain.ts reads what Sift stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
+              { "group": ["**/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
               {
                 "group": ["**", "!next", "!next/*", "!react", "!@/**", "!**/src/sift/page-data.ts"],
                 "message": "app/ draws the page from web/src (@/…), which gets the rest of its data from /api/: from the server only what src/sift/page-data.ts reads, which holds nothing encrypted. Server code reached from here could be handed to the browser."

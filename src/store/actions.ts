@@ -19,7 +19,7 @@ export interface ActionPayload extends LabelChange {
   unsubscribe?: string;
   /** For `filter` and `unfilter` actions, which change no message: the rule, and the Gmail filter written for it or taken out. */
   filter?: { ruleId: string; id?: string; criteria?: Record<string, unknown>; action?: Record<string, unknown> };
-  /** For `digest` actions, which put a message Sift wrote into the mailbox: the digest. */
+  /** For `digest` actions, which put a message Mild wrote into the mailbox: the digest. */
   digest?: number;
   /** For `send` actions, which change no message: the mail sent, by its Message-ID, and to whom. */
   send?: { messageId: string; to: string[]; cc: string[]; subject: string };
@@ -114,7 +114,7 @@ export async function getAction(db: Sql, id: number): Promise<ActionRecord | nul
   return row ? fromRow(db)(row) : null;
 }
 
-/** The last thing sift did to a message's labels that still stands, or null. What the person pressed in Inbox is theirs, carrying out no decision. */
+/** The last thing Mild did to a message's labels that still stands, or null. What the person pressed in Inbox is theirs, carrying out no decision. */
 export async function lastStandingChange(db: Sql, accountId: string, messageId: string): Promise<ActionRecord | null> {
   const [row] = await db
     .select(COLUMNS)
@@ -149,7 +149,7 @@ export async function listOpenActions(db: Sql, scope?: { accountId: string; mess
   return rows.map(fromRow(db));
 }
 
-/** When the user unsubscribed from this sender through sift, or null. */
+/** When the user unsubscribed from this sender through Mild, or null. */
 export async function unsubscribedAt(db: Sql, accountId: string, sender: string): Promise<number | null> {
   const [row] = await db
     .select({ at: min(actions.createdAt) })

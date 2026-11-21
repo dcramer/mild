@@ -27,8 +27,8 @@ export function useNow(ms: number): number | null {
 const onServer = () => null;
 
 /**
- * What Sift saved the reader over each window, with its shape over the 30 days, then what the model cost: the hover
- * card, and on a phone the menu. Until Sift has taken anything out of the inbox, only the cost, with its shape.
+ * What Mild saved the reader over each window, with its shape over the 30 days, then what the model cost: the hover
+ * card, and on a phone the menu. Until Mild has taken anything out of the inbox, only the cost, with its shape.
  */
 export function UsageDetail({ usage, plan }: { usage: Usage; plan: Plan }) {
   const now = useNow(60_000);
@@ -63,7 +63,7 @@ export function UsageDetail({ usage, plan }: { usage: Usage; plan: Plan }) {
 }
 
 /**
- * Sift's line: how long since the mailbox that synced longest ago last did (each one's time when pointed at), then
+ * Mild's line: how long since the mailbox that synced longest ago last did (each one's time when pointed at), then
  * what the model cost over 30 days, which previews the rest and links to Activity. `stacked` for the rail, too narrow
  * for a line.
  */
@@ -98,7 +98,7 @@ export function SiftStatus({ accounts, usage, plan, stacked = false }: { account
   );
 }
 
-/** Sift's line on Activity, where what it counts is, on a phone, whose bar has no room for it. Its room is held while it loads. */
+/** Mild's line on Activity, where what it counts is, on a phone, whose bar has no room for it. Its room is held while it loads. */
 export function PhoneSiftStatus() {
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);

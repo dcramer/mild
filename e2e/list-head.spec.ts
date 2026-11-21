@@ -14,7 +14,7 @@ test.describe('A list on a desktop', () => {
     const add = page.getByRole('button', { name: 'Add a rule' });
     await expect(add).toHaveCount(1);
     // Nothing over the search: it starts level with the rail's name.
-    const name = await boxOf(page.getByRole('link', { name: 'Sift', exact: true }).first());
+    const name = await boxOf(page.getByRole('link', { name: 'Mild', exact: true }).first());
     const [bar, press] = [await boxOf(search), await boxOf(add)];
     expect(bar.y).toBeLessThan(name.y + name.height);
     expect(press.x).toBeGreaterThan(bar.x + bar.width);
@@ -26,7 +26,7 @@ test.describe('A list on a desktop', () => {
     const period = page.getByRole('combobox', { name: 'Period' });
     await expect(period).toHaveCount(1);
     const search = page.getByRole('searchbox', { name: 'Search subject or sender' });
-    const name = await boxOf(page.getByRole('link', { name: 'Sift', exact: true }).first());
+    const name = await boxOf(page.getByRole('link', { name: 'Mild', exact: true }).first());
     const above = await boxOf(period);
     expect(above.y).toBeLessThan(name.y + name.height);
     expect(above.y + above.height).toBeLessThan((await boxOf(search)).y);

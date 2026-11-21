@@ -28,10 +28,10 @@ const DOMAIN = domainPage('code.example.com');
 /** The rows of the page's lists, or of one table, that hold mail: not the headers or the day headings between them. */
 const rows = (page: Page, within: Page | Locator = page) => within.getByRole('row').filter({ has: page.getByRole('cell') });
 
-test.describe('Activity, after a pass with Sift on', () => {
+test.describe('Activity, after a pass with Mild on', () => {
   test.use({ variant: 'on' });
 
-  test('mail Sift could not place says it asked you, and an undone change is struck through', async ({ page }) => {
+  test('mail Mild could not place says it asked you, and an undone change is struck through', async ({ page }) => {
     await page.goto('/activity');
     await expect(page.getByRole('radio', { name: 'Changed' })).toBeChecked();
     await expect(row(page, 'Quick question')).toContainText('Asked you');
@@ -42,7 +42,7 @@ test.describe('Activity, after a pass with Sift on', () => {
     );
   });
 
-  test('says the time Sift saved and which labels it came from, each narrowing the list to its label', async ({ page }) => {
+  test('says the time Mild saved and which labels it came from, each narrowing the list to its label', async ({ page }) => {
     await page.goto('/activity');
     await expect(page.getByText('Time saved', { exact: true })).toBeVisible();
     await expect(page.getByText('1 kept out of your inbox', { exact: true })).toBeVisible();
@@ -53,7 +53,7 @@ test.describe('Activity, after a pass with Sift on', () => {
     await expect(row(page, 'Quick question')).toHaveCount(0);
   });
 
-  test('a sender’s page and a rule’s panel say what Sift kept out of the inbox', async ({ page }) => {
+  test('a sender’s page and a rule’s panel say what Mild kept out of the inbox', async ({ page }) => {
     await page.goto(senderPage('digest@news.example.com'));
     await expect(page.getByText('1 kept out of your inbox, about 10 s', { exact: true })).toBeVisible();
     await page.goto('/rules');
@@ -63,10 +63,10 @@ test.describe('Activity, after a pass with Sift on', () => {
 });
 
 test.describe('Activity', () => {
-  test('lists nothing changed while Sift is off, and every decision under Everything', async ({ page }) => {
+  test('lists nothing changed while Mild is off, and every decision under Everything', async ({ page }) => {
     await page.goto('/activity');
     await expect(page.getByRole('radio', { name: 'Changed' })).toBeChecked();
-    await expect(page.getByText('Sift has changed nothing in Gmail in this period.')).toBeVisible();
+    await expect(page.getByText('Mild has changed nothing in Gmail in this period.')).toBeVisible();
     await expect(page.getByText('Time saved', { exact: true })).toHaveCount(0);
 
     await page.getByRole('radio', { name: 'Everything' }).click();

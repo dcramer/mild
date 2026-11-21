@@ -519,6 +519,13 @@
       "when": 1795290337365,
       "tag": "0073_conversations_sync_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1795303768969,
+      "tag": "0074_gmail_labels_are_mild",
+      "breakpoints": true
     }
   ]
 }

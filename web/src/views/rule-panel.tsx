@@ -107,7 +107,7 @@ export function whoText(match: RuleMatch): string {
 
 /**
  * What applying the rule to the inbox would do, from the newest mail Gmail finds for it, and the press that
- * starts it. Nothing moves until that press: then it is the user's, carried out whether Sift is on or off.
+ * starts it. Nothing moves until that press: then it is the user's, carried out whether Mild is on or off.
  */
 function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void }) {
   const plan = usePlan();
@@ -244,7 +244,7 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
       ) : null}
       {messages.length > 0 ? (
         <>
-          <p className="text-muted-foreground">These came before the rule or while Sift was off, so they were not moved.</p>
+          <p className="text-muted-foreground">These came before the rule or while Mild was off, so they were not moved.</p>
           <Table>
             <Heads>
               <Th>Message</Th>
@@ -352,7 +352,7 @@ export function RulePanel({
 }: {
   rule: RuleSummary;
   labels: readonly LabelSummary[];
-  /** Whether Sift is on, which writing a filter to Gmail needs. */
+  /** Whether Mild is on, which writing a filter to Gmail needs. */
   active: boolean;
   position?: string;
   onPrevious?: (() => void) | undefined;

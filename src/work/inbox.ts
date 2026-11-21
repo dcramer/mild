@@ -112,13 +112,13 @@ async function goThrough(deps: Deps, decider: Awaited<ReturnType<typeof deciderF
   if (!listed) {
     const raw = await deps.api.getMetadata(messageId);
     const facts = raw ? toFacts(run.accountId, raw) : null;
-    // Gone, or out of the inbox since the run listed it, or a digest Sift put there.
+    // Gone, or out of the inbox since the run listed it, or a digest Mild put there.
     if (!facts?.labelIds.includes('INBOX') || (await isOwnDigest(db, facts.headers))) return 'left';
     await recordFromInbox(db, run.accountId, [facts], !run.acts, (deps.now ?? Date.now)());
     listed = await queuedMessage(db, run.accountId, messageId);
     if (!listed) return 'left';
   }
-  // The run's own word on whether to act: Sift was on at the press, and (through `deps.mailbox`) is still on.
+  // The run's own word on whether to act: Mild was on at the press, and (through `deps.mailbox`) is still on.
   return await decider.decide(
     { ...listed, suggestOnly: !run.acts },
     prior ? { decision: prior.decision, carriedOut: prior.carryOut && prior.outcome === 'done' } : undefined,

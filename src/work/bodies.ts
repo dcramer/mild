@@ -14,14 +14,14 @@ export const textOf = (content: MessageContent | null): Text => ({
   read: content?.facts ?? { hasAttachments: false },
 });
 
-/** Text Sift holds as a read of the message gives it; null for one kept empty, which had gone. */
+/** Text Mild holds as a read of the message gives it; null for one kept empty, which had gone. */
 export const contentOf = (held: Text): MessageContent | null => (held.text === '' && held.html === null ? null : heldContent(held.text, held.html, held.read));
 
-/** Reads a message's text, from what Sift holds before Gmail. */
+/** Reads a message's text, from what Mild holds before Gmail. */
 export type Reader = Pick<GmailApi, 'getContent'>;
 
 /**
- * Gmail's text of a message, read at most once: from what Sift holds of it (`heldText`), and otherwise from Gmail, kept as it is
+ * Gmail's text of a message, read at most once: from what Mild holds of it (`heldText`), and otherwise from Gmail, kept as it is
  * read, in Inbox's copy while Inbox is on and for `READ_KEEP_DAYS` otherwise, before anything uses it. The model, the text kept of
  * waiting mail, Inbox and the examples all read through one, so a message is read from Gmail once whichever asks first, in this
  * pass or a later one. A read that failed is asked for again. Remembers only for the pass.
@@ -51,7 +51,7 @@ export function readingOnce(db: Sql, accountId: string, api: Reader, now: () => 
   };
 }
 
-/** Waiting mail Sift would move or could not place whose text it has never read, newest first. Bounded: a mailbox's suggestions go back a year. */
+/** Waiting mail Mild would move or could not place whose text it has never read, newest first. Bounded: a mailbox's suggestions go back a year. */
 async function unreadWaiting(db: Sql, accountId: string, now: number): Promise<string[]> {
   const since = now - READ_KEEP_DAYS * 86_400_000;
   const waiting = (await pendingSuggestions(db, { accountId, since })).filter((s) => s.disposition !== 'keep').map((s) => s.messageId);
@@ -65,7 +65,7 @@ export async function bodiesDue(db: Sql, accountId: string, now: number): Promis
 }
 
 /**
- * Read the text of mail waiting on the person that Sift would move or could not place and has never read (a rule decided
+ * Read the text of mail waiting on the person that Mild would move or could not place and has never read (a rule decided
  * it), up to `PER_PASS`, through `reader`, which keeps it. Mail it would simply keep is not read. A failed read is tried again
  * on the next pass. Returns how many were read.
  */
@@ -75,7 +75,7 @@ export async function keepWaitingText(db: Sql, reader: Reader, accountId: string
   return unread.length;
 }
 
-/** Inbox mail Sift has a record of and no text for, newest first. `messages_inbox` serves it. */
+/** Inbox mail Mild has a record of and no text for, newest first. `messages_inbox` serves it. */
 const textless = (db: Sql, accountId: string, limit: number) =>
   db
     .select({ id: messages.id })
@@ -104,7 +104,7 @@ export async function mailBodiesDue(db: Sql, accountId: string): Promise<boolean
 
 /**
  * While Inbox is on, keep the whole text and HTML of the mail in the inbox, `PER_PASS` a pass, newest first, through `reader`:
- * what Sift read with Inbox off is moved from what it held, and only the rest is read from Gmail. A message that has gone is
+ * what Mild read with Inbox off is moved from what it held, and only the rest is read from Gmail. A message that has gone is
  * kept empty, so it is not asked for again. Returns how many it kept.
  */
 export async function keepMailBodies(db: Sql, reader: Reader, accountId: string, now: () => number = Date.now): Promise<number> {

@@ -20,7 +20,7 @@ export interface InitDeps {
   ui: Ui;
   /** Set a setting in the home's `.env`, or take it out. */
   saveSetting(variable: Variable, value: string | undefined): void;
-  /** Save the key as SIFT_KEY where sift will read it, and use it from now on. Returns the file. Throws if it cannot be written. */
+  /** Save the key as MILD_KEY where Mild will read it, and use it from now on. Returns the file. Throws if it cannot be written. */
   saveKey(key: string): string;
   hasGoogleClient(): boolean;
   /** How far setup has got, so a later run resumes where this one stopped. */
@@ -59,7 +59,7 @@ const steps = (deps: InitDeps): Step[] => [
     run: () => createKey(deps),
   },
   {
-    title: 'Where Sift runs',
+    title: 'Where Mild runs',
     missing: () => deps.setupState().location === undefined,
     value: () => `Dashboard at ${paint.bold(dashboardAddress(deps))}`,
     run: () => chooseLocation(deps),
@@ -91,7 +91,7 @@ const later = (deps: InitDeps): Step[] => [
 ];
 
 /**
- * Set sift up. A first run walks through every step, and one that was stopped part-way carries on with
+ * Set Mild up. A first run walks through every step, and one that was stopped part-way carries on with
  * what is missing. Once the dashboard has an address and the Google client is finished, it lists the
  * steps as they stand and redoes the one the user picks. The Gmail account itself is connected in the
  * browser, by signing in to the dashboard.
@@ -130,12 +130,12 @@ export async function runInit(deps: InitDeps): Promise<void> {
 
   ui.blank();
   if (!googleReady(deps)) {
-    ui.warn(`Still needed: the Google client. Run ${paint.cmd('sift init')} again.`);
+    ui.warn(`Still needed: the Google client. Run ${paint.cmd('mild init')} again.`);
     ui.blank();
     return;
   }
   ui.plain(
-    `${paint.mark(' Ready ')} Start it with ${paint.cmd('sift run')}, then open ${paint.bold(dashboardAddress(deps))}${accounts.length === 0 ? ' and sign in with Google' : ''}.`,
+    `${paint.mark(' Ready ')} Start it with ${paint.cmd('mild run')}, then open ${paint.bold(dashboardAddress(deps))}${accounts.length === 0 ? ' and sign in with Google' : ''}.`,
   );
   ui.blank();
 }
@@ -148,7 +148,7 @@ async function createKey(deps: InitDeps): Promise<void> {
   const { ui } = deps;
   if (deps.config.keys.current) {
     ui.info(
-      `A key is set. Replacing it needs the old one kept as ${paint.cmd('SIFT_OLD_KEYS')} until sift run has re-encrypted everything: see docs/secrets.md.`,
+      `A key is set. Replacing it needs the old one kept as ${paint.cmd('MILD_OLD_KEYS')} until mild run has re-encrypted everything: see docs/secrets.md.`,
     );
     return;
   }
@@ -158,12 +158,12 @@ async function createKey(deps: InitDeps): Promise<void> {
     path = deps.saveKey(key);
   } catch (error) {
     ui.fail(`Could not save the key: ${reason(error)}`);
-    ui.info(`Set this as ${paint.cmd('SIFT_KEY')} wherever Sift runs, then run sift init again:`);
+    ui.info(`Set this as ${paint.cmd('MILD_KEY')} wherever Mild runs, then run mild init again:`);
     ui.plain(key);
     return;
   }
-  ui.ok(`Saved as ${paint.cmd('SIFT_KEY')} in ${paint.path(path)}`);
-  ui.info('Sift reads it only when started from this directory, and cannot open your credentials without it. Keep a copy somewhere else.');
+  ui.ok(`Saved as ${paint.cmd('MILD_KEY')} in ${paint.path(path)}`);
+  ui.info('Mild reads it only when started from this directory, and cannot open your credentials without it. Keep a copy somewhere else.');
 }
 
 /** Ask for a Sentry DSN until one is accepted, or none, which turns it off. */
@@ -191,22 +191,22 @@ async function chooseLocation(deps: InitDeps): Promise<void> {
   const { ui, config } = deps;
   const remote = await ui.select('Where will you open the dashboard?', [
     { label: 'On this machine', value: false },
-    { label: 'From another machine', hint: 'Sift runs on a server', value: true },
+    { label: 'From another machine', hint: 'Mild runs on a server', value: true },
   ]);
   deps.saveSetupState({ ...deps.setupState(), location: remote ? 'remote' : 'local' });
   if (!remote) {
-    deps.saveSetting('SIFT_URL', undefined);
+    deps.saveSetting('MILD_URL', undefined);
     return ui.ok(`Dashboard at ${paint.bold(dashboardAddress(deps))}`);
   }
 
   const name = deps.tailscaleName();
   if (!name) {
     ui.warn('Google only signs people in at localhost or an HTTPS address, and this machine has no Tailscale name to provide one.');
-    ui.info('Install Tailscale here and run sift init again, or reach localhost through an SSH tunnel.');
+    ui.info('Install Tailscale here and run mild init again, or reach localhost through an SSH tunnel.');
     return;
   }
   ui.info('Google only signs people in over HTTPS, which Tailscale provides for your own devices.');
-  deps.saveSetting('SIFT_URL', `https://${name}`);
+  deps.saveSetting('MILD_URL', `https://${name}`);
   const serve = `tailscale serve --bg ${config.settings.dashboardPort}`;
   if (
     await ui.select(`Run ${paint.cmd(serve)} now?`, [
@@ -256,7 +256,7 @@ const googleTasks = (deps: InitDeps): Task[] => [
     url: 'https://console.cloud.google.com/auth/overview',
     todo: ['Choose Get started and fill in the form, then Create.'],
     values: [
-      ['App name', 'Sift'],
+      ['App name', 'Mild'],
       ['User support email', 'your own address'],
       ['Audience', 'External'],
       ['Contact information', 'your own address'],
@@ -269,7 +269,7 @@ const googleTasks = (deps: InitDeps): Task[] => [
     collectsClient: true,
     values: [
       ['Application type', 'Web application'],
-      ['Name', 'Sift'],
+      ['Name', 'Mild'],
       ...redirectUris(deps).map((uri, index) => [index === 0 ? 'Authorised redirect URIs' : '', uri] as const),
     ],
   },
@@ -279,7 +279,7 @@ const googleTasks = (deps: InitDeps): Task[] => [
     todo: [
       'Open "Data Access" in the left menu, then choose "Add or remove scopes".',
       'Paste the scopes below into "Manually add scopes", then Add to table, Update and Save.',
-      'The last is asked for only when someone lets Sift send from a mailbox.',
+      'The last is asked for only when someone lets Mild send from a mailbox.',
     ],
     values: [
       ['Scopes', 'https://www.googleapis.com/auth/gmail.modify'],
@@ -296,7 +296,7 @@ const ACCESS_TASKS: Record<Access, readonly Task[]> = {
     {
       title: 'Add yourself as a test user',
       url: 'https://console.cloud.google.com/auth/audience',
-      todo: ['Under "Test users", choose "Add users" and enter each Gmail address Sift will read.'],
+      todo: ['Under "Test users", choose "Add users" and enter each Gmail address Mild will read.'],
     },
   ],
   publish: [
@@ -345,13 +345,13 @@ async function doTask(deps: InitDeps, task: Task, position: string): Promise<boo
 
 /**
  * The Google setup, from wherever the saved state says it had reached. State is saved after every task,
- * so stopping part-way and running `sift init` again carries on from the same place.
+ * so stopping part-way and running `mild init` again carries on from the same place.
  */
 async function googleClient(deps: InitDeps): Promise<void> {
   const { ui } = deps;
   const state = { ...deps.setupState() };
   if (state.googleTasks === 0) {
-    ui.info('Sift reads your mail through a Google client that you own, so nobody sits in between.');
+    ui.info('Mild reads your mail through a Google client that you own, so nobody sits in between.');
     ui.blank();
   }
 

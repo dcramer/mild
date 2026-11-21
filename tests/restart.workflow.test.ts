@@ -12,8 +12,8 @@ import type { Work } from '../src/work/run.ts';
 const CACHE = resolve('node_modules/.cache/workflow-vitest');
 
 /**
- * Sift starting again on the same runs, as `sift run` does: a new World on the data directory, delivering to the
- * build's flow route, with a Sift whose step finishes at once. A worker, since the World treats a step as cut off
+ * Mild starting again on the same runs, as `mild run` does: a new World on the data directory, delivering to the
+ * build's flow route, with a Mild whose step finishes at once. A worker, since the World treats a step as cut off
  * only when it started before the World was loaded in the process. Says whether `key` was let go.
  */
 const startAgain = (key: string) =>
@@ -60,7 +60,7 @@ const startAgain = (key: string) =>
     worker.once('error', fail);
   });
 
-it('a run cut off while its step ran is taken up when Sift starts again, and lets go of its key', async () => {
+it('a run cut off while its step ran is taken up when Mild starts again, and lets go of its key', async () => {
   let started!: () => void;
   const running = new Promise<void>((resolve) => (started = resolve));
   offerSift({

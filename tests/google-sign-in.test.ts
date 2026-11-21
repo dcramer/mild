@@ -13,7 +13,7 @@ import { tempDir } from './helpers.ts';
 const fake = fakeGoogle();
 
 function configured() {
-  const config = loadConfig({ SIFT_HOME: tempDir() });
+  const config = loadConfig({ MILD_HOME: tempDir() });
   installClient(config, JSON.stringify({ web: { client_id: SECRETS.clientId, client_secret: SECRETS.clientSecret } }));
   return config;
 }

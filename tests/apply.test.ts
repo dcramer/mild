@@ -24,7 +24,7 @@ let gmail: ReturnType<typeof connectGmail>;
 const message = (id: string, address: string, subject = `Subject ${id}`) =>
   facts({ messageId: id, threadId: `t-${id}`, from: { address, domain: address.split('@')[1]! }, subject, receivedAt: 1000 });
 
-/** `inbox` in Gmail's inbox from before Sift, the first the newest. */
+/** `inbox` in Gmail's inbox from before Mild, the first the newest. */
 function hold(inbox: MessageFacts[]) {
   inbox.forEach((m, i) =>
     gmail.gmail.deliver(
@@ -53,7 +53,7 @@ async function applyRule(rule: string, now: number) {
   return await continueRuleRun({ db, api: gmail.api, mailbox: gmail.mailbox, now: () => now }, run!.id);
 }
 
-/** What Sift does to a message while on: records the decision and carries it out in Gmail. */
+/** What Mild does to a message while on: records the decision and carries it out in Gmail. */
 async function decidedWhileOn(messageId: string, decision: Decision) {
   const id = await recordDecision(db, ACCOUNT, messageId, decision, { now: 1, carryOut: true });
   const action = planAction(decision);
@@ -98,7 +98,7 @@ describe('applying a rule to the inbox', () => {
     expect(searches()).toEqual(['from:news.example.com']);
     expect(sample).toMatchObject({ messages: 2, reading: 0, exact: true, most: null });
     expect(sample.examples.map((m) => m.messageId)).toEqual(['seen', 'unseen']);
-    // Mail Sift has a record of is not fetched again, and what it fetched it records, out of the triage queue, deciding nothing.
+    // Mail Mild has a record of is not fetched again, and what it fetched it records, out of the triage queue, deciding nothing.
     expect(fetched().toSorted()).toEqual(['other', 'unseen', 'vip']);
     expect(await raw(db).all(`SELECT id, decided FROM messages WHERE id IN ('unseen', 'vip', 'other') ORDER BY id`)).toEqual([
       { id: 'other', decided: true },
@@ -126,7 +126,7 @@ describe('applying a rule to the inbox', () => {
     expect(await ruleInbox(db, gmail.api, ACCOUNT, rule)).toMatchObject({ messages: REACH.inbox / 2, most: REACH.inbox });
   });
 
-  it("records each as the user's press, to be carried out while Sift is off, and no longer waiting", async () => {
+  it("records each as the user's press, to be carried out while Mild is off, and no longer waiting", async () => {
     const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
     const seen = message('seen', 'deals@news.example.com');
     await recordSync(db, ACCOUNT, [seen], '2');
@@ -158,7 +158,7 @@ describe('applying a rule to the inbox', () => {
     expect(await pendingSuggestions(db)).toEqual([]);
   });
 
-  it('replaces what Sift did to mail it left in the inbox while on, and leaves mail waiting to be carried out', async () => {
+  it('replaces what Mild did to mail it left in the inbox while on, and leaves mail waiting to be carried out', async () => {
     const rule = await addRule(db, { match: { fromDomain: ['news.example.com'] }, labelId: 'marketing' }, 'user');
     const asked = message('asked', 'deals@news.example.com');
     const kept = message('kept', 'tips@news.example.com');
@@ -170,7 +170,7 @@ describe('applying a rule to the inbox', () => {
     await decidedWhileOn('kept', { ...model, disposition: 'keep', labelId: 'everything_else', reason: 'from a person' });
     // Carried out at the next pass.
     await recordDecision(db, ACCOUNT, 'waiting', { ...model, disposition: 'keep', reason: 'r' }, { now: 1, carryOut: true });
-    expect(labelsOf('asked')).toContain(gmail.gmail.labelId('sift/review'));
+    expect(labelsOf('asked')).toContain(gmail.gmail.labelId('mild/review'));
 
     expect(await ruleInbox(db, gmail.api, ACCOUNT, rule)).toMatchObject({ messages: 2, exact: true });
     await applyRule(rule, 3);
@@ -180,7 +180,7 @@ describe('applying a rule to the inbox', () => {
     expect(await decisionsOf('waiting')).toHaveLength(1);
 
     await triageAccount({ db, mailbox: null, answers: gmail.mailbox }, await firstAccount(db));
-    for (const id of ['asked', 'kept']) expect(labelsOf(id)).toEqual([gmail.gmail.labelId('sift/marketing'), gmail.gmail.labelId('sift/did/archived')]);
+    for (const id of ['asked', 'kept']) expect(labelsOf(id)).toEqual([gmail.gmail.labelId('mild/marketing'), gmail.gmail.labelId('mild/did/archived')]);
     // Done, the rule has nothing left to do there.
     expect(await ruleInbox(db, gmail.api, ACCOUNT, rule)).toMatchObject({ messages: 0, exact: true });
   });
@@ -202,7 +202,7 @@ describe('applying a rule to the inbox', () => {
     await triageAccount({ db, mailbox: null, answers: gmail.mailbox, model, sources: gmail }, await firstAccount(db));
     expect(await decisionsOf('sale')).toEqual([{ stage: 'model', disposition: 'spam', label_id: 'marketing', rule_id: rule, carry_out: true, by_user: true }]);
     expect(labelsOf('sale')).toContain('SPAM');
-    // What the model found it to be is a suggestion, as any mail is while Sift is off.
+    // What the model found it to be is a suggestion, as any mail is while Mild is off.
     expect(await decisionsOf('note')).toEqual([{ stage: 'model', disposition: 'keep', label_id: 'personal', rule_id: null, carry_out: false, by_user: false }]);
     expect(labelsOf('note')).toEqual(['INBOX']);
   });

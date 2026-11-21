@@ -3,7 +3,7 @@ import type { Reach } from '../store/inbox.ts';
 import type { InboxEstimate, LabelProposal, MailAsk, MailChange, MailReach, RuleDraft, RuleInbox } from './types.ts';
 
 /**
- * What the dashboard can ask the rest of sift to do. The dashboard itself may not import Gmail, the
+ * What the dashboard can ask the rest of Mild to do. The dashboard itself may not import Gmail, the
  * action executor or the work code, so the process that starts it hands these in. Anything that changes
  * the mailbox goes through here and is audited like any other change. `db` is the database of whoever
  * asked, which is where the thing named is looked for.
@@ -29,7 +29,7 @@ export interface Controls {
    */
   undo(db: Sql, actionId: number): Promise<string | null>;
   /**
-   * The person's own press on messages of theirs in the inbox, through the executor, Sift on or off. Messages no longer in
+   * The person's own press on messages of theirs in the inbox, through the executor, Mild on or off. Messages no longer in
    * the inbox are left as they are. Resolves with the changes that landed or may have (an answer lost), which `undo` takes
    * back, and how many Gmail did not take, which a failed call counts too, so those that landed before it can still be taken back.
    */
@@ -42,7 +42,7 @@ export interface Controls {
   /** What copying these of the person's mailboxes for Inbox would take for each window it can keep, read from Gmail's counts. */
   mailReach(db: Sql, mailboxes: readonly string[]): Promise<MailReach>;
   /**
-   * After the user has corrected a decision: take back what sift last did to that message, so the new
+   * After the user has corrected a decision: take back what Mild last did to that message, so the new
    * decision can be carried out from where the message started.
    */
   putBack(db: Sql, accountId: string, messageId: string): Promise<void>;
@@ -57,7 +57,7 @@ export interface Controls {
    */
   proposeLabels(db: Sql, request: { accountId: string; goal: string }): Promise<LabelProposal>;
   /**
-   * Ask the person's model to fill in a rule from what they want, looking up the senders Sift has recorded
+   * Ask the person's model to fill in a rule from what they want, looking up the senders Mild has recorded
    * in that mailbox as it needs. Rejects with a sentence for them when there is no model or the call failed.
    */
   draftRule(db: Sql, request: { accountId: string; goal: string }): Promise<RuleDraft>;
@@ -74,7 +74,7 @@ export interface Controls {
   /** What applying a rule to the inbox would do, from a sample read from the rule's mailbox in Gmail. Nothing is changed. */
   ruleInbox(db: Sql, ruleId: string): Promise<RuleInbox>;
   /**
-   * Revoke sift's Gmail access to one of this person's mailboxes at Google, before it is removed, and stop
+   * Revoke Mild's Gmail access to one of this person's mailboxes at Google, before it is removed, and stop
    * reporting on it. Resolves false when Google could not be reached; the mailbox is removed anyway.
    */
   revokeGmail(db: Sql, email: string): Promise<boolean>;
@@ -117,19 +117,19 @@ interface Activity {
 }
 
 /**
- * Signing in with Google from the browser. One sign-in does two things: it gives sift its access to the
+ * Signing in with Google from the browser. One sign-in does two things: it gives Mild its access to the
  * Gmail account, and it proves the viewer owns that account, which is what lets them use the dashboard.
  */
 export interface SignIn {
   hasClient(): boolean;
   /**
    * Google's sign-in address for a browser that should come back to `redirectUri`. `send`: a mailbox already connected,
-   * for which Google is asked only to let Sift send.
+   * for which Google is asked only to let Mild send.
    */
   url(redirectUri: string, state: string, challenge: string, send: string | null): string;
   /**
    * Finish a sign-in. Who may is Google's to say: the client's test users, or anyone once it is published.
-   * An account sift does not know is connected as another mailbox of `addTo` (the address of whoever is
+   * An account Mild does not know is connected as another mailbox of `addTo` (the address of whoever is
    * signed in and asked to add it), or else as a new person's. With `send`, it must be that mailbox, whose
    * sign-in is replaced and which then may send if Google granted it. Records whether each mailbox may send.
    * Resolves with the account's address; rejects with a message for the user.

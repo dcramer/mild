@@ -5,7 +5,7 @@ import { ui } from '../src/cli/ui.ts';
 import { writeDigest } from '../src/digest/mail.ts';
 
 /** The name in lowercase as a word of its own, not part of a command, a path, an address or a variable, nor the verb. */
-const LOWERCASE_NAME = /(?<![\w/.@~$-])sift(?![\w/.@-]| through)/;
+const LOWERCASE_NAME = /(?<![\w/.@~$-])mild(?![\w/.@-])/;
 /** What keeps its own spelling in Markdown: code, a picture's alt text (a picture of a command), a link's target, an address. */
 const CODE = /`[^`]*`|!\[[^\]]*\]|\]\([^)]*\)|https?:\/\/\S+/g;
 
@@ -21,34 +21,34 @@ function prose(file: string): [number, string][] {
 }
 
 describe('the name', () => {
-  it('is Sift in the docs, but in code', () => {
+  it('is Mild in the docs, but in code', () => {
     const files = globSync(['*.md', 'docs/**/*.md', '.claude/skills/**/*.md']);
     expect(files.length).toBeGreaterThan(10);
     const lower = files.flatMap((file) => prose(file).flatMap(([n, line]) => (LOWERCASE_NAME.test(line) ? [`${file}:${n}`] : [])));
     expect(lower).toEqual([]);
   });
 
-  it('is Sift in a digest, but in its wordmark', () => {
+  it('is Mild in a digest, but in its wordmark', () => {
     const mail = writeDigest({
-      label: { id: 'notifications', name: 'Notifications', gmailLabel: 'sift/notifications' },
+      label: { id: 'notifications', name: 'Notifications', gmailLabel: 'mild/notifications' },
       mailbox: 'me@example.org',
       since: 0,
       until: 3_600_000,
       entries: [{ mailbox: 'me@example.org', id: 'a1', from: { name: 'Builds', address: 'builds@example.org' }, subject: 'Run passed', receivedAt: 60_000 }],
       highlights: [],
       timeZone: 'UTC',
-      dashboard: 'https://sift.example.com',
+      dashboard: 'https://mild.example.com',
     });
-    expect(mail.html).toContain('>sift</a>');
-    expect(mail.html.replace('>sift</a>', '').replace(/<[^>]*>/g, ' ')).not.toMatch(LOWERCASE_NAME);
+    expect(mail.html).toContain('>mild</a>');
+    expect(mail.html.replace('>mild</a>', '').replace(/<[^>]*>/g, ' ')).not.toMatch(LOWERCASE_NAME);
     expect(mail.text.replace(/https?:\/\/\S+/g, ' ')).not.toMatch(LOWERCASE_NAME);
   });
 
   it('heads each command as its wordmark', () => {
     let printed = '';
     const write = vi.spyOn(process.stdout, 'write').mockImplementation((text) => ((printed += String(text)), true));
-    ui.heading('status', '~/.config/sift');
+    ui.heading('status', '~/.config/mild');
     write.mockRestore();
-    expect(stripVTControlCharacters(printed)).toContain(' sift  status');
+    expect(stripVTControlCharacters(printed)).toContain(' mild  status');
   });
 });

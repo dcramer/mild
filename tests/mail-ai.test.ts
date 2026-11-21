@@ -13,7 +13,7 @@ const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
 
 const ACCOUNT = 'me@example.com';
-const KEYS = loadKeyring({ SIFT_KEY: 'mail-ai-key' });
+const KEYS = loadKeyring({ MILD_KEY: 'mail-ai-key' });
 const LABELS = SAMPLE_LABELS.filter((l) => l.id === 'newsletter' || l.id === 'marketing');
 const TODAY = '2026-11-19';
 const BLANK = { reading: '', from: [], domains: [], label: '', view: '', unread: false, since: '', words: [], note: '' };
@@ -43,7 +43,7 @@ describe('the filter the model makes', () => {
         unread: true,
         since: '2026-11-01',
         words: [' invoice ', 'invoice', ''],
-        note: 'Sift does not know what you answered.',
+        note: 'Mild does not know what you answered.',
       }),
     ).toEqual({
       filter: {
@@ -55,7 +55,7 @@ describe('the filter the model makes', () => {
         since: '2026-11-01',
         words: ['invoice'],
       },
-      note: 'Sift does not know what you answered.',
+      note: 'Mild does not know what you answered.',
     });
     expect(read({ label: 'Receipts' })).toEqual({ unusable: '`label` is not one of theirs' });
     expect(read({ since: '2026-12-01' })).toHaveProperty('unusable');

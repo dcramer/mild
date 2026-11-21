@@ -50,7 +50,7 @@ test.describe('Answering mail', () => {
     await expect(reader(page)).toHaveCount(0);
   });
 
-  test('picking Sift’s own label from the list answers it too', async ({ page }) => {
+  test('picking Mild’s own label from the list answers it too', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Winter sale starts now'), 'Marketing');
     await expect(toast(page, 'Archive as Marketing')).toBeVisible();

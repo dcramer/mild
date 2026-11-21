@@ -41,12 +41,12 @@ export const PRUNE_PER_RUN = 5000;
  *   like the rest);
  * - its example is kept: what the user answered, with the message it was about;
  * - a decision for it has not been carried out, or a change to it was never confirmed;
- * - sift unsubscribed through it, which is how it knows not to ask that sender again;
+ * - Mild unsubscribed through it, which is how it knows not to ask that sender again;
  * - any decision, change or model call for it is newer than the cutoff, so a recent change can still be
  *   undone. A suggestion still waiting on the user is spared this long, and no longer.
  *
  * While Inbox is on, it keeps the person's mail: what is in the inbox however old, and what was received within its window,
- * whole, with everything Sift recorded about it. What falls outside goes as above. Mail Inbox recorded and Sift never
+ * whole, with everything Mild recorded about it. What falls outside goes as above. Mail Inbox recorded and Mild never
  * triaged (`recordKept`) goes by when it was received alone, since nothing of triage depends on it.
  *
  * Returns how many messages went. `PRUNE_PER_RUN` means there may be more.

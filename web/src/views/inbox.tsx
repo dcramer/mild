@@ -95,8 +95,8 @@ function Place({ thread }: { thread: Listed }) {
 }
 
 /**
- * What Sift thinks the newest message is, as a dropdown that says it otherwise: saved at once and the mail left where
- * it is, so picking again is the undo. Mail Sift never placed shows nothing until its row is pointed at, and is answered all the same.
+ * What Mild thinks the newest message is, as a dropdown that says it otherwise: saved at once and the mail left where
+ * it is, so picking again is the undo. Mail Mild never placed shows nothing until its row is pointed at, and is answered all the same.
  */
 function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabel[] }) {
   const record = useRecordAnswer();
@@ -121,7 +121,7 @@ function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabe
 
 /**
  * One conversation, on one line as Gmail lists it: who wrote and how many messages, the subject and the start of the
- * newest, the label Sift gave it, and when; pointed at, Archive and read or unread take the time's place. Unread is bold
+ * newest, the label Mild gave it, and when; pointed at, Archive and read or unread take the time's place. Unread is bold
  * and bright, read is plain and dimmer. On a phone it reads as For review's rows do: who and when, the subject, then a
  * line of the text with the label.
  */
@@ -237,7 +237,7 @@ function ThreadRow({
 }
 
 /**
- * A rule Sift proposes, drawn as mail is: from Sift, the rule as its subject and why as its text, its label where mail
+ * A rule Mild proposes, drawn as mail is: from Mild, the rule as its subject and why as its text, its label where mail
  * has one. Pressing it opens why in full; pointed at, it can be made or dismissed in place.
  */
 function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
@@ -249,7 +249,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
         <WorkflowIcon aria-hidden className="size-3.5 text-muted-foreground" />
       </Td>
       <Td className="max-w-0 phone:py-2 md:w-[18%] md:min-w-40">
-        <span className="font-semibold">Sift</span>
+        <span className="font-semibold">Mild</span>
         <span className="block truncate md:hidden">
           <ProposalWords proposal={proposal} />
         </span>
@@ -306,7 +306,7 @@ export function PhoneCompose() {
   ) : null;
 }
 
-/** Inbox: the conversations in the inbox, as a mail app lists them, with what Sift thinks of each; a search looks through all the mail Sift keeps. */
+/** Inbox: the conversations in the inbox, as a mail app lists them, with what Mild thinks of each; a search looks through all the mail Mild keeps. */
 export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
@@ -316,14 +316,14 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const [asked, setView] = useParam<MailView | ''>('view', VIEWS);
   const view = asked || 'all';
   const [unread, setUnread] = useParam('unread');
-  // Rules Sift proposes, at the top of the inbox: For review is not a section of its own while Inbox is on.
+  // Rules Mild proposes, at the top of the inbox: For review is not a section of its own while Inbox is on.
   const suggestions = useLoaded('suggestions-false', (signal) => api.suggestions(false, '', signal));
   const q = useDeferredValue(search.trim());
   const ask = useAsk();
   const query = { view, label, q, unread: unread === '1', ...ask.query } as const;
   const on = manage.data?.mail === true;
   const started = useStarted();
-  // The inbox is drawn from the copy in this browser; a search, or what Ask made of one, looks through all the mail Sift keeps, which only the server can.
+  // The inbox is drawn from the copy in this browser; a search, or what Ask made of one, looks through all the mail Mild keeps, which only the server can.
   const local = on && started && q === '' && !ask.narrowed;
   // Asked only once the page has started: until then it cannot say whether the copy will draw the list.
   const server = on && started && !local;
@@ -376,7 +376,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
     return (
       <Callout title="Inbox is off" action={<TurnInboxOn label="Turn Inbox on" />}>
         <p>
-          Read and handle your mail here, with what Sift thinks of each message beside it. Sift keeps a copy of the mail in your inbox to show it; turning Inbox
+          Read and handle your mail here, with what Mild thinks of each message beside it. Mild keeps a copy of the mail in your inbox to show it; turning Inbox
           off deletes that copy.
         </p>
       </Callout>

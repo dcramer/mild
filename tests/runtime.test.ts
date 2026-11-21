@@ -20,9 +20,9 @@ const fake = fakeGoogle();
  * record of what happened (docs/runtime.md).
  */
 const CACHES: Record<string, string[]> = {
-  // Keys derived from SIFT_KEY.
+  // Keys derived from MILD_KEY.
   'src/secrets.ts': ['derived', 'hashKeys', 'searchKeys'],
-  // Sift put together over the process's host, again by each copy of the module `next dev` loads.
+  // Mild put together over the process's host, again by each copy of the module `next dev` loads.
   'src/sift/instance.ts': ['opened'],
 };
 
@@ -30,7 +30,7 @@ describe('nothing is kept in module memory between calls', () => {
   it('outside the hosts, no module holds a variable or an empty collection to fill', () => {
     const unexpected: string[] = [];
     for (const file of globSync('src/**/*.ts')) {
-      // The hosts: `sift run` is one long-lived process with its terminal; a Vercel instance keeps its connections.
+      // The hosts: `mild run` is one long-lived process with its terminal; a Vercel instance keeps its connections.
       if (file.startsWith('src/cli/') || file.startsWith('src/vercel/')) continue;
       const held = /^(?:export )?(?:let|var) (\w+)|^(?:export )?const (\w+) = new (?:Map|Set|WeakMap|WeakSet)(?:<[^\n]*>)?\(\)/gm;
       for (const match of readFileSync(file, 'utf8').matchAll(held)) {
@@ -94,10 +94,10 @@ describe("a piece's run key", () => {
   });
 });
 
-/** Sift as a host puts it together, writing its log to `logged`. */
+/** Mild as a host puts it together, writing its log to `logged`. */
 const siftOn = (store: Store, logged: string[], begin?: Parameters<typeof createSift>[0]['begin']) =>
   createSift({
-    config: loadConfig({ SIFT_HOME: tempDir() }),
+    config: loadConfig({ MILD_HOME: tempDir() }),
     store,
     ephemeral: memoryEphemeral(),
     sessionSecret: 'secret',
@@ -162,7 +162,7 @@ describe("a person's model that cannot be reached", () => {
   });
 });
 
-describe('where the Local World delivers runs under sift run', () => {
+describe('where the Local World delivers runs under mild run', () => {
   it('is the listener’s own address, a wildcard at its own family’s loopback', () => {
     expect(fromHere('::', 8787)).toBe('http://[::1]:8787');
     expect(fromHere('0.0.0.0', 8787)).toBe('http://127.0.0.1:8787');

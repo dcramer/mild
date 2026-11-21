@@ -61,7 +61,7 @@ const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center just
 
 /**
  * The top of every screen on a phone, where `Rail` is not shown: one outlined field, the menu button at its start, then
- * a list's search (`ToBar`) or the name. `aside` (Sift's line) is in the menu, not the bar.
+ * a list's search (`ToBar`) or the name. `aside` (Mild's line) is in the menu, not the bar.
  * The sections and `account` move into a panel that covers the screen, the sections followed by `FinePrint` as a list,
  * with `detail` (what `aside`'s hover card says, which a touch screen never shows) framed above the account, and the
  * `mailbox` the dashboard shows under whose they are. Back closes it; where a press in it goes takes its place in history.
@@ -105,7 +105,7 @@ export function Masthead({
     return (
       <header className="flex items-center pt-[calc(1rem+var(--safe-top))] pb-6 md:hidden">
         {/* As tall as the row the menu button makes, so the name stays put as it arrives. */}
-        <Anchor href="/" aria-label="Sift" className="flex min-h-11 items-center">
+        <Anchor href="/" aria-label="Mild" className="flex min-h-11 items-center">
           <Wordmark />
         </Anchor>
       </header>
@@ -202,7 +202,7 @@ export function Masthead({
           </Dialog.Portal>
         </Dialog.Root>
         <div ref={slot} className="peer flex min-w-0 flex-1 items-center self-stretch empty:hidden" />
-        <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Sift" className="flex min-h-11 items-center peer-[:not(:empty)]:hidden">
+        <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Mild" className="flex min-h-11 items-center peer-[:not(:empty)]:hidden">
           <Wordmark />
         </Anchor>
       </div>

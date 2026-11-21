@@ -1,4 +1,4 @@
-// The API, on Vercel and under `sift run` alike. See docs/runtime.md.
+// The API, on Vercel and under `mild run` alike. See docs/runtime.md.
 import { respond } from '../../../src/sift/instance.ts';
 
 export const maxDuration = 300;

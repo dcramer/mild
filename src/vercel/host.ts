@@ -1,11 +1,12 @@
 import { loadConfig } from '../config.ts';
+import { named } from '../env.ts';
 import { openEphemeral } from '../ephemeral/open.ts';
 import { begin } from '../sift/flow.ts';
 import type { Host } from '../sift/sift.ts';
 import { openStore } from '../store/store.ts';
 import { startTelemetry } from '../telemetry.ts';
 
-/** The time limit of every route of Sift's own. */
+/** The time limit of every route of Mild's own. */
 export const MAX_DURATION_S = 300;
 /**
  * A piece of work starts nothing in its last minute, which a model call already under way may need. Pieces run
@@ -14,10 +15,10 @@ export const MAX_DURATION_S = 300;
 const LIMIT_MS = (MAX_DURATION_S - 60) * 1000;
 
 /** What a deploy must give, in the environment: nothing is kept in files. `CRON_SECRET` because without it nothing runs. */
-const REQUIRED = ['DATABASE_URL', 'REDIS_URL', 'SIFT_GOOGLE_CLIENT_ID', 'SIFT_GOOGLE_CLIENT_SECRET', 'SIFT_SESSION_SECRET', 'CRON_SECRET'] as const;
+const REQUIRED = ['DATABASE_URL', 'REDIS_URL', 'MILD_GOOGLE_CLIENT_ID', 'MILD_GOOGLE_CLIENT_SECRET', 'MILD_SESSION_SECRET', 'CRON_SECRET'] as const;
 
 function required(name: (typeof REQUIRED)[number]): string {
-  const value = process.env[name];
+  const value = named(process.env, name);
   if (!value) throw new NotSetUp([name]);
   return value;
 }
@@ -36,9 +37,9 @@ export const cronSecret = () => required('CRON_SECRET');
 
 /** A Vercel instance's host, all from the environment, refused before anything is opened while any setting is missing. */
 export async function vercelHost(): Promise<Host> {
-  const missing = REQUIRED.filter((name) => !process.env[name]);
+  const missing = REQUIRED.filter((name) => !named(process.env, name));
   if (missing.length > 0) throw new NotSetUp(missing);
-  process.env['SIFT_HOME'] ??= '/tmp/sift';
+  if (!named(process.env, 'MILD_HOME')) process.env['MILD_HOME'] = '/tmp/mild';
   const config = loadConfig();
   startTelemetry(config.settings.sentryDsn, process.env['VERCEL_ENV'] ? { environment: process.env['VERCEL_ENV'] } : {});
   const store = await openStore(config);
@@ -49,7 +50,7 @@ export async function vercelHost(): Promise<Host> {
     config,
     store,
     ephemeral,
-    sessionSecret: required('SIFT_SESSION_SECRET'),
+    sessionSecret: required('MILD_SESSION_SECRET'),
     ...(url ? { url } : {}),
     allowedHosts: [process.env['VERCEL_URL'], process.env['VERCEL_BRANCH_URL'], production, url && new URL(url).hostname].filter((name) => name !== undefined),
     signInAddresses: url ? [url] : [],

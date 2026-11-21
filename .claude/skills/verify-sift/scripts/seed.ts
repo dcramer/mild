@@ -1,20 +1,20 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning
 /**
- * Verification scaffolding: fills an empty sift home with synthetic mail and prints a session cookie for it.
+ * Verification scaffolding: fills an empty Mild home with synthetic mail and prints a session cookie for it.
  *
  *   node .claude/skills/verify-sift/scripts/seed.ts <home> <google.json> [--bare | --on | --chatgpt | --inbox] [--scale <n>]
  *
  * The mail is put in the fake Google the unit tests use (tests/google.ts), signed in to with the fake's OAuth client, and
- * goes through the real pass (with sift off) and Sift's own Gmail client, so decisions, labels, suggestion bodies and
- * proposals are what sift itself would record. Writes the fake Google, as Gmail is after the last pass, to <google.json>
+ * goes through the real pass (with Mild off) and Mild's own Gmail client, so decisions, labels, suggestion bodies and
+ * proposals are what Mild itself would record. Writes the fake Google, as Gmail is after the last pass, to <google.json>
  * for serve.ts to carry on from, and prints one line: the `sift_session` cookie value for the connected account.
  *
- * `--on` then turns sift on and runs one more pass over three new messages: Lin's, which it cannot place, so it is left
- * for the user with sift's Gmail label; the Store's last-day sale, archived as Marketing and then undone; and a third
+ * `--on` then turns Mild on and runs one more pass over three new messages: Lin's, which it cannot place, so it is left
+ * for the user with Mild's Gmail label; the Store's last-day sale, archived as Marketing and then undone; and a third
  * widgets newsletter, archived as Newsletters by its rule, which stands.
  * `--chatgpt` has the model reached through a ChatGPT plan instead of an API key.
  * `--inbox` has Inbox on before the passes, so they keep the text of the inbox's mail, and its copy of the last year
- * part-way, its first ten listed, until a pass is begun. Google lets Sift send from me@example.org, as itself or as
+ * part-way, its first ten listed, until a pass is begun. Google lets Mild send from me@example.org, as itself or as
  * `me+lists@example.org`, and not from the work mailbox.
  * `--scale <n>` also gives me@example.org n more messages over the last 120 days, from about n/25 senders, a third of them
  * replies in a conversation, and 20 other people n/10 each, before the passes, so every table holds many people's rows.
@@ -147,7 +147,7 @@ const inbox = [
   // The stand-in model fails on these every time, so after three passes they are out of the queue and not judged.
   mail('Ops <alerts@ops.example.com>', 'Disk 91% full on db-2', 'Free space is running low.'),
   mail('Ops <alerts@ops.example.com>', 'Replica lag on db-3', 'The replica is 40 seconds behind.'),
-  // Kept below as Receipts, which that label archives, as moving them back to the inbox in Gmail answers; so Sift proposes keeping them.
+  // Kept below as Receipts, which that label archives, as moving them back to the inbox in Gmail answers; so Mild proposes keeping them.
   // One conversation, so Inbox has one to fold.
   ...[
     mail('Utility <billing@utility.example.net>', 'Your March bill', 'Your bill is ready.', { 'Message-ID': '<march@utility.example.net>' }),
@@ -194,7 +194,7 @@ const newsRule = await addRule(db, { match: { fromDomain: ['news.example.com'] }
 const ordersRule = await addRule(db, { match: { from: ['orders@shop.example.com'] }, labelId: 'transactional' }, 'user');
 const ciRule = await addRule(db, { match: { fromDomain: ['ci.example.org'] }, disposition: 'archive' }, 'user');
 
-// Ada's mail is a reply: the owner wrote to her, from Gmail, long before Sift.
+// Ada's mail is a reply: the owner wrote to her, from Gmail, long before Mild.
 gmail.deliver(
   {
     id: 's1',
@@ -312,7 +312,7 @@ if (variant === '--on') {
   // As Check now begins it: the timed tick, moments after the last pass, would wait out the gap between looks.
   await pass([user]);
   const [lin, sale, news] = later.map((m) => m.id!);
-  const review = [...gmail.labels.values()].find((l) => l.name.toLowerCase().endsWith('sift/review'));
+  const review = [...gmail.labels.values()].find((l) => l.name.toLowerCase().endsWith('mild/review'));
   if (!review || !gmail.message(lin!)?.labelIds.includes(review.id)) throw new Error('the pass with sift on did not leave Lin for the user');
   const archived = await lastStandingChange(db, ACCOUNT, sale!);
   if (archived?.type !== 'archive') throw new Error('the pass with sift on did not archive the sale');
@@ -361,7 +361,7 @@ if (variant === '--chatgpt') {
   await saveApiKey({ ...(await credentials(db, 'model')), exclusive: (work) => work() }, 'anthropic', 'sk-ant-synthetic-seed');
   await setModel(db, 'anthropic/claude-haiku-4-5');
 }
-// As the first timed tick of a running Sift would: serve.ts has none.
+// As the first timed tick of a running Mild would: serve.ts has none.
 await store.analyze();
 await store.close();
 server.close();

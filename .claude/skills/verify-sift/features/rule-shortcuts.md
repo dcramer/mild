@@ -1,12 +1,12 @@
 # Rules from a shortcut
 
-Wherever Sift offers to make a rule outside the Rules screen, the press opens the rule dialog in place, started on everything that place knows, so the user sees and can change the rule before adding it. It opens on `What should it do?` with that rule already said in words; `Write it yourself` shows the form, filled in the same. Nothing else makes a rule in one press: a standing does, since it is only an address or domain and what happens to their mail. Closing the dialog changes nothing.
+Wherever Mild offers to make a rule outside the Rules screen, the press opens the rule dialog in place, started on everything that place knows, so the user sees and can change the rule before adding it. It opens on `What should it do?` with that rule already said in words; `Write it yourself` shows the form, filled in the same. Nothing else makes a rule in one press: a standing does, since it is only an address or domain and what happens to their mail. Closing the dialog changes nothing.
 
 ## Sub-features
 
 - `shortcut-proposal`: For review's proposal line (`Keep Receipts from …?`). `Make a rule…` opens the dialog on the proposal's sender, waiting for its label (`Only when it is this label`), then doing what the user has been doing; adding resolves the proposal, whatever the user changed; closing the dialog leaves it. `Dismiss` is one press and makes no rule.
 - `shortcut-message`: the reader's `Make a rule…` (`Rule…`, beside the answer), on the sender and the label the message has; and `Keep as <label>…` under Why, on the sender once a model gives that label, keeping it.
-- `shortcut-fact`: a `What Sift saw` row's `Rule…`, on the sender and that fact, or on the list (see message-facts.md).
+- `shortcut-fact`: a `What Mild saw` row's `Rule…`, on the sender and that fact, or on the list (see message-facts.md).
 - `shortcut-standing`: `Trust`, `Unwanted`, `Block` (the group `Where <name> stands`) on a sender's or domain's page add, in one press, a rule for that address or domain: `Leave in inbox` for Trust, or no label and `Archive` or `Spam`. A toast is titled by the rule in words, then `Rule added` (or `Rule replaced`), with `Undo` (Z) and, for Unwanted and Block, `Apply to inbox…`. It replaces another standing, which Undo gives back; when their own rule says more (a label), the press opens the dialog instead. Pressing the standing that is on takes it back in one press.
 - `shortcut-sender`: a sender's page's own `Make a rule…` beside `Where <name> stands`, on that address and its label; under `Names` (an address several names write from), one per name, on the address and that name; under `What it is` (one name, mail under more than one label), one per label.
 - `shortcut-replaces`: when the dialog's conditions are exactly those of a rule already there, a `Replaces` line names what that rule says, and adding replaces it.
@@ -14,7 +14,7 @@ Wherever Sift offers to make a rule outside the Rules screen, the press opens th
 ## How to get to it (user POV)
 
 - For review, the line above the list.
-- Any message, `Make a rule…` beside the answer or `Rule…` beside what Sift saw.
+- Any message, `Make a rule…` beside the answer or `Rule…` beside what Mild saw.
 - A sender's name anywhere, then `Where <their name> stands` on their page; or the domain linked from it.
 
 ## Driving it with verify.sh

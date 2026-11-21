@@ -32,7 +32,7 @@ const MIGRATIONS = new URL('../src/store/migrations/', import.meta.url);
 
 /**
  * A database migrated up to `tag` and not through it, as an install was then, with a way to run each migration on it:
- * as a Postgres server runs it, by the tables' owner, whom row-level security holds as it holds sift; or `asSuperuser`,
+ * as a Postgres server runs it, by the tables' owner, whom row-level security holds as it holds Mild; or `asSuperuser`,
  * as PGlite runs it on a machine.
  */
 async function migratedBefore(tag: string, { asSuperuser = false } = {}) {
@@ -84,7 +84,7 @@ describe('migrations', () => {
     await expect(insert('n', 'keep')).rejects.toThrow();
   });
 
-  it('keep the database where they were applied, and refuse one a newer sift has migrated', async () => {
+  it('keep the database where they were applied, and refuse one a newer Mild has migrated', async () => {
     const paths = { databaseDir: tempDir(), keys: loadKeyring({}) };
     const first = await openStore(paths);
     await connectAccount(first, 'me@example.org', '1', 0);
@@ -96,7 +96,7 @@ describe('migrations', () => {
     const raw = new PGlite(paths.databaseDir);
     await raw.query(`INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('from-the-future', $1)`, [Date.UTC(2999, 0)]);
     await raw.close();
-    await expect(openStore(paths)).rejects.toThrow('last opened by a newer Sift');
+    await expect(openStore(paths)).rejects.toThrow('last opened by a newer Mild');
   });
 
   it('start over in a new database once the old one is moved aside, which is refused while it is open', async () => {
@@ -112,9 +112,9 @@ describe('migrations', () => {
     await fresh.close();
   });
 
-  it('move Workflow’s runs aside with the database on sift reset-db: they name the old one’s people and mailboxes', () => {
+  it('move Workflow’s runs aside with the database on mild reset-db: they name the old one’s people and mailboxes', () => {
     const home = tempDir();
-    vi.stubEnv('SIFT_HOME', home);
+    vi.stubEnv('MILD_HOME', home);
     mkdirSync(join(home, 'database'));
     mkdirSync(join(home, 'workflow'));
     resetDb();
@@ -131,7 +131,7 @@ describe('migrations', () => {
     const raw = new PGlite(paths.databaseDir);
     await raw.query(`UPDATE drizzle.__drizzle_migrations SET hash = 'replaced' WHERE id = 1`);
     await raw.close();
-    await expect(openStore(paths)).rejects.toThrow('sift reset-db');
+    await expect(openStore(paths)).rejects.toThrow('mild reset-db');
   });
 });
 
@@ -345,7 +345,27 @@ describe('Inbox turned on before it copied all mail', () => {
   });
 });
 
-describe('the text Sift read', () => {
+describe('the rename to Mild', () => {
+  it("moves every label's Gmail name from mild/ to mild/, as a Postgres server runs it", async () => {
+    const { db, run } = await migratedBefore('0074_gmail_labels_are_mild');
+    await db.exec(`
+      INSERT INTO users (id, owner, created_at) VALUES (1, true, 0), (2, false, 0);
+      INSERT INTO accounts (id, user_id, created_at, "primary") VALUES ('a@example.org', 1, 0, true), ('b@example.org', 2, 0, true);
+      INSERT INTO mailboxes (user_id, id) VALUES (1, 'a@example.org'), (2, 'b@example.org');
+      INSERT INTO labels (user_id, id, name, description, disposition, gmail_label, position) VALUES
+        (1, 'news', 'News', '', 'archive', 'sift/news', 1),
+        (2, 'receipts', 'Receipts', '', 'archive', 'sift/receipts', 1);
+    `);
+    await run('0074_gmail_labels_are_mild');
+    expect((await db.query('SELECT gmail_label FROM labels WHERE gmail_label IS NOT NULL ORDER BY user_id')).rows).toEqual([
+      { gmail_label: 'mild/news' },
+      { gmail_label: 'mild/receipts' },
+    ]);
+    expect((await db.query(`SELECT relforcerowsecurity AS forced FROM pg_class WHERE relname = 'labels'`)).rows).toEqual([{ forced: true }]);
+  });
+});
+
+describe('the text Mild read', () => {
   it('kept while mail waited is kept as read text by a migration, as a Postgres server runs it, held to its person', async () => {
     const { db, run } = await migratedBefore('0070_read_text_is_kept_thirty_days');
     await db.exec(`
@@ -537,7 +557,7 @@ describe('the database in the home directory', () => {
   it('is refused to a second opener while the first has it, and free again once closed', async () => {
     const paths = { databaseDir: tempDir(), keys: loadKeyring({}) };
     const first = await openStore(paths);
-    await expect(openStore(paths)).rejects.toThrow(`Another Sift (process ${process.pid}) has the database open`);
+    await expect(openStore(paths)).rejects.toThrow(`Another Mild (process ${process.pid}) has the database open`);
     await first.close();
     await (await openStore(paths)).close();
   });
@@ -571,7 +591,7 @@ describe("a person's handle", () => {
   });
 });
 
-describe('the role sift connects to a server as', () => {
+describe('the role Mild connects to a server as', () => {
   it('is named when it could pass row-level security', async () => {
     const pg = await superuser();
     // In a transaction rolled back after, so the roles and table go with it.
@@ -611,7 +631,7 @@ describe('the role sift connects to a server as', () => {
     expect(await rows()).toBe(6100);
   });
 
-  it('is warned about by the store, for whoever starts sift to be told', async () => {
+  it('is warned about by the store, for whoever starts Mild to be told', async () => {
     const driver = pglite(await superuser());
     expect(storeOn(driver, loadKeyring({})).warning).toBeUndefined();
     expect(storeOn({ ...driver, warning: 'The database role x is a superuser' }, loadKeyring({})).warning).toBe('The database role x is a superuser');

@@ -173,7 +173,7 @@ async function conversations(db: Sql, scope: Scope, wanted: readonly { accountId
   return wanted.map((w) => ({ accountId: w.accountId, threadId: w.threadId, conversation: values.get(key(w.accountId, w.threadId)) ?? null }));
 }
 
-/** What Sift thinks of each message: its latest decision, or the person's answer about it where they gave one. */
+/** What Mild thinks of each message: its latest decision, or the person's answer about it where they gave one. */
 async function thinksOf(db: Sql, newest: readonly (readonly [string, string])[]) {
   const thinks = new Map<string, NonNullable<SyncedConversation['thinks']>>();
   if (newest.length === 0) return thinks;

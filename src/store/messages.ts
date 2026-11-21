@@ -85,7 +85,7 @@ export async function listUndecided(db: Sql, accountId: string, limit: number): 
   return rows.map((r) => ({ suggestOnly: r.suggestOnly, applyRule: r.applyRule, outOfTries: r.outOfTries, facts: toMessage(db, accountId, r) }));
 }
 
-/** One recorded message as `listUndecided` gives it, decided or not; null if Sift never saw it. */
+/** One recorded message as `listUndecided` gives it, decided or not; null if Mild never saw it. */
 export async function queuedMessage(db: Sql, accountId: string, messageId: string): Promise<QueuedMessage | null> {
   const [r] = await db
     .select({ ...COLUMNS, outOfTries: outOfTries(db, messages.accountId, messages.id).mapWith(Boolean) })
@@ -94,7 +94,7 @@ export async function queuedMessage(db: Sql, accountId: string, messageId: strin
   return r ? { suggestOnly: r.suggestOnly, applyRule: r.applyRule, outOfTries: r.outOfTries, facts: toMessage(db, accountId, r) } : null;
 }
 
-/** The facts recorded for a message, or null if sift has not seen it. */
+/** The facts recorded for a message, or null if Mild has not seen it. */
 export async function storedFacts(db: Sql, accountId: string, messageId: string): Promise<Facts | null> {
   const [row] = await db
     .select({ facts: messages.facts, headers: messages.headers })
@@ -111,7 +111,7 @@ export async function recordFacts(db: Sql, accountId: string, messageId: string,
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 
-/** The recorded messages of a thread, oldest first, with their labels: what Gmail's `threads.get` would say of those Sift has. */
+/** The recorded messages of a thread, oldest first, with their labels: what Gmail's `threads.get` would say of those Mild has. */
 export async function recordedThread(db: Sql, accountId: string, threadId: string): Promise<{ id: string; labelIds: string[] }[]> {
   return await db
     .select({ id: messages.id, labelIds: messages.labelIds })
@@ -131,7 +131,7 @@ export async function markApplying(db: Sql, accountId: string, messageId: string
     .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
 }
 
-/** One recorded message as triage input, or null if sift never saw it. */
+/** One recorded message as triage input, or null if Mild never saw it. */
 export async function getFacts(db: Sql, accountId: string, messageId: string): Promise<MessageFacts | null> {
   const [row] = await db
     .select(COLUMNS)

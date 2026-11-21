@@ -13,7 +13,7 @@ export const MAX_LOOKUPS = 5;
 /** What one look-up shows of each sender, most mail first. More is noise to the model. */
 const MAX_FOUND = 25;
 
-/** A sender Sift has recorded mail from, as a look-up shows them to the model. */
+/** A sender Mild has recorded mail from, as a look-up shows them to the model. */
 export interface FoundSender {
   address: string;
   name: string | null;
@@ -73,7 +73,7 @@ export type RuleDrafter = (
   find: FindSenders,
 ) => Promise<{ draft: RuleDraft; usage?: Usage; lookups: number } | { failed: string; usage?: Usage; lookups: number }>;
 
-/** Each answer a rule can ask of what Sift saw in a message, in the words the model picks from. */
+/** Each answer a rule can ask of what Mild saw in a message, in the words the model picks from. */
 export const FACT_WORDS: readonly string[] = Object.values(RULE_FACTS).flatMap((answers) => answers.map(([, words]) => words));
 
 export const RULE_DRAFT_PROMPT = `You fill in one email rule for the owner of a mailbox, from what they say they want it to do.
@@ -83,9 +83,9 @@ What a rule can say, all of which must hold for it to apply:
   mailing list it came through; an address it was sent to; or words in its subject. Beside an address or
   domain, it may also ask for the sender's name, exactly or containing some words. Several conditions of one
   kind are alternatives: mail from either of two domains, or with either of two words in its subject.
-  Conditions of different kinds must all hold. It may name none of these and ask only about what Sift saw in
+  Conditions of different kinds must all hold. It may name none of these and ask only about what Mild saw in
   the message.
-- What Sift saw in the message: any of the conditions offered in ${FILL_TOOL}, at most one answer per fact.
+- What Mild saw in the message: any of the conditions offered in ${FILL_TOOL}, at most one answer per fact.
 - Then either a label, which says what the mail is and brings what that label does; or no label and an
   action alone (keep, archive or spam), which may also mark the mail read and unsubscribe from the sender's
   mailing list. Or it waits: it applies only once a model has given the mail one of the labels, and then does
@@ -127,7 +127,7 @@ export function buildRuleDraftPrompt(input: RuleDraftInput): string {
 
 /** What a look-up found, as the tool's answer. */
 export function describeFound(found: readonly FoundSender[]): string {
-  if (found.length === 0) return 'No sender Sift has recorded matches.';
+  if (found.length === 0) return 'No sender Mild has recorded matches.';
   return found
     .map((s) =>
       [

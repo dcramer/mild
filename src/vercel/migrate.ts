@@ -1,13 +1,14 @@
 /**
- * Run by the deploy's build (`vercel.json`), so the database is migrated and brought under `SIFT_KEY`
+ * Run by the deploy's build (`vercel.json`), so the database is migrated and brought under `MILD_KEY`
  * once, before any instance opens it; instances starting together would otherwise do it at once. A first
  * deploy, made before the project has a database, builds without one.
  */
 import { loadConfig } from '../config.ts';
+import { named } from '../env.ts';
 import { rekeyStore } from '../store/rekey.ts';
 import { openStore } from '../store/store.ts';
 
-process.env['SIFT_HOME'] ??= '/tmp/sift';
+if (!named(process.env, 'MILD_HOME')) process.env['MILD_HOME'] = '/tmp/mild';
 if (process.env['DATABASE_URL']) {
   const store = await openStore(loadConfig());
   try {

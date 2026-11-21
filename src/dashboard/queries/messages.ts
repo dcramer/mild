@@ -26,7 +26,7 @@ async function mailboxOf(db: Sql, scope: Scope, messageId: string): Promise<stri
   return found[0]?.accountId ?? null;
 }
 
-/** One message with its full history, in whichever of the scope's mailboxes holds it, or null if sift has not seen it. */
+/** One message with its full history, in whichever of the scope's mailboxes holds it, or null if Mild has not seen it. */
 export async function messageDetail(db: Sql, scope: Scope, messageId: string): Promise<MessageDetail | null> {
   const accountId = await mailboxOf(db, scope, messageId);
   if (accountId === null) return null;
@@ -100,7 +100,7 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
   };
 }
 
-/** A message as sift holds it, as text and HTML: Inbox's whole copy, a suggestion's temporary one, or an example the user made. */
+/** A message as Mild holds it, as text and HTML: Inbox's whole copy, a suggestion's temporary one, or an example the user made. */
 async function storedBody(db: Sql, accountId: string, messageId: string): Promise<{ text: Confidential; html: Confidential | null } | null> {
   const [whole] = await db
     .select({ text: mailBodies.bodyText, html: mailBodies.bodyHtml })
@@ -121,14 +121,14 @@ async function storedBody(db: Sql, accountId: string, messageId: string): Promis
     : { text: openPart(db, accountId, messageId, 'text', kept.text)!, html: openPart(db, accountId, messageId, 'html', kept.html) };
 }
 
-/** The HTML of one of the scope's messages, as sift holds it; null when it holds none. */
+/** The HTML of one of the scope's messages, as Mild holds it; null when it holds none. */
 export async function storedHtml(db: Sql, scope: Scope, messageId: string): Promise<string | null> {
   const accountId = await mailboxOf(db, scope, messageId);
   if (accountId === null) return null;
   return plain((await storedBody(db, accountId, messageId))?.html ?? null);
 }
 
-/** Whether sift can leave the list a message came from. Mirrors what `unsubscribe` in src/actions will agree to. */
+/** Whether Mild can leave the list a message came from. Mirrors what `unsubscribe` in src/actions will agree to. */
 async function canUnsubscribe(db: Sql, accountId: string, sender: string, headers: Record<string, string>): Promise<MessageDetail['unsubscribe']> {
   const signals = bulkSignals(headers);
   if (!signals.hasListUnsubscribe) return 'none';

@@ -21,7 +21,7 @@ export interface LabelDraft {
 }
 
 export interface ProposalInput {
-  /** What the person wants of Sift, in their own words. */
+  /** What the person wants of Mild, in their own words. */
   goal: string;
   /** Labels they have already, which a proposal must not repeat. */
   labels: readonly Pick<Label, 'name' | 'description'>[];

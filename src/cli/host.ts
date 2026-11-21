@@ -7,10 +7,10 @@ import { openStore } from '../store/store.ts';
 import { startTelemetry } from '../telemetry.ts';
 import { fromHere, machineNames, signInAddresses } from './network.ts';
 
-/** How long a piece of work in `sift run` may start work: as a host's function would cut it off, so the same path runs. */
+/** How long a piece of work in `mild run` may start work: as a host's function would cut it off, so the same path runs. */
 const LIMIT_MS = 5 * 60_000;
 
-/** What the dashboard answers to on this machine: any name or address that is this machine, and SIFT_URL's. */
+/** What the dashboard answers to on this machine: any name or address that is this machine, and MILD_URL's. */
 function dashboardAddresses(config: Config, port: number) {
   const { url } = config.settings;
   return {
@@ -26,7 +26,7 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 const STAND_INS = Symbol.for('sift.stand-ins');
 
 /**
- * `sift run`'s host, in the Next.js server it starts: this machine and its home directory, with the settings the
+ * `mild run`'s host, in the Next.js server it starts: this machine and its home directory, with the settings the
  * command line read and the address it listens on (`HOSTNAME`, as Next.js's standalone server takes it, and `PORT`,
  * which Next.js sets once listening).
  */

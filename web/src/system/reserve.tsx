@@ -20,8 +20,8 @@ function remember(id: string, empty: boolean) {
  * chart, a notice that may or may not be there.
  *
  * `room` is its usual height on a narrow and on a wide screen, as classes (`min-h-[386px] lg:min-h-[206px]`), so the
- * server's page holds it too. A part that held nothing the last time it filled in, in this browser, holds no room (Sift
- * is on, so there is no "Sift is off"): that is kept under `id`, and the page's head lets it go before anything is
+ * server's page holds it too. A part that held nothing the last time it filled in, in this browser, holds no room (Mild
+ * is on, so there is no "Mild is off"): that is kept under `id`, and the page's head lets it go before anything is
  * drawn (`web/src/lib/before-paint.ts`). `placeholder` is drawn while waiting and must fit inside the room.
  */
 export function Reserve({

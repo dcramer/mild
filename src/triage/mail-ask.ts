@@ -44,9 +44,9 @@ export const ASK_PROMPT = `You turn what the owner of a mailbox types into a fil
 
 The list can be narrowed by, all of which must hold:
 - Who sent a message in the conversation: addresses, or domains for everyone at one. Several are alternatives.
-- One of their labels: what Sift, or they, said the newest message is.
-- Which of the list's views: mail that needs them (Sift would leave it in the inbox, or could not place it) or mail
-  sorted away (Sift would archive it or call it spam).
+- One of their labels: what Mild, or they, said the newest message is.
+- Which of the list's views: mail that needs them (Mild would leave it in the inbox, or could not place it) or mail
+  sorted away (Mild would archive it or call it spam).
 - Unread.
 - Received on or after a day.
 - Words a message says: in its text, its sender's name or address, or its subject. One message must have every one.

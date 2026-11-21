@@ -6,7 +6,7 @@ export interface PullResult {
   /** Ids of messages that arrived in the inbox since the cursor, oldest first, deduplicated. */
   messageIds: string[];
   /**
-   * Label changes to any message since the cursor, sift's own among them. Empty after `recovery`: what
+   * Label changes to any message since the cursor, Mild's own among them. Empty after `recovery`: what
    * changed while the cursor was expired cannot be read back.
    */
   labelChanges: HistoryLabelChange[];
@@ -39,7 +39,7 @@ const RECOVERY_DAYS = 7;
 /**
  * Find messages added to the inbox since `cursor`.
  *
- * With no cursor this only records the current position: sift handles mail that arrives after it
+ * With no cursor this only records the current position: Mild handles mail that arrives after it
  * is connected and never sweeps the existing inbox on its own.
  */
 export async function pullChanges(api: GmailApi, cursor: string | null): Promise<PullResult> {

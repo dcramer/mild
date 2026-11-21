@@ -54,7 +54,7 @@ const COUNT_MS = 5 * 60_000;
 /** A Gmail client for one of the person's mailboxes, with the sign-in kept in their database. */
 async function gmailClient(config: Config, db: Sql, email: string) {
   const token = await (await credentials(db, 'gmail')).read(email);
-  if (token === null) throw new Refusal(`Sift has no access to ${email}. Sign in to the dashboard with that account.`);
+  if (token === null) throw new Refusal(`Mild has no access to ${email}. Sign in to the dashboard with that account.`);
   return clientFor(loadClientSecrets(config), token);
 }
 

@@ -169,7 +169,7 @@ describe('yellow means look here', () => {
 
 describe('red means a failure the reader can do something about', () => {
   test('a screen says a failure only as the error of a press or a load, never in words of its own or as a status', () => {
-    // Sift retries what it does in the background (a mailbox change, a Gmail filter, a model call) and reports
+    // Mild retries what it does in the background (a mailbox change, a Gmail filter, a model call) and reports
     // what never lands; the page is for a press that just failed, or a page that could not load.
     const failures: string[] = [];
     for (const path of SCREENS) {

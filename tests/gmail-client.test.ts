@@ -180,14 +180,28 @@ describe('changing the mailbox', () => {
 
   it('makes a label once, and finds one made meanwhile by another hand', async () => {
     const { mailbox, gmail: box } = gmail();
-    const id = await mailbox.ensureLabel('sift/news');
-    expect(await mailbox.ensureLabel('Sift/News')).toBe(id);
+    const id = await mailbox.ensureLabel('mild/news');
+    expect(await mailbox.ensureLabel('Mild/News')).toBe(id);
     expect(box.asked('users.labels.create')).toHaveLength(1);
 
     const other = gmail();
-    await other.mailbox.ensureLabel('sift/other');
-    const raced = box.label('sift/receipts');
-    expect(await other.mailbox.ensureLabel('sift/receipts')).toBe(raced);
+    await other.mailbox.ensureLabel('mild/other');
+    const raced = box.label('mild/receipts');
+    expect(await other.mailbox.ensureLabel('mild/receipts')).toBe(raced);
+  });
+
+  it('renames the labels it made when it was Sift, keeping each id, the first time it needs one', async () => {
+    const { mailbox, gmail: box } = gmail();
+    const parent = box.label('sift');
+    const news = box.label('Sift/News');
+    const review = box.label('sift/review');
+    const taken = box.label('mild/review');
+    const theirs = box.label('Sifted');
+    expect(await mailbox.ensureLabel('mild/news')).toBe(news);
+    expect([parent, news, review, taken, theirs].map((id) => box.labels.get(id)!.name)).toEqual(['mild', 'mild/News', 'sift/review', 'mild/review', 'Sifted']);
+    expect(box.asked('users.labels.create')).toHaveLength(0);
+    await mailbox.ensureLabel('mild/digest');
+    expect(box.asked('users.labels.patch')).toHaveLength(2);
   });
 
   it('says whether the owner has written to an address, and refuses one that would change the search', async () => {
@@ -200,7 +214,7 @@ describe('changing the mailbox', () => {
 
   it('makes, lists and removes filters, and removing one already gone is done', async () => {
     const { mailbox, gmail: box } = gmail();
-    const label = await mailbox.ensureLabel('sift/news');
+    const label = await mailbox.ensureLabel('mild/news');
     const id = await mailbox.createFilter({ criteria: { from: 'news@example.com' }, action: { addLabelIds: [label], removeLabelIds: ['INBOX'] } });
     expect(await mailbox.listFilters()).toEqual([{ id, criteria: { from: 'news@example.com' }, action: { addLabelIds: [label], removeLabelIds: ['INBOX'] } }]);
     await mailbox.deleteFilter(id);
@@ -210,10 +224,10 @@ describe('changing the mailbox', () => {
     expect(box.asked('users.settings.filters.create')).toHaveLength(1);
   });
 
-  it('puts in a message Sift wrote, and finds it again by its Message-ID', async () => {
+  it('puts in a message Mild wrote, and finds it again by its Message-ID', async () => {
     const { mailbox, gmail: box } = gmail();
     const raw = [
-      'From: Sift <me@example.org>',
+      'From: Mild <me@example.org>',
       'To: me@example.org',
       'Subject: Your digest',
       'Message-ID: <digest-1@sift.example.org>',

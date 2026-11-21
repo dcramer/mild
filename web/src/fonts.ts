@@ -1,6 +1,6 @@
 import localFont from 'next/font/local';
 
-// The four typefaces, their Latin sets served by Sift itself and fetched with the page, each with a fallback sized
+// The four typefaces, their Latin sets served by Mild itself and fetched with the page, each with a fallback sized
 // to match so nothing moves when it arrives. Other scripts come from the same faces' other sets, fetched only for a
 // page that has their letters (Fontsource, `web/src/index.css`). Next.js takes only literals here.
 

@@ -110,7 +110,7 @@ export async function contacts(db: Sql, accounts: readonly string[], addresses: 
   );
 }
 
-/** What sift knows about a sender, or about everyone at a domain. */
+/** What Mild knows about a sender, or about everyone at a domain. */
 export interface SenderFacts {
   messages: number;
   firstSeenAt: number | null;
@@ -128,7 +128,7 @@ export interface SenderFacts {
   answered: { id: string; messages: number }[];
   /** Share of the mail the owner labelled that got the commonest label. Null with fewer than three labelled. */
   consistency: number | null;
-  /** The owner's answers about their mail: sift right, sift wrong. */
+  /** The owner's answers about their mail: Mild right, Mild wrong. */
   answers: { right: number; wrong: number };
   /** Whether the owner has written to them (for a domain: to anyone there). Null if not checked. */
   userHasWritten: boolean | null;
@@ -164,7 +164,7 @@ async function facts(db: Sql, accounts: readonly string[], who: { address: strin
       .groupBy(decisions.labelId)
       .orderBy(desc(count()), asc(decisions.labelId))) as SenderFacts['labels'];
   const labels = await tally();
-  // An answer is recorded as a decision of the rules stage, as a rule's is; agreeing with sift leaves its decision standing, with a `right` answer on it.
+  // An answer is recorded as a decision of the rules stage, as a rule's is; agreeing with Mild leaves its decision standing, with a `right` answer on it.
   const answered = await tally(
     or(
       eq(decisions.stage, 'rules'),
@@ -236,7 +236,7 @@ export async function domainFacts(db: Sql, accounts: readonly string[], domain: 
 const sent = alias(messages, 'sent');
 
 /**
- * Everyone Sift has recorded mail from in a mailbox, with their newest mail's name, list and subject and
+ * Everyone Mild has recorded mail from in a mailbox, with their newest mail's name, list and subject and
  * the label their newest labelled mail got. Senders are found only by keyed hash, so this reads one record
  * of each and the caller searches it.
  */

@@ -12,7 +12,7 @@ import { FRAME_SCRIPT } from './frame-script.ts';
  * Remote `src`, `srcset` and `background` are dropped rather than left for the policy to block: a plain
  * image is the usual tracking pixel, dropping it costs nothing, and the frame then has no violation to
  * report for each one. What held one is marked `data-sift-remote`, so the frame can tell the page there is
- * something for Show images to load (a `cid:` picture is not: Sift does not keep it). Once the reader asks
+ * something for Show images to load (a `cid:` picture is not: Mild does not keep it). Once the reader asks
  * for them, HTTPS ones are kept; plain HTTP ones never, since they would name what is being read to anyone
  * on the network. `url(...)` in CSS is left to the policy, since CSS can spell a URL in too many ways
  * (escapes, comments, `image-set`) for a rewrite to be sure of catching them all.

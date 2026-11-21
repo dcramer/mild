@@ -11,7 +11,7 @@ const LINKS = [
 const SOURCE = { href: 'https://github.com/dcramer/sift', label: 'Open source' };
 
 /**
- * Whether this Sift is run as a service for other people (`SIFT_CLOUD`). Only then are there terms, a
+ * Whether this Mild is run as a service for other people (`MILD_CLOUD`). Only then are there terms, a
  * privacy policy and a security page: on someone's own copy they would be addressed to themselves.
  */
 export const Cloud = createContext(false);

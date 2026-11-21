@@ -52,8 +52,8 @@ test.describe('When a Google sign-in expired', () => {
   });
 });
 
-test.describe("Sift's line", () => {
-  test('says how long since Sift synced and what the model cost over 30 days, and the cost previews each window', async ({ page }) => {
+test.describe("Mild's line", () => {
+  test('says how long since Mild synced and what the model cost over 30 days, and the cost previews each window', async ({ page }) => {
     await page.goto('/');
     const banner = page.getByRole('banner');
     const cost = banner.getByRole('link', { name: /30D$/ }).filter({ visible: true });
@@ -177,7 +177,7 @@ test.describe('While the reader waits', () => {
   test("a sender's page is drawn with the name and the loading bar before the browser knows who is signed in", async ({ page }) => {
     const release = await hold(page, '**/api/session?*');
     await page.goto(senderPage('ada@example.org'));
-    await expect(page.getByRole('link', { name: 'Sift' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Mild' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(0);
     await expect(page.locator('.loading-bar')).toHaveCount(1);
     release();
@@ -185,10 +185,10 @@ test.describe('While the reader waits', () => {
   });
 });
 
-test.describe("Sift's line, after a pass with Sift on", () => {
+test.describe("Mild's line, after a pass with Mild on", () => {
   test.use({ variant: 'on' });
 
-  test('the cost previews what Sift saved over each window, above what the model cost', async ({ page }) => {
+  test('the cost previews what Mild saved over each window, above what the model cost', async ({ page }) => {
     await page.goto('/');
     const cost = page.getByRole('banner').getByRole('link', { name: /30D$/ }).filter({ visible: true });
     await expect(cost).toHaveText('$0 30D');

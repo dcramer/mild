@@ -29,7 +29,7 @@ export interface Traced {
 const CARRIED = ['sift.message', 'sift.sender', 'sift.domain', 'sift.run_id', 'gen_ai.agent.name', 'gen_ai.conversation.id'];
 
 /**
- * Attributes that would hold the prompt, the answer or a tool call's arguments. Sift sets them only for an
+ * Attributes that would hold the prompt, the answer or a tool call's arguments. Mild sets them only for an
  * agent in `SHOWS_PROMPT`, and Sentry's own AI integrations, which would, are not loaded.
  */
 const CONTENT = new Set([
@@ -91,7 +91,7 @@ export function scrub<T>(value: T, prompt = false): T {
 /**
  * Start sending, if there is somewhere to send to. Called once by each host. Nothing is instrumented on
  * its own: no HTTP, database or AI library integration, no breadcrumbs, no local variables, since each
- * would carry what came from mail. Only the spans and logs sift makes go out. The release is the commit
+ * would carry what came from mail. Only the spans and logs Mild makes go out. The release is the commit
  * Vercel or `SENTRY_RELEASE` names.
  */
 export function startTelemetry(dsn: string | undefined, options: { environment?: string; transport?: Sentry.NodeOptions['transport'] } = {}): void {
@@ -222,7 +222,7 @@ export const checkedIn = <T>(work: () => Promise<T>): Promise<T> =>
     maxRuntime: 5,
   });
 
-/** A line of what Sift is doing, as the host writes it, sent as a log beside the trace it was written in. */
+/** A line of what Mild is doing, as the host writes it, sent as a log beside the trace it was written in. */
 export function logged(line: string): void {
   Sentry.logger.info(line);
 }
@@ -259,7 +259,7 @@ export const invokeAgent = <T extends object>(
     },
   );
 
-/** An error Sift could not deal with, sent with the trace it happened in. */
+/** An error Mild could not deal with, sent with the trace it happened in. */
 export function reportError(error: unknown): void {
   Sentry.captureException(error);
 }

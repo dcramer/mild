@@ -12,7 +12,7 @@ import { ACCOUNT, DAY, everything, facts } from './helpers.ts';
 const NOW = Date.UTC(2026, 5, 15, 12);
 const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
 
-/** A decision of Sift's own, carried out in Gmail; returns its change. */
+/** A decision of Mild's own, carried out in Gmail; returns its change. */
 async function done(db: Sql, messageId: string, decision: Partial<Parameters<typeof recordDecision>[3]> = {}, options: { byUser?: boolean; at?: number } = {}) {
   const at = options.at ?? NOW;
   const id = await recordDecision(
@@ -46,7 +46,7 @@ async function mailbox(ids: string[], read: string[] = []) {
 }
 
 describe('attention saved', () => {
-  it('counts mail Sift took out of the inbox, a glance each, and not what was undone, answered, opened, kept or only suggested', async () => {
+  it('counts mail Mild took out of the inbox, a glance each, and not what was undone, answered, opened, kept or only suggested', async () => {
     const db = await mailbox(['kept', 'spam', 'undone', 'answered', 'opened', 'left', 'suggested', 'news'], ['opened']);
     await done(db, 'kept', { labelId: 'marketing' });
     await done(db, 'spam', { disposition: 'spam', labelId: 'marketing' });
@@ -82,7 +82,7 @@ describe('attention saved', () => {
     await done(db, 'lastWeek', {}, { at: NOW - 10 * DAY });
     await recordDecision(db, ACCOUNT, 'sure', { ...base, disposition: 'archive' }, { now: NOW });
     await recordDecision(db, ACCOUNT, 'unsure', { ...base, disposition: 'review', stage: 'model', confidence: 0.4 }, { now: NOW });
-    // Sift said archive; the reader's answer since does not change what Sift would have done.
+    // Mild said archive; the reader's answer since does not change what Mild would have done.
     await recordDecision(db, ACCOUNT, 'corrected', { ...base, disposition: 'spam' }, { now: NOW });
     await recordDecision(db, ACCOUNT, 'corrected', { ...base, disposition: 'keep' }, { byUser: true, now: NOW });
 

@@ -38,20 +38,20 @@ import { Refusal } from '../refusal.ts';
 import { plain } from '../plain.ts';
 import type { Confidential } from '../confidential.ts';
 
-/** A decision sift only suggested, that the user has not yet confirmed or corrected. */
+/** A decision Mild only suggested, that the user has not yet confirmed or corrected. */
 export interface Suggestion {
   decisionId: number;
   accountId: string;
   messageId: string;
   stage: StageName;
   disposition: Disposition;
-  /** With `spam`: sift would also block the sender. */
+  /** With `spam`: Mild would also block the sender. */
   block: boolean;
-  /** With `archive`: sift would list it in its label's digest. */
+  /** With `archive`: Mild would list it in its label's digest. */
   digest: boolean;
-  /** The label sift gave it, or null if it could not place it. */
+  /** The label Mild gave it, or null if it could not place it. */
   labelId: string | null;
-  /** Carried out: Sift was on, so it is in Gmail with the review label, asked about there. */
+  /** Carried out: Mild was on, so it is in Gmail with the review label, asked about there. */
   carriedOut: boolean;
   confidence: number | null;
   decidedAt: number;
@@ -84,9 +84,9 @@ const toSuggestion = (db: Sql, r: Omit<Suggestion, 'fromAddress' | 'fromName' | 
 
 /**
  * Suggestions waiting on the user, newest first: the current decision for a message, recorded as
- * a suggestion or, while Sift was on, left for the user to say, with no answer yet. Decisions that only
- * repeat what the user already told sift (their answers, and rules they wrote or made by correcting it)
- * are not suggestions and are left out; ones from a rule sift learned are.
+ * a suggestion or, while Mild was on, left for the user to say, with no answer yet. Decisions that only
+ * repeat what the user already told Mild (their answers, and rules they wrote or made by correcting it)
+ * are not suggestions and are left out; ones from a rule Mild learned are.
  */
 export async function pendingSuggestions(
   db: Sql,
@@ -123,7 +123,7 @@ const waiting = (db: Sql, filter: { accountId?: string; accounts?: readonly stri
         .from(x)
         .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
     ),
-    // Mail Sift asked about while on is waiting on the user as much as what it would have done while off.
+    // Mail Mild asked about while on is waiting on the user as much as what it would have done while off.
     or(eq(decisions.carryOut, false), eq(decisions.disposition, 'review')),
     eq(decisions.byUser, false),
     notExists(
@@ -140,7 +140,7 @@ const waiting = (db: Sql, filter: { accountId?: string; accounts?: readonly stri
     filter.since === undefined ? undefined : gte(decisions.decidedAt, filter.since),
   );
 
-/** A message sift never decided (the model could not judge it), with who sent it, or null. */
+/** A message Mild never decided (the model could not judge it), with who sent it, or null. */
 async function undecided(db: Sql, accountId: string, messageId: string): Promise<{ fromAddress: string } | null> {
   const [row] = await db
     .select({ headers: messages.headers })
@@ -197,13 +197,13 @@ export interface FeedbackInput {
   decisionId?: number;
   /**
    * The one message the answer is about; the sender's other waiting mail is left alone. It need not be
-   * waiting: this is how a decision sift already made, or mail it kept, is corrected, and how mail the
+   * waiting: this is how a decision Mild already made, or mail it kept, is corrected, and how mail the
    * model could not judge is answered. Either gets a new decision.
    */
   messageId: string;
   /**
    * Each message the answer settles gets it as a decision of its own, carried out in Gmail on the next
-   * pass even while sift is off. Without it (an answer read from Gmail, where the mail already is) only
+   * pass even while Mild is off. Without it (an answer read from Gmail, where the mail already is) only
    * the corrected message's decision is recorded, and nothing is carried out.
    */
   carryOut?: boolean;
@@ -216,7 +216,7 @@ interface FeedbackResult {
   corrected: string | null;
   /** How many messages now have the answer waiting to be carried out in Gmail. */
   carrying: number;
-  /** Messages this answer settled that Sift had marked for review in Gmail, so the caller can take that mark back, carried out or not. */
+  /** Messages this answer settled that Mild had marked for review in Gmail, so the caller can take that mark back, carried out or not. */
   asked: string[];
 }
 
@@ -238,20 +238,20 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
 
   const waiting = await pendingSuggestions(db, { accountId: input.accountId, sender: input.sender });
   const targets = waiting.filter((s) => s.messageId === input.messageId && (input.decisionId === undefined || s.decisionId === input.decisionId));
-  // A message that is not waiting (sift already acted on it, a rule decided it, or it was answered before)
+  // A message that is not waiting (Mild already acted on it, a rule decided it, or it was answered before)
   // is corrected through its current decision.
   const given = targets.length === 0 ? await currentDecision(db, input.accountId, input.messageId) : null;
-  // Mail sift never decided has nothing to correct: the answer is its first decision, with no suggestion before it.
+  // Mail Mild never decided has nothing to correct: the answer is its first decision, with no suggestion before it.
   const fresh = targets.length === 0 && !given ? await undecided(db, input.accountId, input.messageId) : null;
   const from = given?.fromAddress ?? fresh?.fromAddress;
   if (from !== undefined && from !== input.sender) throw new Refusal('That message is not from that sender.');
   if (targets.length === 0 && !given && !fresh) throw new Refusal('That message is no longer waiting for review.');
-  // With only the user's own answers before it, there is nothing of Sift's to be right or wrong.
+  // With only the user's own answers before it, there is nothing of Mild's to be right or wrong.
   const scored = given ? ((await siftSaid(db, input.accountId, given.messageId)) ?? { decisionId: given.decisionId, labelId: null }) : null;
 
   // Agreeing with a decision that already stands changes nothing about the message itself.
   const changes = given !== null && (given.labelId !== label.id || given.disposition !== outcome);
-  // sift having no suggestion is not sift being wrong.
+  // Mild having no suggestion is not Mild being wrong.
   const verdictFor = (target: Pick<Suggestion, 'labelId'>): (typeof VERDICTS)[number] =>
     target.labelId === null ? 'answered' : target.labelId === label.id ? 'right' : 'wrong';
   // Pressed in the dashboard: what the user said is done to each waiting message it settled.
@@ -279,7 +279,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         .insert(feedback)
         .values({ accountId: target.accountId, decisionId: target.decisionId, ...answered })
         .onConflictDoUpdate({ target: [feedback.userId, feedback.decisionId], set: answered });
-      // Every marked message is kept as an example, with the text Sift holds of it; without any, the next pass captures it.
+      // Every marked message is kept as an example, with the text Mild holds of it; without any, the next pass captures it.
       const kept = await exampleText(tx, target.accountId, target.messageId);
       const held = kept ? { status: 'captured' as const, ...kept } : {};
       const marked = { labelId: label.id, markedAt: now, ...held };
@@ -288,13 +288,13 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
         .values({ accountId: target.accountId, messageId: target.messageId, ...marked, ...(await exampleKeysOf(tx, target.accountId, target.messageId)) })
         .onConflictDoUpdate({ target: [examples.userId, examples.accountId, examples.messageId], set: marked });
     }
-    // Mail Sift already marked in Gmail gets the answer as a decision of its own however it was given, as a correction would.
+    // Mail Mild already marked in Gmail gets the answer as a decision of its own however it was given, as a correction would.
     for (const target of targets) if (input.carryOut || target.carriedOut) await recordDecision(tx, input.accountId, target.messageId, answer, carried);
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
     // it is carried out, the mailbox is brought into line with it.
     if (given && changes) await recordDecision(tx, input.accountId, given.messageId, answer, carried);
   });
-  // An answer makes no rule of its own; enough answers giving a sender's mail of one label another action, and Sift offers one.
+  // An answer makes no rule of its own; enough answers giving a sender's mail of one label another action, and Mild offers one.
   await proposeFromCorrections(db, input.accountId, input.sender, label.id, now);
   return {
     corrected: given && changes ? given.messageId : null,
@@ -308,15 +308,15 @@ export interface Accuracy {
   right: number;
   /** Per tier that made the suggestion. Tiers with no answers are absent. */
   byStage: { stage: StageName; reviewed: number; right: number }[];
-  /** Per label sift gave, most answers first. */
+  /** Per label Mild gave, most answers first. */
   byLabel: { labelId: string; labelName: string; reviewed: number; right: number }[];
-  /** What sift called one label when the user said another, commonest first. */
+  /** What Mild called one label when the user said another, commonest first. */
   confusion: { suggested: string; correct: string; count: number }[];
 }
 
 /**
- * How often sift's suggestions matched what the user wanted, from the answers given since `since`.
- * An answer to mail sift could not place is not counted: having no suggestion is not being wrong.
+ * How often Mild's suggestions matched what the user wanted, from the answers given since `since`.
+ * An answer to mail Mild could not place is not counted: having no suggestion is not being wrong.
  */
 export async function accuracy(db: Sql, since = 0, accounts?: readonly string[]): Promise<Accuracy> {
   const right = sql<number>`count(*) FILTER (WHERE ${feedback.verdict} = 'right')`.mapWith(Number);

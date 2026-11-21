@@ -4,8 +4,8 @@ import { Tooltip } from './tooltip.tsx';
 const NAMES = ['', 'Unsure', 'Fairly sure', 'Sure'] as const;
 
 /**
- * How sure sift is, in three steps of ink: one, two or three bars lit. Sits before what it qualifies,
- * inside a row's answer. Its name is read out, so the bars need no legend. With no `level` (mail Sift could not
+ * How sure Mild is, in three steps of ink: one, two or three bars lit. Sits before what it qualifies,
+ * inside a row's answer. Its name is read out, so the bars need no legend. With no `level` (mail Mild could not
  * place) it is only the room the bars take, so a column of answers starts its words in one place.
  */
 export function Meter({ level }: { level: 1 | 2 | 3 | null }) {

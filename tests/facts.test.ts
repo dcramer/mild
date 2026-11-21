@@ -70,7 +70,7 @@ describe('deriveFacts', () => {
     const marked = deriveFacts(facts({ labelIds: ['INBOX', 'IMPORTANT', 'CATEGORY_PROMOTIONS'] }));
     expect(marked).toMatchObject({ important: true, category: 'promotions' });
     expect(matchesFacts({ important: true, category: 'promotions' }, marked)).toBe(true);
-    // Mail recorded before sift read the marker has no answer, so a rule asking either way passes it by.
+    // Mail recorded before Mild read the marker has no answer, so a rule asking either way passes it by.
     const before = { ...marked };
     delete before.important;
     expect(matchesFacts({ important: false }, before)).toBe(false);
@@ -180,7 +180,7 @@ describe('matchesFacts', () => {
 });
 
 describe('what a rule can ask of the facts', () => {
-  it('is said the same on the dashboard as in what sift records, answer for answer', () => {
+  it('is said the same on the dashboard as in what Mild records, answer for answer', () => {
     expect(FACTS).toEqual(RULE_FACTS);
     for (const [key, words] of FACT_FILTER_WORDS) {
       const [[fact, want]] = Object.entries(FACT_FILTER_CONDITIONS[key]) as [[string, unknown]];

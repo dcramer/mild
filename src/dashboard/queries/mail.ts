@@ -65,7 +65,7 @@ const junk = (labelIds: AnyColumn) => or(has(labelIds, 'SPAM'), has(labelIds, 'T
 
 /**
  * Conversations, newest first, a page at a time: those with mail in the inbox now, or, for a search or what Ask made of
- * one, all the mail Sift keeps. A search (`q`) is words one message has in its text, its sender or its subject, all of
+ * one, all the mail Mild keeps. A search (`q`) is words one message has in its text, its sender or its subject, all of
  * them, the last as the start of one.
  */
 export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Promise<MailThreads> {
@@ -116,7 +116,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
     .groupBy(messages.accountId, messages.threadId)
     .as('threads');
   const later = alias(decisions, 'later');
-  // The reader's answer about it, where they gave one, beats what Sift decided.
+  // The reader's answer about it, where they gave one, beats what Mild decided.
   const answered = sql`${feedback.id} IS NOT NULL`;
   const labelId = sql<string | null>`CASE WHEN ${answered} THEN ${feedback.labelId} ELSE ${decisions.labelId} END`;
   const disposition = sql<string | null>`CASE WHEN ${answered} THEN ${feedback.disposition} ELSE ${decisions.disposition} END`;

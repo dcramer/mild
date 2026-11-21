@@ -14,7 +14,7 @@ test.describe('Removing a mailbox', () => {
     await settings(page).getByRole('button', { name: 'Remove me@work.example.org' }).click();
     const confirm = page.getByRole('dialog', { name: 'Remove me@work.example.org' });
     await expect(confirm).toContainText('Your labels and rules stay, for your other mailboxes.');
-    await expect(confirm).toContainText('The filters Sift made in Gmail stay there, as do its labels on your mail');
+    await expect(confirm).toContainText('The filters Mild made in Gmail stay there, as do its labels on your mail');
     const remove = confirm.getByRole('button', { name: 'Remove mailbox' });
     await expect(remove).toBeDisabled();
     const typed = confirm.getByRole('textbox', { name: 'Type me@work.example.org to confirm' });
@@ -64,8 +64,8 @@ test.describe('Removing a mailbox', () => {
 test.describe('Connecting another mailbox', () => {
   test('that Google did not complete says why in Settings, until Settings closes', async ({ page }) => {
     // Where Google's return sends someone still signed in when it did not work out.
-    await page.goto(`/?settings=1&signin=${encodeURIComponent('bravo@example.net is already connected to Sift by someone else.')}`);
-    await expect(settings(page).getByText('bravo@example.net is already connected to Sift by someone else.')).toBeVisible();
+    await page.goto(`/?settings=1&signin=${encodeURIComponent('bravo@example.net is already connected to Mild by someone else.')}`);
+    await expect(settings(page).getByText('bravo@example.net is already connected to Mild by someone else.')).toBeVisible();
     await closeSettings(page);
     await query(page).toBe('');
   });

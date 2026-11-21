@@ -41,7 +41,7 @@ async function pull(me: Me, since?: string) {
 }
 
 describe('the copy the page keeps', () => {
-  it('starts with every conversation in the inbox, newest first, each whole, with what Sift thinks of its newest', async () => {
+  it('starts with every conversation in the inbox, newest first, each whole, with what Mild thinks of its newest', async () => {
     const { sift, box, me, arrives } = await withInbox();
     const lunch = box.deliver({ from: 'Ada <ada@example.com>', subject: 'Lunch?', text: 'Lunch on Friday?', at: AT - DAY });
     const reply = box.deliver({ from: 'Ada <ada@example.com>', subject: 'Re: Lunch?', threadId: lunch, text: 'Or Saturday.', at: AT - 60_000 });

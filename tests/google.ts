@@ -1,11 +1,11 @@
 /**
- * Google as Sift reaches it, in memory: Gmail's API and Google's sign-in, answered at their real addresses through MSW, so
- * Sift's own Gmail client (`src/gmail/`) runs as it does against Google. Each mailbox is a `FakeGmail`: its messages, kept
+ * Google as Mild reaches it, in memory: Gmail's API and Google's sign-in, answered at their real addresses through MSW, so
+ * Mild's own Gmail client (`src/gmail/`) runs as it does against Google. Each mailbox is a `FakeGmail`: its messages, kept
  * as the RFC 2822 text Gmail would hold and read back as Gmail's API gives them; its labels, filters, send-as addresses,
- * and history. A test puts mail in it, changes it as the person would in Gmail, makes a call fail, and reads what Sift
+ * and history. A test puts mail in it, changes it as the person would in Gmail, makes a call fail, and reads what Mild
  * asked (`requests`) and what it changed.
  *
- * Gmail's search is a small one: the operators Sift's queries use (`in:`, `label:`, `from:`, `to:`, `list:`, `subject:`,
+ * Gmail's search is a small one: the operators Mild's queries use (`in:`, `label:`, `from:`, `to:`, `list:`, `subject:`,
  * `rfc822msgid:`, `after:`, `before:`, `newer_than:`, `is:`, `has:attachment`), `-`, `OR`, `{…}` and `(…)`, and bare words.
  * Any other operator is refused, as a query Gmail would read differently from the fake would be.
  */
@@ -67,7 +67,7 @@ interface HistoryRecord {
  */
 export type Failure = { status: number; reason?: string } | 'network' | 'lost' | 'unchanged';
 
-/** One request Sift made of Gmail, as the API's name for its method and what it asked for. */
+/** One request Mild made of Gmail, as the API's name for its method and what it asked for. */
 export interface Asked {
   method: string;
   id?: string;
@@ -210,7 +210,7 @@ function textOf(part: Part): string {
 
 const hasAttachment = (part: Part): boolean => Boolean(part.filename) || (part.parts ?? []).some(hasAttachment);
 
-/** A Gmail search Sift's fake cannot read the way Gmail would. */
+/** A Gmail search Mild's fake cannot read the way Gmail would. */
 class QueryError extends Error {}
 
 const DAY = 86_400_000;
@@ -372,7 +372,7 @@ export class FakeGmail {
     return gmail;
   }
 
-  /** Mail arriving: in the mailbox, and in its history unless `quietly` (mail from before Sift, found only by a search). */
+  /** Mail arriving: in the mailbox, and in its history unless `quietly` (mail from before Mild, found only by a search). */
   deliver(mail: Mail, { quietly = false }: { quietly?: boolean } = {}): string {
     const id = mail.id ?? this.newId();
     this.put(
@@ -446,17 +446,17 @@ export class FakeGmail {
     this.failures.set(method, [...(this.failures.get(method) ?? []), ...failures]);
   }
 
-  /** The calls of `method` after the next `answered` fail, one each: Gmail refusing part-way through Sift's work. */
+  /** The calls of `method` after the next `answered` fail, one each: Gmail refusing part-way through Mild's work. */
   failLater(method: string, answered: number, ...failures: Failure[]): void {
     this.failures.set(method, [...(this.failures.get(method) ?? []), ...Array<null>(answered).fill(null), ...failures]);
   }
 
-  /** `change` happens in Gmail right after the next call of `method` is answered, before Sift asks again: mail arriving while Sift pages. */
+  /** `change` happens in Gmail right after the next call of `method` is answered, before Mild asks again: mail arriving while Mild pages. */
   meanwhile(method: string, change: () => void): void {
     this.meanwhiles.set(method, [...(this.meanwhiles.get(method) ?? []), change]);
   }
 
-  /** `happening` is awaited when the next call of `method` reaches Gmail, before it is carried out: what goes on while Sift waits on it. */
+  /** `happening` is awaited when the next call of `method` reaches Gmail, before it is carried out: what goes on while Mild waits on it. */
   whileAsked(method: string, happening: () => unknown): void {
     this.arrivals.set(method, [...(this.arrivals.get(method) ?? []), happening]);
   }
@@ -689,6 +689,14 @@ export class FakeGmail {
         if (this.labelId(name)) return refused(409, 'Label name exists or conflicts', 'alreadyExists');
         return HttpResponse.json(this.labels.get(this.label(name)));
       }
+      case 'users.labels.patch': {
+        const label = this.labels.get(id!);
+        if (!label) return refused(404, 'Requested entity was not found.', 'notFound');
+        const name = typeof body['name'] === 'string' ? body['name'] : label.name;
+        if (this.labelId(name) && this.labelId(name) !== label.id) return refused(409, 'Label name exists or conflicts', 'alreadyExists');
+        label.name = name;
+        return HttpResponse.json(label);
+      }
       case 'users.settings.sendAs.list':
         return HttpResponse.json({
           sendAs: [
@@ -717,8 +725,8 @@ export class FakeGmail {
   }
 }
 
-/** Each Gmail method Sift calls: how it is sent and its path, as `src/gmail/call.ts` names them. */
-const ROUTES: [method: string, verb: 'get' | 'post' | 'delete', path: string][] = [
+/** Each Gmail method Mild calls: how it is sent and its path, as `src/gmail/call.ts` names them. */
+const ROUTES: [method: string, verb: 'get' | 'post' | 'patch' | 'delete', path: string][] = [
   ['users.getProfile', 'get', '/profile'],
   ['users.history.list', 'get', '/history'],
   ['users.messages.list', 'get', '/messages'],
@@ -730,6 +738,7 @@ const ROUTES: [method: string, verb: 'get' | 'post' | 'delete', path: string][] 
   ['users.labels.list', 'get', '/labels'],
   ['users.labels.get', 'get', '/labels/:id'],
   ['users.labels.create', 'post', '/labels'],
+  ['users.labels.patch', 'patch', '/labels/:id'],
   ['users.settings.sendAs.list', 'get', '/settings/sendAs'],
   ['users.settings.filters.list', 'get', '/settings/filters'],
   ['users.settings.filters.create', 'post', '/settings/filters'],
@@ -740,7 +749,7 @@ const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/:user';
 const TOKEN = 'https://oauth2.googleapis.com/token';
 const REVOKE = 'https://oauth2.googleapis.com/revoke';
 
-/** What `gmail.modify`, `gmail.settings.basic` and, given, `gmail.send` grant: the scopes Sift asks for. */
+/** What `gmail.modify`, `gmail.settings.basic` and, given, `gmail.send` grant: the scopes Mild asks for. */
 const SCOPES = { read: [...GMAIL_SCOPES], send: [...GMAIL_SCOPES, SEND_SCOPE] };
 
 /** Google: the mailboxes, and the sign-ins that reach them. */
@@ -858,7 +867,7 @@ export class FakeGoogle {
           if (!mailbox) return refused(401, 'Request had invalid authentication credentials.', 'unauthenticated');
           const q = new URL(request.url).searchParams;
           const id = typeof params['id'] === 'string' ? params['id'] : undefined;
-          const body = verb === 'post' ? ((await request.json().catch(() => ({}))) as Record<string, unknown>) : {};
+          const body = verb === 'post' || verb === 'patch' ? ((await request.json().catch(() => ({}))) as Record<string, unknown>) : {};
           const answered = await mailbox.answer(
             method,
             {

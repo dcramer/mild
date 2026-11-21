@@ -1,6 +1,6 @@
 import { boxOf, expect, path, PHONE, test } from './sift.ts';
 
-test.describe('A Sift run as a service', () => {
+test.describe('A Mild run as a service', () => {
   test.use({ cloud: true });
 
   test.describe('signed out', () => {

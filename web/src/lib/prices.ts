@@ -2,7 +2,7 @@ import type { ManageState } from './api.ts';
 import { money, plural } from './format.ts';
 
 /**
- * What Sift's sums of money say. Through a subscription (ChatGPT) the plan is not charged by the message, so a
+ * What Mild's sums of money say. Through a subscription (ChatGPT) the plan is not charged by the message, so a
  * sum is only what the same use would cost through the API (pi-ai records each call at that price), and says so.
  */
 

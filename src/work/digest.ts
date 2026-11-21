@@ -39,7 +39,7 @@ interface Due {
 }
 
 /**
- * The digests due for a person at `now`, from the record alone: while Sift is on, each label that digests whose last
+ * The digests due for a person at `now`, from the record alone: while Mild is on, each label that digests whose last
  * digest ended before the latest digest hour, with mail in the window since. An empty window stays open.
  */
 async function due(db: Sql, now: number): Promise<{ due: Due[]; hour: number; zone: string }> {
@@ -69,7 +69,7 @@ export interface DigestDeps {
   mailbox: (accountId: string) => Promise<Mailbox>;
   /** The person's model, to pick what is worth a look; without it a digest goes without. */
   highlight?: { highlight: Highlighter; model: string } | null;
-  /** Sift's dashboard, linked from each digest. */
+  /** Mild's dashboard, linked from each digest. */
   dashboard?: string;
   now?: () => number;
   until?: number;
@@ -140,7 +140,7 @@ async function pick(db: Sql, record: DigestRecord, items: readonly DigestItem[],
 
 /**
  * Put a written digest into its mailbox. One whose mail has all been answered or put back since is dropped, unless an
- * earlier try landed in Gmail: dropped, it would no longer be known as Sift's own, and sync would read it as new mail.
+ * earlier try landed in Gmail: dropped, it would no longer be known as Mild's own, and sync would read it as new mail.
  */
 async function finish(deps: DigestDeps, record: DigestRecord, zone: string, listed?: readonly DigestItem[]): Promise<boolean> {
   const { db } = deps;

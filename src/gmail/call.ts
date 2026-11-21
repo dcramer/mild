@@ -1,7 +1,7 @@
 import { clientRequest, traced } from '../telemetry.ts';
 import type { Pace } from './quota.ts';
 
-/** Each Gmail method Sift calls: how it is sent, and its path with the ids in it left as names. */
+/** Each Gmail method Mild calls: how it is sent, and its path with the ids in it left as names. */
 const ROUTES = {
   'users.getProfile': ['GET', '/users/me/profile'],
   'users.history.list': ['GET', '/users/me/history'],
@@ -14,6 +14,7 @@ const ROUTES = {
   'users.labels.list': ['GET', '/users/me/labels'],
   'users.labels.get': ['GET', '/users/me/labels/{id}'],
   'users.labels.create': ['POST', '/users/me/labels'],
+  'users.labels.patch': ['PATCH', '/users/me/labels/{id}'],
   'users.settings.sendAs.list': ['GET', '/users/me/settings/sendAs'],
   'users.settings.filters.list': ['GET', '/users/me/settings/filters'],
   'users.settings.filters.create': ['POST', '/users/me/settings/filters'],
@@ -33,7 +34,7 @@ export const isConflict = (error: unknown) => {
   return e?.status === 409 || e?.code === 409 || e?.code === '409';
 };
 
-/** Gmail compares label names without case: "Sift/news" is the label "sift/news", and creating one beside the other is refused. */
+/** Gmail compares label names without case: "Mild/news" is the label "mild/news", and creating one beside the other is refused. */
 export const labelKey = (name: string) => name.toLowerCase();
 
 /**

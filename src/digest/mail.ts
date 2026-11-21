@@ -15,7 +15,7 @@ interface Highlight {
   why: string;
 }
 
-/** One label's mail that Sift took out of the inbox since the last digest. */
+/** One label's mail that Mild took out of the inbox since the last digest. */
 export interface Digest {
   label: { id: string; name: string; gmailLabel: string };
   /** The mailbox the digest is put in. */
@@ -27,7 +27,7 @@ export interface Digest {
   highlights: Highlight[];
   /** The person's, so times read as their clock does. */
   timeZone: string;
-  /** Sift's dashboard, for links back to it. */
+  /** Mild's dashboard, for links back to it. */
   dashboard?: string;
 }
 
@@ -110,13 +110,13 @@ export function writeDigest(digest: Digest): DigestMail {
   const picked = new Set(highlights.map((h) => h.entry.id));
   const groups = bySender(entries.slice(0, LISTED).filter((e) => !picked.has(e.id)));
 
-  // A window longer than a day (the first digest, or days Sift was off) names every day it holds, and each message its day.
+  // A window longer than a day (the first digest, or days Mild was off) names every day it holds, and each message its day.
   const oneDay = digest.until - digest.since <= ONE_DAY;
   const span = oneDay ? date.format(digest.until) : dates.formatRange(digest.since, digest.until);
   const when = oneDay ? new Intl.DateTimeFormat('en-US', { ...zone, hour: 'numeric', minute: '2-digit' }) : dates;
   const timeOf = (entry: DigestEntry) => keepTogether(when.format(entry.receivedAt));
   const subject = `${digest.label.name} digest for ${span}: ${plural(entries.length, 'message')}${highlights.length > 0 ? `, ${highlights.length} worth a look` : ''}`;
-  const summary = `${plural(entries.length, 'message')} Sift archived since ${keepTogether(moment.format(digest.since))}`;
+  const summary = `${plural(entries.length, 'message')} Mild archived since ${keepTogether(moment.format(digest.since))}`;
   const senders = bySender(entries).map((g) => sender(g.from));
   const preheader =
     highlights.length > 0
@@ -134,8 +134,8 @@ export function writeDigest(digest: Digest): DigestMail {
     row(
       `<td style="padding:0 0 20px;">${
         digest.dashboard
-          ? `<a href="${escape(digest.dashboard)}" style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;text-decoration:none;">sift</a>`
-          : `<span style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;">sift</span>`
+          ? `<a href="${escape(digest.dashboard)}" style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;text-decoration:none;">mild</a>`
+          : `<span style="font:700 13px/1 ${FONT};color:${MUTED};letter-spacing:-0.01em;">mild</span>`
       }</td>`,
     ),
     row(`<td style="font:700 28px/1.15 ${FONT};color:${INK};letter-spacing:-0.03em;">${escape(digest.label.name)}</td>`),
@@ -186,7 +186,7 @@ export function writeDigest(digest: Digest): DigestMail {
     row(
       `<td style="font:400 13px/1.6 ${FONT};color:${MUTED};padding:16px 0 0;">` +
         [
-          ...(inSift ? [`<a href="${escape(inSift)}" style="color:${MUTED};white-space:nowrap;">See them in Sift</a>`] : []),
+          ...(inSift ? [`<a href="${escape(inSift)}" style="color:${MUTED};white-space:nowrap;">See them in Mild</a>`] : []),
           `<a href="${escape(labelLink(digest))}" style="color:${MUTED};white-space:nowrap;">Open ${escape(digest.label.name)} in Gmail</a>`,
           ...(digest.dashboard
             ? [`<a href="${escape(`${digest.dashboard}/labels`)}" style="color:${MUTED};white-space:nowrap;">Change or stop this digest</a>`]
@@ -216,7 +216,7 @@ export function writeDigest(digest: Digest): DigestMail {
     '',
     stayedOut,
     '',
-    ...(inSift ? [`See them in Sift: ${inSift}`] : []),
+    ...(inSift ? [`See them in Mild: ${inSift}`] : []),
     `Open in Gmail: ${labelLink(digest)}`,
     ...(digest.dashboard ? [`Change or stop this digest: ${digest.dashboard}/labels`] : []),
     '',
@@ -249,7 +249,7 @@ export function toRfc822(mail: DigestMail, head: { from: string; to: string; dat
   // Not a base64 character, so no line of either part can end it.
   const boundary = 'sift-digest-part';
   return [
-    `From: Sift <${head.from}>`,
+    `From: Mild <${head.from}>`,
     `To: ${head.to}`,
     `Subject: ${encodedWord(mail.subject)}`,
     `Date: ${new Date(head.date).toUTCString()}`,

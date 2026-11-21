@@ -118,7 +118,7 @@ test.describe('When drawing the page fails', () => {
   });
 });
 
-test.describe('After Sift is updated under an open page', () => {
+test.describe('After Mild is updated under an open page', () => {
   test.use({ serviceWorkers: 'block' });
 
   test('the next screen gone to is loaded whole, from the new build', async ({ page }) => {
@@ -161,7 +161,7 @@ test.describe('Started without a network', () => {
     await path(page).toBe('/rules');
   });
 
-  test('a page that does not come stands in with the one kept, and loads once Sift answers', async ({ page, context }) => {
+  test('a page that does not come stands in with the one kept, and loads once Mild answers', async ({ page, context }) => {
     test.slow();
     await installed(page);
     let held = true;

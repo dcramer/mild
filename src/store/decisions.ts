@@ -11,7 +11,7 @@ type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
 
 /**
  * Append a decision to the log. Every triage outcome is recorded, including "leave it alone" and
- * "could not decide", so the log is a complete account of what sift did and what it cost.
+ * "could not decide", so the log is a complete account of what Mild did and what it cost.
  *
  * A suggestion (the default) is final as recorded. One to `carryOut` stays unsettled until
  * `settleDecision` records what happened in the mailbox. `byUser`: it is the user's own answer.
@@ -67,7 +67,7 @@ interface UnsettledDecision {
 /**
  * Decisions to carry out that were recorded but not yet carried out (an answer waiting for the next pass, a crash,
  * a provider error), oldest first. `byUserOnly` keeps only the user's own answers, which are carried out
- * even while sift is off.
+ * even while Mild is off.
  */
 export async function listUnsettledDecisions(db: Sql, accountId: string, options: { byUserOnly?: boolean } = {}): Promise<UnsettledDecision[]> {
   const rows = await db

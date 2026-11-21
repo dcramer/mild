@@ -18,7 +18,7 @@ const entry = (
 });
 
 const digest = (over: Partial<Digest> = {}): Digest => ({
-  label: { id: 'notifications', name: 'Notifications', gmailLabel: 'sift/notifications' },
+  label: { id: 'notifications', name: 'Notifications', gmailLabel: 'mild/notifications' },
   mailbox: 'me@example.org',
   since: until - 24 * HOUR,
   until,
@@ -69,10 +69,10 @@ describe('writeDigest', () => {
     expect(alone.text).not.toContain('EVERYTHING ELSE');
   });
 
-  it('says what Sift did and since when, and counts what is worth a look in the subject', () => {
+  it('says what Mild did and since when, and counts what is worth a look in the subject', () => {
     const mail = writeDigest(digest({ highlights: [{ id: 'a2', why: 'The only failure.' }] }));
     expect(mail.subject).toBe('Notifications digest for Wed, Nov 18: 3 messages, 1 worth a look');
-    expect(mail.text).toContain('3 messages Sift archived since Tue, Nov 17, 7:00 AM');
+    expect(mail.text).toContain('3 messages Mild archived since Tue, Nov 17, 7:00 AM');
     expect(mail.preheader).toBe('Worth a look: Run failed');
     expect(mail.html).toContain('Worth a look');
     expect(mail.text).toMatch(/WORTH A LOOK\n\nBuilds: Run failed\n {2}The only failure\./);
@@ -124,25 +124,25 @@ describe('writeDigest', () => {
     expect(text).toContain('Run 0\n');
     expect(text).not.toContain(`Run ${LISTED}\n`);
     expect(text).toContain('12 more in Gmail');
-    expect(text).toContain('https://mail.google.com/mail/u/me%40example.org/#label/sift%2Fnotifications');
+    expect(text).toContain('https://mail.google.com/mail/u/me%40example.org/#label/mild%2Fnotifications');
   });
 
-  it('links back to Sift only when it knows its address', () => {
+  it('links back to Mild only when it knows its address', () => {
     const { html } = writeDigest(digest());
-    expect(html).not.toContain('See them in Sift');
+    expect(html).not.toContain('See them in Mild');
     expect(html).not.toContain('Change or stop this digest');
     const linked = writeDigest(digest({ dashboard: 'https://sift.example.com' }));
     expect(linked.html).toContain('<a href="https://sift.example.com" style');
-    expect(linked.text).toContain('See them in Sift: https://sift.example.com/activity?label=notifications');
+    expect(linked.text).toContain('See them in Mild: https://sift.example.com/activity?label=notifications');
     expect(linked.text).toContain('Change or stop this digest: https://sift.example.com/labels');
   });
 });
 
 describe('toRfc822', () => {
   it('carries both parts and a subject in any script', () => {
-    const mail = writeDigest(digest({ entries: [entry('d1', 1, 'Résumé — 日本語')], label: { id: 'recus', name: 'Reçus', gmailLabel: 'sift/recus' } }));
+    const mail = writeDigest(digest({ entries: [entry('d1', 1, 'Résumé — 日本語')], label: { id: 'recus', name: 'Reçus', gmailLabel: 'mild/recus' } }));
     const raw = toRfc822(mail, { from: 'me@example.org', to: 'me@example.org', date: until, messageId: '<digest-1@sift.invalid>' });
-    expect(raw).toContain('From: Sift <me@example.org>\r\n');
+    expect(raw).toContain('From: Mild <me@example.org>\r\n');
     expect(raw).toContain('Message-ID: <digest-1@sift.invalid>\r\n');
     const subject = /Subject: =\?UTF-8\?B\?([^?]+)\?=/.exec(raw)?.[1] ?? '';
     expect(new TextDecoder().decode(Uint8Array.from(atob(subject), (c) => c.charCodeAt(0)))).toBe('Reçus digest for Wed, Nov 18: 1 message');

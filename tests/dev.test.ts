@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ROOT } from '../src/cli/next.ts';
 
 describe('the checkout root', () => {
-  it('is where `sift dev` finds the page sources and the CLI', () => {
+  it('is where `mild dev` finds the page sources and the CLI', () => {
     expect(existsSync(join(ROOT, 'web/src'))).toBe(true);
     expect(existsSync(join(ROOT, 'src/cli/main.ts'))).toBe(true);
   });

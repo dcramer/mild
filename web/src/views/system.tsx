@@ -332,7 +332,7 @@ export function SystemView() {
                 <Heard at={SYNCED - 3 * 86_400_000} />
               </p>
             </Row>
-            <Row label="Sift does" note="Its icon and its word, the same whether suggested, done or a setting. Never what comes with it.">
+            <Row label="Mild does" note="Its icon and its word, the same whether suggested, done or a setting. Never what comes with it.">
               {ACTIONS.map(([key]) => (
                 <Does key={key} action={key}>
                   {outcomeName(key)}
@@ -345,7 +345,7 @@ export function SystemView() {
                 Archived
               </Does>
             </Row>
-            <Row label="verdict" note="What Sift says mail is and does: the action, then the label. At any size; a sender's next mail is a heading.">
+            <Row label="verdict" note="What Mild says mail is and does: the action, then the label. At any size; a sender's next mail is a heading.">
               <Verdict labelId="newsletters" labelName="Newsletters" disposition="archive" />
               <Verdict labelId={null} labelName={null} disposition="review" />
               <p className="heading">
@@ -354,7 +354,7 @@ export function SystemView() {
             </Row>
             <Row
               label="meter"
-              note="How sure Sift is about a label, in three steps. A suggestion's label is its answer button, meter first. Unlabelled keeps the bars' room, so a column of answers lines up."
+              note="How sure Mild is about a label, in three steps. A suggestion's label is its answer button, meter first. Unlabelled keeps the bars' room, so a column of answers lines up."
             >
               <Meter level={1} />
               <Meter level={2} />
@@ -389,7 +389,7 @@ export function SystemView() {
             <Row label="hint" note="An icon after a name; pointing at it says what it means. Look is yellow.">
               <span className="flex items-center gap-2 font-medium">
                 Store
-                <Hint icon={SparkleIcon} says="The first time Sift has seen them" tone="look" />
+                <Hint icon={SparkleIcon} says="The first time Mild has seen them" tone="look" />
               </span>
               <span className="flex items-center gap-2 font-medium">
                 Deals
@@ -402,7 +402,7 @@ export function SystemView() {
             </Row>
             <Row label="hint, said" note="The icon with its words, where they are the point: under a sender's name on their own page.">
               <span className="text-muted-foreground">
-                <Hint icon={SparkleIcon} says="The first time Sift has seen them" tone="look" said />
+                <Hint icon={SparkleIcon} says="The first time Mild has seen them" tone="look" said />
               </span>
             </Row>
           </Sheet>
@@ -457,8 +457,8 @@ export function SystemView() {
                 question="Delete your account?"
                 action="Delete everything"
                 typed="me@example.org"
-                says="Sift stops reading every mailbox and deletes everything it recorded."
-                onDelete={() => Promise.reject(new Error('Sift stopped answering, so this may not have been saved.'))}
+                says="Mild stops reading every mailbox and deletes everything it recorded."
+                onDelete={() => Promise.reject(new Error('Mild stopped answering, so this may not have been saved.'))}
               >
                 Delete account
               </DeleteButton>
@@ -473,7 +473,7 @@ export function SystemView() {
               </DeleteButton>
             </Row>
             <Row label="confirm" note="A press that is hard to take back, but deletes nothing, asks first, in place.">
-              <ConfirmButton variant="plain" question="Archive, label and mark spam on new mail by itself?" onConfirm={() => toast('Sift is on')}>
+              <ConfirmButton variant="plain" question="Archive, label and mark spam on new mail by itself?" onConfirm={() => toast('Mild is on')}>
                 Turn on
               </ConfirmButton>
             </Row>
@@ -483,7 +483,7 @@ export function SystemView() {
         <Section title="Controls">
           <Sheet>
             <Row label="select" note="A short list.">
-              <Select label="What Sift does" value={choice} options={ACTIONS} onChange={setChoice} />
+              <Select label="What Mild does" value={choice} options={ACTIONS} onChange={setChoice} />
               <Select
                 label="With icons"
                 value={choice}
@@ -579,7 +579,7 @@ export function SystemView() {
         <Section title="Form" meta="fields, one under another, the action last">
           <div className="grid gap-10 md:grid-cols-2">
             <Form onSubmit={() => toast('Saved')}>
-              <Field label="Name" hint="In Gmail it stays sift/newsletters.">
+              <Field label="Name" hint="In Gmail it stays mild/newsletters.">
                 <Input aria-label="Name" className="w-full" defaultValue="Newsletters" />
               </Field>
               <Field label="Then" hint="It leaves the inbox and stays findable under its label.">
@@ -923,9 +923,9 @@ export function SystemView() {
 
         <div className="grid gap-14 lg:grid-cols-2">
           <Section title="Settings in a sheet" meta="a settings page is groups: what each governs on the left, its sheet on the right">
-            <SettingsGroup title="Active" note="Whether Sift changes your Gmail.">
+            <SettingsGroup title="Active" note="Whether Mild changes your Gmail.">
               <Sheet>
-                <SettingRow title="Off" note="Nothing in Gmail changes. Sift suggests, and learns from your answers.">
+                <SettingRow title="Off" note="Nothing in Gmail changes. Mild suggests, and learns from your answers.">
                   <Button>Turn on</Button>
                 </SettingRow>
                 <SettingRow title="Check for mail" note="Last checked 1 min ago.">
@@ -947,8 +947,8 @@ export function SystemView() {
               art={<Rope />}
               after={
                 <>
-                  <p>Sift is off. Nothing it suggests is done in Gmail until you turn it on.</p>
-                  <Button href="#system">Turn Sift on…</Button>
+                  <p>Mild is off. Nothing it suggests is done in Gmail until you turn it on.</p>
+                  <Button href="#system">Turn Mild on…</Button>
                 </>
               }
             >
@@ -995,7 +995,7 @@ export function SystemView() {
         <div className="grid gap-14 lg:grid-cols-2">
           <Section title="Toast" meta="what a press did, after the list moved on: one line, the newest replacing the last">
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => toast('12 messages pulled in', { description: 'They show under For review as Sift decides them.' })}>A result</Button>
+              <Button onClick={() => toast('12 messages pulled in', { description: 'They show under For review as Mild decides them.' })}>A result</Button>
               <Button onClick={answer}>With Undo</Button>
               <Button
                 onClick={() =>
@@ -1045,7 +1045,7 @@ export function SystemView() {
                   ['sorted', 'Sorted'],
                 ].map(([key, text]) => ({ label: text, on: key === view, onSelect: () => setView(key) }))}
               />
-              <Notice>Sift cannot be reached</Notice>
+              <Notice>Mild cannot be reached</Notice>
               <Notice tone="look" href="/system" action="Reconnect">
                 Google sign-in expired
               </Notice>
@@ -1163,11 +1163,11 @@ export function SystemView() {
         <Section title="Document" meta="a page read from top to bottom: /terms, /privacy, /security">
           <Sheet>
             <Document title="Terms of service" updated="November 15, 2026">
-              <p>These terms are between you and whoever runs this copy of Sift.</p>
+              <p>These terms are between you and whoever runs this copy of Mild.</p>
               <Clause title="Your part">
                 <ul>
                   <li>Sign in only with a Gmail account that is yours.</li>
-                  <li>Check what Sift suggests before turning it on.</li>
+                  <li>Check what Mild suggests before turning it on.</li>
                 </ul>
               </Clause>
             </Document>
@@ -1176,7 +1176,7 @@ export function SystemView() {
 
         <Section
           title="FinePrint, PageFoot"
-          meta="the terms, privacy and security, on a Sift run as a service: at the foot of every dashboard screen, under the sections in the phone menu, under Splash and Entry"
+          meta="the terms, privacy and security, on a Mild run as a service: at the foot of every dashboard screen, under the sections in the phone menu, under Splash and Entry"
         >
           <p className="flex flex-wrap gap-x-5 gap-y-2 text-muted-foreground">
             <FinePrint />
@@ -1193,7 +1193,7 @@ export function SystemView() {
           <div className="sheet [&>main]:min-h-0">
             <Entry>
               <p className="statement">Sign-in is not set up.</p>
-              <p className="text-muted-foreground">Sift needs a Google client before anyone can sign in.</p>
+              <p className="text-muted-foreground">Mild needs a Google client before anyone can sign in.</p>
               <Button variant="mark" size="lg" className="justify-between">
                 Continue
                 <ArrowRightIcon aria-hidden />
@@ -1202,16 +1202,16 @@ export function SystemView() {
           </div>
         </Section>
 
-        <Section title="Onboarding" meta="the page in place of the dashboard while someone sets Sift up: the steps, then the step, centred; scrolls when long">
+        <Section title="Onboarding" meta="the page in place of the dashboard while someone sets Mild up: the steps, then the step, centred; scrolls when long">
           <div className="sheet [&>div]:min-h-0">
             <Onboarding
               steps={['Connect a model', 'What you want', 'Your labels', 'Older mail']}
               current={1}
-              title="What do you want from Sift?"
-              intro="Say it in your own words, and Sift suggests labels for it."
+              title="What do you want from Mild?"
+              intro="Say it in your own words, and Mild suggests labels for it."
               account={{ name: 'me@example.org', onSettings: () => {}, onSignOut: () => {} }}
             >
-              <TextArea aria-label="What do you want from Sift?" className="min-h-24" defaultValue="Get sales pitches out of my inbox." />
+              <TextArea aria-label="What do you want from Mild?" className="min-h-24" defaultValue="Get sales pitches out of my inbox." />
               <div>
                 <Button variant="mark" size="lg">
                   Suggest labels
@@ -1232,7 +1232,7 @@ export function SystemView() {
           </div>
         </Section>
 
-        <Section title="Reader" meta="a message opened from a list, in the list's place: its bar, Sift's row, the conversation and a reply in place">
+        <Section title="Reader" meta="a message opened from a list, in the list's place: its bar, Mild's row, the conversation and a reply in place">
           {reading ? (
             <SpecimenReader onBack={() => setReading(false)} />
           ) : (
@@ -1260,8 +1260,8 @@ export function SystemView() {
           </div>
         </Section>
 
-        <Section title="Callout" meta="first on a page whose rows read differently in the state Sift is in">
-          <Callout title="Sift is off" action={<Button href="#system">Turn Sift on…</Button>}>
+        <Section title="Callout" meta="first on a page whose rows read differently in the state Mild is in">
+          <Callout title="Mild is off" action={<Button href="#system">Turn Mild on…</Button>}>
             <p>What the state means for everything below it, said once.</p>
             <CalloutKey mark={<Meter level={3} />}>What a mark in the rows means.</CalloutKey>
             <CalloutKey mark={<Meter level={2} />}>And the others.</CalloutKey>
@@ -1300,7 +1300,7 @@ export function SystemView() {
         <Section title="Copyable and disclosure">
           <div className="grid gap-6 sm:grid-cols-2">
             <Copyable value="sudo tailscale serve --bg 8787" label="command" />
-            <Disclosure summary="What Sift saw in it">
+            <Disclosure summary="What Mild saw in it">
               <p>Shown only to the reader who went looking.</p>
             </Disclosure>
           </div>
@@ -1366,7 +1366,7 @@ const THREAD = [
 const NEWEST = THREAD[THREAD.length - 1];
 
 /**
- * The reader as Inbox opens a conversation, its middle folded, or (For review) one message with what Sift said beside
+ * The reader as Inbox opens a conversation, its middle folded, or (For review) one message with what Mild said beside
  * it. Answering an earlier message opens the reply box at the foot, saying which it answers.
  */
 function SpecimenReader({ onBack }: { onBack: () => void }) {
@@ -1511,7 +1511,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
               ) : (
                 <>
                   <Button variant="mark" onClick={() => setSending('allowed')}>
-                    Let Sift send
+                    Let Mild send
                   </Button>
                   <Button variant="quiet" onClick={() => setReplying(null)}>
                     Not now
@@ -1534,7 +1534,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                 <DraftText aria-label="Message" className="min-h-48" />
               </>
             ) : (
-              <DraftBlocked title="Sift can’t send from ada@example.org yet">Google asks you once before Sift can send as you.</DraftBlocked>
+              <DraftBlocked title="Mild can’t send from ada@example.org yet">Google asks you once before Mild can send as you.</DraftBlocked>
             )}
           </ReplyBox>
         ) : (

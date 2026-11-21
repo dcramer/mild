@@ -29,10 +29,10 @@ describe('whether a rule can be a Gmail filter', () => {
   it('turns a sender rule into a filter that labels and, where the label archives, skips the inbox', () => {
     expect(verdict(rule())).toMatchObject({
       possible: true,
-      plan: { criteria: { from: 'news@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
+      plan: { criteria: { from: 'news@example.com' }, gmailLabel: 'mild/newsletters', archive: true },
     });
-    expect(verdict(rule({ labelId: 'personal' }))).toMatchObject({ possible: true, plan: { gmailLabel: 'sift/personal', archive: false }, differs: [] });
-    expect(verdict(rule({ disposition: 'keep' }))).toMatchObject({ possible: true, plan: { gmailLabel: 'sift/newsletters', archive: false } });
+    expect(verdict(rule({ labelId: 'personal' }))).toMatchObject({ possible: true, plan: { gmailLabel: 'mild/personal', archive: false }, differs: [] });
+    expect(verdict(rule({ disposition: 'keep' }))).toMatchObject({ possible: true, plan: { gmailLabel: 'mild/newsletters', archive: false } });
   });
 
   it('turns a rule that only archives into a filter that only skips the inbox', () => {
@@ -65,11 +65,11 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(reason(rule({ match: { fromDomain: ['example.com', 'example.net'] } }), [keep])).toBeNull();
   });
 
-  it('refuses what Gmail cannot do or sift will not let a filter do', () => {
+  it('refuses what Gmail cannot do or Mild will not let a filter do', () => {
     expect(reason(rule({ labelId: 'phishing' }))).toMatch(/spam/);
     expect(reason(rule({ disposition: 'spam' }))).toMatch(/spam/);
     expect(reason(rule({ markRead: true }))).toMatch(/marks mail read/);
-    // A filter would archive the mail before Sift sees it, so it would never be listed in the digest.
+    // A filter would archive the mail before Mild sees it, so it would never be listed in the digest.
     const digesting = SAMPLE_LABELS.map((l) => (l.id === 'newsletter' ? { ...l, digest: true } : l));
     expect(filterFor(rule(), digesting, [rule()])).toMatchObject({ possible: false, reason: expect.stringMatching(/daily digest/) });
     expect(filterFor(rule({ disposition: 'archive' }), digesting, [rule({ disposition: 'archive' })])).toMatchObject({ possible: true });
@@ -79,7 +79,7 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(reason(rule({ except: [{ subjectContains: ['invoice'] }] }))).toMatch(/exceptions/);
     expect(reason(rule({ labelId: 'no-such-label' }))).toMatch(/label has been removed/);
     expect(reason(rule({ match: { from: ['news@example.com'], facts: { unsubscribe: 'one-click' } } }))).toBe(
-      'It asks what Sift found in the message, which Gmail filters cannot see.',
+      'It asks what Mild found in the message, which Gmail filters cannot see.',
     );
   });
 
@@ -89,12 +89,12 @@ describe('whether a rule can be a Gmail filter', () => {
   });
 
   it('refuses a rule that is judged, not matched', () => {
-    expect(reason({ id: 'r', match: { from: ['news@example.com'] }, whenLabel: 'newsletter' })).toMatch(/once Sift has said what the mail is/);
+    expect(reason({ id: 'r', match: { from: ['news@example.com'] }, whenLabel: 'newsletter' })).toMatch(/once Mild has said what the mail is/);
     expect(reason(rule({ when: 'it is an auction notice' }))).toMatch(/plain language/);
     expect(verdict(rule()).possible).toBe(true);
   });
 
-  it('refuses a rule sift learned when it would hide mail, since a filter cannot spare people the user writes to', () => {
+  it('refuses a rule Mild learned when it would hide mail, since a filter cannot spare people the user writes to', () => {
     expect(reason(rule({ learned: true }))).toMatch(/learned/);
     expect(verdict(rule({ learned: true, labelId: 'personal' })).possible).toBe(true);
   });
@@ -115,7 +115,7 @@ describe('whether a rule can be a Gmail filter', () => {
   it('refuses a rule another rule could overrule, because Gmail would run the filter regardless', () => {
     const domain = rule({ id: 'domain', match: { fromDomain: ['example.com'] } });
     const billing = rule({ id: 'billing', match: { from: ['billing@example.com'] }, labelId: 'transactional' });
-    // The narrower keep rule wins in sift, so the broad archive cannot go ahead of it; the keep rule itself can.
+    // The narrower keep rule wins in Mild, so the broad archive cannot go ahead of it; the keep rule itself can.
     expect(reason(domain, [billing])).toMatch(/Another rule \(from billing@example.com\)/);
     expect(verdict(billing, [domain]).possible).toBe(true);
 
@@ -170,7 +170,7 @@ describe("a rule's Gmail filter", () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id, ACCOUNT);
 
-    const news = box.labelId('sift/newsletters');
+    const news = box.labelId('mild/newsletters');
     expect(box.filters).toEqual([
       { id: expect.any(String), criteria: { from: 'news@example.com' }, action: { addLabelIds: [news], removeLabelIds: ['INBOX'] } },
     ]);
@@ -195,7 +195,7 @@ describe("a rule's Gmail filter", () => {
     await expect(writeRuleFilter(deps(), id, ACCOUNT)).rejects.toThrow('Gmail filters cannot mark mail as spam.');
     await expect(writeRuleFilter(deps(), 'r-missing', ACCOUNT)).rejects.toThrow(/no longer exists/);
     const replies = await addRule(db, { match: { from: ['news@example.com'], facts: { isReply: false } }, labelId: 'newsletter' }, 'user');
-    await expect(writeRuleFilter(deps(), replies, ACCOUNT)).rejects.toThrow('It asks what Sift found in the message, which Gmail filters cannot see.');
+    await expect(writeRuleFilter(deps(), replies, ACCOUNT)).rejects.toThrow('It asks what Mild found in the message, which Gmail filters cannot see.');
     expect(box.filters).toEqual([]);
     expect(box.asked(CREATE)).toEqual([]);
     expect(await actions()).toEqual([]);
@@ -203,7 +203,7 @@ describe("a rule's Gmail filter", () => {
 
   it('takes over a filter the account already has that does the same, and replaces its own when asked again', async () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    const news = box.label('sift/newsletters');
+    const news = box.label('mild/newsletters');
     box.filters.push({ id: 'theirs', criteria: { from: 'News@Example.com' }, action: { addLabelIds: [news], removeLabelIds: ['INBOX'] } });
     await writeRuleFilter(deps(), id, ACCOUNT);
     expect(box.filters.map((f) => f.id)).toEqual(['theirs']);
@@ -263,7 +263,7 @@ describe("a rule's Gmail filter", () => {
 
   it("is refused, with nothing sent, once the account has Gmail's 1,000, unless it takes over one of them", async () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    const news = box.label('sift/newsletters');
+    const news = box.label('mild/newsletters');
     box.filters = Array.from({ length: 1000 }, (_, n) => ({
       id: `theirs-${n}`,
       criteria: { from: `sender${n}@example.org` },
@@ -353,7 +353,7 @@ describe("a rule's Gmail filter", () => {
   it('tells the dashboard the filter it would write, and when it last wrote or took one out', async () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     expect((await ruleFilterStatus(db)).get(id)).toMatchObject({
-      plan: { criteria: { from: 'news@example.com' }, gmailLabel: 'sift/newsletters', archive: true },
+      plan: { criteria: { from: 'news@example.com' }, gmailLabel: 'mild/newsletters', archive: true },
       history: [],
     });
     await writeRuleFilter(deps(), id, ACCOUNT);
@@ -418,14 +418,14 @@ describe('checking filters against Gmail', () => {
     expect(await getRuleFilter(db, id, ACCOUNT)).toMatchObject({ state: 'active' });
   });
 
-  it('replaces a filter whose rule now says something else, or only marks it while sift is off', async () => {
+  it('replaces a filter whose rule now says something else, or only marks it while Mild is off', async () => {
     await setRule(db, { from: ['news@example.com'] }, { labelId: 'personal' }, 'user');
     expect(await checkRuleFilters(deps(), ACCOUNT, false)).toEqual({ gone: 0, changed: 0, outdated: 1 });
     expect(await getRuleFilter(db, id, ACCOUNT)).toMatchObject({ state: 'outdated' });
     expect(box.filters[0]!.action.removeLabelIds).toEqual(['INBOX']);
 
     await checkRuleFilters(deps(), ACCOUNT, true);
-    expect(box.filters).toEqual([{ id: expect.any(String), criteria: { from: 'news@example.com' }, action: { addLabelIds: [box.labelId('sift/personal')] } }]);
+    expect(box.filters).toEqual([{ id: expect.any(String), criteria: { from: 'news@example.com' }, action: { addLabelIds: [box.labelId('mild/personal')] } }]);
     expect(await getRuleFilter(db, id, ACCOUNT)).toMatchObject({ filterId: box.filters[0]!.id, state: 'active' });
   });
 

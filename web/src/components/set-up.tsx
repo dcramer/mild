@@ -37,10 +37,10 @@ const EXAMPLES = [
 const OFFERED = 6;
 
 /**
- * Nothing of the dashboard shows until Sift can work: a model in use, and labels of the person's own (Sift
+ * Nothing of the dashboard shows until Mild can work: a model in use, and labels of the person's own (Mild
  * reads nothing of theirs without them). The steps come in order; one already done is ticked and
  * skipped. A model that is lost later (its sign-in removed or expired) brings back only that step. Once
- * the labels are made, Sift may go through the newest of the inbox to suggest about. Settings opens over it.
+ * the labels are made, Mild may go through the newest of the inbox to suggest about. Settings opens over it.
  */
 export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string | null; onSettings: () => void; children: ReactNode }) {
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
@@ -188,13 +188,13 @@ function Want({
     <Onboarding
       steps={steps}
       current={1}
-      title="What do you want from Sift?"
-      intro="What you want out of your way, and what you never want to miss, in your own words. Sift suggests labels for it, mostly for mail to move. Mail none of them fits stays in your inbox."
+      title="What do you want from Mild?"
+      intro="What you want out of your way, and what you never want to miss, in your own words. Mild suggests labels for it, mostly for mail to move. Mail none of them fits stays in your inbox."
       account={account}
     >
       <Form onSubmit={suggest}>
         <TextArea
-          aria-label="What do you want from Sift?"
+          aria-label="What do you want from Mild?"
           className="min-h-32"
           maxLength={2000}
           value={goal}
@@ -307,7 +307,7 @@ function Teach({ state, steps, account, onDone }: { state: ManageState; steps: r
       steps={steps}
       current={3}
       title="Older mail"
-      intro={`Sift reads new mail from now on. Have it go through the newest mail already in ${new Intl.ListFormat('en', { type: 'conjunction' }).format(state.accounts.map((a) => a.email))} as well, and answer what it says: it learns from your answers.`}
+      intro={`Mild reads new mail from now on. Have it go through the newest mail already in ${new Intl.ListFormat('en', { type: 'conjunction' }).format(state.accounts.map((a) => a.email))} as well, and answer what it says: it learns from your answers.`}
       account={account}
     >
       <InboxFigures estimate={estimate.data} model={state.model} />

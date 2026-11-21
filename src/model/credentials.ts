@@ -1,7 +1,7 @@
 import type { Credential, CredentialStore } from '@earendil-works/pi-ai';
 
 /**
- * Where one person's model sign-ins are kept, as text by provider id. sift keeps them encrypted in that
+ * Where one person's model sign-ins are kept, as text by provider id. Mild keeps them encrypted in that
  * person's database; this module never sees where.
  */
 export interface SignIns {

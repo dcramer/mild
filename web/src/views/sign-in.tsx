@@ -15,7 +15,7 @@ export function SignInScreen({ session, error }: { session: Session; error: stri
   if (session.canSignIn)
     return (
       <Splash title="Your inbox, without the pesky salespeople." art={<Rope queue={6} />}>
-        <p className="max-w-[36rem] text-muted-foreground">Sift labels each message and archives the kinds you don't want.</p>
+        <p className="max-w-[36rem] text-muted-foreground">Mild labels each message and archives the kinds you don't want.</p>
         {failed}
         <div>
           <Button variant="mark" size="lg" href="/auth/login" className="w-full sm:w-auto">
@@ -40,7 +40,7 @@ function Blocked({ session }: { session: Session }) {
     return (
       <>
         <p className="statement">Google won't sign you in at this address.</p>
-        <p className="text-muted-foreground">It only returns to localhost or to HTTPS. Open Sift at one of these instead:</p>
+        <p className="text-muted-foreground">It only returns to localhost or to HTTPS. Open Mild at one of these instead:</p>
         <div className="flex flex-col gap-2">
           {session.addresses.map((address) => (
             <Button key={address} href={address} className="justify-between font-mono text-sm font-medium">
@@ -51,7 +51,7 @@ function Blocked({ session }: { session: Session }) {
         </div>
         {session.addresses.some((a) => a.startsWith('https://')) ? (
           <Step>
-            <p>The HTTPS address needs this run once, on the machine running Sift:</p>
+            <p>The HTTPS address needs this run once, on the machine running Mild:</p>
             <Copyable value={`sudo tailscale serve --bg ${port}`} label="command" />
           </Step>
         ) : null}
@@ -62,9 +62,9 @@ function Blocked({ session }: { session: Session }) {
     <>
       <p className="statement">No Google client yet.</p>
       <p className="text-muted-foreground">
-        Sift signs you in through a Google client you own. Create one with <Code>sift init</Code>, on the machine running Sift:
+        Mild signs you in through a Google client you own. Create one with <Code>mild init</Code>, on the machine running Mild:
       </p>
-      <Copyable value="sift init" label="command" />
+      <Copyable value="mild init" label="command" />
     </>
   );
 }

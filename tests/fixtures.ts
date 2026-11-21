@@ -109,7 +109,7 @@ export const withReason = <T>(row: T): T => {
 };
 
 /**
- * SQL text run as `db`'s person, held to row-level security as sift's own queries are: for a test to set
+ * SQL text run as `db`'s person, held to row-level security as Mild's own queries are: for a test to set
  * up rows or read back what was stored. `?` placeholders, or `:name` ones given one object.
  */
 export function raw(db: Sql) {
@@ -369,7 +369,7 @@ export function fakeGoogle(): { readonly google: FakeGoogle } {
 }
 
 /**
- * Sift's own Gmail client for `address` in `google`, signed in as a sign-in that granted it would be (`send`: with
+ * Mild's own Gmail client for `address` in `google`, signed in as a sign-in that granted it would be (`send`: with
  * `gmail.send`), unpaced; and the mailbox it reaches. `token`: signed in with that sign-in instead, given earlier by
  * `google.grant`, for a test that ends it (`google.expire`).
  */
@@ -396,13 +396,13 @@ export function fauxModel(): { chosen: ChosenModel; answers: (...replies: FauxRe
 export type Browser = Awaited<ReturnType<Awaited<ReturnType<typeof startSift>>['browser']>>;
 
 /**
- * Sift as a host puts it together, on a fresh store and home, reaching Google through `google` as it would Google itself,
+ * Mild as a host puts it together, on a fresh store and home, reaching Google through `google` as it would Google itself,
  * and given `model` as its model stand-in. Work a request begins (`kick`, the tick) waits in `queued` until `work()` does
  * it, as a Workflow run would after the request answered. `browser()` is a browser with nobody signed in; `signIn` signs one
  * in through Google's consent screen as a mailbox: a new person, or with `addTo`, another mailbox of whoever that browser is.
  */
 export async function startSift(google: FakeGoogle, options: { model?: ChosenModel; keys?: Keyring; now?: () => number; env?: Record<string, string> } = {}) {
-  const config = loadConfig({ SIFT_HOME: tempDir(), ...options.env });
+  const config = loadConfig({ MILD_HOME: tempDir(), ...options.env });
   installClient(config, JSON.stringify({ web: { client_id: SECRETS.clientId, client_secret: SECRETS.clientSecret } }));
   const store = await freshStore(options.keys);
   const queued: Work[] = [];
@@ -485,7 +485,7 @@ export async function startSift(google: FakeGoogle, options: { model?: ChosenMod
     /** A browser signed in as a new person with this mailbox, the first of whom owns the install. */
     signedIn,
     /**
-     * `signedIn`, with a label of their own (Receipts, archived) put in their record, without which Sift reads nothing of
+     * `signedIn`, with a label of their own (Receipts, archived) put in their record, without which Mild reads nothing of
      * their Gmail, and the work signing in began done.
      */
     settled: async (address: string) => {
@@ -494,10 +494,10 @@ export async function startSift(google: FakeGoogle, options: { model?: ChosenMod
       await work();
       return b;
     },
-    /** The database of whoever has this mailbox: to seed what Sift would have recorded, such as the model's answer about a message. */
+    /** The database of whoever has this mailbox: to seed what Mild would have recorded, such as the model's answer about a message. */
     db,
     /**
-     * The model's answer that a message a pass recorded is `labelId`, recorded as a pass with Sift off records it: a
+     * The model's answer that a message a pass recorded is `labelId`, recorded as a pass with Mild off records it: a
      * suggestion, waiting on the person. A pass here has no model of its own.
      */
     judged: async (address: string, messageId: string, labelId: string, disposition: Decision['disposition'] = 'archive') =>

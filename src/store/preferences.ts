@@ -5,9 +5,9 @@ import type { Reasoning } from '../model/reasoning.ts';
 import type { Sql } from './sql.ts';
 
 export interface Preferences {
-  /** Whether sift is on for them. Off: what sift decides for their mail stays a suggestion. On: it is carried out in Gmail. */
+  /** Whether Mild is on for them. Off: what Mild decides for their mail stays a suggestion. On: it is carried out in Gmail. */
   active: boolean;
-  /** Whether Inbox is on for them: Sift keeps a copy of their mail, and may send as them from a mailbox that lets it. */
+  /** Whether Inbox is on for them: Mild keeps a copy of their mail, and may send as them from a mailbox that lets it. */
   mail: boolean;
   /** How far back that copy goes. */
   mailWindow: MailWindow;
@@ -49,7 +49,7 @@ export async function setActive(db: Sql, active: boolean): Promise<void> {
 }
 
 /**
- * On, every mailbox starts copying its mail from as far back as `window` says. Off, the text Sift kept of their mail goes in
+ * On, every mailbox starts copying its mail from as far back as `window` says. Off, the text Mild kept of their mail goes in
  * the same write, with the copies under way.
  */
 export async function setMail(db: Sql, on: boolean, { now = Date.now(), window }: { now?: number; window?: MailWindow } = {}): Promise<void> {

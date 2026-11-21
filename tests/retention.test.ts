@@ -30,7 +30,7 @@ async function message(id: string, at = OLD, from = `${id}@example.com`): Promis
   await recordSync(db, ACCOUNT, [facts({ messageId: id, receivedAt: at, from: { address: from, domain: 'example.com' } })], '1', at);
 }
 
-/** A message sift decided and changed long ago. */
+/** A message Mild decided and changed long ago. */
 async function acted(id: string, type: ActionType = 'archive'): Promise<{ decisionId: number; actionId: number }> {
   await message(id);
   const decisionId = await recordDecision(db, ACCOUNT, id, archive, { carryOut: true, now: OLD });
@@ -137,7 +137,7 @@ describe('pruneOld', () => {
 });
 
 describe('daily upkeep', () => {
-  it('deletes the text Sift read 30 days after reading it, for everyone, whether or not Gmail can be reached', async () => {
+  it('deletes the text Mild read 30 days after reading it, for everyone, whether or not Gmail can be reached', async () => {
     await message('old');
     await message('young');
     await raw(db).run(

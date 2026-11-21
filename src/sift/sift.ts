@@ -19,13 +19,13 @@ export type Beginning = { begun: true } | { begun: false; since?: number };
 /**
  * What a test host puts in place of the model that suggests labels and drafts rules (verify-sift's `stand-ins.ts`). A pass
  * is given no model, so the record a test starts from is not judged again. Gmail has no stand-in here: a test answers
- * Google's own addresses (`tests/google.ts`), so Sift's Gmail client runs as it does against Google.
+ * Google's own addresses (`tests/google.ts`), so Mild's Gmail client runs as it does against Google.
  */
 export interface StandIns {
   model: ChosenModel;
 }
 
-/** What a host gives sift: `sift run` on a machine, or a function on Vercel (docs/runtime.md). */
+/** What a host gives sift: `mild run` on a machine, or a function on Vercel (docs/runtime.md). */
 export interface Host {
   config: Config;
   store: Store;
@@ -34,13 +34,13 @@ export interface Host {
   sessionSecret: string;
   /** Names besides localhost the dashboard answers to. */
   allowedHosts: readonly string[];
-  /** Where people open the dashboard, for links in what Sift puts in their Gmail. */
+  /** Where people open the dashboard, for links in what Mild puts in their Gmail. */
   url?: string;
   /** Addresses Google can sign someone in at, suggested when the dashboard is opened at one it cannot. */
   signInAddresses: readonly string[];
   /**
    * Whether the scheme a request's URL says was used is believed. Next.js takes it from `X-Forwarded-Proto`,
-   * whoever sent it, so `sift run` believes it only while it listens on loopback, where every peer is this
+   * whoever sent it, so `mild run` believes it only while it listens on loopback, where every peer is this
    * machine (`tailscale serve` among them). Vercel's edge sets the header itself.
    */
   forwarded: boolean;
@@ -95,7 +95,7 @@ const deviceId = (secret: string) => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
 
-/** sift, put together from what the host gives it. Holds nothing between calls but what `host` does. */
+/** Mild, put together from what the host gives it. Holds nothing between calls but what `host` does. */
 export async function createSift(host: Host): Promise<Sift> {
   const { config, store, ephemeral, standIns } = host;
   // What the host writes is a log in Sentry too, beside the trace it was written in.
@@ -159,7 +159,7 @@ export async function createSift(host: Host): Promise<Sift> {
     sessionSecret: host.sessionSecret,
     signInAddresses: host.signInAddresses,
     ...(config.settings.cloud ? { cloud: true } : {}),
-    build: process.env.SIFT_BUILD ?? null,
+    build: process.env.MILD_BUILD ?? null,
     ephemeral,
     log,
   });

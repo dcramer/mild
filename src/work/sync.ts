@@ -26,7 +26,7 @@ export interface SyncReport {
   mode: PullResult['mode'];
   /** Messages recorded for the first time, oldest first. */
   added: MessageFacts[];
-  /** Arrivals that had already left the inbox, been deleted, had no usable sender, or were Sift's own digests. */
+  /** Arrivals that had already left the inbox, been deleted, had no usable sender, or were Mild's own digests. */
   skipped: number;
   /** Mail that arrived anywhere but the inbox, or that the person sent, recorded with its text for Inbox while it is on. */
   kept: number;
@@ -41,7 +41,7 @@ export interface SyncReport {
  * fetched, so a failure part-way leaves it where it was and the next run reads the same history again.
  */
 export async function syncAccount(db: Sql, api: GmailApi, account: Account, now: () => number = Date.now, until = Infinity): Promise<SyncReport> {
-  // Recorded as the sync time, so the next sync knows which of sift's own changes its history can contain: those made since this one began.
+  // Recorded as the sync time, so the next sync knows which of Mild's own changes its history can contain: those made since this one began.
   const startedAt = now();
   const syncedAt = await lastSyncedAt(db, account.id);
   // On the first sync of a day, before this sync's mail is recorded with them.
@@ -84,7 +84,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
     const raw = keeping ? (whole?.raw ?? null) : await api.getMetadata(id);
     const arrived = raw?.labelIds.includes('INBOX') && (!stray || raw.internalDate >= since);
     const facts = raw && arrived ? toFacts(account.id, raw) : null;
-    // A digest whose Gmail id Sift had not recorded yet when this read it.
+    // A digest whose Gmail id Mild had not recorded yet when this read it.
     if (!facts || (await isOwnDigest(db, facts.headers))) {
       // Read whole already: mail that is not new to the inbox is still the person's mail, kept as the copy would.
       const other = whole && !arrived && !whole.raw.labelIds.some((label) => NOT_MAIL.includes(label)) ? toFacts(account.id, whole.raw) : null;
@@ -113,7 +113,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
       if (await recordKept(db, account.id, { facts, text: textOf(whole!.content) }, startedAt)) kept++;
     }
 
-  // Sift's own changes too: the labels are where the mail is now, which is what learning reads.
+  // Mild's own changes too: the labels are where the mail is now, which is what learning reads.
   await followLabels(db, account.id, pull.labelChanges);
   // Before the cursor moves: a failure here means the same history is read again, which both tolerate.
   const corrections = await learnFromGmail(
@@ -130,7 +130,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
 }
 
 /**
- * Whether `syncAccount` would find anything: mail new to the inbox, or a change the person made in Gmail. Sift's own
+ * Whether `syncAccount` would find anything: mail new to the inbox, or a change the person made in Gmail. Mild's own
  * changes move Gmail's history too, and are told from the person's as sync tells them, so they begin no pass. Reads
  * history from the cursor (2 quota units a page) and moves nothing.
  */
@@ -152,7 +152,7 @@ async function recorded(db: Sql, accountId: string, ids: readonly string[]): Pro
   return new Set(rows.map((r) => r.id));
 }
 
-/** History without Sift's own digests: one arriving, or read, is nothing for a pass to do. */
+/** History without Mild's own digests: one arriving, or read, is nothing for a pass to do. */
 async function mailOnly(db: Sql, account: Account, pull: PullResult): Promise<PullResult> {
   const digests = await knownDigests(db, account.id, [
     ...new Set([...pull.messageIds, ...pull.strays, ...pull.elsewhere, ...pull.labelChanges.map((c) => c.messageId)]),

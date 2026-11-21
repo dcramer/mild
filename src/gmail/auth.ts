@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
 import type { Config, Env } from '../config.ts';
+import { named } from '../env.ts';
 import { readSecret, writeSecret } from '../secrets.ts';
 import { readProfile } from './api.ts';
 import { GMAIL_SCOPES, SEND_SCOPE } from './scopes.ts';
@@ -12,7 +13,7 @@ interface ClientSecrets {
 
 /** True if the user's Google OAuth client is available, from the home directory or the environment. */
 export function hasClientSecrets(config: Config, env: Env = process.env): boolean {
-  return Boolean(env['SIFT_GOOGLE_CLIENT_ID'] && env['SIFT_GOOGLE_CLIENT_SECRET']) || existsSync(config.googleClientPath);
+  return Boolean(named(env, 'MILD_GOOGLE_CLIENT_ID') && named(env, 'MILD_GOOGLE_CLIENT_SECRET')) || existsSync(config.googleClientPath);
 }
 
 /**
@@ -34,7 +35,7 @@ function parseClientFile(text: string, path: string): ClientSecrets {
   } catch {
     throw new Error(`${path} is not valid JSON.`);
   }
-  if (parsed.installed) throw new Error(`${path} is a Desktop app client. Sift needs a Web application one.`);
+  if (parsed.installed) throw new Error(`${path} is a Desktop app client. Mild needs a Web application one.`);
   const entry = parsed.web;
   if (!entry?.client_id || !entry.client_secret) throw new Error(`${path} is not a Google OAuth client (it has no "web" entry).`);
   return { clientId: entry.client_id, clientSecret: entry.client_secret };
@@ -42,15 +43,15 @@ function parseClientFile(text: string, path: string): ClientSecrets {
 
 /**
  * The user's own OAuth client: `google-client.json` in the home directory (the file Google
- * Cloud Console downloads; `sift init` puts it there). SIFT_GOOGLE_CLIENT_ID and
- * SIFT_GOOGLE_CLIENT_SECRET override it when both are set.
+ * Cloud Console downloads; `mild init` puts it there). MILD_GOOGLE_CLIENT_ID and
+ * MILD_GOOGLE_CLIENT_SECRET override it when both are set.
  */
 export function loadClientSecrets(config: Config, env: Env = process.env): ClientSecrets {
-  const clientId = env['SIFT_GOOGLE_CLIENT_ID'];
-  const clientSecret = env['SIFT_GOOGLE_CLIENT_SECRET'];
+  const clientId = named(env, 'MILD_GOOGLE_CLIENT_ID');
+  const clientSecret = named(env, 'MILD_GOOGLE_CLIENT_SECRET');
   if (clientId && clientSecret) return { clientId, clientSecret };
   const text = readSecret(config.googleClientPath, config.keys);
-  if (text === null) throw new Error('No Google OAuth client is set up yet. Run `sift init`.');
+  if (text === null) throw new Error('No Google OAuth client is set up yet. Run `mild init`.');
   return parseClientFile(text, config.googleClientPath);
 }
 
@@ -62,8 +63,8 @@ export function clientFor(secrets: ClientSecrets, refreshToken: string): OAuth2C
 }
 
 /**
- * Where to send the browser so Google can sign the user in and grant sift its Gmail access, in one step. `send`: a connected
- * mailbox to let Sift send from, which Google is asked for that alone, on top of what it has granted.
+ * Where to send the browser so Google can sign the user in and grant Mild its Gmail access, in one step. `send`: a connected
+ * mailbox to let Mild send from, which Google is asked for that alone, on top of what it has granted.
  */
 export function browserSignInUrl(secrets: ClientSecrets, request: { redirectUri: string; state: string; challenge: string; send: string | null }): string {
   return new OAuth2Client({ clientId: secrets.clientId, clientSecret: secrets.clientSecret, redirectUri: request.redirectUri }).generateAuthUrl({
@@ -99,7 +100,7 @@ export async function completeBrowserSignIn(
 }
 
 /**
- * Revoke a sign-in's grant at Google, which ends sift's access to the mailbox. A token Google no longer
+ * Revoke a sign-in's grant at Google, which ends Mild's access to the mailbox. A token Google no longer
  * honours counts as revoked. False when Google could not be reached or refused for another reason.
  */
 export async function revokeGrant(refreshToken: string): Promise<boolean> {

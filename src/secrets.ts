@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, ran
 import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { Env } from './config.ts';
+import { named } from './env.ts';
 
 /**
  * Credentials at rest, in a file or a database row. Each is either plain text or one line:
@@ -20,7 +21,7 @@ interface Key {
 }
 
 export interface Keyring {
-  /** What new values are encrypted with. Null: sift stores them plain. */
+  /** What new values are encrypted with. Null: Mild stores them plain. */
   current: Key | null;
   /** Still accepted for reading, so a key can be replaced. */
   old: Key[];
@@ -39,10 +40,10 @@ function derive(secret: string): Key {
   return key;
 }
 
-/** `SIFT_KEY` is the current key; `SIFT_OLD_KEYS` lists, comma-separated, the ones it replaced. */
+/** `MILD_KEY` is the current key; `MILD_OLD_KEYS` lists, comma-separated, the ones it replaced. */
 export function loadKeyring(env: Env = process.env): Keyring {
-  const current = env['SIFT_KEY']?.trim();
-  const old = (env['SIFT_OLD_KEYS'] ?? '')
+  const current = named(env, 'MILD_KEY')?.trim();
+  const old = (named(env, 'MILD_OLD_KEYS') ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s !== '' && s !== current);
@@ -56,7 +57,7 @@ function keyIdOf(stored: string): string | null {
 
 const lost = (names: string[]) =>
   new Error(
-    `${names.join(', ')} ${names.length === 1 ? 'was' : 'were'} encrypted with a key that is not in SIFT_KEY or SIFT_OLD_KEYS. ` +
+    `${names.join(', ')} ${names.length === 1 ? 'was' : 'were'} encrypted with a key that is not in MILD_KEY or MILD_OLD_KEYS. ` +
       `Set the key ${names.length === 1 ? 'it was' : 'they were'} written with. If that key is lost, ` +
       'sign in to Google and the model provider again to replace what it held.',
   );
@@ -97,7 +98,7 @@ export function sealSecret(name: string, text: string, keys: Keyring): string {
  */
 export function openSecret(name: string, stored: string, keys: Keyring): string {
   if (keyIdOf(stored) === null && keys.current)
-    throw new Error(`${name} is stored unencrypted though SIFT_KEY is set, so it is not used. Sign in again to replace it.`);
+    throw new Error(`${name} is stored unencrypted though MILD_KEY is set, so it is not used. Sign in again to replace it.`);
   return openToRekey(name, stored, keys);
 }
 

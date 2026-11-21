@@ -42,7 +42,7 @@ export function useAction(): {
     onSuccess: (_, { hides }) => (hides.length > 0 ? reload() : void reload()),
     // Several messages answered together may have been saved in part.
     onError: (_, { hides }) => void (hides.length > 0 && reload()),
-    // Unreachable fails the change, which says it may not have been saved, rather than holding it, hidden, until Sift is back.
+    // Unreachable fails the change, which says it may not have been saved, rather than holding it, hidden, until Mild is back.
     networkMode: 'always',
   });
   const said = (failure: unknown) => (failure instanceof Error ? failure.message : String(failure));

@@ -1,12 +1,12 @@
 import type { Decision } from '../triage/types.ts';
 import type { MessageAction } from './executor.ts';
 
-/** Marks mail left for the user because no tier could place it, or a protection held sift back. It stays in the inbox. */
-const REVIEW_LABEL = 'sift/review';
+/** Marks mail left for the user because no tier could place it, or a protection held Mild back. It stays in the inbox. */
+const REVIEW_LABEL = 'mild/review';
 
 /**
  * Turn a triage decision into the mailbox action that carries it out. The message gets its label's
- * Gmail label whatever happens to it; the executor adds the label for what sift did. Null means leave
+ * Gmail label whatever happens to it; the executor adds the label for what Mild did. Null means leave
  * the message untouched.
  */
 export function planAction(decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>): MessageAction | null {

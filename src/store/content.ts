@@ -33,7 +33,7 @@ import { type RuleMatch, tidyMatch } from '../triage/stages/rules.ts';
 import { searchIndex } from './search.ts';
 import type { Sql } from './sql.ts';
 
-/** What Sift holds of a message that came from the message: its body, and the headers its record keeps. */
+/** What Mild holds of a message that came from the message: its body, and the headers its record keeps. */
 type Part = 'text' | 'html' | 'preview' | 'headers' | 'reason';
 
 /** Each is encrypted for its person, message and part, so one copied into another row does not open. */
@@ -57,7 +57,7 @@ const seal = (db: Sql, name: string, value: string) => (db.keys.current ? sealSe
 
 function open(db: Sql, name: string, stored: string): string {
   if (!stored.startsWith(PLAIN)) return openSecret(name, stored, db.keys);
-  if (db.keys.current) throw new Error(`${name} is stored unencrypted though SIFT_KEY is set.`);
+  if (db.keys.current) throw new Error(`${name} is stored unencrypted though MILD_KEY is set.`);
   return stored.slice(PLAIN.length);
 }
 

@@ -145,7 +145,7 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
   );
 }
 
-/** What happened to a message, oldest first: what Sift decided and what changed in Gmail, each with Undo. */
+/** What happened to a message, oldest first: what Mild decided and what changed in Gmail, each with Undo. */
 function History({ detail, onUndone }: { detail: MessageDetail; onUndone: () => void }) {
   const undo = useAction();
   const toast = useToast();
@@ -269,7 +269,7 @@ function OpenOne({ id, newest, onAnswer }: { id: string; newest: MessageDetail; 
  * The messages of what is open: a conversation (Inbox), oldest first, the reader's own reply included; or one message.
  * Its newest, what is unread and what a reply in the address answers start open, and so does one that arrives while it
  * is (a reply just sent). Opening a conversation with unread mail marks it read. `newest` is the newest in the inbox,
- * which Sift's row is about.
+ * which Mild's row is about.
  */
 function Messages({
   conversation,
@@ -328,7 +328,7 @@ const stacked = (conversation: MailConversation) =>
   }));
 
 /**
- * A conversation the copy holds, drawn while its newest message loads: its subject, a place for Sift's row, and its
+ * A conversation the copy holds, drawn while its newest message loads: its subject, a place for Mild's row, and its
  * messages, the newest and the unread open on their text to come, as the conversation draws once it has.
  */
 function Arriving({ conversation, subject, bar }: { conversation: MailConversation; subject: Confidential; bar: ReactNode }) {
@@ -382,9 +382,9 @@ function Answering({ what, newest, onClose }: { what: Answer; newest: MessageDet
 }
 
 /**
- * Everything about one message once it has loaded. Sift's row under the title: the answer, which starts on the reader's
- * own where they gave one, Why (Sift's reason, and in Inbox the history) and Rule…; answering moves on to the next item.
- * Then the conversation, and what answers it. Opened from anywhere but Inbox, a side column has what Sift saw, the
+ * Everything about one message once it has loaded. Mild's row under the title: the answer, which starts on the reader's
+ * own where they gave one, Why (Mild's reason, and in Inbox the history) and Rule…; answering moves on to the next item.
+ * Then the conversation, and what answers it. Opened from anywhere but Inbox, a side column has what Mild saw, the
  * sender, what else of theirs waits, and the history.
  */
 function OpenedMessage({
@@ -414,15 +414,15 @@ function OpenedMessage({
   const [answering] = useParam('answering');
   const root = useRef<HTMLElement>(null);
   const [adding, setAdding] = useState(false);
-  // The rule dialog, opened in place on what this message shows: its sender and label, or one thing Sift saw in it.
+  // The rule dialog, opened in place on what this message shows: its sender and label, or one thing Mild saw in it.
   const [ruling, setRuling] = useState<RuleStart | null>(null);
   const current = detail.decisions.at(-1);
-  // What the message is, as every list shows it: the user's answer where they gave one, else Sift's.
+  // What the message is, as every list shows it: the user's answer where they gave one, else Mild's.
   const shownLabel = current?.answer ? current.answer.labelId : (current?.labelId ?? null);
   const waitingNow = waiting.data?.messages ?? [];
   const others = waitingNow.filter((m) => m.accountId !== detail.accountId || m.messageId !== detail.messageId);
   const labels = manage.data?.labels ?? [];
-  // Mail Sift never decided (the model could not judge it) is answered all the same.
+  // Mail Mild never decided (the model could not judge it) is answered all the same.
   const target = {
     accountId: detail.accountId,
     sender: reveal(detail.fromAddress),
@@ -448,7 +448,7 @@ function OpenedMessage({
     .filter((l) => l.id !== current?.labelId)
     .slice(0, 2)
     .map((l) => ({ id: l.id, name: l.name, share: total ? l.messages / total : 0 }));
-  // Mail that is what Sift says but matters anyway: a rule keeps the sender's mail of that kind, and this message with it.
+  // Mail that is what Mild says but matters anyway: a rule keeps the sender's mail of that kind, and this message with it.
   const given = labels.find((l) => l.id === current?.labelId);
   const keepable = given && current?.disposition !== 'keep' && given.disposition !== 'keep' && given.disposition !== 'review' ? given : null;
   // A rule covers mail from here on; this message, which may already have been moved, is answered as the rule would.
@@ -471,12 +471,12 @@ function OpenedMessage({
     onAnswered();
   };
 
-  // Inbox reads mail; everywhere else the job is what Sift said, so what it said about the message sits beside it.
+  // Inbox reads mail; everywhere else the job is what Mild said, so what it said about the message sits beside it.
   const inInbox = conversation !== null;
   const history = historyCount(detail) > 0;
   const said = current ? (
     <p>
-      {current.answer ? 'Your answer. Sift said: ' : null}
+      {current.answer ? 'Your answer. Mild said: ' : null}
       {current.answer ? reveal(current.reason) : capitalised(reveal(current.reason))}
       {current.carryOut ? (
         <>

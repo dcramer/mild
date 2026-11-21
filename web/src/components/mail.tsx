@@ -23,7 +23,7 @@ const OUT = {
 let pressing: Promise<unknown> = Promise.resolve();
 
 /**
- * The reader's own presses on conversations in their inbox, Sift on or off. Archive and Spam take them off the list at
+ * The reader's own presses on conversations in their inbox, Mild on or off. Archive and Spam take them off the list at
  * once and offer Undo; read and unread are on every message of each, but unread only on its newest, as Gmail marks it.
  * Block gives each sender the Blocked standing and marks their conversation spam, with one Undo for both; where a
  * sender's own rule says more than Block would, nothing is given and `ruling` names them, for the rule dialog.
@@ -122,7 +122,7 @@ export function whoWrote(names: readonly string[]): string {
   return names.map((name) => (name.includes('@') ? name.split('@')[0] : name.split(/\s+/)[0])).join(', ');
 }
 
-/** The label Sift gave a message, with how sure it is; nothing for mail it never decided or could not place, which is most of an inbox. */
+/** The label Mild gave a message, with how sure it is; nothing for mail it never decided or could not place, which is most of an inbox. */
 export function Thinks({ thinks }: { thinks: MailThread['thinks'] }) {
   if (!thinks || thinks.labelId === null) return null;
   return (

@@ -19,7 +19,7 @@ it("leaves the home's PGlite shut down when the server is stopped as Next.js sto
     process.kill(process.pid, 'SIGTERM');
   `;
   const stopped = promisify(execFile)(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=module', '--eval', child], {
-    env: { PATH: process.env['PATH'], SIFT_HOME: home },
+    env: { PATH: process.env['PATH'], MILD_HOME: home },
   });
   await expect(stopped).rejects.toMatchObject({ code: 143 });
   expect(stateOf(home)).toBe(SHUT_DOWN);
