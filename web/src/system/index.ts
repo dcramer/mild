@@ -1,5 +1,5 @@
 export { Ago, Arrived, Heard, useNow } from './ago.tsx';
-export { AnswerPicker, type Pick } from './answer-picker.tsx';
+export { AnswerPicker, LabelPick, type Pick } from './answer-picker.tsx';
 export { Button, Finish } from './button.tsx';
 export { StackedBars, Swatch } from './chart.tsx';
 export { ChoiceGroup } from './choice.tsx';

@@ -212,6 +212,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
         accountId: r.accountId,
         threadId: r.threadId,
         subject: newest.subject,
+        from: newest.fromAddress,
         who: seal(who),
         messageIds: all.map((m) => m.messageId),
         unread: r.unread,

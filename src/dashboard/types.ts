@@ -590,6 +590,8 @@ export const FeedbackRequest = z.strictObject({
   label: labelId,
   /** What should happen to it. Left out: what the label does. */
   disposition: decided.optional(),
+  /** False: recorded, and the mail left where it is (Inbox, where the reader archives it themselves). Left out: done in Gmail. */
+  carryOut: z.boolean().optional(),
   decisionId: z.int().optional(),
   /** The one message the answer is about, which need not be waiting: this is how a decision already made is corrected. */
   messageId: text(),
@@ -719,6 +721,8 @@ export const MailThread = z.object({
   threadId: z.string(),
   /** Its newest message's. */
   subject: held,
+  /** Its newest message's sender's address, which an answer about it names. */
+  from: held,
   /** Who wrote the messages Sift has of it, oldest first, each once: a name, or the address of a sender without one; the reader's own mailboxes as "me". */
   who: z.array(held),
   /** The messages Sift has recorded of it, oldest first; the newest is the one the reader opens. Sync records mail that arrives, not what the person sent. */

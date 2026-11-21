@@ -1,6 +1,7 @@
 import {
   PHONE,
   back,
+  choose,
   expect,
   inboxLink,
   inboxRow,
@@ -57,6 +58,43 @@ test.describe('Inbox', () => {
     await expect(inboxRow(page, 'This week in widgets')).toHaveCount(0);
     await inboxSearch(page).fill('utility');
     await expect(inboxRows(page)).toHaveCount(1);
+  });
+
+  test('a row’s label is changed in place: saved at once, the conversation left in the inbox, and picked again to undo', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    const label = () => inboxRow(page, 'Your order has shipped').getByRole('combobox', { name: 'What Your order has shipped is' });
+    const pick = async (name: string) => {
+      await label().click();
+      const saved = page.waitForResponse('**/api/feedback');
+      await page.getByRole('option', { name, exact: true }).click();
+      await saved;
+    };
+    await expect(label()).toContainText('Receipts');
+
+    await pick('Personal');
+    await expect(reader(page)).toHaveCount(0);
+    await page.reload();
+    await expect(label()).toContainText('Personal');
+    expect(sift.google().mailbox('me@example.org').message('m3')!.labelIds).toContain('INBOX');
+
+    await pick('Receipts');
+    await page.reload();
+    await expect(label()).toContainText('Receipts');
+    await expect(inboxRows(page)).toHaveCount(19);
+    expect(sift.google().mailbox('me@example.org').message('m3')!.labelIds).toContain('INBOX');
+  });
+
+  test('the reader’s answer is saved and the conversation stays open', async ({ page }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Your order has shipped').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    const saved = page.waitForResponse('**/api/feedback');
+    await choose(open, 'Personal');
+    await saved;
+    await expect(open.getByRole('heading', { name: 'Your order has shipped', level: 1 })).toBeVisible();
+    await expect(open.getByRole('combobox', { name: 'What this message is' })).toContainText('Personal');
+    await back(page).click();
+    await expect(inboxRow(page, 'Your order has shipped').getByRole('combobox', { name: 'What Your order has shipped is' })).toContainText('Personal');
   });
 
   test('J and K move, O opens a conversation with its unread open, and opening it marks it read', async ({ page }) => {

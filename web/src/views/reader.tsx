@@ -1,7 +1,7 @@
 'use client';
 import { PlusIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { useAnswer } from '@/components/answer.tsx';
+import { useAnswer, useRecordAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts, useMessageView } from '@/components/message-parts.tsx';
 import { useMailPress } from '@/components/mail.tsx';
@@ -395,6 +395,7 @@ function OpenedMessage({
     })),
     onAnswered,
   );
+  const record = useRecordAnswer();
   // What else it might be: the labels the sender's other mail has had, most first.
   const total = detail.sender.labels.reduce((sum, l) => sum + l.messages, 0);
   const alternatives = detail.sender.labels
@@ -471,7 +472,8 @@ function OpenedMessage({
             value: shownLabel,
             groups: choices(target, current ? sureness(current) : 1, alternatives),
             empty: outcomeName('review'),
-            onSubmit: (id) => answer(target, id),
+            // In Inbox the reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
+            onSubmit: (id) => (inInbox ? record(target, id) : answer(target, id)),
             extra: { label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) },
           }}
           why={why}

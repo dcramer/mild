@@ -28,6 +28,7 @@ import {
   Blank,
   Does,
   AnswerPicker,
+  LabelPick,
   ActionIcon,
   Avatar,
   Button,
@@ -698,6 +699,33 @@ export function SystemView() {
           </p>
         </Section>
 
+        <Section title="Label pick" meta="what a row's mail is, changed in place down a list: words until the row is pointed at, and nothing without a label">
+          <Table>
+            <Heads>
+              <Th>Message</Th>
+              <Th>Label</Th>
+            </Heads>
+            <tbody>
+              {ROWS.map((row) => (
+                <Tr key={row.subject} onOpen={() => toast(`Opens ${row.subject}`)}>
+                  <Td className="w-full">{row.subject}</Td>
+                  <Td quiet className="whitespace-nowrap" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                    <LabelPick
+                      label={`What ${row.subject} is`}
+                      value={row.label === null ? null : (LABELS.find(([, name]) => name === row.label)?.[0] ?? null)}
+                      groups={[
+                        LABELS.slice(0, 1).map(([id, name]) => ({ id, label: name })),
+                        LABELS.slice(1, 2).map(([id, name]) => ({ id, label: name, lead: <Meter level={3} /> })),
+                        LABELS.slice(2).map(([id, name]) => ({ id, label: name })),
+                      ]}
+                      onSubmit={async (id) => toast(`Saved: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
+                    />
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        </Section>
         <Section title="A log" meta="a few ways to see the list; one table, a heading for each day">
           <Sheet className="p-5">
             <ListPage title="Activity">

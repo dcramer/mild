@@ -81,25 +81,7 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
     onDone?.();
   };
 
-  /**
-   * What a message might be, for the answer's dropdown: Leave in inbox, always first; then sift's label and its
-   * other likely ones, each with how sure; then every other label. Leave in inbox has its meter where it is,
-   * when it is one of the likely ones.
-   */
-  const choices = (target: Answerable, sure: 1 | 2 | 3, alternatives: readonly { id: string; name: string; share: number }[]): Pick[][] => {
-    const guess = labels.find((l) => l.id === target.labelId);
-    const likely = [
-      ...(guess ? [{ id: guess.id, label: guess.name, lead: <Meter level={sure} /> }] : []),
-      // A removed label is still in the sender's history, but nothing is given it again.
-      ...alternatives
-        .filter((a) => a.id !== target.labelId && labels.some((l) => l.id === a.id))
-        .map((a) => ({ id: a.id, label: a.name, lead: <Meter level={a.share >= 0.5 ? 2 : 1} /> })),
-    ];
-    const inbox = labels.find((l) => l.id === INBOX);
-    const first = inbox ? [{ id: inbox.id, label: inbox.name, ...likely.find((p) => p.id === INBOX) }] : [];
-    const rest = labels.filter((l) => l.id !== INBOX && !likely.some((p) => p.id === l.id)).map((l) => ({ id: l.id, label: l.name }));
-    return [first, likely.filter((p) => p.id !== INBOX), rest];
-  };
+  const choices = (target: Answerable, sure: 1 | 2 | 3, alternatives: readonly Alternative[]) => answerChoices(labels, target, sure, alternatives);
 
   /** One answer for several messages, as a folded row gives it. */
   const answerAll = (targets: readonly Answerable[], labelId: string) => {
@@ -108,4 +90,64 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
   };
 
   return { answer, answerAll, choices };
+}
+
+/** A label the sender's other mail has had, and what share of it. */
+interface Alternative {
+  id: string;
+  name: string;
+  share: number;
+}
+
+/**
+ * What a message might be, for the answer's dropdown: Leave in inbox, always first; then sift's label and its
+ * other likely ones, each with how sure; then every other label. Leave in inbox has its meter where it is,
+ * when it is one of the likely ones.
+ */
+export function answerChoices(
+  labels: readonly AnswerLabel[],
+  target: { labelId: string | null },
+  sure: 1 | 2 | 3,
+  alternatives: readonly Alternative[],
+): Pick[][] {
+  const guess = labels.find((l) => l.id === target.labelId);
+  const likely = [
+    ...(guess ? [{ id: guess.id, label: guess.name, lead: <Meter level={sure} /> }] : []),
+    // A removed label is still in the sender's history, but nothing is given it again.
+    ...alternatives
+      .filter((a) => a.id !== target.labelId && labels.some((l) => l.id === a.id))
+      .map((a) => ({ id: a.id, label: a.name, lead: <Meter level={a.share >= 0.5 ? 2 : 1} /> })),
+  ];
+  const inbox = labels.find((l) => l.id === INBOX);
+  const first = inbox ? [{ id: inbox.id, label: inbox.name, ...likely.find((p) => p.id === INBOX) }] : [];
+  const rest = labels.filter((l) => l.id !== INBOX && !likely.some((p) => p.id === l.id)).map((l) => ({ id: l.id, label: l.name }));
+  return [first, likely.filter((p) => p.id !== INBOX), rest];
+}
+
+/**
+ * Saying what a message is in Inbox, where the reader handles their own mail: saved at once and the mail left where it
+ * is, since Archive is their press, so picking again is the undo. Resolves once saved; a failure is said in a toast.
+ */
+export function useRecordAnswer(): (target: Answerable, labelId: string) => Promise<void> {
+  const { settle } = useAction();
+  const toast = useToast();
+  return async (target, labelId) => {
+    try {
+      await settle(async () => {
+        const reply = await api.feedback({
+          accountId: target.accountId,
+          sender: target.sender,
+          messageId: target.messageId,
+          ...(target.decisionId === undefined ? {} : { decisionId: target.decisionId }),
+          label: labelId,
+          carryOut: false,
+        });
+        // The answer is saved; Sift's own label on the message could not be taken back in Gmail.
+        if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
+      });
+    } catch (failure) {
+      toast('Could not save your answer', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
+      throw failure;
+    }
+  };
 }
