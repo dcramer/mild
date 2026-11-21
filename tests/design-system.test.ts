@@ -202,6 +202,15 @@ describe('red is also deleting, always through DeleteButton', () => {
   });
 });
 
+test('a screen is as wide as the window; only a page with one thing on it centres a column', () => {
+  const centred = new Set(['system/splash.tsx', 'system/entry.tsx', 'system/onboarding.tsx', 'system/document.tsx', 'views/system.tsx']);
+  const failures = ALL.filter((path) => !centred.has(relative(WEB, path)))
+    .flatMap((path) => words(path))
+    .filter(({ word }) => utility(word) === 'mx-auto')
+    .map(({ file, line }) => `web/src/${file}:${line} mx-auto: the dashboard runs the width of the window (docs/design.md).`);
+  expect(failures, failures.join('\n')).toEqual([]);
+});
+
 test('whatever can be pressed shows the pointer', () => {
   // A choice in a menu or a select is pressed like a button. Only a disabled one keeps the arrow, through a variant.
   const bare = [...SYSTEM].flatMap((path) => words(path)).filter(({ word }) => word === 'cursor-default');
