@@ -28,7 +28,6 @@ import mailOnWrite from './routes/mail/on/post.ts';
 import mailReachRead from './routes/mail/reach/get.ts';
 import mailThreadRead from './routes/mail/thread/get.ts';
 import mailThreadsRead from './routes/mail/threads/get.ts';
-import mailTextsRead from './routes/mail/texts/get.ts';
 import syncRead from './routes/sync/get.ts';
 
 import mailSendWrite from './routes/mail/send/post.ts';
@@ -80,7 +79,6 @@ export const READS: readonly Read[] = [
   mailReachRead,
   mailThreadRead,
   mailThreadsRead,
-  mailTextsRead,
   syncRead,
   manageRead,
   messageRead,

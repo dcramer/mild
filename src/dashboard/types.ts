@@ -792,18 +792,14 @@ export const SyncPage = z.object({
   reset: z.boolean(),
   /** There is more: ask again at once from `cursor`. */
   more: z.boolean(),
+  /** The person's counter the copy holds every change up to once this page, and with `more` every page after it, is applied: a write is held once it reaches the write's `x-sift-seq`. */
+  seq: z.number(),
   /** The person's mailboxes: a conversation of any other is gone, since removing a mailbox marks none of its own. */
   mailboxes: z.array(z.string()),
   /** Each changed conversation as it is now; null when it is gone or out of the copy. */
   conversations: z.array(z.object({ accountId: z.string(), threadId: z.string(), conversation: SyncedConversation.nullable() })),
 });
 export type SyncPage = z.infer<typeof SyncPage>;
-
-/** GET /api/mail/texts: the readable text Inbox keeps of each message asked for, and whether it keeps its HTML; a message it keeps none of is left out. */
-export const MailTexts = z.object({
-  texts: z.array(z.object({ accountId: z.string(), messageId: z.string(), text: held, hasHtml: z.boolean() })),
-});
-export type MailTexts = z.infer<typeof MailTexts>;
 
 /** The body of POST /api/mail/change: the person's own press on messages in their inbox. */
 export const MailChange = z.strictObject({

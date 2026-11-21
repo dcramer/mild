@@ -75,7 +75,7 @@ export const AREAS = {
     'POST /api/evals/run',
     'GET /api/eval',
   ],
-  sync: ['GET /api/sync', 'GET /api/mail/texts'],
+  sync: ['GET /api/sync'],
   senders: ['GET /api/sender', 'GET /api/domain', 'GET /api/contacts', 'POST /api/standing', 'POST /api/standing/clear'],
 } as const satisfies Record<string, readonly string[]>;
 

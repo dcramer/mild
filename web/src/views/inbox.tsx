@@ -1,12 +1,16 @@
 'use client';
 import { ArchiveIcon, MailIcon, MailOpenIcon } from 'lucide-react';
-import { type ReactNode, useDeferredValue, useState } from 'react';
+import { eq, inArray, isNull, or, useLiveQuery } from '@tanstack/react-db';
+import { type ReactNode, useContext, useDeferredValue, useState } from 'react';
 import { type AnswerLabel, answerChoices, useRecordAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { Thinks, useMailPress, whoWrote } from '@/components/mail.tsx';
-import { type MailThread, type MailView, api, useLoaded, usePages } from '@/lib/api.ts';
+import { type MailThread, type MailView, api, readAhead, useLoaded, usePages } from '@/lib/api.ts';
+import { type Copied, conversations, useWhole } from '@/lib/copy.ts';
+import { Mailbox } from '@/lib/narrowed.ts';
+import { useStarted } from '@/system/started.ts';
 import { useHidden } from '@/lib/action.ts';
 import { useCompose } from '@/lib/compose.ts';
 import { inboxFirst, period, sureness } from '@/lib/format.ts';
@@ -43,11 +47,39 @@ const VIEWS = [
   ['sorted', 'Sorted'],
 ] as const satisfies readonly (readonly [MailView, string])[];
 
+/** How long a narrowing of the list is kept once nothing shows it: longer than a conversation is read for. */
+const LIST_KEPT_MS = 30 * 60_000;
+
+/** A conversation as a row lists it: who wrote, named already. */
+type Listed = Omit<MailThread, 'who'> & { who: string };
+
 /** The newest message, which the reader opens on. */
-const newest = (t: MailThread) => ({ accountId: t.accountId, messageId: t.messageIds.at(-1)! });
+const newest = (t: Listed) => ({ accountId: t.accountId, messageId: t.messageIds.at(-1)! });
+
+/** A conversation the copy holds, as its row lists it: the person's own mailboxes as "me", the label by its name. */
+function listedOf({ conversation: c, unread, newestAt }: Copied, mine: ReadonlySet<string>, names: ReadonlyMap<string, string>): Listed {
+  const last = c.messages.at(-1)!;
+  const writers = c.messages.map((m) => (mine.has(reveal(m.fromAddress)) ? 'me' : reveal(m.fromName ?? m.fromAddress)));
+  return {
+    accountId: c.accountId,
+    threadId: c.threadId,
+    subject: last.subject,
+    from: last.fromAddress,
+    who: whoWrote([...new Set(writers)]),
+    messageIds: c.messages.map((m) => m.messageId),
+    unread,
+    newestAt,
+    place: 'inbox',
+    preview: last.preview,
+    thinks: c.thinks ? { ...c.thinks, labelName: (c.thinks.labelId && names.get(c.thinks.labelId)) ?? null } : null,
+  };
+}
+
+/** Its newest message read ahead of a press that opens it, which then waits on nothing. */
+const ahead = (t: Listed) => readAhead(`message/${t.accountId}/${newest(t).messageId}`, (signal) => api.message(newest(t).messageId, signal, t.accountId));
 
 /** Where a conversation a search found is, when that is not the inbox, in front of its subject as Gmail puts a label. */
-function Place({ thread }: { thread: MailThread }) {
+function Place({ thread }: { thread: Listed }) {
   if (thread.place === 'inbox') return null;
   return <span className="mr-2 font-normal text-muted-foreground">{thread.place === 'sent' ? 'Sent' : 'Archived'}</span>;
 }
@@ -56,7 +88,7 @@ function Place({ thread }: { thread: MailThread }) {
  * What Sift thinks the newest message is, as a dropdown that says it otherwise: saved at once and the mail left where
  * it is, so picking again is the undo. Mail Sift never placed shows nothing until its row is pointed at, and is answered all the same.
  */
-function Label({ thread, labels }: { thread: MailThread; labels: readonly AnswerLabel[] }) {
+function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabel[] }) {
   const record = useRecordAnswer();
   const { thinks } = thread;
   const target = {
@@ -91,19 +123,25 @@ function ThreadRow({
   onOpen,
   press,
 }: {
-  thread: MailThread;
+  thread: Listed;
   labels: readonly AnswerLabel[];
   selected: boolean;
   onSelect: (on: boolean) => void;
   onOpen: () => void;
-  press: (threads: readonly MailThread[], what: 'archive' | 'read' | 'unread') => void;
+  press: (threads: readonly Listed[], what: 'archive' | 'read' | 'unread') => void;
 }) {
   const subject = reveal(thread.subject) || '(no subject)';
-  const who = whoWrote(thread.who);
+  const { who } = thread;
   const many = thread.messageIds.length > 1 ? <span className="font-normal text-muted-foreground tabular-nums">{thread.messageIds.length}</span> : null;
   const ink = thread.unread ? 'font-semibold text-foreground' : 'text-foreground/70';
   return (
-    <Tr selected={selected} onOpen={onOpen} holds={thread.messageIds.map((messageId) => messageKey({ accountId: thread.accountId, messageId }))}>
+    <Tr
+      selected={selected}
+      onOpen={onOpen}
+      onPointerEnter={() => ahead(thread)}
+      onFocusCapture={() => ahead(thread)}
+      holds={thread.messageIds.map((messageId) => messageKey({ accountId: thread.accountId, messageId }))}
+    >
       <RowCheck checked={selected} onChange={onSelect} label={`Select ${subject}`} />
       <Td className="max-w-0 phone:py-2 md:w-[18%] md:min-w-40">
         <span className={`flex min-w-0 items-baseline gap-1.5 phone:hidden ${ink}`}>
@@ -200,19 +238,44 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const ask = useAsk();
   const query = { view, label, q, unread: unread === '1', ...ask.query } as const;
   const on = manage.data?.mail === true;
-  const pages = usePages(`mail-threads-${on}-${query.view}-${label}-${query.unread}-${q}-${JSON.stringify(ask.query)}`, (before, signal) =>
-    on ? api.mailThreads(query, before, signal) : Promise.resolve({ threads: [], next: null }),
+  const started = useStarted();
+  // The inbox is drawn from the copy in this browser; a search, or what Ask made of one, looks through all the mail Sift keeps, which only the server can.
+  const local = on && started && q === '' && !ask.narrowed;
+  // Asked only once the page has started: until then it cannot say whether the copy will draw the list.
+  const server = on && started && !local;
+  const pages = usePages(`mail-threads-${server}-${query.view}-${label}-${query.unread}-${q}-${JSON.stringify(ask.query)}`, (before, signal) =>
+    server ? api.mailThreads(query, before, signal) : Promise.resolve({ threads: [], next: null }),
   );
+  const mailbox = useContext(Mailbox);
+  const copy = useLiveQuery({
+    query: (from) => {
+      if (!local) return undefined;
+      let rows = from.from({ c: conversations() }).where(({ c }) => eq(c.inbox, true));
+      if (mailbox) rows = rows.where(({ c }) => eq(c.accountId, mailbox));
+      if (unread === '1') rows = rows.where(({ c }) => eq(c.unread, true));
+      if (label) rows = rows.where(({ c }) => eq(c.labelId, label));
+      if (view === 'needs') rows = rows.where(({ c }) => or(isNull(c.disposition), inArray(c.disposition, ['keep', 'review'])));
+      if (view === 'sorted') rows = rows.where(({ c }) => inArray(c.disposition, ['archive', 'spam', 'block', 'digest']));
+      return rows.orderBy(({ c }) => c.newestAt, 'desc');
+    },
+    // Kept while the reader hides the list, so going back draws it as it was, the row last shown still there to take the focus.
+    gcTime: LIST_KEPT_MS,
+  });
+  const whole = useWhole();
   const hidden = useHidden();
-  const threads = pages.pages.flatMap((page) => page.threads).filter((t) => !hidden.has(threadKey(t)));
+  const labels = manage.data?.labels ?? [];
+  const names = new Map(labels.map((l) => [l.id, l.name] as const));
+  const mine = new Set((manage.data?.accounts ?? []).map((a) => a.email));
+  const listed: Listed[] = local
+    ? (copy.data ?? []).map((row) => listedOf(row, mine, names))
+    : pages.pages.flatMap((page) => page.threads).map((t) => ({ ...t, who: whoWrote(reveal(t.who)) }));
+  const threads = listed.filter((t) => !hidden.has(threadKey(t)));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const chosen = threads.filter((t) => selected.has(threadKey(t)));
   const { press, error } = useMailPress();
   const act = (what: 'archive' | 'read' | 'unread') => press(chosen, what, () => setSelected(new Set()));
-  const labels = manage.data?.labels ?? [];
-  const names = new Map(labels.map((l) => [l.id, l.name] as const));
   const now = useNow();
-  const periods: { title: string | null; rows: MailThread[] }[] = [];
+  const periods: { title: string | null; rows: Listed[] }[] = [];
   for (const thread of threads) {
     const title = now === null ? null : period(thread.newestAt, now);
     const last = periods.at(-1);
@@ -269,7 +332,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
           <p>{ask.said}</p>
         </Note>
       ) : null}
-      {pages.loading || !manage.data ? (
+      {(local ? !copy.isReady || (threads.length === 0 && !whole) : !server || pages.loading) || !manage.data ? (
         loadingRows
       ) : threads.length === 0 ? (
         <Empty>{q !== '' || ask.narrowed ? 'No mail matches.' : narrowed ? 'Nothing in your inbox matches.' : 'Nothing is in your inbox.'}</Empty>
@@ -307,7 +370,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
               </tbody>
             ))}
           </Table>
-          {pages.more ? <More onReach={pages.next} /> : null}
+          {!local && pages.more ? <More onReach={pages.next} /> : null}
         </>
       )}
     </ListView>

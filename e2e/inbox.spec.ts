@@ -20,6 +20,31 @@ import {
   tooltip,
 } from './sift.ts';
 
+// Run in the page, which e2e is typed without: as text.
+const OPEN_COPY = `new Promise((done) => (indexedDB.open('sift-copy').onsuccess = (event) => done(event.target.result)))`;
+const ALL = (method: string) =>
+  `new Promise((done) => (db.transaction('conversations').objectStore('conversations').${method}().onsuccess = (event) => done(event.target.result)))`;
+
+/** How many conversations the copy on the device holds; none before the page has made it. */
+const copied = `(async () => {
+  if (!(await indexedDB.databases()).some((d) => d.name === 'sift-copy')) return 0;
+  const db = await ${OPEN_COPY};
+  const count = await ${ALL('count')};
+  db.close();
+  return count;
+})()`;
+
+/** Whether `words` can be read anywhere in what the copy keeps on the device. */
+const diskHolds = (words: string) => `(async () => {
+  const db = await ${OPEN_COPY};
+  const rows = await ${ALL('getAll')};
+  db.close();
+  return rows.some((row) => JSON.stringify(row).includes(${JSON.stringify(words)}) || new TextDecoder().decode(row.sealed.data).includes(${JSON.stringify(words)}));
+})()`;
+
+/** The names of the page's databases. */
+const databases = '(async () => (await indexedDB.databases()).map((d) => d.name))()';
+
 test.describe('Inbox, off', () => {
   test('is turned on in Settings, after saying what it keeps, and then is a section listing the inbox', async ({ page }) => {
     await page.goto('/inbox');
@@ -95,6 +120,39 @@ test.describe('Inbox', () => {
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toContainText('Personal');
     await back(page).click();
     await expect(inboxRow(page, 'Your order has shipped').getByRole('combobox', { name: 'What Your order has shipped is' })).toContainText('Personal');
+  });
+
+  test('opens from the copy kept in this browser, encrypted, without asking the server for the list', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(19);
+    await expect.poll(() => page.evaluate<number>(copied)).toBe(19);
+
+    // The feed never answers: the list is the one on the device.
+    await page.route('**/api/sync**', () => {});
+    const asked: string[] = [];
+    page.on('request', (request) => void (request.url().includes('/api/mail/threads') && asked.push(request.url())));
+    await page.reload();
+    await expect(inboxRows(page)).toHaveCount(19);
+    await expect(inboxRows(page).first()).toContainText('This week in widgets');
+    expect(asked).toEqual([]);
+    // Nothing of the mail is readable on the disk.
+    expect(await page.evaluate<boolean>(diskHolds('This week in widgets'))).toBe(false);
+  });
+
+  test('a conversation archived stays gone once the feed has it, and the copy goes at sign-out', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(19);
+    await pointAt(inboxRow(page, 'This week in widgets'));
+    await inboxRow(page, 'This week in widgets').getByRole('button', { name: 'Archive' }).click();
+    await expect(inboxRows(page)).toHaveCount(18);
+    await expect.poll(() => page.evaluate<number>(copied)).toBe(18);
+    await page.reload();
+    await expect(inboxRows(page)).toHaveCount(18);
+
+    await page.getByRole('button', { name: /^Account, / }).click();
+    await page.getByRole('menuitem', { name: 'Sign out' }).click();
+    await expect(page.getByRole('button', { name: /^Account, / })).toHaveCount(0);
+    await expect.poll(() => page.evaluate<string[]>(databases)).not.toContain('sift-copy');
   });
 
   test('J and K move, O opens a conversation with its unread open, and opening it marks it read', async ({ page }) => {

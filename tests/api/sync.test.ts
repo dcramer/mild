@@ -63,15 +63,6 @@ describe('the copy the page keeps', () => {
       thinks: { disposition: 'archive', labelId: 'receipts', stage: 'model', confidence: 0.9 },
     });
     expect(conversations[1]!.conversation!.thinks).toBeNull();
-
-    const texts = await me.call('GET', `/api/mail/texts?ids=${encodeURIComponent(`${ME}/${lunch},${ME}/${reply},${ME}/nothing`)}`);
-    expect(texts.body).toEqual({
-      texts: expect.arrayContaining([
-        { accountId: ME, messageId: lunch, text: 'Lunch on Friday?', hasHtml: false },
-        { accountId: ME, messageId: reply, text: 'Or Saturday.', hasHtml: false },
-      ]),
-    });
-    expect((texts.body['texts'] as unknown[]).length).toBe(2);
   });
 
   it('then sends only what changed, as it is now, and a conversation gone from the inbox as gone', async () => {
@@ -94,7 +85,8 @@ describe('the copy the page keeps', () => {
     const after = await pull(me, arrived.cursor);
     expect(after.conversations).toEqual([{ accountId: ME, threadId: a, conversation: null }]);
     // The write's number is how far the page must read to hold its change.
-    expect(seq).toBeGreaterThan(0);
+    expect(arrived.pages.at(-1)!.seq).toBeLessThan(seq);
+    expect(after.pages.at(-1)!.seq).toBe(seq);
     expect((await pull(me, after.cursor)).conversations).toEqual([]);
 
     // Read in Gmail: the conversation comes again, read.

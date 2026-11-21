@@ -36,6 +36,8 @@ export type {
   SuggestionItem,
   Suggestions,
   Summary,
+  SyncedConversation,
+  SyncPage,
   Usage,
 } from '../../../src/dashboard/types.ts';
 export type { Confidential } from '../../../src/confidential.ts';
@@ -72,6 +74,7 @@ import type {
   SuggestionDetail,
   Suggestions,
   Summary,
+  SyncPage,
   Usage,
 } from '../../../src/dashboard/types.ts';
 
@@ -193,6 +196,10 @@ async function reason(response: Response): Promise<Said> {
   }
 }
 
+/** Told the person's counter after each write Sift took (`x-sift-seq`): the page's copy holds the change once it has read that far (docs/sync.md). */
+let wrote: (seq: number) => void = () => {};
+export const onWrite = (heard: (seq: number) => void) => void (wrote = heard);
+
 /**
  * A change. The headers mark it as coming from this page, which the server requires of every write.
  * Refused outright while sift is unreachable: a change is never queued to happen later, unseen.
@@ -207,6 +214,8 @@ async function post<T = unknown>(path: string, body: unknown, keepalive = false)
   );
   const result = (await response.json()) as T & Said;
   if (!response.ok) throw new Refused(response.status, result);
+  const seq = Number(response.headers.get('x-sift-seq'));
+  if (seq > 0) wrote(seq);
   return result;
 }
 
@@ -353,6 +362,12 @@ export const api = {
   stopInbox: (rule?: string) => post('/api/inbox/stop', rule ? { rule } : {}),
   checkNow: () => post('/api/check', {}),
   session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),
+  /** What changed in the page's copy since `since`; with none, the whole copy (docs/sync.md). */
+  sync: (since: string | null, signal: AbortSignal) => get<SyncPage>('/api/sync', since === null ? {} : { since }, signal),
+  /** The key this browser's copy is encrypted with, where it has one; the page is drawn with it, but for a sender's page. */
+  device: (signal: AbortSignal) => get<{ key: string | null }>('/api/device', {}, signal),
+  /** Make this browser a key for its copy, the first time: after that the page is drawn with it. */
+  makeDevice: () => post<{ key: string }>('/api/device', {}),
   signOut: () => post('/api/signout', {}),
   /** `address` is what the person typed to confirm. */
   removeMailbox: (address: string) => post<Removed>('/api/mailbox/remove', { address }),
@@ -437,6 +452,13 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
     at: query.dataUpdatedAt,
     reload: () => void query.refetch({ cancelRefetch: false }),
   };
+}
+
+/** Read what `useLoaded(key, …, '')` will draw ahead of a press that draws it, unless it was read in the last minute. */
+export function readAhead<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>): void {
+  queryClientFor()
+    .query({ queryKey: [key], queryFn: ({ signal }) => fetcher(signal), staleTime: 60_000 })
+    .catch(() => {});
 }
 
 /**
