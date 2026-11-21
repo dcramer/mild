@@ -11,7 +11,6 @@ import { serverBuild } from '@/lib/build.ts';
 import { useKeptPlace } from '@/lib/place.ts';
 import { signOut } from '@/lib/sign-out.ts';
 import { keepStart } from '@/lib/start.ts';
-import { conversations } from '@/lib/copy.ts';
 import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
@@ -169,7 +168,7 @@ function useStartsOn(inbox: boolean | null) {
 /** While Inbox is on, the copy of it starts as the page does, so it is there before Inbox is opened (docs/sync.md). */
 function useCopy(on: boolean) {
   useEffect(() => {
-    if (on) conversations();
+    if (on) void import('@/lib/copy.ts').then((copy) => copy.conversations());
   }, [on]);
 }
 

@@ -1,5 +1,4 @@
 import { api } from './api.ts';
-import { dropCopy } from './copy.ts';
 import { forgetDrafts } from './compose.ts';
 import { chooseMailbox } from './mailbox.ts';
 import { START } from './start.ts';
@@ -10,7 +9,7 @@ import { START } from './start.ts';
  */
 export async function signOut(): Promise<void> {
   await api.signOut();
-  await dropCopy();
+  await (await import('./copy.ts')).dropCopy();
   forgetDrafts();
   chooseMailbox('');
   try {
