@@ -348,23 +348,3 @@ export function MessageHead({ from, address, at, to, answers }: { from: ReactNod
     </header>
   );
 }
-
-/**
- * Writing in place at the foot of the conversation (Reply, Reply all, Forward): `about` says which message it answers
- * when that is not the newest, then its fields and text, and Send and Discard (`actions`) on a line under them. It
- * brings itself into view as it opens, under however much conversation is above it.
- */
-export function ReplyBox({ label, about, actions, children }: { label: string; about?: ReactNode; actions: ReactNode; children: ReactNode }) {
-  const own = useRef<HTMLElement>(null);
-  // Braced: a browser may answer a scroll with a promise, which React would take for the effect's cleanup.
-  useEffect(() => {
-    own.current?.scrollIntoView({ block: 'nearest' });
-  }, []);
-  return (
-    <section ref={own} aria-label={label} className="mt-2 flex scroll-mb-6 flex-col gap-4">
-      {about ? <p className="text-sm text-muted-foreground">{about}</p> : null}
-      {children}
-      <div className="flex flex-wrap items-center gap-1.5">{actions}</div>
-    </section>
-  );
-}

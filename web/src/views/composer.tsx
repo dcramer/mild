@@ -8,7 +8,7 @@ import { type Draft, type Writing, keepDraft, keptDraft, newMessageId, useCompos
 import { useChosenMailbox } from '@/lib/mailbox.ts';
 import { useHere } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
-import { Button, Failure, Field, Finish, Input, Loading, Note, Panel, ReplyBox, Select, TextArea, useToast } from '@/system';
+import { Button, DiscardButton, DraftBlocked, DraftLine, DraftText, Failure, Finish, Input, Loading, Panel, ReplyBox, Select, useToast } from '@/system';
 import type { ManageState, MessageDetail } from '../../../src/dashboard/types.ts';
 
 /** An address mail can be from: a mailbox's own, or one of its aliases, and whether Google lets Sift send from that mailbox. */
@@ -222,56 +222,69 @@ function Writer({
 
   const nobody = to.parties.length + cc.parties.length === 0;
   const wrong = to.wrong.length + cc.wrong.length > 0;
+  const fromLine =
+    choices.length > 1 ? (
+      <DraftLine label="From">
+        <Select
+          label="From"
+          value={from.address}
+          options={choices.map((c) => [c.address, c.address] as const)}
+          onChange={(address) => change({ from: address })}
+        />
+      </DraftLine>
+    ) : null;
+
+  // Nothing to write in until Google lets Sift send from this mailbox: only the press that asks, and any other address to send from.
+  if (!from.canSend) {
+    const allow = (
+      <Button variant="mark" href={`/auth/login?${new URLSearchParams({ grant: 'send', mailbox: from.accountId, to: here })}`}>
+        Let Sift send
+      </Button>
+    );
+    const blocked = <DraftBlocked title={`Sift can’t send from ${from.accountId} yet`}>Google asks you once before Sift can send as you.</DraftBlocked>;
+    if (inline)
+      return (
+        <ReplyBox
+          label={title}
+          about={about}
+          actions={
+            <>
+              {allow}
+              <Button variant="quiet" onClick={onClose}>
+                Not now
+              </Button>
+            </>
+          }
+        >
+          {blocked}
+        </ReplyBox>
+      );
+    return (
+      <Panel narrow open onClose={onClose} title={title} actions={allow}>
+        {fromLine}
+        {blocked}
+      </Panel>
+    );
+  }
+
   const actions = (
     <>
-      <Finish
-        busy={busy}
-        disabled={!from.canSend || nobody || wrong}
-        {...(from.canSend
-          ? nobody
-            ? { why: 'Say who it is to.' }
-            : wrong
-              ? { why: 'An address is wrong.' }
-              : {}
-          : { why: 'Sift may not send from this mailbox yet.' })}
-        onClick={send}
-      >
+      <Finish busy={busy} disabled={nobody || wrong} {...(nobody ? { why: 'Say who it is to.' } : wrong ? { why: 'An address is wrong.' } : {})} onClick={send}>
         Send
       </Finish>
-      <Button variant="quiet" onClick={discard}>
-        Discard
-      </Button>
       <Failure>{error}</Failure>
+      <DiscardButton onClick={discard} />
     </>
   );
 
   // Not a Form: Enter in To or Subject must not send.
   const fields = (
-    <div className="flex flex-col gap-5">
-      {from.canSend ? null : (
-        <Note tone="look" title={`Sift may not send from ${from.accountId} yet`}>
-          <p>Google asks you once to let it send as you. What you have written stays here.</p>
-          <div>
-            <Button variant="mark" href={`/auth/login?${new URLSearchParams({ grant: 'send', mailbox: from.accountId, to: here })}`}>
-              Let Sift send
-            </Button>
-          </div>
-        </Note>
-      )}
-      {choices.length > 1 ? (
-        <Field inline label="From">
-          <Select
-            label="From"
-            wide
-            value={from.address}
-            options={choices.map((c) => [c.address, c.address] as const)}
-            onChange={(address) => change({ from: address })}
-          />
-        </Field>
-      ) : null}
-      <Field inline label="To" error={wrongAddresses(to.wrong)}>
+    <>
+      {fromLine}
+      <DraftLine label="To" error={wrongAddresses(to.wrong)}>
         <Input
           ref={toField}
+          bare
           aria-label="To"
           className="flex-1"
           autoComplete="off"
@@ -291,14 +304,15 @@ function Writer({
             Cc
           </Button>
         )}
-      </Field>
+      </DraftLine>
       {draft.showCc ? (
-        <Field inline label="Cc" error={wrongAddresses(cc.wrong)}>
+        <DraftLine label="Cc" error={wrongAddresses(cc.wrong)}>
           <Input
             ref={(field) => {
               if (field && ccAsked.current) field.focus();
               ccAsked.current = false;
             }}
+            bare
             aria-label="Cc"
             className="flex-1"
             autoComplete="off"
@@ -307,21 +321,21 @@ function Writer({
             onBlur={() => setTyping(null)}
             onChange={(event) => change({ cc: event.target.value })}
           />
-        </Field>
+        </DraftLine>
       ) : null}
       {what.kind === 'reply' ? null : (
-        <Field inline label="Subject">
-          <Input aria-label="Subject" className="flex-1" value={draft.subject} onChange={(event) => change({ subject: event.target.value })} />
-        </Field>
+        <DraftLine label="Subject">
+          <Input bare aria-label="Subject" className="flex-1" value={draft.subject} onChange={(event) => change({ subject: event.target.value })} />
+        </DraftLine>
       )}
-      <TextArea
+      <DraftText
         ref={textField}
         aria-label="Message"
-        className={inline ? 'min-h-44' : 'min-h-72'}
+        className={inline ? 'min-h-48' : 'min-h-72'}
         value={draft.text}
         onChange={(event) => change({ text: event.target.value })}
       />
-    </div>
+    </>
   );
   if (inline)
     return (
