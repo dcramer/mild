@@ -121,14 +121,13 @@ test.describe('with Inbox on', () => {
   });
 
   test('from a mailbox Google has not let Sift send from, there is nothing to write in, only the press that asks', async ({ page, sift }) => {
-    await page.goto('/');
+    await page.goto('/inbox');
     await switchMailbox(page, WORK);
     await page.keyboard.press('c');
     const writing = composer(page, 'New message');
     await expect(writing.getByText(`Sift can’t send from ${WORK} yet`)).toBeVisible();
     await expect(writing.getByRole('link', { name: 'Let Sift send' })).toHaveAttribute(
       'href',
-      // With Inbox on, `/` is Inbox.
       `/auth/login?${new URLSearchParams({ grant: 'send', mailbox: WORK, to: '/inbox?compose=new' }).toString()}`,
     );
     await expect(writing.getByRole('textbox')).toHaveCount(0);
