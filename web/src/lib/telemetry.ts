@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Session } from './api.ts';
+import type * as Sdk from './telemetry-sdk.ts';
 import type { captureMessage } from './telemetry-sdk.ts';
 import { type Timing, drain, opening, stopCarrying, timed } from './trace.ts';
 
@@ -97,7 +98,7 @@ export function useShown(name: string, ready: boolean, attributes: Record<string
 }
 
 /** What was timed before the SDK was up under the page load it began, and what is timed from now on under its screen's. */
-function timeFrom(sdk: typeof import('./telemetry-sdk.ts')) {
+function timeFrom(sdk: typeof Sdk) {
   const at = (ms: number) => (performance.timeOrigin + ms) / 1000;
   drain(({ name, op, start, end, attributes }: Timing) => {
     const active = sdk.getActiveSpan();

@@ -34,7 +34,9 @@ test.describe('Settings', () => {
     await expect(goThrough(page)).toHaveCount(0);
     await expect(settingsActive(page).getByText('On', { exact: true })).toBeVisible();
     await expect(settingsActive(page).getByText('Going through your inbox')).toBeVisible();
-    await expect(settingsActive(page).getByText('Reading your inbox · 0 found')).toBeVisible();
+    // Before Gmail has listed anything there is no count to give: it says what it is doing, not "0 found".
+    await expect(settingsActive(page).getByText('Reading your inbox', { exact: true })).toBeVisible();
+    await expect(settingsActive(page).getByText(/found/)).toHaveCount(0);
     // Only one at a time: the row is where it is going, not a press to start another.
     await expect(settingsActive(page).getByRole('button', { name: /^Go through/ })).toHaveCount(0);
   });

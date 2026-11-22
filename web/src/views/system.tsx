@@ -909,6 +909,11 @@ export function SystemView() {
                 <dd className="text-right text-muted-foreground tabular-nums">{part}</dd>
               </Fragment>
             ))}
+            <dt>Not counted yet</dt>
+            <dd>
+              <Share part={0} whole={null} />
+            </dd>
+            <dd />
           </dl>
         </Section>
 

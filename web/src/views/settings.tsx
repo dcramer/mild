@@ -140,13 +140,13 @@ function Mail({ state, reload }: { state: ManageState; reload: () => void }) {
             note={
               copying ? (
                 <div className="flex flex-col gap-2 pt-1">
-                  <Share part={copying.done} whole={copying.counted ? Math.max(copying.total, copying.done) : 0} />
+                  <Share part={copying.done} whole={copying.counted ? Math.max(copying.total, copying.done) : null} />
                   <span className="tabular-nums">
                     {copying.counted
                       ? [`${count(copying.done)} of ${count(Math.max(copying.total, copying.done))}`, now === null ? null : timeLeft(copying, now)]
                           .filter(Boolean)
                           .join(' · ')
-                      : `Counting your mail · ${count(copying.total)} found`}
+                      : ['Counting your mail', copying.total > 0 ? `${count(copying.total)} found` : null].filter(Boolean).join(' · ')}
                   </span>
                 </div>
               ) : (

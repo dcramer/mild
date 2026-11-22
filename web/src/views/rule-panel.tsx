@@ -236,9 +236,11 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
       <Failure>{waiting.error ?? stop.error}</Failure>
       {going ? (
         <div className="flex flex-col gap-2">
-          <Share part={going.done} whole={going.listed ? going.total : 0} />
+          <Share part={going.done} whole={going.listed ? going.total : null} />
           <span className="text-muted-foreground tabular-nums">
-            {going.listed ? `Applying · ${count(going.done)} of ${count(going.total)}` : `Finding them in Gmail · ${count(going.total)} so far`}
+            {going.listed
+              ? `Applying · ${count(going.done)} of ${count(going.total)}`
+              : ['Finding them in Gmail', going.total > 0 ? `${count(going.total)} so far` : null].filter(Boolean).join(' · ')}
           </span>
         </div>
       ) : null}

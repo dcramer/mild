@@ -95,13 +95,13 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
         title="Going through your inbox"
         note={
           <div className="flex flex-col gap-2 pt-1">
-            <Share part={going.done} whole={going.listed ? going.total : 0} />
+            <Share part={going.done} whole={going.listed ? going.total : null} />
             <span className="tabular-nums">
               {going.listed
                 ? [`${count(going.done)} of ${count(going.total)}`, `${money(going.spent)} so far`, now === null ? null : timeLeft(going, now)]
                     .filter(Boolean)
                     .join(' · ')
-                : `Reading your inbox · ${count(going.total)} found`}
+                : ['Reading your inbox', going.total > 0 ? `${count(going.total)} found` : null].filter(Boolean).join(' · ')}
             </span>
             <Failure>{error}</Failure>
           </div>

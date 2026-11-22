@@ -292,6 +292,20 @@
     background: color-mix(in oklab, var(--foreground) 70%, transparent);
     animation: loading-bar-run 1100ms ease-in-out infinite;
   }
+  /* `Share` before its whole is known: the loading bar's run, inside the bar's track. */
+  .share-pending {
+    position: relative;
+    overflow: hidden;
+  }
+  .share-pending::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 30%;
+    border-radius: 2px;
+    background: var(--muted-foreground);
+    animation: loading-bar-run 1100ms ease-in-out infinite;
+  }
   @keyframes loading-bar-in {
     from {
       opacity: 0;
@@ -327,12 +341,14 @@
   @media (prefers-reduced-motion: reduce) {
     .press,
     .busy-dots,
-    .loading-bar::after {
+    .loading-bar::after,
+    .share-pending::after {
       transition: none;
       animation: none;
     }
     /* Still, the whole width, fainter. */
-    .loading-bar::after {
+    .loading-bar::after,
+    .share-pending::after {
       width: 100%;
       opacity: 0.4;
     }
