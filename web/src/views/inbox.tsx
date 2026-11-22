@@ -1,5 +1,5 @@
 'use client';
-import { ArchiveIcon, BanIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, WorkflowIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, CircleHelpIcon, ShieldAlertIcon, WorkflowIcon } from 'lucide-react';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { proposalStart, standingStart } from '@/lib/rule-start.ts';
@@ -29,6 +29,7 @@ import {
   Failure,
   FilterGroup,
   Heads,
+  Hint,
   LabelPick,
   ListView,
   More,
@@ -94,9 +95,12 @@ function Place({ thread }: { thread: Listed }) {
   return <span className="mr-2 font-normal text-muted-foreground">{thread.place === 'sent' ? 'Sent' : 'Archived'}</span>;
 }
 
+/** Mild looked at the newest message and could not say which label it is. */
+const unplaced = (t: Listed) => t.thinks?.disposition === 'review' && t.thinks.labelId === null;
+
 /**
  * What Mild thinks the newest message is, as a dropdown that says it otherwise: saved at once and the mail left where
- * it is, so picking again is the undo. Mail Mild never placed shows nothing until its row is pointed at, and is answered all the same.
+ * it is, so picking again is the undo. Mail Mild never placed is answered all the same.
  */
 function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabel[] }) {
   const record = useRecordAnswer();
@@ -121,8 +125,8 @@ function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabe
 
 /**
  * One conversation, on one line as Gmail lists it: who wrote and how many messages, the subject and the start of the
- * newest, the label Mild gave it, and when; pointed at, Archive and read or unread take the time's place. Unread is bold
- * and bright, read is plain and dimmer. On a phone it reads as For review's rows do: who and when, the subject, then a
+ * newest, and when, marked where Mild could not place it; pointed at, its label, Archive, Spam and Block take the time's
+ * place. Unread is bold and bright, read is plain and dimmer. On a phone it reads as For review's rows do: who and when, the subject, then a
  * line of the text with the label.
  */
 function ThreadRow({
@@ -190,11 +194,9 @@ function ThreadRow({
           {thread.preview ? <span className="text-muted-foreground"> — {reveal(thread.preview)}</span> : null}
         </span>
       </Td>
-      {/* A press on the dropdown is not a press on the row. */}
-      <Td phone="hide" quiet className="whitespace-nowrap" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-        <Label thread={thread} labels={labels} />
-      </Td>
       <RowPresses
+        lead={<Label thread={thread} labels={labels} />}
+        mark={unplaced(thread) ? <Hint icon={CircleHelpIcon} says="Unlabelled" tone="look" /> : null}
         presses={
           <>
             <Tooltip says="Archive">
@@ -212,19 +214,6 @@ function ThreadRow({
                 <BanIcon aria-hidden />
               </Button>
             </Tooltip>
-            {thread.unread ? (
-              <Tooltip says="Mark read">
-                <Button variant="bare" size="tray" aria-label="Mark read" onClick={() => press([thread], 'read')}>
-                  <MailOpenIcon aria-hidden />
-                </Button>
-              </Tooltip>
-            ) : (
-              <Tooltip says="Mark unread">
-                <Button variant="bare" size="tray" aria-label="Mark unread" onClick={() => press([thread], 'unread')}>
-                  <MailIcon aria-hidden />
-                </Button>
-              </Tooltip>
-            )}
           </>
         }
       >
@@ -237,8 +226,7 @@ function ThreadRow({
 }
 
 /**
- * A rule Mild proposes, drawn as mail is: from Mild, the rule as its subject and why as its text, its label where mail
- * has one. Pressing it opens why in full; pointed at, it can be made or dismissed in place.
+ * A rule Mild proposes, drawn as mail is: from Mild, the rule as its subject and why as its text. Pressing it opens why in full; pointed at, it can be made or dismissed in place.
  */
 function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonly AnswerLabel[] }) {
   const { hide } = useAction();
@@ -262,9 +250,6 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
           </span>
           <span className="text-muted-foreground"> — {proposalWhy(proposal)}</span>
         </span>
-      </Td>
-      <Td phone="hide" quiet className="whitespace-nowrap">
-        {proposal.labelName}
       </Td>
       <RowPresses
         presses={
@@ -434,7 +419,6 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
               <Th phone="hide">Select</Th>
               <Th>From</Th>
               <Th phone="hide">Subject</Th>
-              <Th phone="hide">Label</Th>
               <Th phone="hide">Received</Th>
             </Heads>
             {proposals.length > 0 ? (
@@ -446,7 +430,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
             ) : null}
             {periods.map(({ title, rows }) => (
               <tbody key={title ?? ''}>
-                {title ? <TrGroup title={title} span={5} /> : null}
+                {title ? <TrGroup title={title} span={4} /> : null}
                 {rows.map((thread) => (
                   <ThreadRow
                     block={block}

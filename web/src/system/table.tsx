@@ -247,13 +247,19 @@ const ON_ROW = 'group-hover/row:flex group-focus-visible/row:flex group-has-focu
 /** What the presses take the place of, hidden where they show; Tailwind finds whole class names only. */
 const OFF_ROW = 'group-hover/row:invisible group-focus-visible/row:invisible group-has-focus-visible/row:invisible';
 
+/** The block a row's presses sit on: a shade lighter than the row, and solid, since it covers the end of the row's text. */
+const TRAY = '[background:linear-gradient(var(--fill),var(--fill)),linear-gradient(var(--fill),var(--fill)),var(--surface)]';
+
 /**
  * The last cell of a row whose presses act on it without opening it, as a mail app's do: it says something (when the mail
  * came), and while the row is pointed at, or the keys are on it, the presses take its place, on a block a shade lighter
- * than the row. Icon presses (`bare`, `size="tray"`), each named in a `Tooltip`. On a touch screen, where nothing is pointed at, it only says what it says, and the row opens to the
- * same presses. Dropped on a phone.
+ * than the row, its edge on the time's, reaching left over the row's text as far as they need. Icon presses (`bare`,
+ * `size="tray"`), each named in a `Tooltip`. `lead` goes first on the block, set apart by a rule: what the row's mail is
+ * (`LabelPick`), so it can be changed without being covered. `mark` sits before what the cell says, in a slot of its own
+ * at the cell's start so a column of them lines up; pass null on a row without one. On a touch screen, where nothing is
+ * pointed at, it only says what it says, and the row opens to the same presses. Dropped on a phone.
  */
-export function RowPresses({ presses, children }: { presses: ReactNode; children: ReactNode }) {
+export function RowPresses({ lead, mark, presses, children }: { lead?: ReactNode; mark?: ReactNode; presses: ReactNode; children: ReactNode }) {
   const touch = useTouch();
   return (
     <td
@@ -262,10 +268,20 @@ export function RowPresses({ presses, children }: { presses: ReactNode; children
       onKeyDown={(event) => event.stopPropagation()}
     >
       <span className="relative flex h-(--control) min-w-20 items-center justify-end">
-        <span className={cn('tabular-nums', !touch && OFF_ROW)}>{children}</span>
+        <span className={cn('flex flex-1 items-center justify-between gap-2.5 tabular-nums', !touch && OFF_ROW)}>
+          {mark === undefined ? null : <span className="flex w-3.5 justify-center">{mark}</span>}
+          <span className="ml-auto">{children}</span>
+        </span>
         {touch ? null : (
-          // A block a shade lighter than the row, its edge on the time's, so the presses read as laid over the row.
-          <span className={cn('absolute top-1/2 right-0 hidden -translate-y-1/2 items-center gap-1.5 rounded-[2px] bg-(--fill)', ON_ROW)}>{presses}</span>
+          <span className={cn('absolute top-1/2 right-0 hidden -translate-y-1/2 items-center gap-1.5 rounded-[2px]', TRAY, ON_ROW)}>
+            {lead === undefined ? null : (
+              <>
+                {lead}
+                <span aria-hidden className="h-4 border-l border-(--frame)" />
+              </>
+            )}
+            {presses}
+          </span>
         )}
       </span>
     </td>
