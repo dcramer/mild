@@ -39,6 +39,7 @@ import { Refusal } from '../refusal.ts';
 import { reportError } from '../telemetry.ts';
 import type { StandIns } from './sift.ts';
 import { seal } from '../plain.ts';
+import { fetchIcon } from '../icons.ts';
 
 const DAY_MS = 86_400_000;
 /** How far back an estimate looks for how much mail went to the model: recent enough to reflect the rules as they are. */
@@ -50,6 +51,10 @@ const KEPT_GUESS = 30_000;
  * or a second look asks Gmail nothing for a while.
  */
 const COUNT_MS = 5 * 60_000;
+/** How long a domain's icon is kept: a site changes its icon seldom, and losing it costs one fetch. */
+const ICON_MS = 30 * 86_400_000;
+/** How long a domain with no icon Mild can use is left before its site is asked again. */
+const NO_ICON_MS = 86_400_000;
 
 /** A Gmail client for one of the person's mailboxes, with the sign-in kept in their database. */
 async function gmailClient(config: Config, db: Sql, email: string) {
@@ -308,6 +313,19 @@ export async function buildControls(
       return token === null || (token !== undefined && (await revokeGrant(token)));
     },
     send: async (db, sending) => await sendMail({ db, mailbox: (await gmail(db, sending.accountId)).mailbox }, sending),
+    mailboxIcons: async (domains) =>
+      Object.fromEntries(
+        await Promise.all(
+          domains.map(async (domain) => {
+            const key = `icon:${domain}`;
+            const kept = await live.ephemeral.get<{ icon: string | null }>(key);
+            if (kept) return [domain, kept.icon] as const;
+            const icon = await (standIns?.icon ?? fetchIcon)(domain);
+            await live.ephemeral.set(key, { icon }, icon ? ICON_MS : NO_ICON_MS);
+            return [domain, icon] as const;
+          }),
+        ),
+      ),
     checkNow: passNow,
     activity: async (mailboxes) => ({ running: true, ...(await passStatus(live.ephemeral, mailboxes)) }),
   };

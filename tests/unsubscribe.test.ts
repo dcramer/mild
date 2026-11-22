@@ -1,7 +1,8 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { reconcile, undo } from '../src/actions/executor.ts';
-import { RETRY_AFTER_MS, isPublicAddress, unsubscribe } from '../src/actions/unsubscribe.ts';
+import { RETRY_AFTER_MS, unsubscribe } from '../src/actions/unsubscribe.ts';
+import { isPublicAddress } from '../src/public-address.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { recordSync } from '../src/store/accounts.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';

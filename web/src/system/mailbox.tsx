@@ -3,6 +3,7 @@ import { useContext } from 'react';
 import { Mailbox } from '@/lib/narrowed.ts';
 import type { MenuGroup } from './menu.tsx';
 import { Select } from './select.tsx';
+import { cn } from '@/lib/utils';
 
 export interface MailboxChoice {
   mailboxes: readonly string[];
@@ -40,4 +41,20 @@ export function mailboxChoices({ mailboxes, value, onChange }: MailboxChoice): M
 export function Narrowed() {
   const mailbox = useContext(Mailbox);
   return mailbox ? <span className="text-muted-foreground">{mailbox}</span> : null;
+}
+
+/**
+ * Which of the person's mailboxes a message came to, before its address where the reader says whom it went to: the
+ * icon its domain's own site gives itself (`icon`, a `data:` address), or the domain's initial where the site has none;
+ * nothing yet, in the same room, while `icon` is undefined. The one place colour that is not the system's own is
+ * drawn: it is the domain's.
+ */
+export function MailboxIcon({ address, icon }: { address: string; icon: string | null | undefined }) {
+  const face = 'flex size-4 shrink-0 items-center justify-center rounded-[3px]';
+  if (icon) return <img alt="" src={icon} className={cn(face, 'object-contain')} />;
+  return (
+    <span aria-hidden className={cn(face, 'bg-(--fill) font-heading text-label leading-none font-bold text-muted-foreground uppercase')}>
+      {icon === null ? (address.split('@')[1] ?? address).charAt(0) : null}
+    </span>
+  );
 }

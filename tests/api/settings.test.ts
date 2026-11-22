@@ -157,6 +157,20 @@ describe('mailboxes', () => {
     });
   });
 
+  it("show the icon each one's domain gives itself, asked of its site once", async () => {
+    const asked: string[] = [];
+    const sift = await startSift(fake.google, {
+      icon: async (domain) => (asked.push(domain), domain === 'work.example.com' ? 'data:image/png;base64,iVBORw0KGgo=' : null),
+    });
+    const me = await sift.settled(ME);
+    await me.signIn(WORK, { add: true });
+    const icons = { icons: { 'example.org': null, 'work.example.com': 'data:image/png;base64,iVBORw0KGgo=' } };
+    expect(await me.call('GET', '/api/mailbox/icons')).toMatchObject({ status: 200, body: icons });
+    expect(await me.call('GET', '/api/mailbox/icons')).toMatchObject({ status: 200, body: icons });
+    expect(asked.toSorted()).toEqual(['example.org', 'work.example.com']);
+    expect((await me.call('GET', `/api/mailbox/icons?mailbox=${WORK}`)).body).toEqual({ icons: { 'work.example.com': 'data:image/png;base64,iVBORw0KGgo=' } });
+  });
+
   it('are nobody else’s to change', async () => {
     const sift = await startSift(fake.google);
     const me = await sift.settled(ME);
