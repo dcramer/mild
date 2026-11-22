@@ -1131,7 +1131,6 @@ export function SystemView() {
             </Sheet>
           </div>
           <div className="flex flex-wrap items-end gap-6">
-            <MailboxSwitch {...mailboxes} compact />
             <div className="w-72">
               <MailboxSwitch {...mailboxes} />
             </div>

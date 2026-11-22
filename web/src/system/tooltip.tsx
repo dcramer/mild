@@ -9,7 +9,7 @@ import { useTouch } from './touch.ts';
  * it only adds to what the page says: an exact time behind "11 h ago", what a figure counts. Whatever a
  * reader on a phone needs is said where a tap reaches it, such as the panel a row opens.
  */
-export function Tooltip({ says, children, className }: { says: ReactNode; children: ReactNode; className?: string }) {
+export function Tooltip({ says, children, className, side }: { says: ReactNode; children: ReactNode; className?: string; side?: 'top' | 'right' | undefined }) {
   const touch = useTouch();
   if (touch || says === null || says === undefined || says === '') return <span className={className}>{children}</span>;
   return (
@@ -18,7 +18,7 @@ export function Tooltip({ says, children, className }: { says: ReactNode; childr
         {children}
       </Base.Trigger>
       <Base.Portal>
-        <Base.Positioner sideOffset={6} className="z-50">
+        <Base.Positioner side={side} sideOffset={6} className="z-50">
           <Base.Popup
             role="tooltip"
             className={cn(

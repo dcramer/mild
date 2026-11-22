@@ -1,7 +1,7 @@
 'use client';
-import { MailIcon, MailsIcon } from 'lucide-react';
 import { useContext } from 'react';
 import { Mailbox } from '@/lib/narrowed.ts';
+import type { MenuGroup } from './menu.tsx';
 import { Select } from './select.tsx';
 
 export interface MailboxChoice {
@@ -12,31 +12,28 @@ export interface MailboxChoice {
 }
 
 /**
- * Which of the person's mailboxes the dashboard shows: All mailboxes first, set apart, then each address. Nothing for
- * someone with one. `compact` is the rail's: an icon over All or the address, cut to the rail's width, with the choices
- * in full; otherwise a select as wide as what holds it.
+ * Which of the person's mailboxes the dashboard shows: All mailboxes first, set apart, then each address, as wide as
+ * what holds it. Nothing for someone with one. The rail has none: its account menu offers the same choices
+ * (`mailboxChoices`).
  */
-export function MailboxSwitch({ mailboxes, value, onChange, compact = false }: MailboxChoice & { compact?: boolean }) {
+export function MailboxSwitch({ mailboxes, value, onChange }: MailboxChoice) {
   if (mailboxes.length < 2) return null;
-  const Icon = value ? MailIcon : MailsIcon;
   return (
     <Select
       label={`Mailbox, ${value || 'All mailboxes'}`}
       value={value}
       options={[['', 'All mailboxes'], null, ...mailboxes.map((mailbox) => [mailbox, mailbox] as const)]}
       onChange={onChange}
-      {...(compact
-        ? {
-            face: (
-              <span className="flex w-14 flex-col items-center gap-1 py-1.5 text-label font-semibold text-muted-foreground">
-                <Icon aria-hidden className="size-5" strokeWidth={1.75} />
-                <span className="w-full truncate text-center">{value || 'All'}</span>
-              </span>
-            ),
-          }
-        : { wide: true })}
+      wide
     />
   );
+}
+
+/** The same choices as a group of the account menu, the one shown ticked. Nothing for someone with one mailbox. */
+export function mailboxChoices({ mailboxes, value, onChange }: MailboxChoice): MenuGroup[] {
+  if (mailboxes.length < 2) return [];
+  const choice = (mailbox: string, label: string) => ({ label, on: value === mailbox, onSelect: () => onChange(mailbox) });
+  return [{ group: 'Mailbox', items: [choice('', 'All mailboxes'), ...mailboxes.map((mailbox) => choice(mailbox, mailbox))] }];
 }
 
 /** The mailbox the page is narrowed to, beside its title, so a list that looks short says why. */

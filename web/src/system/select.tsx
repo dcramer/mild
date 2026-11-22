@@ -12,8 +12,7 @@ const CONTROL = 'h-(--control) max-w-full justify-between gap-1.5 pr-2 pl-3 text
  * One choice from a short list. `options` are `[value, label]` pairs; `label` names the control for screen readers.
  * A `null` between two draws a rule, setting apart what is not one of the rest (Leave in inbox from the labels).
  * `icons` gives a choice its icon, before its label in the list and once chosen (an action's). `wide` runs the width
- * of what holds it. `face` is drawn in the trigger in place of the value and chevron, where a control's width does not
- * fit (the rail); the choices still say themselves in full.
+ * of what holds it.
  */
 export function Select<T extends string>({
   label,
@@ -23,7 +22,6 @@ export function Select<T extends string>({
   disabled,
   icons,
   wide,
-  face,
 }: {
   label: string;
   value: T;
@@ -32,24 +30,21 @@ export function Select<T extends string>({
   disabled?: boolean;
   icons?: Partial<Record<T, ReactNode>>;
   wide?: boolean;
-  face?: ReactNode;
 }) {
   const items = options.flatMap((option) => (option ? [{ value: option[0], label: option[1] }] : []));
   return (
     <Base.Root items={items} value={value} disabled={disabled ?? false} onValueChange={(next) => next !== null && onChange(next)}>
-      <Base.Trigger aria-label={label} className={cn(TRIGGER, face ? 'flex-col justify-center' : CONTROL, wide && 'w-full')}>
-        {face ?? (
-          <>
-            {/* Down a pixel, as a button's words sit: Karla centred on its box reads high. */}
-            <span className="relative top-px flex min-w-0 items-center gap-2">
-              {icons?.[value] ?? null}
-              <span className="truncate">
-                <Base.Value />
-              </span>
+      <Base.Trigger aria-label={label} className={cn(TRIGGER, CONTROL, wide && 'w-full')}>
+        <>
+          {/* Down a pixel, as a button's words sit: Karla centred on its box reads high. */}
+          <span className="relative top-px flex min-w-0 items-center gap-2">
+            {icons?.[value] ?? null}
+            <span className="truncate">
+              <Base.Value />
             </span>
-            <Base.Icon render={<ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />} />
-          </>
-        )}
+          </span>
+          <Base.Icon render={<ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />} />
+        </>
       </Base.Trigger>
       <Base.Portal>
         <Base.Positioner sideOffset={4} align="start" alignItemWithTrigger={false} className="z-50">
