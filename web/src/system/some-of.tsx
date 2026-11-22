@@ -1,11 +1,9 @@
 'use client';
 import { useState } from 'react';
+import { TextPress } from './type.tsx';
 
 /** How many a folded list names before "and N more". */
 const SHOWN = 3;
-
-const PRESS =
-  'cursor-pointer underline decoration-foreground/35 underline-offset-[0.2em] hover:decoration-foreground focus-visible:decoration-foreground pointer-coarse:-my-3 pointer-coarse:py-3';
 
 /**
  * Items said in a line, "a, b, c and 38 more", so a long list (everyone a message went to) never pushes what
@@ -19,17 +17,17 @@ export function SomeOf({ items, shown = SHOWN }: { items: readonly string[]; sho
     return (
       <>
         {items.join(', ')}{' '}
-        <button type="button" aria-expanded className={PRESS} onClick={() => setOpen(false)}>
+        <TextPress aria-expanded onPress={() => setOpen(false)}>
           Fewer
-        </button>
+        </TextPress>
       </>
     );
   return (
     <>
       {items.slice(0, shown).join(', ')} and{' '}
-      <button type="button" aria-expanded={false} className={PRESS} onClick={() => setOpen(true)}>
+      <TextPress aria-expanded={false} onPress={() => setOpen(true)}>
         {items.length - shown} more
-      </button>
+      </TextPress>
     </>
   );
 }

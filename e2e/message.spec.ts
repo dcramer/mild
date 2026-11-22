@@ -48,6 +48,9 @@ async function showAs(open: Locator, view: 'text' | 'HTML') {
     .click();
 }
 
+/** A one-pixel PNG, standing in for every image a sender links to. */
+const PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
 const mailFrame = (page: Page, subject: string) => page.frameLocator(`iframe[title="${subject}"]`);
 
 test.describe('A message as its HTML', () => {
@@ -65,6 +68,22 @@ test.describe('A message as its HTML', () => {
     // reported as failed a moment later, so the list is asked again until it has gone.
     await page.waitForLoadState('networkidle');
     await expect.poll(() => [...sent]).toEqual([]);
+  });
+
+  test('Show images loads the images it asked for, until it is opened again', async ({ page, sift }) => {
+    const sent = remote(page, sift.url);
+    await page.route('https://*.example.com/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(PIXEL, 'base64') }));
+    await page.goto(DEALS);
+    const open = reader(page);
+    await open.getByRole('button', { name: 'Show images' }).click();
+    await expect(open.getByText('Remote images are blocked')).toHaveCount(0);
+    const frame = mailFrame(page, '48 hours only: 30% off');
+    await expect(frame.getByRole('img', { name: '48 hours only' })).toHaveJSProperty('naturalWidth', 1);
+    await expect
+      .poll(() => [...sent].toSorted())
+      .toEqual(['https://images.example.com/hero.png', 'https://images.example.com/paper.png', 'https://track.example.com/open.gif?u=me']);
+    await page.goto(DEALS);
+    await expect(reader(page).getByRole('button', { name: 'Show images' })).toBeVisible();
   });
 
   test('a link in it opens in a new tab, and the panel stays', async ({ page, context }) => {
@@ -174,7 +193,12 @@ test.describe('A message read as part of the page', () => {
 /** Ada's reply shown as `html` instead, cleaned and sent as Sift sends any message's frame. */
 const replyAs = (page: Page, html: string) =>
   page.route('**/api/message/html?**', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', headers: { 'content-security-policy': FRAME_POLICY }, body: mailDocument(html) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      headers: { 'content-security-policy': FRAME_POLICY },
+      body: mailDocument(html, false),
+    }),
   );
 
 const ASKED = 'Shall we meet at the lake?';

@@ -85,7 +85,7 @@ export const FRAME_SCRIPT = `(() => {
   on('DOMContentLoaded', () => {
     const body = root.querySelector('body');
     if (body) fold(body);
-    blocked ||= root.querySelector('img:not([src])') !== null;
+    blocked ||= root.querySelector('[data-sift-remote]') !== null;
     root.style.overflowY = 'hidden';
     const watch = new ResizeObserver(tell);
     watch.observe(root);

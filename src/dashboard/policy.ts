@@ -15,6 +15,9 @@ export const PAGE_HEADERS = {
   'referrer-policy': 'no-referrer',
 };
 
+const framePolicy = (images: string) =>
+  `default-src 'none'; script-src ${FRAME_SCRIPT_HASH}; style-src 'unsafe-inline'; img-src ${images}; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox`;
+
 /**
  * A message's own HTML. No script the mail brings runs: the one allowed is Sift's (`FRAME_SCRIPT`, by its hash). The
  * frame has no origin of its own to reach the dashboard's data from (no `allow-same-origin`), so even that script
@@ -22,4 +25,11 @@ export const PAGE_HEADERS = {
  * image, font, stylesheet or tracking pixel. Its own inline styles are all it may have. Links open in a new tab, which
  * is not sandboxed so the site linked to works.
  */
-export const FRAME_POLICY = `default-src 'none'; script-src ${FRAME_SCRIPT_HASH}; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox`;
+export const FRAME_POLICY = framePolicy('data:');
+
+/**
+ * The same, once the reader has pressed Show images: images over HTTPS from anywhere, which tells each sender the
+ * message was opened, when, and from what address and browser. Nothing else of the reader's goes with them: the frame
+ * sends no referrer, and has no origin of its own for a cookie to belong to.
+ */
+export const IMAGES_FRAME_POLICY = framePolicy('data: https:');

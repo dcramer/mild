@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { type MessageDetail, api } from '@/lib/api.ts';
 import { FACTS, type FactAnswer, capitalised, factWords } from '@/lib/format.ts';
 import { type RuleStart, factStart, listStart } from '@/lib/rule-start.ts';
-import { Button, Heads, MailFrame, Quoted, RowActions, Section, Sub, Table, Td, Th, Tr } from '@/system';
+import { Button, Heads, MailFrame, Quoted, RowActions, Section, Sub, Table, Td, TextPress, Th, Tr } from '@/system';
 import { splitQuoted } from '@/lib/quoted.ts';
 import { reveal } from '@/lib/reveal.ts';
 
@@ -54,15 +54,24 @@ export function useMessageView(detail: MessageDetail): { html: boolean; more: { 
   return { html, more: detail.hasHtml ? [{ label: html ? 'Show as text' : 'Show as HTML', onSelect: () => choose(html ? 'text' : 'html') }] : [] };
 }
 
-/** A message as Sift holds it: its HTML (`html`, from `useMessageView`), or its text when it has none or the reader chose text. */
+/**
+ * A message as Sift holds it: its HTML (`html`, from `useMessageView`), or its text when it has none or the reader chose text.
+ * Its images load only once the reader presses Show images, since loading them tells the sender it was opened; the next
+ * message is blocked again.
+ */
 export function MessageBody({ detail, html }: { detail: MessageDetail; html: boolean }) {
   const [blocked, setBlocked] = useState(false);
+  const [images, setImages] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {html && blocked ? <p className="text-sm text-muted-foreground">Remote images are blocked</p> : null}
+      {html && blocked && !images ? (
+        <p className="text-sm text-muted-foreground">
+          Remote images are blocked. <TextPress onPress={() => setImages(true)}>Show images</TextPress>
+        </p>
+      ) : null}
       {html ? (
         <MailFrame
-          src={api.messageHtml(detail.messageId, detail.accountId)}
+          src={api.messageHtml(detail.messageId, detail.accountId, images)}
           title={reveal(detail.subject) || '(no subject)'}
           onBlocked={() => setBlocked(true)}
         />

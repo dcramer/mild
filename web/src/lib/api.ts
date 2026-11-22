@@ -258,8 +258,9 @@ export const api = {
     ),
   /** A message by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
   message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
-  /** Where a frame loads a message as the HTML Sift holds for it. */
-  messageHtml: (id: string, mailbox: string) => `/api/message/html?${new URLSearchParams({ id, mailbox })}`,
+  /** Where a frame loads a message as the HTML Sift holds for it; `images` once the reader asked for its images. */
+  messageHtml: (id: string, mailbox: string, images: boolean) =>
+    `/api/message/html?${new URLSearchParams(images ? { id, mailbox, images: '1' } : { id, mailbox })}`,
   /** Everyone the person has mail from, newest first, a page at a time. */
   contacts: (q: ContactQuery, signal: AbortSignal) => get<ContactPage>('/api/contacts', { ...q }, signal),
   /** `name` lists only their mail under that name. */

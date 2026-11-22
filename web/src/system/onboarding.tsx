@@ -2,7 +2,7 @@
 import { CheckIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { Wordmark } from './type.tsx';
+import { TextPress, Wordmark } from './type.tsx';
 
 /**
  * The page in place of the dashboard while someone sets Sift up: connecting a model, saying what they want,
@@ -33,8 +33,8 @@ export function Onboarding({
         {account ? (
           <p className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span className="min-w-0 truncate max-sm:hidden">{account.name}</span>
-            <Press onPress={account.onSettings}>Settings</Press>
-            <Press onPress={account.onSignOut}>Sign out</Press>
+            <TextPress onPress={account.onSettings}>Settings</TextPress>
+            <TextPress onPress={account.onSignOut}>Sign out</TextPress>
           </p>
         ) : null}
       </header>
@@ -72,13 +72,5 @@ function Steps({ steps, current }: { steps: readonly string[]; current: number }
         Step {current + 1} of {steps.length}: {steps[current]}
       </p>
     </>
-  );
-}
-
-function Press({ onPress, children }: { onPress: () => void; children: ReactNode }) {
-  return (
-    <button type="button" onClick={onPress} className="cursor-pointer underline decoration-foreground/35 underline-offset-[0.2em] hover:decoration-foreground">
-      {children}
-    </button>
   );
 }

@@ -47,4 +47,4 @@ export { Heads, OnPhone, RowActions, RowCheck, RowPresses, Sub, Table, Td, Th, T
 export { Timeline, TimelineEvent } from './timeline.tsx';
 export { Toaster, useToast } from './toast.tsx';
 export { Tooltip } from './tooltip.tsx';
-export { Code, Highlight, Hint, Kbd, Look, Marked, TextLink, Wordmark } from './type.tsx';
+export { Code, Highlight, Hint, Kbd, Look, Marked, TextLink, TextPress, Wordmark } from './type.tsx';

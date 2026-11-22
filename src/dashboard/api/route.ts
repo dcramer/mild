@@ -45,13 +45,14 @@ export interface Read<Q extends z.ZodType = z.ZodType, R extends z.ZodType = z.Z
 
 /**
  * A GET answered with a document for a frame on the page instead of JSON: a message as its HTML. It is
- * given the scope as a read is, and sent under the frame's own policy, never the page's (`FRAME_HEADERS`
+ * given the scope as a read is, and sent under the frame's own policy, never the page's (`frameHeaders`
  * in server.ts). `html` is the whole document, a sentence in place of the message when it cannot be shown.
+ * `images`: the reader asked for its images, so the policy lets them load (`IMAGES_FRAME_POLICY`).
  */
 export interface Frame<Q extends z.ZodType = z.ZodType> {
   path: string;
   query: Q;
-  run(ctx: Context, scope: Scope, query: z.output<Q>): Promise<{ status: 200 | 404; html: string }>;
+  run(ctx: Context, scope: Scope, query: z.output<Q>): Promise<{ status: 200 | 404; html: string; images?: boolean }>;
 }
 
 /**
