@@ -62,7 +62,8 @@ test.describe('What the page sends Sentry', () => {
     await page.goto('/');
     await expect.poll(() => sent.some((envelope) => envelope.includes('"pageload"'))).toBe(true);
     // Work that holds the page for most of a second, as drawing a long list in one go can.
-    await page.evaluate('{ const end = performance.now() + 700; while (performance.now() < end); }');
-    await expect.poll(() => sent.find((envelope) => envelope.includes('The page froze for'))).toContain('"screen":"/"');
+    await page.evaluate('void requestAnimationFrame(() => { const end = performance.now() + 700; while (performance.now() < end); })');
+    // A long frame is reported once the page is idle again, and sent after.
+    await expect.poll(() => sent.find((envelope) => envelope.includes('The page froze for')), { timeout: 15_000 }).toContain('"screen":"/"');
   });
 });
