@@ -300,8 +300,11 @@ export const api = {
   models: (signal: AbortSignal) => get<Models>('/api/models', {}, signal),
   /** The reader's own: true, Mild carries out its decisions in their Gmail. */
   setActive: (active: boolean) => post('/api/active', { active }),
-  /** Mail the person wrote, sent as them. */
-  send: (mail: SendRequest) => post<{ id: string; threadId: string }>('/api/mail/send', mail),
+  /**
+   * Mail the person wrote, sent as them. Sent as the page closes too, when its toast goes then, as far as a browser lets a
+   * closing page send (64 KB); a longer one waits in the draft, which Send sends once.
+   */
+  send: (mail: SendRequest) => post<{ id: string; threadId: string }>('/api/mail/send', mail, JSON.stringify(mail).length < 60_000),
   /** Whom to suggest as an address is typed in the composer. */
   addresses: (q: string, signal: AbortSignal) => get<{ addresses: AddressSuggestion[] }>('/api/mail/addresses', { q }, signal),
   /** A message's files, read from Gmail once where Mild has not kept them. */

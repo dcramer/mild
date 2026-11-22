@@ -52,9 +52,9 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
       // The last list stands until tomorrow's.
     }
   }
-  const pull = await mailOnly(db, account, await pullChanges(api, account.historyId));
-  const byUser = await userChanges(db, account.id, pull.labelChanges, syncedAt ?? 0);
   const keeping = await inboxOn(db);
+  const pull = await mailOnly(db, account, await pullChanges(api, account.historyId), keeping);
+  const byUser = await userChanges(db, account.id, pull.labelChanges, syncedAt ?? 0);
   const known = await recorded(db, account.id, [...pull.messageIds, ...pull.strays, ...(keeping ? pull.elsewhere : [])]);
   const since = (syncedAt ?? startedAt) - LATE;
   const added: MessageFacts[] = [];
@@ -84,12 +84,11 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
     const raw = keeping ? (whole?.raw ?? null) : await api.getMetadata(id);
     const arrived = raw?.labelIds.includes('INBOX') && (!stray || raw.internalDate >= since);
     const facts = raw && arrived ? toFacts(account.id, raw) : null;
-    // A digest whose Gmail id Mild had not recorded yet when this read it.
+    // Mild's own digest is never triaged.
     if (!facts || (await isOwnDigest(db, facts.headers))) {
-      // Read whole already: mail that is not new to the inbox is still the person's mail, kept as the copy would.
-      const other = whole && !arrived && !whole.raw.labelIds.some((label) => NOT_MAIL.includes(label)) ? toFacts(account.id, whole.raw) : null;
-      if (other && !(await isOwnDigest(db, other.headers)) && (await recordKept(db, account.id, { facts: other, text: textOf(whole!.content) }, startedAt)))
-        kept++;
+      // Read whole already, with Inbox on: mail that is not new to the inbox, and a digest, are still the person's mail, kept as the copy would.
+      const mine = whole && !whole.raw.labelIds.some((label) => NOT_MAIL.includes(label)) ? (facts ?? toFacts(account.id, whole.raw)) : null;
+      if (mine && (await recordKept(db, account.id, { facts: mine, text: textOf(whole!.content) }, startedAt))) kept++;
       if (!stray) skipped++;
       continue;
     }
@@ -109,7 +108,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
       }
       const whole = await api.getMessage(id);
       const facts = whole && !whole.raw.labelIds.some((label) => NOT_MAIL.includes(label)) ? toFacts(account.id, whole.raw) : null;
-      if (!facts || (await isOwnDigest(db, facts.headers))) continue;
+      if (!facts) continue;
       if (await recordKept(db, account.id, { facts, text: textOf(whole!.content) }, startedAt)) kept++;
     }
 
@@ -135,7 +134,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
  * history from the cursor (2 quota units a page) and moves nothing.
  */
 export async function syncWants(db: Sql, api: GmailApi, account: Account): Promise<boolean> {
-  const pull = await mailOnly(db, account, await pullChanges(api, account.historyId));
+  const pull = await mailOnly(db, account, await pullChanges(api, account.historyId), await inboxOn(db));
   if (pull.mode !== 'incremental' || pull.messageIds.length > 0) return true;
   if ((await recorded(db, account.id, pull.strays)).size < pull.strays.length) return true;
   if (pull.elsewhere.length > 0 && (await inboxOn(db)) && (await recorded(db, account.id, pull.elsewhere)).size < pull.elsewhere.length) return true;
@@ -152,8 +151,12 @@ async function recorded(db: Sql, accountId: string, ids: readonly string[]): Pro
   return new Set(rows.map((r) => r.id));
 }
 
-/** History without Mild's own digests: one arriving, or read, is nothing for a pass to do. */
-async function mailOnly(db: Sql, account: Account, pull: PullResult): Promise<PullResult> {
+/**
+ * History without Mild's own digests: with Inbox off, one arriving, or read, is nothing for a pass to do. With it on, a
+ * digest is the person's mail like any other, recorded and followed for Inbox, and never triaged.
+ */
+async function mailOnly(db: Sql, account: Account, pull: PullResult, keeping: boolean): Promise<PullResult> {
+  if (keeping) return pull;
   const digests = await knownDigests(db, account.id, [
     ...new Set([...pull.messageIds, ...pull.strays, ...pull.elsewhere, ...pull.labelChanges.map((c) => c.messageId)]),
   ]);

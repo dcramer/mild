@@ -314,6 +314,17 @@ export const dismiss = async (page: Page, name: string) => {
   await expect(toast(page, name)).toHaveCount(0);
 };
 
+/**
+ * Mail sent from the composer, which is held while its toast says Sending, as Undo send holds it: dismissing the toast
+ * sends it at once, and the toast says Sent once Gmail has it.
+ */
+export async function sendNow(page: Page, title: string) {
+  const held = toast(page, title);
+  await expect(held).toContainText('Sending');
+  await held.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(toast(page, title)).toContainText('Sent');
+}
+
 /** A failure's toast, as it is announced: Base UI hides the toast itself from assistive technology and says it as an alert. */
 export const failureToast = (page: Page, title: string) => page.getByRole('alert').filter({ hasText: title });
 

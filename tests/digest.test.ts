@@ -11,6 +11,7 @@ import type { Store } from '../src/store/store.ts';
 import type { Highlighter } from '../src/triage/digest.ts';
 import { type RunOptions, type Work, dueWork, runOnce, runWork } from '../src/work/run.ts';
 import { syncAccount, syncWants } from '../src/work/sync.ts';
+import { setMail } from '../src/store/preferences.ts';
 import { connectGmail, fakeGoogle, onePerson, raw } from './fixtures.ts';
 import { ACCOUNT, UNSURE, facts } from './helpers.ts';
 
@@ -324,5 +325,30 @@ describe('a daily digest', () => {
     await raw(db).run('UPDATE digests SET gmail_id = NULL');
     expect(await syncAccount(db, api, from(before), () => clock)).toMatchObject({ added: [], skipped: 1 });
     expect(await raw(db).get('SELECT count(*) AS n FROM messages WHERE id = ?', id)).toEqual({ n: 0 });
+  });
+
+  it('is the person’s mail while Inbox is on: recorded with its text, followed as it is read, and never triaged', async () => {
+    await arrive(ACCOUNT, ['b1', 'Run 1 passed']);
+    clock = SEVEN + 5 * 60_000;
+    const { api } = connectGmail(fake.google);
+    const before = fake.google.mailbox(ACCOUNT).cursor();
+    await runWork(store, DIGEST, options(), clock + 60_000);
+    await setMail(db, true, { now: clock });
+    const { id } = digests()[0]!;
+    const from = (cursor: string) => ({ id: ACCOUNT, number: 1, email: ACCOUNT, historyId: cursor });
+    expect(await syncWants(db, api, from(before))).toBe(true);
+    expect(await syncAccount(db, api, from(before), () => clock)).toMatchObject({ added: [], kept: 1 });
+    expect(await raw(db).get('SELECT decided, label_ids FROM messages WHERE id = ?', id)).toEqual({
+      decided: true,
+      label_ids: ['INBOX', 'UNREAD', boxOf().labelId('mild/digest')],
+    });
+    expect(await raw(db).get('SELECT count(*) AS n FROM mail_bodies WHERE message_id = ?', id)).toEqual({ n: 1 });
+    expect(await raw(db).get('SELECT count(*) AS n FROM decisions WHERE message_id = ?', id)).toEqual({ n: 0 });
+
+    const cursor = fake.google.mailbox(ACCOUNT).cursor();
+    boxOf().change(id, { remove: ['UNREAD', 'INBOX'] });
+    await syncAccount(db, api, from(cursor), () => clock);
+    expect(await raw(db).get('SELECT label_ids FROM messages WHERE id = ?', id)).toEqual({ label_ids: [boxOf().labelId('mild/digest')] });
+    expect(boxOf().asked('users.messages.get', id)).toHaveLength(1);
   });
 });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Refusal } from '../../../../../refusal.ts';
+import { triedToSend } from '../../../../../store/actions.ts';
 import { refuseMissing } from '../../../../../store/uploads.ts';
 import { replyTo } from '../../../../queries/reply.ts';
 import { mailboxOf } from '../../../../queries/messages.ts';
@@ -15,7 +16,8 @@ export default write({
   touches: named,
   run: async ({ db, controls }, { accountId, id, from, to, cc, bcc, text, uploads, ...about }, scope) => {
     if (!controls) throw new Refusal('This dashboard cannot send mail.');
-    await refuseMissing(db, uploads);
+    // A try before this one took its files with it, or still holds them.
+    if (!(await triedToSend(db, id))) await refuseMissing(db, uploads);
     const mail = { from, to, cc, bcc, text };
     if ('subject' in about) {
       const { subject, forwarding } = about;

@@ -179,12 +179,14 @@ export async function lastUnsubscribeFailure(db: Sql, accountId: string, sender:
 /**
  * Tries at putting in a digest or sending mail whose outcome was never confirmed, of the one `which` picks out: `pending`
  * while its call has not answered, `unknown` once it failed without saying whether it landed. `at` is its latest word.
+ * `done` asks instead for the tries Gmail took.
  */
 export async function openTries(
   db: Sql,
   type: 'digest' | 'send',
   which: (payload: ActionPayload) => boolean,
-): Promise<{ id: number; status: 'pending' | 'unknown'; at: number }[]> {
+  done = false,
+): Promise<{ id: number; status: 'pending' | 'unknown' | 'done'; at: number }[]> {
   const rows = await db
     .select({
       id: actions.id,
@@ -195,8 +197,14 @@ export async function openTries(
       completedAt: actions.completedAt,
     })
     .from(actions)
-    .where(and(eq(actions.type, type), inArray(actions.status, ['pending', 'unknown'])));
+    .where(and(eq(actions.type, type), inArray(actions.status, done ? ['done'] : ['pending', 'unknown'])));
   return rows
     .filter((r) => which(openPayload(db, r.accountId, r.payload)))
-    .map((r) => ({ id: r.id, status: r.status === 'pending' ? 'pending' : 'unknown', at: r.completedAt ?? r.createdAt }));
+    .map((r) => ({ id: r.id, status: done ? 'done' : r.status === 'pending' ? 'pending' : 'unknown', at: r.completedAt ?? r.createdAt }));
+}
+
+/** Whether a press of Send has tried this Message-ID before, whatever became of it. */
+export async function triedToSend(db: Sql, messageId: string): Promise<boolean> {
+  const ours = (payload: ActionPayload) => payload.send?.messageId === messageId;
+  return (await openTries(db, 'send', ours)).length > 0 || (await openTries(db, 'send', ours, true)).length > 0;
 }

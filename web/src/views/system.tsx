@@ -41,6 +41,7 @@ import {
   Code,
   ConfirmButton,
   DeleteButton,
+  Ask,
   AttachButton,
   DiscardButton,
   type DraftFile,
@@ -490,6 +491,11 @@ export function SystemView() {
               <ConfirmButton variant="plain" question="Archive, label and mark spam on new mail by itself?" onConfirm={() => toast('Mild is on')}>
                 Turn on
               </ConfirmButton>
+            </Row>
+            <Row label="ask" note="A press that asks only when what it acts on needs it: Send, on mail with no subject.">
+              <Ask question="Send without a subject?" onYes={() => toast('Sends it')} onNo={() => toast('Back to writing')}>
+                Send
+              </Ask>
             </Row>
           </Sheet>
         </Section>

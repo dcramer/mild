@@ -3,6 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": [
+    "*.css",
+    "./src/**",
+    "./app/**",
+    "./instrumentation*.ts",
+    "./proxy.ts"
+  ],
   "description": "Self-hosted inbox triage: labels, archives, filters and unsubscribes, using inference only when cheaper tiers abstain.",
   "bin": {
     "mild": "src/cli/main.ts",

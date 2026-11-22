@@ -352,6 +352,20 @@ describe('sending mail', () => {
     expect(box.sent()).toHaveLength(1);
   });
 
+  it('answers a press tried again after Gmail took it with what went, files and all, never sending it twice', async () => {
+    const { box, me } = await canSend();
+    const { id: upload } = (await me.call('POST', '/api/mail/upload', { name: 'a.txt', type: 'text/plain', size: 2 })).body as { id: string };
+    expect((await me.call('POST', '/api/mail/upload/piece', { id: upload, piece: 0, data: Buffer.from('hi').toString('base64') })).status).toBe(200);
+    const press = mail('<twice.1@example.org>', { uploads: [upload] });
+    const first = await me.call('POST', '/api/mail/send', press);
+    expect(first.status).toBe(200);
+
+    // The page never heard, and presses Send again.
+    expect(await me.call('POST', '/api/mail/send', press)).toMatchObject({ status: 200, body: first.body });
+    expect(box.asked('users.messages.send')).toHaveLength(1);
+    expect(box.sent()).toHaveLength(1);
+  });
+
   it('sends again once a try that never reached Gmail has settled, and an edited draft goes as new mail', async () => {
     const { box, me } = await canSend();
     box.fail('users.messages.send', 'network');

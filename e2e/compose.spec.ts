@@ -11,6 +11,8 @@ import {
   path,
   readSent,
   reader,
+  sendNow,
+  failureToast,
   recipients,
   inboxRows,
   reviewRows,
@@ -75,7 +77,7 @@ test.describe('with Inbox on', () => {
     await writing.getByRole('textbox', { name: 'Message' }).fill('See you at noon.\nBring the plans.');
     await page.keyboard.press('Control+Enter');
 
-    await expect(toast(page, 'Lunch')).toContainText('Sent');
+    await sendNow(page, 'Lunch');
     await expect(writing).toHaveCount(0);
     await param(page, 'compose').toBeNull();
     const [sent, ...more] = sift.sent();
@@ -94,6 +96,64 @@ test.describe('with Inbox on', () => {
     // Sent, it is not kept as a draft.
     await compose(page).click();
     await expect(recipients(composer(page, 'New message'), 'To').chips).toHaveCount(0);
+  });
+
+  test('Send holds the mail while its toast is up: Undo opens the draft again, and left alone it goes', async ({ page, sift }) => {
+    await page.clock.install();
+    await page.goto('/inbox');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
+    await writing.getByRole('textbox', { name: 'Subject' }).fill('Lunch');
+    await writing.getByRole('textbox', { name: 'Message' }).fill('See you at noon.');
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await expect(writing).toHaveCount(0);
+    await toast(page, 'Lunch').getByRole('button', { name: /^Undo/ }).click();
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('See you at noon.');
+    await expect(recipients(writing, 'To').chip('ada@example.org')).toBeVisible();
+    expect(sift.sent()).toEqual([]);
+
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await expect(toast(page, 'Lunch')).toContainText('Sending');
+    // The toast is low on the screen, and one pointed at waits.
+    await page.mouse.move(0, 0);
+    await page.clock.runFor(8000);
+    await page.clock.resume();
+    await expect(toast(page, 'Lunch')).toContainText('Sent');
+    expect(sift.sent()).toHaveLength(1);
+  });
+
+  test('Send asks first about mail with no subject, or that mentions a file with none attached', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
+    await writing.getByRole('textbox', { name: 'Message' }).fill('The plans are attached.');
+    const sendIt = writing.getByRole('button', { name: /^Send/ });
+    await sendIt.click();
+    const asked = writing.getByRole('group', { name: 'Send without a subject?' });
+    await expect(asked.getByRole('button', { name: 'Send' })).toBeFocused();
+    await asked.getByRole('button', { name: 'Cancel' }).click();
+    await expect(sendIt).toBeVisible();
+
+    await writing.getByRole('textbox', { name: 'Subject' }).fill('Plans');
+    await page.keyboard.press('Control+Enter');
+    const file = writing.getByRole('group', { name: 'You mention a file, but none is attached. Send anyway?' });
+    await expect(file.getByRole('button', { name: 'Send' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(file).toHaveCount(0);
+    await expect(writing).toBeVisible();
+    // Each question in turn, the subject's first.
+    await writing.getByRole('textbox', { name: 'Subject' }).fill('');
+    await page.keyboard.press('Control+Enter');
+    await expect(asked.getByRole('button', { name: 'Send' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(file.getByRole('button', { name: 'Send' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await sendNow(page, 'To ada@example.org');
+    expect(sift.sent()).toHaveLength(1);
   });
 
   test('as an address is typed it suggests whom the person knows, by any word of their name, and a pick is a chip', async ({ page }) => {
@@ -142,7 +202,7 @@ test.describe('with Inbox on', () => {
     await expect(files.getByRole('listitem')).toHaveText(['roof.pdf13 bytes']);
     await writing.getByRole('button', { name: /^Send/ }).click();
 
-    await expect(toast(page, 'Plans')).toContainText('Sent');
+    await sendNow(page, 'Plans');
     const [sent] = sift.sent();
     expect(sent!.raw).toContain(`filename*=UTF-8''roof.pdf`);
     expect(sent!.raw).not.toContain('old.txt');
@@ -168,17 +228,22 @@ test.describe('with Inbox on', () => {
       await writing.getByRole('textbox', { name: 'Subject' }).fill('Lunch');
       await writing.getByRole('textbox', { name: 'Message' }).fill('See you at noon.');
       const sendIt = writing.getByRole('button', { name: /^Send/ });
-      await sendIt.click();
-      await expect.poll(() => ids.length).toBe(1);
-      await expect(sendIt).toBeEnabled();
-      await sendIt.click();
-      await expect.poll(() => ids.length).toBe(2);
+      // Each failure says so, and Open draft brings it back as it was, with the Message-ID of the press that failed.
+      for (const tries of [1, 2]) {
+        await sendIt.click();
+        await toast(page, 'Lunch').getByRole('button', { name: 'Dismiss' }).click();
+        await expect.poll(() => ids.length).toBe(tries);
+        const failed = failureToast(page, 'Not sent: Lunch');
+        await expect(failed).toContainText('Try again.');
+        // The failure is said as an alert, and its toast is hidden from assistive technology.
+        await toasts(page).getByRole('button', { name: 'Open draft', includeHidden: true }).click();
+        await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('See you at noon.');
+      }
       expect(ids[1]).toBe(ids[0]);
 
-      await expect(sendIt).toBeEnabled();
       await writing.getByRole('textbox', { name: 'Message' }).fill('See you at one.');
       await sendIt.click();
-      await expect(toast(page, 'Lunch')).toContainText('Sent');
+      await sendNow(page, 'Lunch');
       expect(ids).toHaveLength(3);
       expect(ids[2]).not.toBe(ids[0]);
       const [sent] = sift.sent();
@@ -263,7 +328,7 @@ test.describe('with Inbox on', () => {
     await page.keyboard.type('Thursday works.');
     await writing.getByRole('button', { name: /^Send/ }).click();
 
-    await expect(toast(page, 'Re: Lunch on Thursday?')).toContainText('Sent');
+    await sendNow(page, 'Re: Lunch on Thursday?');
     await expect(writing).toHaveCount(0);
     // The message it answers is still open.
     await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
@@ -296,15 +361,15 @@ test.describe('with Inbox on', () => {
     await param(page, 'compose').toBe('reply');
     await page.keyboard.type('Thursday works.');
     await page.keyboard.press('Control+Enter');
-
-    await expect(toast(page, 'Re: Lunch on Thursday?')).toContainText('Sent');
     await expect(writing).toHaveCount(0);
+    // Back on the reader, not on its first link, whose card would open over the conversation.
+    await expect(open).toBeFocused();
+
+    await sendNow(page, 'Re: Lunch on Thursday?');
     // The newest in the conversation now, open under Ada's.
     await expect(open.getByRole('article').last()).toContainText('Thursday works.');
     // From the account, said as a mail app says it.
     await expect(open.getByRole('article').last().getByText('me', { exact: true })).toBeVisible();
-    // Back on the reader, not on its first link, whose card would open over the conversation.
-    await expect(open).toBeFocused();
     expect(readSent(sift.sent()[0]!.raw).headers).toMatchObject({ 'In-Reply-To': '<thursday@example.org>' });
 
     // Opened again, the reply is the newest, so it is the one open and Ada's is folded above it.
@@ -331,7 +396,7 @@ test.describe('with Inbox on', () => {
     await page.keyboard.type('Thanks.');
     await page.keyboard.press('Control+Enter');
 
-    await expect(toast(page, 'Re: Your March bill')).toContainText('Sent');
+    await sendNow(page, 'Re: Your March bill');
     expect(readSent(sift.sent()[0]!.raw).headers).toMatchObject({ 'In-Reply-To': '<march@utility.example.net>' });
   });
 
@@ -359,7 +424,7 @@ test.describe('with Inbox on', () => {
     await expect(open.getByRole('article')).toHaveCount(2);
     await writing.getByRole('button', { name: /^Send/ }).click();
 
-    await expect(toast(page, 'Re: Your May bill')).toContainText('Sent');
+    await sendNow(page, 'Re: Your May bill');
     await expect(writing).toHaveCount(0);
     await param(page, 'answering').toBeNull();
     await expect(open.getByRole('article').last()).toContainText('Paid already.');
@@ -398,11 +463,12 @@ test.describe('with Inbox on', () => {
     await expect(recipients(writing, 'To').input).toBeFocused();
     await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveValue('Fwd: Lunch on Thursday?');
     await page.keyboard.type('grace@example.net');
+    await page.keyboard.press('Tab');
     await writing.getByRole('textbox', { name: 'Message' }).focus();
     await page.keyboard.type('Are you free too?');
     await writing.getByRole('button', { name: /^Send/ }).click();
 
-    await expect(toast(page, 'Fwd: Lunch on Thursday?')).toContainText('Sent');
+    await sendNow(page, 'Fwd: Lunch on Thursday?');
     const { headers, text } = readSent(sift.sent()[0]!.raw);
     expect(headers).toMatchObject({ To: 'grace@example.net', Subject: 'Fwd: Lunch on Thursday?' });
     expect(headers['In-Reply-To']).toBeUndefined();
@@ -422,7 +488,7 @@ test.describe('with Inbox on', () => {
     await recipients(writing, 'To').input.fill('ada@example.org');
     await page.keyboard.press('Tab');
     await writing.getByRole('button', { name: /^Send/ }).click();
-    await expect(toast(page, 'Fwd: Notes from the review')).toContainText('Sent');
+    await sendNow(page, 'Fwd: Notes from the review');
     expect(sift.sent()[0]!.raw).toContain(`filename*=UTF-8''review-notes.pdf`);
 
     await reader(page)
@@ -434,6 +500,7 @@ test.describe('with Inbox on', () => {
     await page.keyboard.press('Tab');
     await writing.getByRole('button', { name: /^Send/ }).click();
     await expect(writing).toHaveCount(0);
+    await sendNow(page, 'Fwd: Notes from the review');
     await expect.poll(() => sift.sent().length).toBe(2);
     expect(sift.sent()[1]!.raw).not.toContain('review-notes.pdf');
   });
