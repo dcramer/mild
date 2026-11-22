@@ -76,6 +76,7 @@ import {
   MailFrame,
   Quoted,
   Marked,
+  MailboxIcon,
   MailboxSwitch,
   Masthead,
   Menu,
@@ -149,6 +150,8 @@ const USAGE = {
   },
 };
 const SYNCED = Date.now() - 20_000;
+/** A made-up site's icon, as a mailbox's domain would give one. */
+const SPECIMEN_ICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#362d59"/><path d="M16 6l10 19H6z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>')}`;
 const SPECIMEN_ACCOUNTS = [
   { id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true, canSend: false, aliases: [], signInEnds: null },
 ];
@@ -1122,6 +1125,14 @@ export function SystemView() {
               <MailboxSwitch {...mailboxes} />
             </div>
           </div>
+          <Row
+            label="MailboxIcon"
+            note="Which mailbox a message came to, before its address in the reader's To line, for someone with more than one: its domain's own icon, its initial where the site has none, nothing while it loads."
+          >
+            <MailboxIcon address="ada@analytical.example.com" icon={SPECIMEN_ICON} />
+            <MailboxIcon address="ada@example.org" icon={null} />
+            <MailboxIcon address="ada@engines.example.net" icon={undefined} />
+          </Row>
           <div className="flex flex-col gap-6 md:hidden">
             <Sheet className="px-4">
               <Masthead

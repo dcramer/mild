@@ -15,6 +15,7 @@
  *   or with neither says Mild cannot tell which mail you have answered. Suggesting gives Sales pitches when
  *   the words name pitches, Build results (Digest) when they name builds, and notes that Receipts and transactions
  *   covers receipts already when they name receipts; words naming none of these are an unusable answer. A pass is given no model.
+ * - A domain's site, asked for its icon (`StandIns`): example.org's is a made-up triangle; work.example.org has none.
  */
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
@@ -117,5 +118,11 @@ const answer = (context: Context) => {
 };
 faux.setResponses([answer, answer]);
 
-const standIns: StandIns = { model: { spec: 'faux/stand-in', models, model: faux.getModel(), reasoning: 'low' } };
+/** example.org's site gives a made-up icon; any other domain's gives none, so its mailbox shows its initial. */
+const ICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#362d59"/><path d="M16 6l10 19H6z" fill="none" stroke="#fff" stroke-width="3"/></svg>')}`;
+
+const standIns: StandIns = {
+  model: { spec: 'faux/stand-in', models, model: faux.getModel(), reasoning: 'low' },
+  icon: async (domain) => (domain === 'example.org' ? ICON : null),
+};
 (globalThis as Record<symbol, unknown>)[Symbol.for('sift.stand-ins')] = standIns;

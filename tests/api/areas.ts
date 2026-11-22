@@ -45,6 +45,7 @@ export const AREAS = {
     'POST /api/active',
     'POST /api/check',
     'POST /api/digest',
+    'GET /api/mailbox/icons',
     'POST /api/mailbox/primary',
     'POST /api/mailbox/remove',
     'POST /api/account/delete',
