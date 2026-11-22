@@ -21,6 +21,7 @@ import {
   reader,
   readerHeading,
   senderCard,
+  section,
   senderPage,
   settings,
   settingsInbox,
@@ -453,6 +454,51 @@ test.describe('Inbox', () => {
     await expect(widgets).toBeVisible();
     await expect(inboxRow(other, 'This week in widgets')).toBeVisible();
     await other.close();
+  });
+
+  test('a digest Mild put in the inbox opens as what it lists, the picks first with why, each opening in the reader', async ({ page }) => {
+    await page.goto('/inbox');
+    const idOf = async (subject: string) => (await inboxRow(page, subject).getAttribute('data-holds'))!.split('/')[1]!;
+    const [digest, order, lunch] = [await idOf('This week in widgets'), await idOf('Your order has shipped'), await idOf('Lunch on Thursday?')];
+    const listed = (messageId: string, subject: string, from: { address: string; name: string }) => ({
+      accountId: 'me@example.org',
+      messageId,
+      from,
+      subject,
+      receivedAt: Date.now() - 3_600_000,
+      archivedAt: Date.now() - 3_000_000,
+    });
+    await patchJson(page, '**/api/message?*', (message: { messageId: string }) =>
+      message.messageId === digest
+        ? {
+            ...message,
+            digest: {
+              labelId: 'notification',
+              labelName: 'Notifications',
+              since: 0,
+              until: 1,
+              picks: [{ messageId: order, why: 'It says when the parcel comes.' }],
+              mail: [
+                listed(order, 'Your order has shipped', { address: 'orders@shop.example.com', name: 'Shop' }),
+                listed(lunch, 'Lunch on Thursday?', { address: 'ada@example.org', name: 'Ada Lovelace' }),
+              ],
+            },
+          }
+        : message,
+    );
+    await inboxRow(page, 'This week in widgets').getByRole('cell').nth(2).click();
+    const worth = section(page, 'Worth a look');
+    await expect(worth.getByRole('row').filter({ hasText: 'Your order has shipped' })).toContainText('It says when the parcel comes.');
+    const archived = section(page, 'Archived as Notifications');
+    await expect(archived.getByRole('row').filter({ hasText: 'Lunch on Thursday?' })).toBeVisible();
+    await expect(page.getByText('Five stories about widgets.').filter({ visible: true })).toHaveCount(0);
+    await expect(page.getByRole('combobox', { name: 'What this message is' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Reply', exact: true })).toHaveCount(0);
+
+    await archived.getByRole('row').filter({ hasText: 'Lunch on Thursday?' }).getByRole('cell').nth(1).click();
+    await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
+    await back(page).click();
+    await expect(section(page, 'Worth a look')).toBeVisible();
   });
 
   test('an archive still held when the page is left is sent', async ({ page, sift }) => {

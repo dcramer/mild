@@ -3,10 +3,11 @@ import { keptAttachments } from '../../store/kept.ts';
 import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt, openPayload } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
+import { digestShown } from '../../store/digests.ts';
 import { openEnvelope, openPart } from '../../store/content.ts';
 import { bulkSignals, passedDmarc } from '../../triage/features.ts';
 import { Refusal } from '../../refusal.ts';
-import { type Scope, within } from '../scope.ts';
+import { type Scope, sees, within } from '../scope.ts';
 import type { MessageDetail } from '../types.ts';
 import { decisionsJoined, toDecisionRow } from './decisions.ts';
 import { senderProfile } from './senders.ts';
@@ -28,6 +29,12 @@ export async function mailboxOf(db: Sql, scope: Scope, messageId: string): Promi
 }
 
 /** One message with its full history, in whichever of the scope's mailboxes holds it, or null if Mild has not seen it. */
+/** The digest this message is, with only the mail of mailboxes the request may see. */
+async function digestIn(db: Sql, scope: Scope, accountId: string, messageId: string) {
+  const digest = await digestShown(db, accountId, messageId);
+  return digest && { ...digest, mail: digest.mail.filter((m) => sees(scope, m.accountId)) };
+}
+
 export async function messageDetail(db: Sql, scope: Scope, messageId: string): Promise<MessageDetail | null> {
   const accountId = await mailboxOf(db, scope, messageId);
   if (accountId === null) return null;
@@ -95,6 +102,7 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
     facts: { ...facts, listId: seal(facts.listId) },
     unsubscribe: await canUnsubscribe(db, accountId, plain(m.fromAddress), plain(m.headers)),
     sender: (await senderProfile(db, scope, plain(m.fromAddress)))!,
+    digest: await digestIn(db, scope, accountId, messageId),
     decisions: shown.map((r) => ({ ...toDecisionRow(db, r), ...costs.get(r.id)! })),
     actions: changes.map(({ payload: stored, ...a }) => {
       const payload = openPayload(db, accountId, stored);

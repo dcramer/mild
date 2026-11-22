@@ -3,6 +3,7 @@ import type { Sql } from './sql.ts';
 import { digestName, openEnvelope, openJson, sealJson } from './content.ts';
 import type { Usage } from '../triage/stages/model.ts';
 import { plain } from '../plain.ts';
+import type { Confidential } from '../confidential.ts';
 
 /** The Message-ID a digest is given: `.invalid` is no one's domain, so no mail from anyone else carries one. */
 const DIGEST_ID = /^<digest\.[\w-]+@sift\.invalid>$/;
@@ -103,9 +104,17 @@ export async function hasDigestItems(db: Sql, labelId: string, since: number, un
 
 /** What the label's digest for the window lists, newest first. */
 export async function digestItems(db: Sql, labelId: string, since: number, until: number): Promise<DigestItem[]> {
+  return plain(await heldItems(db, labelId, since, until));
+}
+
+/** A digest's message with what came from mail held, for the page. */
+type HeldItem = Omit<DigestItem, 'from' | 'subject'> & { from: { address: Confidential; name?: Confidential }; subject: Confidential };
+
+/** `digestItems` with what came from mail held, for the page. */
+async function heldItems(db: Sql, labelId: string, since: number, until: number): Promise<HeldItem[]> {
   const rows = await inWindow(db, labelId, since, until).orderBy(desc(messages.receivedAt));
   return rows.map((r) => {
-    const { fromAddress, fromName, subject } = plain(openEnvelope(db, r.accountId, r.messageId, r));
+    const { fromAddress, fromName, subject } = openEnvelope(db, r.accountId, r.messageId, r);
     return {
       accountId: r.accountId,
       messageId: r.messageId,
@@ -206,4 +215,38 @@ export async function labelOfDigest(db: Sql, labelId: string): Promise<DigestLab
 /** A digest that will not go: its window opens again, and is due once there is something in it. */
 export async function dropDigest(db: Sql, id: number): Promise<void> {
   await db.delete(digests).where(eq(digests.id, id));
+}
+
+/** A digest as the reader shows it: its label, its window, what the model picked and why, and what it lists now. */
+export interface DigestShown {
+  labelId: string;
+  labelName: string;
+  since: number;
+  until: number;
+  picks: { messageId: string; why: Confidential }[];
+  mail: HeldItem[];
+}
+
+/**
+ * The digest Mild put into this mailbox as `gmailId`, or null for any other message. What it lists is read again from the
+ * record, so mail answered for or put back since has left it, as the next digest would leave it out.
+ */
+export async function digestShown(db: Sql, accountId: string, gmailId: string): Promise<DigestShown | null> {
+  const [row] = await db
+    .select(RECORD)
+    .from(digests)
+    .where(and(eq(digests.accountId, accountId), eq(digests.gmailId, gmailId)))
+    .limit(1);
+  if (!row) return null;
+  const { id, labelId, since, until, highlights } = row;
+  const label = await labelOfDigest(db, labelId);
+  const picks = highlights === null ? [] : openJson<Highlight[]>(db, digestName(db, id), highlights);
+  return {
+    labelId,
+    labelName: label.name,
+    since,
+    until,
+    picks: picks.map((p) => ({ messageId: plain(p.id), why: p.why })),
+    mail: await heldItems(db, labelId, since, until),
+  };
 }

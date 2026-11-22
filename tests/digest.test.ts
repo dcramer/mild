@@ -12,6 +12,8 @@ import type { Highlighter } from '../src/triage/digest.ts';
 import { type RunOptions, type Work, dueWork, runOnce, runWork } from '../src/work/run.ts';
 import { syncAccount, syncWants } from '../src/work/sync.ts';
 import { setMail } from '../src/store/preferences.ts';
+import { digestShown } from '../src/store/digests.ts';
+import { plain } from '../src/plain.ts';
 import { connectGmail, fakeGoogle, onePerson, raw } from './fixtures.ts';
 import { ACCOUNT, UNSURE, facts } from './helpers.ts';
 
@@ -293,6 +295,11 @@ describe('a daily digest', () => {
       input_tokens: 900,
       cost_usd: 0.002,
     });
+    // As the reader shows it: the pick and why, and what it lists now.
+    const shownNow = plain(await digestShown(db, ACCOUNT, digests()[0]!.id));
+    expect(shownNow).toMatchObject({ labelName: 'Notifications', picks: [{ messageId: 'b2', why: 'The only failure.' }] });
+    expect(shownNow!.mail.map((m) => m.subject).toSorted()).toEqual(['Run 1 passed', 'Run 2 failed', 'Run 3 passed']);
+    expect(await digestShown(db, ACCOUNT, 'b1')).toBeNull();
 
     await arrive(ACCOUNT, ['b4', 'Run 4 passed']);
     highlight = async () => ({ failed: 'timeout' });
