@@ -561,6 +561,13 @@
       "when": 1795452912946,
       "tag": "0079_archived_alongside",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1795467004540,
+      "tag": "0080_gmail_label_names",
+      "breakpoints": true
     }
   ]
 }

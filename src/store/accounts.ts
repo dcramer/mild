@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, lte, accounts, credentials, labels, mailboxes, messages as messageRows, preferences, users } from './query.ts';
+import { and, asc, eq, gt, isNull, lte, not, sql, accounts, credentials, labels, mailboxes, messages as messageRows, preferences, users } from './query.ts';
 import { startCopies } from './copies.ts';
 import { windowStart } from '../mail-window.ts';
 import { inboxRow } from './labels.ts';
@@ -240,6 +240,21 @@ export async function setMailboxAliases(db: Sql, accountId: string, aliases: rea
     .update(mailboxes)
     .set({ aliases: aliases.filter((a) => a !== accountId) })
     .where(eq(mailboxes.id, accountId));
+}
+
+/** Records Gmail's name for a label Mild put on mail, so what it changed reads by name. Writes only when it is new or was renamed. */
+export async function rememberLabelName(db: Sql, accountId: string, id: string, name: string): Promise<void> {
+  const pair = JSON.stringify({ [id]: name });
+  await db
+    .update(mailboxes)
+    .set({ labelNames: sql`${mailboxes.labelNames} || ${pair}::jsonb` })
+    .where(and(eq(mailboxes.id, accountId), not(sql`${mailboxes.labelNames} @> ${pair}::jsonb`)));
+}
+
+/** Gmail's name for each label Mild has put on the mailbox's mail, by its id. */
+export async function labelNames(db: Sql, accountId: string): Promise<Record<string, string>> {
+  const [row] = await db.select({ names: mailboxes.labelNames }).from(mailboxes).where(eq(mailboxes.id, accountId));
+  return row?.names ?? {};
 }
 
 async function insertMessages(

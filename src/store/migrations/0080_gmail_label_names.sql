@@ -1,0 +1,1 @@
+ALTER TABLE "mailboxes" ADD COLUMN "label_names" jsonb DEFAULT '{}'::jsonb NOT NULL;

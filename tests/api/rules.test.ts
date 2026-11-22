@@ -175,6 +175,21 @@ describe('applying a rule to the inbox', () => {
     for (const message of [before, after]) expect(box.message(message)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
   });
 
+  it('names each label it changed in the message’s history: its own by the name it gave them, Gmail’s in words', async () => {
+    const { sift, box, me, news } = await waiting();
+    const { id } = (await me.call('POST', '/api/rules', { match: { from: [NEWS] }, label: 'receipts' })).body as { id: string };
+    await me.call('POST', '/api/rules/apply', { id });
+    await sift.work();
+    await sift.tick();
+    expect(box.message(news)!.labelIds).toContain(box.labelId('mild/receipts'));
+
+    const history = async () => (await me.call('GET', `/api/message?id=${news}`)).body['actions'] as { id: number }[];
+    const [archived] = await history();
+    expect(archived).toMatchObject({ type: 'archive', added: ['mild/receipts'], removed: ['Inbox'] });
+    await me.call('POST', '/api/undo', { id: archived!.id });
+    expect((await history()).at(-1)).toMatchObject({ type: 'undo', added: ['Inbox'], removed: ['mild/receipts'] });
+  });
+
   it('changes nothing in Gmail once stopped', async () => {
     const { sift, box, me, news } = await waiting();
     const { id } = (await me.call('POST', '/api/rules', { match: { from: [NEWS] }, label: 'receipts' })).body as { id: string };
