@@ -35,6 +35,23 @@ export function ContactHint({ contact, said }: { contact: Contact; said?: boolea
   return <Hint icon={CONTACT_ICONS[contact]} says={CONTACT_SAYS[contact]} tone={contact === 'new' ? 'look' : 'plain'} said={said ?? false} />;
 }
 
+/** A domain's link with how Mild knows it after it, held to the domain's last letters: a domain wrapped on a phone never leaves it on a line of its own. */
+export function DomainNamed({ domain, contact }: { domain: string; contact: Contact }) {
+  return (
+    <span>
+      <DomainLink domain={domain} />
+      {contact ? (
+        <>
+          {'\u00a0'}
+          <span className="inline-flex align-[-2px]">
+            <ContactHint contact={contact} />
+          </span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
 /** What Mild's rules say about a sender, one per line. */
 function Rules({ rules }: { rules: SenderProfile['rules'] }) {
   return (
@@ -115,10 +132,7 @@ export function SenderFacts({ profile, page = false }: { profile: SenderProfile;
       {page && right + wrong > 0 ? <Fact term="Mild was right">{`${count(right)} of ${plural(right + wrong, 'time')} you checked`}</Fact> : null}
       {!page && profile.domain ? (
         <Fact term="Domain">
-          <span className="inline-flex items-center gap-2">
-            <DomainLink domain={reveal(profile.domain.name)} />
-            <ContactHint contact={profile.domain.contact} />
-          </span>
+          <DomainNamed domain={reveal(profile.domain.name)} contact={profile.domain.contact} />
         </Fact>
       ) : null}
       {!page && profile.rules.length > 0 ? (
@@ -230,7 +244,7 @@ export function SenderName({ address, name, children }: { address: string; name:
 }
 
 /** A domain, wherever one is named: a link to its page. */
-export function DomainLink({ domain, className }: { domain: string; className?: string }) {
+function DomainLink({ domain, className }: { domain: string; className?: string }) {
   return (
     <HoverCard href={domainHref(domain)} card={<Preview who={{ domain }} />} {...(className ? { className } : {})}>
       {domain}

@@ -350,9 +350,16 @@
     @apply font-sans;
     /* Android reloads the page when it is pulled down from the top, which in the installed app throws away what was open. */
     overscroll-behavior-y: none;
+    /* A double tap zooms a page, and a page left zoomed scrolls sideways; pinching still zooms. */
+    touch-action: manipulation;
+    /* What still comes out wider than the screen is cut off rather than letting the page slide sideways under the thumb.
+       e2e/phone.spec.ts measures the page's width, which this does not hide. */
+    overflow-x: clip;
   }
   body {
     @apply bg-background text-foreground;
+    /* An address, a domain or a link has no space to break at, and mail's can be longer than a phone is wide. */
+    overflow-wrap: break-word;
     font-size: var(--text-base);
     line-height: var(--text-base--line-height);
     -webkit-font-smoothing: antialiased;

@@ -6,6 +6,20 @@ const bar = (page: Page) => page.getByRole('banner');
 /** Inbox's conversations, by when each came: the only rows with a time in them. */
 const conversations = (page: Page) => page.getByRole('row').filter({ hasText: /\d:\d\d [AP]M/ });
 
+/** What `lengthened` puts in front of a sender's domain: a list's sending host, with nowhere to break a line. */
+const LONG = 'em7731.bounces.notifications-mailer.';
+const MINE = new Set(['me@example.org', 'me@work.example.org', 'example.org', 'work.example.org']);
+
+/** `json` with every sender's address and domain as long as a mailing list's (a bounce address, a sending host); the account's own are left. */
+function lengthened(json: unknown): unknown {
+  if (Array.isArray(json)) return json.map(lengthened);
+  if (typeof json === 'object' && json !== null) return Object.fromEntries(Object.entries(json).map(([k, v]) => [k, lengthened(v)]));
+  if (typeof json !== 'string' || MINE.has(json)) return json;
+  const address = /^([^\s@/]+)@([a-z0-9.-]+\.[a-z]+)$/.exec(json);
+  if (address) return `${address[1]}+bounce-2f8a91c04e6b7d35a1c9e2f0b84d6a7e@${LONG}${address[2]}`;
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.(com|org|net)$/.test(json) ? `${LONG}${json}` : json;
+}
+
 /** How many of `rows` are wholly on the first screen. */
 async function onFirstScreen(rows: Locator) {
   let whole = 0;
@@ -58,6 +72,29 @@ test.describe('On a phone', () => {
     await expect.poll(async () => (await boxOf(bar(page))).y).toBe(0);
     const height = (await boxOf(bar(page))).height;
     await expect.poll(async () => (await boxOf(today)).y).toBe(height);
+  });
+
+  test('no screen scrolls sideways, even with addresses and domains as long as a mailing list sends', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const response = await route.fetch();
+      if (!(response.headers()['content-type'] ?? '').includes('json')) return route.fulfill({ response });
+      await route.fulfill({ response, json: lengthened(await response.json()) });
+    });
+    const screens = [
+      '/',
+      '/inbox',
+      '/rules',
+      '/sender/deals%40promo.example.com',
+      '/domain/promo.example.com',
+      '/inbox?message=m4&account=me%40example.org',
+      '/?message=m8&account=me%40example.org',
+    ];
+    for (const screen of screens)
+      await test.step(screen, async () => {
+        await page.goto(screen);
+        await expect(page.getByText(LONG).filter({ visible: true }).first()).toBeVisible();
+        await sideScroll(page).toBe(0);
+      });
   });
 
   test('a phone on its side keeps the layout of a phone', async ({ page }) => {

@@ -26,6 +26,8 @@ const answering = (subject: string) => (/^re:/i.test(subject.trim()) ? subject.t
 /** "Fwd: " once. */
 const forwarding = (subject: string) => (/^fwd?:/i.test(subject.trim()) ? subject.trim() : `Fwd: ${subject.trim()}`);
 
+/** A phone's keyboard for addresses: with @ on it, and nothing capitalised or corrected. */
+const ADDRESSES = { inputMode: 'email', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false } as const;
 const TITLES = { new: 'New message', reply: 'Reply', all: 'Reply to all', forward: 'Forward' } as const;
 
 /**
@@ -288,6 +290,7 @@ function Writer({
           aria-label="To"
           className="flex-1"
           autoComplete="off"
+          {...ADDRESSES}
           value={draft.to}
           onFocus={() => setTyping('to')}
           onBlur={() => setTyping(null)}
@@ -316,6 +319,7 @@ function Writer({
             aria-label="Cc"
             className="flex-1"
             autoComplete="off"
+            {...ADDRESSES}
             value={draft.cc}
             onFocus={() => setTyping('cc')}
             onBlur={() => setTyping(null)}
