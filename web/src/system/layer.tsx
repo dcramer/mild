@@ -17,7 +17,7 @@ export function Backdrop() {
   return (
     <Base.Backdrop
       forceRender
-      className="fixed inset-0 z-50 bg-background/70 transition-opacity duration-150 data-ending-style:pointer-events-none data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
+      className="fixed inset-0 z-50 bg-(--scrim) transition-opacity duration-150 data-ending-style:pointer-events-none data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none"
     />
   );
 }

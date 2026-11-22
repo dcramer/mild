@@ -46,11 +46,12 @@ test.describe('On a phone with a notch', () => {
   /** The status bar and the home indicator, as an iPhone's installed app has them. */
   const notched = (page: Page) => page.addStyleTag({ content: ':root { --safe-top: 47px !important; --safe-bottom: 34px !important; }' });
 
-  test('the top bar, the menu, a panel, a dialog and the reader start below the status bar', async ({ page }) => {
+  test('the top bar, the menu, a panel, a dialog and the reader start below the status bar, the bar a gutter below it', async ({ page }) => {
     await page.goto('/rules');
     await notched(page);
     const below = async (what: Parameters<typeof boxOf>[0]) => expect((await boxOf(what)).y).toBeGreaterThanOrEqual(47);
-    await below(page.getByRole('button', { name: 'Menu' }));
+    // iOS fades what is just under the status bar, so the bar's field stands the page's gutter below it.
+    expect((await boxOf(page.getByRole('button', { name: 'Menu' }))).y).toBeGreaterThanOrEqual(47 + 16);
 
     await page.getByRole('button', { name: 'Menu' }).click();
     await below(menu(page).getByRole('button', { name: 'Close menu' }));

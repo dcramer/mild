@@ -41,6 +41,8 @@
   --color-border: var(--border);
   --color-destructive: var(--destructive);
   --color-muted-foreground: var(--muted-foreground);
+  --color-supporting: var(--supporting);
+  --color-faint: var(--faint);
   --color-popover: var(--popover);
   --color-card: var(--card);
   --color-foreground: var(--foreground);
@@ -52,7 +54,7 @@
   /* How tall the phone's top bar is while it shows (the bar measures itself), so what sticks under it (a day's heading) sits below it. */
   --bar: 0px;
   @media (width < 48rem), (height < 30rem) {
-    --bar: calc(64px + var(--safe-top));
+    --bar: calc(72px + var(--safe-top));
   }
 
   /* Type, by role. */
@@ -64,11 +66,16 @@
   /* The dashboard is dark only: ink-black paper, off-white ink. */
   --background: #111110;
   --foreground: #f0eee8;
-  --card: #181816;
-  --popover: #1d1d1a;
+  /* What floats is a step lighter than the page, so it stands off what it covers. */
+  --card: #1e1e1b;
+  --popover: #232320;
   /* What the nearest layer is drawn on: the page, or a panel or dialog, which set it to theirs. Something laid over its own layer (a question covering a row) takes it. */
   --surface: var(--background);
-  --muted-foreground: #b5b3aa;
+  /* Ink at three strengths: `--foreground`, then what supports it, then what only places it (when, an address, a count, a
+     day's heading), which a row sets as its quiet ink (`Table`). `--muted-foreground` is the quiet ink where it is drawn. */
+  --supporting: #a3a198;
+  --faint: #85837a;
+  --muted-foreground: var(--supporting);
   --destructive: #ff7a6b;
   --border: #2b2b27;
   --ring: #f0eee8;
@@ -86,14 +93,19 @@
   --corner: 3px;
 
   /* The edge of the sheet beneath: the only shadow, always hard and offset down-right. */
-  --edge: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --edge: color-mix(in oklab, var(--foreground) 13%, transparent);
 
   /* Lines are drawn in the ink colour at low strength, never a separate grey. */
-  --rule: color-mix(in oklab, var(--foreground) 8%, transparent);
-  --frame: color-mix(in oklab, var(--foreground) 17%, transparent);
+  --rule: color-mix(in oklab, var(--foreground) 12%, transparent);
+  --frame: color-mix(in oklab, var(--foreground) 22%, transparent);
   /* What a control is filled with, in place of an outline. */
-  --fill: color-mix(in oklab, var(--foreground) 10%, transparent);
-  --fill-strong: color-mix(in oklab, var(--foreground) 17%, transparent);
+  --fill: color-mix(in oklab, var(--foreground) 11%, transparent);
+  --fill-strong: color-mix(in oklab, var(--foreground) 20%, transparent);
+  /* The row the reader is on: quieter than any control, so a control on it, and its hover, stand off it. */
+  --row: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --row-strong: color-mix(in oklab, var(--foreground) 8%, transparent);
+  /* Behind what floats: darker than the page, so the layer is the lightest thing on the screen. */
+  --scrim: rgb(0 0 0 / 0.62);
 
   /* How far a table, an empty state or a loading state stands in from its container: nothing on the page, a sheet's padding inside one. */
   --gutter: 0px;
@@ -147,6 +159,10 @@
     border: 1px solid var(--frame);
     border-radius: 2px;
     box-shadow: 3px 3px 0 0 var(--edge);
+  }
+  /* A dialog floats higher than a sheet on the page, so the sheet beneath shows more of its edge. */
+  .sheet[role='dialog'] {
+    box-shadow: 6px 6px 0 0 var(--edge);
   }
 
   /* Headings, names and figures are set in the display face, bold; everything read is in the text face.

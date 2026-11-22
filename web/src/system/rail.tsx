@@ -9,7 +9,7 @@ import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Tooltip } from './tooltip.tsx';
 import { Wordmark } from './type.tsx';
 
-/** A section, or Compose: its icon in a rounded square, which the current section fills with the highlighter. */
+/** A section, or Compose: its icon in a rounded square, which the current section fills. */
 const TILE = 'relative flex size-10 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-100 motion-reduce:transition-none';
 
 export interface NavItem {
@@ -24,7 +24,7 @@ export interface NavItem {
 /**
  * The sections down the left of every screen on a desktop: the name at the top, then `compose` (writing a new message,
  * with Inbox on, also C, with no keycap: the rail is not a list worked through), then each section as its icon
- * in a rounded square, named when pointed at, the current one filled with the highlighter, then at the foot `aside` (Mild's line, stacked), the
+ * in a rounded square, named when pointed at, the current one filled in ink, not yellow, which is for what waits on the reader, then at the foot `aside` (Mild's line, stacked), the
  * `mailbox` the dashboard shows, beside whose they are, and `account` (who is signed in, behind their `Avatar`). No fill; a line sets it apart. As tall as the window, and never taller
  * than what holds it. Given no sections it is the name alone, as `Masthead` is.
  */
@@ -60,7 +60,7 @@ export function Rail({
                     aria-current={to === current ? 'page' : undefined}
                     className={cn(
                       TILE,
-                      to === current ? 'bg-(--highlight) text-(--highlight-ink)' : 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
+                      to === current ? 'bg-(--fill-strong) text-foreground' : 'text-muted-foreground hover:bg-(--fill) hover:text-foreground',
                     )}
                   >
                     <Icon aria-hidden className="size-5" strokeWidth={1.75} />
@@ -82,7 +82,7 @@ export function Rail({
         </nav>
       ) : null}
       {aside || account ? (
-        <div className="mt-auto flex flex-col items-center gap-4 text-label text-muted-foreground">
+        <div className="mt-auto flex flex-col items-center gap-4 text-label text-muted-foreground [--muted-foreground:var(--faint)]">
           {aside}
           {account ? (
             <Menu

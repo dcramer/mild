@@ -144,7 +144,7 @@ export function WhoWrote({ writers }: { writers: readonly Writer[] }) {
 export function Thinks({ thinks }: { thinks: MailThread['thinks'] }) {
   if (!thinks || thinks.labelId === null) return null;
   return (
-    <span className="inline-flex items-baseline gap-2">
+    <span className="inline-flex items-baseline gap-2 text-supporting">
       <Meter level={sureness(thinks)} />
       {thinks.labelName ?? outcomeName(thinks.disposition)}
     </span>

@@ -16,7 +16,7 @@ export function Meter({ level }: { level: 1 | 2 | 3 | null }) {
         {[1, 2, 3].map((step) => (
           <span
             key={step}
-            className={cn('w-[3px]', step === 1 ? 'h-[6px]' : step === 2 ? 'h-[9px]' : 'h-3', step <= level ? 'bg-muted-foreground' : 'bg-foreground/20')}
+            className={cn('w-[3px]', step === 1 ? 'h-[6px]' : step === 2 ? 'h-[9px]' : 'h-3', step <= level ? 'bg-supporting' : 'bg-foreground/20')}
           />
         ))}
       </span>
