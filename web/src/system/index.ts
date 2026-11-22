@@ -49,3 +49,5 @@ export { Timeline, TimelineEvent } from './timeline.tsx';
 export { Toaster, useToast } from './toast.tsx';
 export { Tooltip } from './tooltip.tsx';
 export { Code, Highlight, Hint, Kbd, Look, Marked, TextLink, TextPress, Wordmark } from './type.tsx';
+export { Swipe, type SwipePress } from './swipe.tsx';
+export { usePhone } from './phone.ts';

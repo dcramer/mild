@@ -90,7 +90,8 @@ export function keptFrame(): Promise<Record<string, unknown>> {
 
 async function readFrame(): Promise<{ key: boolean; frame: Record<string, unknown> }> {
   const start = performance.now();
-  const read = await readKept();
+  // Wiped meanwhile (signed out, here or in another tab), its connection closes under the read: nothing is kept.
+  const read = await readKept().catch(() => ({ key: false, frame: {} }));
   timed('Frame from the device', 'mild.device', start, { kept: Object.keys(read.frame).length });
   return read;
 }

@@ -10,6 +10,7 @@ import { Menu } from './menu.tsx';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { Narrowed } from './mailbox.tsx';
 import { BarSlot, ToBar } from './nav.tsx';
+import { type Thumb, ThumbBar } from './thumbs.tsx';
 
 /** Where a list's views go on a phone, in place of its name, and the name to draw there; and the page's own action, which a desktop draws beside the list's search. */
 const Views = createContext<{ at: HTMLElement | null; title: string; actions?: ReactNode }>({ at: null, title: '' });
@@ -83,8 +84,8 @@ export function ListView({
   /** Which of a few ways to see the list, as segments at the end of the search bar: "Changed" or "Everything". */
   view?: { label: string; value: string; options: readonly (readonly [string, string])[]; onChange: (value: string) => void };
   filters?: { panel: ReactNode; active: ActiveFilter[] };
-  /** Rows selected, and what can be done to all of them, each with its key. */
-  selected?: { count: number; clear: () => void; actions: readonly { label: string; key: string; onPress: () => void }[] };
+  /** Rows selected, and what can be done to all of them, each with its key; on a phone, `thumbs` along the bottom. */
+  selected?: { count: number; clear: () => void; actions: readonly { label: string; key: string; onPress: () => void }[]; thumbs?: readonly Thumb[] };
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -127,8 +128,22 @@ export function ListView({
       ) : null}
       {intro ? aside : null}
       {intro}
-      {/* On a phone the search is the top bar. */}
-      {search ? (
+      {/* On a phone the search is the top bar; while rows are selected, how many, and what to do with them along the bottom. */}
+      {selected && selected.count > 0 ? (
+        <>
+          <ToBar>
+            <span className="flex h-full min-w-0 flex-1 items-center text-base font-semibold tabular-nums">{selected.count} selected</span>
+            <button
+              type="button"
+              aria-label="Select none"
+              className="press flex size-11 shrink-0 cursor-pointer items-center justify-center"
+              onClick={selected.clear}
+            >
+              <XIcon aria-hidden className="size-5" />
+            </button>
+          </ToBar>
+        </>
+      ) : search ? (
         <ToBar>
           <label className="flex h-full min-w-0 flex-1 items-center gap-2.5 pr-1">
             <input
@@ -275,7 +290,11 @@ export function ListView({
         )}
 
         <div className={cn('grid grid-cols-[minmax(0,1fr)] gap-4', open && 'md:grid-cols-[minmax(0,1fr)_15rem]')}>
-          <div className="flex min-w-0 flex-col gap-3 md:order-1">{children}</div>
+          <div className="flex min-w-0 flex-col gap-3 md:order-1">
+            {children}
+            {/* After the rows, so the room it keeps at the end of the page does not push them down as it comes. */}
+            {selected && selected.count > 0 && selected.thumbs ? <ThumbBar thumbs={selected.thumbs} /> : null}
+          </div>
           {open && filters ? (
             <aside aria-label="Filters" className="order-first flex flex-col gap-5 md:order-2 md:border-l md:border-dashed md:border-(--rule) md:pl-4">
               <div className="flex items-center justify-between">
