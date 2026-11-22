@@ -1,5 +1,5 @@
 'use client';
-import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useToast } from '@/system';
 
@@ -12,6 +12,9 @@ interface Change {
 }
 
 const CHANGE = ['change'];
+
+/** Everything on screen, asked for again. Not the model list: it comes from the provider, and is asked for again when a sign-in changes (its key names them). */
+export const reloadAll = (client: QueryClient) => client.invalidateQueries({ predicate: (query) => !String(query.queryKey[0]).startsWith('models ') });
 
 /**
  * Run a change, tracking whether it is in flight and what went wrong. When it is done, everything on screen loads again.
@@ -30,8 +33,7 @@ export function useAction(): {
   const client = useQueryClient();
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
-  // Not the model list: it comes from the provider, and is asked for again when a sign-in changes (its key names them).
-  const reload = () => client.invalidateQueries({ predicate: (query) => !String(query.queryKey[0]).startsWith('models ') });
+  const reload = () => reloadAll(client);
   const change = useMutation({
     mutationKey: CHANGE,
     mutationFn: async (change: Change) => {

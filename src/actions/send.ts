@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { canSend, mailboxAliases } from '../store/accounts.ts';
-import { finishAction, insertPendingAction, openTries } from '../store/actions.ts';
+import { type ActionPayload, finishAction, insertPendingAction, openTries } from '../store/actions.ts';
 import { preferences } from '../store/preferences.ts';
 import { recordSent } from '../store/sent.ts';
 import type { Sql } from '../store/sql.ts';
@@ -183,7 +183,14 @@ export async function sendMail(
     return { id: sent.id, threadId: sent.threadId };
   };
 
-  const earlier = await openTries(db, 'send', (payload) => payload.send?.messageId === id);
+  const ours = (payload: ActionPayload) => payload.send?.messageId === id;
+  // A try Gmail took whose answer never reached the page: the press is answered with what went, never sent again.
+  if ((await openTries(db, 'send', ours, true)).length > 0) {
+    const went = await mailbox.findByMessageId(id);
+    if (!went) throw new Refusal('This mail has gone already.');
+    return await keep({ ...went, labelIds: ['SENT'] });
+  }
+  const earlier = await openTries(db, 'send', ours);
   if (earlier.length > 0) {
     const found = await mailbox.findByMessageId(id);
     if (!found && earlier.some((t) => t.status === 'pending' || at - t.at < SETTLE_MS))

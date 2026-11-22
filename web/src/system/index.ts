@@ -3,7 +3,7 @@ export { AnswerPicker, LabelPick, type Pick } from './answer-picker.tsx';
 export { Button, Finish } from './button.tsx';
 export { StackedBars, Swatch } from './chart.tsx';
 export { ChoiceGroup } from './choice.tsx';
-export { ConfirmButton } from './confirm.tsx';
+export { Ask, ConfirmButton } from './confirm.tsx';
 export { Copyable } from './copyable.tsx';
 export { DeleteButton } from './delete.tsx';
 export { Dialog } from './dialog.tsx';
