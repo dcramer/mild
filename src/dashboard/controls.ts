@@ -102,6 +102,8 @@ export interface Controls {
       forwarding?: { messageId: string; parts: string[] };
     },
   ): Promise<{ id: string; threadId: string }>;
+  /** Take a draft out of Gmail's Drafts (`dropGmailDraft`): it was sent, discarded, or moved to another mailbox. */
+  dropDraft(db: Sql, draft: { id: string; accountId: string; gmailId: string }): Promise<void>;
   /** A message's files, read from Gmail once for mail Inbox kept before it kept these. */
   attachments(db: Sql, message: { accountId: string; messageId: string }): Promise<{ part: string; name: Confidential; type: Confidential; size: number }[]>;
   /** Pass this person's mailboxes now instead of at the next tick. */

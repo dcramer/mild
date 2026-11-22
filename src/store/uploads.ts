@@ -2,14 +2,15 @@ import { randomBytes } from 'node:crypto';
 import { Refusal } from '../refusal.ts';
 import { plain } from '../plain.ts';
 import { openData, openJson, sealData, sealJson, uploadName } from './content.ts';
-import { asc, eq, inArray, lt, uploadPieces, uploads } from './query.ts';
+import { heldUploads } from './drafts.ts';
+import { and, asc, eq, inArray, lt, notInArray, uploadPieces, uploads } from './query.ts';
 import type { Sql } from './sql.ts';
 
 /** A piece's bytes: as base64 in JSON, about 4 MB, under the 4.5 MB Vercel takes in a request. */
 export const PIECE_BYTES = 3_000_000;
 /** What Gmail sends attached to one message. */
 export const MOST_ATTACHED = 25 * 1024 * 1024;
-/** Long enough to write the mail it is for; past it, the pass removes it (`upkeep`). */
+/** Long enough to write the mail it is for; past it, the pass removes it (`upkeep`), unless a draft saved holds it. */
 const UPLOAD_KEEP_MS = 86_400_000;
 
 const MISSING = 'An attachment did not finish uploading. Remove it and attach it again.';
@@ -92,7 +93,8 @@ export async function refuseMissing(db: Sql, ids: readonly string[]): Promise<vo
   if (held.length !== new Set(ids).size) throw new Refusal(MISSING);
 }
 
-/** Files attached to mail that was never sent. */
+/** Files attached to mail that was never sent, and that no draft holds. */
 export async function pruneUploads(db: Sql, now: number): Promise<void> {
-  await db.delete(uploads).where(lt(uploads.createdAt, now - UPLOAD_KEEP_MS));
+  const kept = [...(await heldUploads(db))];
+  await db.delete(uploads).where(and(lt(uploads.createdAt, now - UPLOAD_KEEP_MS), kept.length > 0 ? notInArray(uploads.id, kept) : undefined));
 }

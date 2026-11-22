@@ -7,7 +7,7 @@
  * (src/confidential.ts), so the page draws it only through `reveal`, in the browser.
  */
 import { z } from 'zod';
-import type { Confidential } from '../confidential.ts';
+import type { Confidential, Sealed } from '../confidential.ts';
 import { RULE_FACTS, type RuleFacts as Conditions, factCondition } from '../triage/facts.ts';
 import { GIVEN } from '../triage/standing.ts';
 import { DRAFT_ACTIONS } from '../triage/proposal.ts';
@@ -624,6 +624,8 @@ const sending = {
   text: z.string().max(200_000),
   /** Files uploaded for it (`/api/mail/upload`), in the order they go. */
   uploads: z.array(text(64)).max(50),
+  /** The draft it was written as (`/api/mail/drafts/save`), which goes once it has, with Gmail's copy. */
+  draft: text(100).optional(),
 };
 
 /**
@@ -644,6 +646,59 @@ export type SendRequest = z.infer<typeof SendRequest>;
 /** Someone the composer suggests as an address is typed: whom the person has written to first, then who wrote to them. */
 export const AddressSuggestion = z.object({ address: held, name: held.nullable() });
 export type AddressSuggestion = z.infer<typeof AddressSuggestion>;
+
+const recipient = z.strictObject({ address: text(320), name: text().optional(), wrong: z.literal(true).optional() });
+
+/** What a draft answers: nothing (new mail), a message replied to, or one forwarded. */
+const DraftOf = z.union([
+  z.strictObject({ kind: z.literal('new') }),
+  z.strictObject({ kind: z.literal('reply'), messageId: text(), all: z.boolean() }),
+  z.strictObject({ kind: z.literal('forward'), messageId: text() }),
+]);
+
+/** Mail being written, as the composer holds it (`Draft`, web/src/lib/compose.ts), saved as the person pauses. */
+export const DraftWriting = z.strictObject({
+  of: DraftOf,
+  from: z.string().max(320),
+  to: z.array(recipient).max(100),
+  cc: z.array(recipient).max(100),
+  bcc: z.array(recipient).max(100),
+  showCc: z.boolean(),
+  showBcc: z.boolean(),
+  subject: z.string().max(900),
+  text: z.string().max(200_000),
+  files: z.array(z.strictObject({ id: text(64), name: text(255), size: z.int().nonnegative(), added: z.number() })).max(50),
+  dropped: z.array(text(64)).max(50),
+  /** The Message-ID of a press of Send that may not have gone. */
+  id: text().nullable(),
+  /** When it was last changed, by the page's clock: of two copies of it, the newer is kept. */
+  at: z.number(),
+});
+export type DraftWriting = z.infer<typeof DraftWriting>;
+
+/** The body of POST /api/mail/drafts/save. `id` names the draft: one for each new message, one for a reply or forward of each message. */
+export const DraftSave = z.strictObject({
+  id: text(100),
+  accountId: text(),
+  writing: DraftWriting,
+  /** Send it then (schedule send). Left out, a draft is not scheduled, and one that was is no longer. */
+  sendAt: z.number().optional(),
+});
+export type DraftSave = z.infer<typeof DraftSave>;
+
+/** A draft saved, as GET /api/mail/drafts lists it: all of it, so the composer can open it. */
+export const SavedDraft = z.object({
+  id: z.string(),
+  accountId: z.string(),
+  writing: z.custom<Sealed<DraftWriting>>((value) => typeof value === 'object' && value !== null),
+  changedAt: z.number(),
+  /** In Gmail's Drafts too. */
+  inGmail: z.boolean(),
+  sendAt: z.number().nullable(),
+  /** Why it did not go when it was scheduled to, which the person puts right. */
+  sendError: z.string().nullable(),
+});
+export type SavedDraft = z.infer<typeof SavedDraft>;
 
 /** A label: what mail is, and what Mild does with it. */
 export const LabelSummary = z.object({

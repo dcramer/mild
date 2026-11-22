@@ -165,6 +165,7 @@ Everything a person prefers is in their own database.
   - `labels`: what mail can be and what to do with each. Leave in inbox from the start; the rest chosen while setting up, from what the model suggests, and changed and added to in the dashboard, under Labels.
   - `rules`: what the user has said happens to mail, or what it is; and a rule for each sender Mild blocked.
   - `correspondents`: whether the user has ever written to an address, cached.
+  - `drafts`: what the person is writing, sealed, until they send or discard it; given to Gmail's Drafts once left alone ([inbox.md](inbox.md#the-composer)).
   - `addresses`: the composer's address book, everyone the person wrote to or had mail from that was not sent in bulk, each sealed with a keyed Bloom filter of the starts of its words, filled as mail is recorded ([inbox.md](inbox.md#the-composer)).
 
 ## Model tier

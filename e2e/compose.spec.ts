@@ -268,6 +268,81 @@ test.describe('with Inbox on', () => {
     await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Half written');
   });
 
+  test('a draft closed is in Drafts, on another device too, opens where it was left, and goes once sent', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
+    await writing.getByRole('textbox', { name: 'Subject' }).fill('Roof');
+    await writing.getByRole('textbox', { name: 'Message' }).fill('Half written');
+    await writing.getByRole('button', { name: 'Close' }).click();
+    await expect(writing).toHaveCount(0);
+
+    // Another device has none of this browser's copy.
+    await page.evaluate('localStorage.clear()');
+    await page.reload();
+    await page.getByRole('radio', { name: 'Drafts' }).click();
+    await param(page, 'view').toBe('drafts');
+    const row = page.getByRole('row').filter({ hasText: 'Roof' });
+    await expect(row).toContainText('ada@example.org');
+    await expect(row).toContainText('Half written');
+    await row.click();
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Half written');
+    await expect(recipients(writing, 'To').chip('ada@example.org')).toBeVisible();
+
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await sendNow(page, 'Roof');
+    expect(sift.sent()).toHaveLength(1);
+    await expect(page.getByText('No drafts.')).toBeVisible();
+  });
+
+  test('Schedule send saves it to go later, said in Drafts, and Undo makes it a draft again', async ({ page, sift }) => {
+    await page.goto('/inbox?view=drafts');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
+    await writing.getByRole('textbox', { name: 'Subject' }).fill('Tomorrow');
+    await writing.getByRole('button', { name: 'Schedule send' }).click();
+    await page.getByRole('menuitem', { name: /^Tomorrow morning/ }).click();
+    await expect(writing).toHaveCount(0);
+    await expect(toast(page, 'Tomorrow')).toContainText('Scheduled for');
+    const row = page.getByRole('row').filter({ hasText: 'Tomorrow' });
+    await expect(row).toContainText('Sends');
+    expect(sift.sent()).toEqual([]);
+
+    await toast(page, 'Tomorrow').getByRole('button', { name: /^Undo/ }).click();
+    await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveValue('Tomorrow');
+    await writing.getByRole('button', { name: 'Close' }).click();
+    await expect(row).toBeVisible();
+    await expect(row).not.toContainText('Sends');
+
+    // A time picked, which must be from now on.
+    await row.click();
+    await writing.getByRole('button', { name: 'Schedule send' }).click();
+    await page.getByRole('menuitem', { name: 'Pick a date and time…' }).click();
+    const picker = page.getByRole('dialog', { name: 'Schedule send' });
+    await picker.locator('input[type="datetime-local"]').fill('2001-01-01T08:00');
+    await expect(picker.getByRole('button', { name: 'Schedule send' })).toBeDisabled();
+    await picker.locator('input[type="datetime-local"]').fill('2030-01-01T08:00');
+    await picker.getByRole('button', { name: 'Schedule send' }).click();
+    await expect(row).toContainText('Sends');
+  });
+
+  test('a draft discarded is gone from Drafts', async ({ page }) => {
+    await page.goto('/inbox?view=drafts');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    await writing.getByRole('textbox', { name: 'Subject' }).fill('Never mind');
+    await writing.getByRole('button', { name: 'Close' }).click();
+    const row = page.getByRole('row').filter({ hasText: 'Never mind' });
+    await expect(row).toContainText('No one yet');
+    await row.click();
+    await writing.getByRole('button', { name: 'Discard' }).click();
+    await expect(page.getByText('No drafts.')).toBeVisible();
+  });
+
   test('a press outside slides the composer away once, without it coming back while Back is followed', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page).first()).toBeVisible();
@@ -297,9 +372,11 @@ test.describe('with Inbox on', () => {
     await page.keyboard.press('c');
     const writing = composer(page, 'New message');
     await expect(writing.getByText(`Mild can’t send from ${WORK} yet`)).toBeVisible();
+    // Back to this draft, which the address names, once Google has said yes.
+    const back = new URLSearchParams({ grant: 'send', mailbox: WORK, to: '/inbox?compose=new&draft=' }).toString();
     await expect(writing.getByRole('link', { name: 'Let Mild send' })).toHaveAttribute(
       'href',
-      `/auth/login?${new URLSearchParams({ grant: 'send', mailbox: WORK, to: '/inbox?compose=new' }).toString()}`,
+      new RegExp(`^/auth/login\\?${back.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}[0-9a-f-]{36}$`),
     );
     await expect(writing.getByRole('textbox')).toHaveCount(0);
     await expect(writing.getByRole('button', { name: /^Send/ })).toHaveCount(0);

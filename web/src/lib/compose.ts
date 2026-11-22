@@ -6,7 +6,10 @@ import { goBack, panelEntry, paramNow, setParams } from './params.ts';
  * What the composer writes: a new message, to someone already (`to`, from their page) or to be said; a reply to one, to
  * its sender alone or (`all`) to everyone on it too; or a forward of one, which is new mail with the message quoted under it.
  */
-export type Writing = { kind: 'new'; to?: string } | { kind: 'reply'; messageId: string; all: boolean } | { kind: 'forward'; messageId: string };
+export type Writing =
+  | { kind: 'new'; to?: string; draft?: string }
+  | { kind: 'reply'; messageId: string; all: boolean }
+  | { kind: 'forward'; messageId: string };
 
 /**
  * Open the composer. In the address, as a message is: `?compose=new` (with `to` for someone already, from their page) is
@@ -16,7 +19,8 @@ export type Writing = { kind: 'new'; to?: string } | { kind: 'reply'; messageId:
  */
 export function openComposer(what: Writing = { kind: 'new' }) {
   if (what.kind === 'new') {
-    setParams({ compose: 'new', ...(what.to ? { to: what.to } : {}) }, { state: { panel: true } });
+    // Each new message is a draft of its own, saved under this id.
+    setParams({ compose: 'new', draft: what.draft ?? crypto.randomUUID(), ...(what.to ? { to: what.to } : {}) }, { state: { panel: true } });
     return;
   }
   const reading = paramNow('message') || what.messageId;
@@ -33,7 +37,7 @@ export const closeReply = () => setParams({ compose: '', answering: '' });
 /** Closes the panel a new message is written in. */
 export function closeComposer() {
   if (panelEntry()) goBack();
-  else setParams({ compose: '', to: '' });
+  else setParams({ compose: '', to: '', draft: '' });
 }
 
 /** What the address says the composer is writing, or null when it is closed. */
@@ -69,6 +73,8 @@ export interface Draft {
   dropped: string[];
   /** Its Message-ID, made at the first press of Send and kept until it has gone, so trying again cannot send it twice. */
   id: string | null;
+  /** When it last changed, by this browser's clock: of this browser's copy and Mild's, the newer is kept. */
+  at: number;
 }
 
 /** A draft with nothing in it yet but where it is from and to whom. */
@@ -84,25 +90,38 @@ export const emptyDraft = (from: string, more: Partial<Draft> = {}): Draft => ({
   files: [],
   dropped: [],
   id: null,
+  at: 0,
   ...more,
 });
 
 const DRAFT = 'sift:draft:';
 
-/** `who` is whoever is signed in, so someone else signed in on this browser finds none of theirs. */
-const draftKey = (who: string, what: Writing) =>
-  `${DRAFT}${who}:${what.kind === 'new' ? `new${what.to ? `/${what.to}` : ''}` : `${what.kind === 'forward' ? 'forward/' : ''}${what.messageId}`}`;
+/**
+ * The draft's name, here and on the server: one for each new message, made as it opens, and one for a reply to or forward
+ * of each message, so pressing Reply again finds the reply begun.
+ */
+export const draftId = (what: Writing) => (what.kind === 'new' ? (what.draft ?? 'new') : `${what.kind === 'forward' ? 'forward' : 'reply'}/${what.messageId}`);
 
-/** The unsent draft `who` kept for this, if any; a new message to someone starts as one to them. One kept as the composer once kept them, with its addresses as text, is not. */
-export function keptDraft(who: string, what: Writing): Draft | null {
+/** `who` is whoever is signed in, so someone else signed in on this browser finds none of theirs. */
+const draftKey = (who: string, what: Writing) => `${DRAFT}${who}:${draftId(what)}`;
+
+/**
+ * The unsent draft `who` kept for this, if any: the newer of this browser's and `saved`, the one Mild has, which another
+ * device may have written. A new message to someone starts as one to them.
+ */
+export function keptDraft(who: string, what: Writing, saved: Draft | null): Draft | null {
   const started = what.kind === 'new' && what.to ? emptyDraft('', { to: readRecipients(what.to) }) : null;
+  let here: Draft | null = null;
   try {
     const stored = window.localStorage.getItem(draftKey(who, what));
     const kept = stored === null ? null : (JSON.parse(stored) as Partial<Draft>);
-    return kept && Array.isArray(kept.to) && Array.isArray(kept.files) ? (kept as Draft) : started;
+    // One kept as the composer once kept them, with its addresses as text, is not one.
+    if (kept && Array.isArray(kept.to) && Array.isArray(kept.files)) here = { at: 0, ...kept } as Draft;
   } catch {
-    return started;
+    // Nothing kept here.
   }
+  const newer = here && saved ? (here.at >= saved.at ? here : saved) : (here ?? saved);
+  return newer ?? started;
 }
 
 /** Keep a draft, or with null forget it. */

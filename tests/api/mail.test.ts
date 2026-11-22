@@ -1,5 +1,6 @@
 import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DRAFT_QUIET_MS } from '../../src/actions/drafts.ts';
 import { SETTLE_MS } from '../../src/actions/send.ts';
 import { ASK_TOOL } from '../../src/triage/mail-ask.ts';
 import { FIND_TOOL } from '../../src/triage/rule-draft.ts';
@@ -35,6 +36,9 @@ function filesOf(raw: string): { name: string; type: string; data: Buffer }[] {
       };
     });
 }
+
+type Sift = Awaited<ReturnType<typeof startSift>>;
+type Me = Awaited<ReturnType<Sift['settled']>>;
 
 async function withInbox(model?: ReturnType<typeof fauxModel>) {
   const sift = await startSift(fake.google, model ? { model: model.chosen } : {});
@@ -489,6 +493,142 @@ describe('sending mail', () => {
     const other = await sift.settled(OTHER);
     expect((await other.call('POST', '/api/mail/send', mail('<theirs.1@example.org>'))).status).toBe(404);
     expect(box.asked('users.messages.send')).toEqual([]);
+  });
+});
+
+describe('drafts', () => {
+  const writing = (more: Record<string, unknown> = {}) => ({
+    of: { kind: 'new' },
+    from: ME,
+    to: [{ address: 'ada@example.com', name: 'Ada' }],
+    cc: [],
+    bcc: [],
+    showCc: false,
+    showBcc: false,
+    subject: 'Plans',
+    text: 'Half written.',
+    files: [],
+    dropped: [],
+    id: null,
+    at: Date.now(),
+    ...more,
+  });
+  const save = (me: Me, id: string, more: Record<string, unknown> = {}) =>
+    me.call('POST', '/api/mail/drafts/save', { id, accountId: ME, writing: writing(more) });
+  const listed = async (me: Me) =>
+    ((await me.call('GET', '/api/mail/drafts')).body as { drafts: { id: string; writing: { text: string }; inGmail: boolean }[] }).drafts;
+  /** A pass, once the draft has been left alone long enough for Gmail to hear of it. */
+  const quiet = async (sift: Sift, me: Me) => {
+    vi.setSystemTime(Date.now() + DRAFT_QUIET_MS);
+    await arrives(sift, me);
+  };
+
+  it('are kept as they are written, the newer of two copies, and given to Gmail once left alone a while, in place of what it had', async () => {
+    const { sift, box, me } = await withInbox();
+    expect((await save(me, 'd1')).status).toBe(200);
+    // An older copy, from a device that had not heard of the newer.
+    expect((await save(me, 'd1', { text: 'Older.', at: Date.now() - 1000 })).status).toBe(200);
+    expect(await listed(me)).toMatchObject([{ id: 'd1', writing: { text: 'Half written.' }, inGmail: false }]);
+
+    await arrives(sift, me);
+    expect(box.draftsHeld().size).toBe(0);
+    await quiet(sift, me);
+    const [gmailId, held] = [...box.draftsHeld()][0]!;
+    expect(held.header('to')).toBe('"Ada" <ada@example.com>');
+    expect(held.labelIds).toEqual(['DRAFT']);
+    expect(await listed(me)).toMatchObject([{ inGmail: true }]);
+    // Gmail's Drafts are not mail: nothing of them is recorded, so nothing triages them.
+    expect(box.asked('users.messages.get').filter((r) => r.id === held.id)).toEqual([]);
+
+    expect((await save(me, 'd1', { text: 'Written.', at: Date.now() })).status).toBe(200);
+    await quiet(sift, me);
+    expect([...box.draftsHeld().keys()]).toEqual([gmailId]);
+    expect(box.draftsHeld().get(gmailId)!.raw).toContain(Buffer.from('Written.').toString('base64'));
+  });
+
+  it('go once sent, here and in Gmail, and once discarded', async () => {
+    const { sift, box, me } = await withInbox();
+    await me.signIn(ME, { send: true });
+    await save(me, 'd1');
+    await save(me, 'd2', { subject: 'Other' });
+    await quiet(sift, me);
+    expect(box.draftsHeld().size).toBe(2);
+
+    const press = {
+      accountId: ME,
+      id: '<d1.1@example.org>',
+      from: { address: ME },
+      to: [{ address: 'ada@example.com' }],
+      cc: [],
+      bcc: [],
+      text: 'Done.',
+      uploads: [],
+      subject: 'Plans',
+      draft: 'd1',
+    };
+    expect((await me.call('POST', '/api/mail/send', press)).status).toBe(200);
+    expect((await me.call('POST', '/api/mail/drafts/remove', { id: 'd2' })).status).toBe(200);
+    expect(await listed(me)).toEqual([]);
+    expect(box.draftsHeld().size).toBe(0);
+  });
+
+  describe('scheduled', () => {
+    const HOUR = 3_600_000;
+    const schedule = (me: Me, id: string, sendAt: number, more: Record<string, unknown> = {}) =>
+      me.call('POST', '/api/mail/drafts/save', { id, accountId: ME, writing: writing({ id: `<${id}@example.org>`, ...more }), sendAt });
+
+    it('go at their time, once, as the press of Send would have sent them, and then are no draft', async () => {
+      const { sift, box, me } = await withInbox();
+      await me.signIn(ME, { send: true });
+      expect((await schedule(me, 's1', Date.now() + HOUR)).status).toBe(200);
+      await quiet(sift, me);
+      expect(box.sent()).toEqual([]);
+      expect(await listed(me)).toMatchObject([{ id: 's1', sendAt: Date.now() - DRAFT_QUIET_MS + HOUR, inGmail: true }]);
+
+      vi.setSystemTime(Date.now() + HOUR);
+      await arrives(sift, me);
+      await arrives(sift, me);
+      expect(box.sent().map((m) => m.header('message-id'))).toEqual(['<s1@example.org>']);
+      expect(await listed(me)).toEqual([]);
+      expect(box.draftsHeld().size).toBe(0);
+    });
+
+    it('sent or deleted in Gmail first are not sent, and what cannot go is a draft again, saying why', async () => {
+      const { sift, box, me } = await withInbox();
+      await me.signIn(ME, { send: true });
+      await schedule(me, 's1', Date.now() + HOUR);
+      await schedule(me, 's2', Date.now() + HOUR, { to: [{ address: 'nope', wrong: true }] });
+      expect(await schedule(me, 's3', Date.now() + HOUR, { to: [] })).toMatchObject({ status: 409, body: { error: 'Say who the mail is to.' } });
+      await quiet(sift, me);
+      box.dropDraft([...box.draftsHeld().keys()][0]!);
+
+      vi.setSystemTime(Date.now() + HOUR);
+      await arrives(sift, me);
+      expect(box.sent()).toEqual([]);
+      expect(await listed(me)).toEqual([]);
+    });
+
+    it('a draft scheduled while Inbox is on, sent once it is off, waits as a draft, saying why', async () => {
+      const { sift, box, me } = await withInbox();
+      await me.signIn(ME, { send: true });
+      await schedule(me, 's1', Date.now() + HOUR);
+      expect((await me.call('POST', '/api/mail/on', { on: false })).status).toBe(200);
+      vi.setSystemTime(Date.now() + HOUR);
+      await arrives(sift, me);
+      expect(box.sent()).toEqual([]);
+      expect(await listed(me)).toMatchObject([{ id: 's1', sendAt: null, sendError: 'Turn Inbox on to send mail from Mild.' }]);
+    });
+  });
+
+  it('give Gmail a reply in its conversation, to nobody yet if so', async () => {
+    const { sift, box, me } = await withInbox();
+    const asked = box.deliver({ from: 'Ada <ada@example.com>', subject: 'Lunch?' });
+    await arrives(sift, me);
+    await save(me, `reply/${asked}`, { of: { kind: 'reply', messageId: asked, all: false }, to: [], subject: '' });
+    await quiet(sift, me);
+    const [held] = [...box.draftsHeld().values()];
+    expect(held).toMatchObject({ threadId: asked });
+    expect(held!.header('subject')).toBe('Re: Lunch?');
   });
 });
 

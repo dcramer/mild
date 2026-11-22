@@ -5,6 +5,9 @@ import type { GmailApi } from '../gmail/api.ts';
 import { READ_KEEP_DAYS, indexKept, purgeRead, searchDue } from '../store/kept.ts';
 import { pruneGone } from '../store/sync.ts';
 import { addressesDue, fillAddresses } from '../store/addresses.ts';
+import { draftsDue, scheduledDue } from '../store/drafts.ts';
+import { sendScheduled } from './drafts.ts';
+import { DRAFT_QUIET_MS, pushDrafts } from '../actions/drafts.ts';
 import { pruneUploads } from '../store/uploads.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
@@ -332,6 +335,8 @@ async function recordWants(db: Sql, account: Account, options: RunOptions, now: 
   if (await mailBodiesDue(db, account.id)) return true;
   if (await searchDue(db, account.id)) return true;
   if (await addressesDue(db, account.id)) return true;
+  if (await draftsDue(db, account.id, now - DRAFT_QUIET_MS)) return true;
+  if (await scheduledDue(db, account.id, now)) return true;
   if (await examplesDue(db, account.id)) return true;
   if (await filtersDue(db, account.id, active, now)) return true;
   // With no model, what no rule covers waits for one and a pass leaves it be. A rule added since decides it at the next
@@ -355,6 +360,8 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     const api = { ...gmail, ...readingOnce(db, account.id, gmail, options.now) };
     const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };
     if (active) await reconcile(deps, { accountId: account.id });
+    // The person's own press, timed: before anything a backlog could hold it behind, and whether Mild is on or not.
+    await sendScheduled(db, { api: gmail, mailbox }, account.id, (options.now ?? Date.now)());
     result.sync = await syncAccount(db, api, account, options.now, until);
     if (result.sync.unfinished) return finish(result, active, options, true);
     // Before triage, which takes every pass there is while a backlog lasts: read only after it, mail left waiting would never get its text.
@@ -379,6 +386,8 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     result.indexed = await indexKept(db, account.id, INDEX_PER_PASS, over);
     if (over()) return finish(result, active, options, true);
     await fillAddresses(db, account.id, ADDRESSES_PER_PASS, over);
+    // The person's own, so whether Mild is on or not.
+    await pushDrafts(db, mailbox, account.id, (options.now ?? Date.now)());
     if (over()) return finish(result, active, options, true);
     result.captured = await captureExamples(db, api, account.id);
     try {
