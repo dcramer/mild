@@ -27,7 +27,7 @@ export default write({
       if (gone?.gmailId) await controls.dropDraft(db, { id: draft!, accountId: gone.accountId, gmailId: gone.gmailId }).catch(reportError);
       return went;
     };
-    if ('subject' in about) {
+    if (!('replyTo' in about)) {
       const { subject, forwarding } = about;
       // A forward carries files only from a message of the same mailbox.
       if (forwarding && (await mailboxOf(db, scope, forwarding.messageId)) !== accountId) return null;
@@ -36,6 +36,19 @@ export default write({
     const answered = await replyTo(db, scope, accountId, about.replyTo.messageId);
     if (!answered) return null;
     const { threadId, ...thread } = answered;
-    return await sent(await controls.send(db, { accountId, id, threadId, mail: { ...mail, ...thread }, uploads }));
+    const { forwarding } = about;
+    if (forwarding && forwarding.messageId !== about.replyTo.messageId) return null;
+    // A subject of its own is a conversation of its own, as Gmail makes it: References alone do not hold it in the thread.
+    const own = about.subject?.trim() ? about.subject : null;
+    return await sent(
+      await controls.send(db, {
+        accountId,
+        id,
+        ...(own ? {} : { threadId }),
+        mail: { ...mail, ...thread, ...(own ? { subject: own } : {}) },
+        uploads,
+        ...(forwarding ? { forwarding } : {}),
+      }),
+    );
   },
 });

@@ -71,6 +71,10 @@ export interface Draft {
   files: { id: string; name: string; size: number; added: number }[];
   /** A forward's files taken off it, by their parts; every other file of the message forwarded goes with it. */
   dropped: string[];
+  /** A reply that carries the files of the message it answers, as a forward does (Gmail's Include original attachments). */
+  withFiles?: boolean;
+  /** A reply whose subject is shown to edit, as Gmail's Edit subject shows it. */
+  editSubject?: boolean;
   /** Its Message-ID, made at the first press of Send and kept until it has gone, so trying again cannot send it twice. */
   id: string | null;
   /** When it last changed, by this browser's clock: of this browser's copy and Mild's, the newer is kept. */

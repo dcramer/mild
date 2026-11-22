@@ -653,7 +653,14 @@ export const SendRequest = z.union([
     /** A forward: the message's files that go with it, by their parts. */
     forwarding: z.strictObject({ messageId: text(), parts: z.array(text(64)).max(50) }).optional(),
   }),
-  z.strictObject({ ...sending, replyTo: z.strictObject({ messageId: text() }) }),
+  z.strictObject({
+    ...sending,
+    replyTo: z.strictObject({ messageId: text() }),
+    /** Edited, as Gmail lets a reply's be: it then goes as a conversation of its own. Left out, the message's with "Re: ". */
+    subject: z.string().max(900).optional(),
+    /** The files of the message answered that go with it, by their parts (Gmail's Include original attachments). */
+    forwarding: z.strictObject({ messageId: text(), parts: z.array(text(64)).max(50) }).optional(),
+  }),
 ]);
 export type SendRequest = z.infer<typeof SendRequest>;
 
@@ -683,6 +690,10 @@ export const DraftWriting = z.strictObject({
   text: z.string().max(200_000),
   files: z.array(z.strictObject({ id: text(64), name: text(255), size: z.int().nonnegative(), added: z.number() })).max(50),
   dropped: z.array(text(64)).max(50),
+  /** A reply that carries the files of the message it answers. */
+  withFiles: z.boolean().optional(),
+  /** A reply whose subject was opened to edit. */
+  editSubject: z.boolean().optional(),
   /** The Message-ID of a press of Send that may not have gone. */
   id: text().nullable(),
   /** When it was last changed, by the page's clock: of two copies of it, the newer is kept. */

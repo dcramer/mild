@@ -325,7 +325,7 @@ describe('from the dashboard', () => {
       expect(sentHeaders()).toMatchObject({ Subject: 'Re: Lunch', 'In-Reply-To': '<m1@example.com>', References: '<m0@example.com> <m1@example.com>' });
       expect(await queuedMessage(db, ACCOUNT, sent!.id)).toMatchObject({ facts: { threadId: 't9', subject: 'Re: Lunch' } });
       // The page names the conversation by the message alone.
-      expect((await call('POST', '/api/mail/send', { ...NEW, replyTo: { messageId: 'm1' }, subject: 'Other' })).status).toBe(400);
+      expect((await call('POST', '/api/mail/send', { ...NEW, replyTo: { messageId: 'm1' }, threadId: 't1' })).status).toBe(400);
     });
 
     it('keeps a subject that already says it answers, and names the first message and the newest before it in a long conversation', async () => {

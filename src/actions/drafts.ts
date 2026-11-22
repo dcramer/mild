@@ -34,7 +34,7 @@ export async function pushDrafts(db: Sql, mailbox: Mailbox, accountId: string, n
       to: parties(writing.to),
       cc: parties(writing.cc),
       bcc: parties(writing.bcc),
-      subject: answered?.subject ?? writing.subject,
+      subject: (answered && !writing.editSubject ? answered.subject : writing.subject.trim()) || (answered?.subject ?? ''),
       text: writing.text,
       ...(answered?.inReplyTo ? { inReplyTo: answered.inReplyTo } : {}),
       ...(answered ? { references: answered.references } : {}),

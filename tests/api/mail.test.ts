@@ -466,6 +466,31 @@ describe('sending mail', () => {
     expect(box.asked('users.messages.get').filter((r) => r.id === asked)).toHaveLength(reads + 1);
   });
 
+  it('sends a reply under a subject of its own as a conversation of its own, and with the files of the message it answers', async () => {
+    const { sift, box, me } = await canSend();
+    const asked = box.deliver({
+      from: 'Ada <ada@example.com>',
+      subject: 'Plans',
+      attachments: [{ filename: 'roof.pdf', mimeType: 'application/pdf', data: 'roof' }],
+    });
+    await arrives(sift, me);
+    const [file] = ((await me.call('GET', `/api/message?id=${asked}`)).body as { attachments: { part: string }[] }).attachments;
+    const reply = { ...written('<re.2@example.org>'), replyTo: { messageId: asked } };
+
+    const own = await me.call('POST', '/api/mail/send', { ...reply, subject: 'Roof, again', forwarding: { messageId: asked, parts: [file!.part] } });
+    expect(own.status).toBe(200);
+    const went = box.message((own.body as { id: string }).id)!;
+    expect(went.header('subject')).toBe('Roof, again');
+    expect(went.header('in-reply-to')).toBe(`<${asked}@mail.example.com>`);
+    expect(went.threadId).not.toBe(asked);
+    expect(filesOf(went.raw).map((f) => f.name)).toEqual(['roof.pdf']);
+
+    // Only the message answered gives its files.
+    const other = box.deliver({ from: 'Bo <bo@example.com>', subject: 'Other' });
+    await arrives(sift, me);
+    expect((await me.call('POST', '/api/mail/send', { ...reply, id: '<re.3@example.org>', forwarding: { messageId: other, parts: ['1'] } })).status).toBe(400);
+  });
+
   it('suggests, as an address is typed, whom the person wrote to, then who wrote to them, never a list', async () => {
     const { sift, box, me } = await canSend();
     box.deliver({ from: 'Ada Lovelace <ada@example.com>', subject: 'Hello' });

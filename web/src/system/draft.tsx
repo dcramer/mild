@@ -6,12 +6,25 @@ import { TextArea } from './field.tsx';
 import { Tooltip } from './tooltip.tsx';
 
 /**
- * Mail being written in place at the foot of a conversation (Reply, Reply all, Forward), framed as one thing: `about`
- * says which message it answers when that is not the newest, then its `DraftLine`s, its `DraftText`, and Send and
+ * Mail being written in place at the foot of a conversation (Reply, Reply all, Forward), framed as one thing: `menu`
+ * says what it is and changes it, `about` says which message it answers when that is not the newest, then its `DraftLine`s, its `DraftText`, and Send and
  * `DiscardButton` (`actions`) along its foot. It brings itself into view as it opens, under however much conversation
  * is above it.
  */
-export function ReplyBox({ label, about, actions, children }: { label: string; about?: ReactNode; actions: ReactNode; children: ReactNode }) {
+export function ReplyBox({
+  label,
+  about,
+  menu,
+  actions,
+  children,
+}: {
+  label: string;
+  about?: ReactNode;
+  /** What it is (Reply, Forward) as a menu that changes it, before `about`. */
+  menu?: ReactNode;
+  actions: ReactNode;
+  children: ReactNode;
+}) {
   const own = useRef<HTMLElement>(null);
   // Braced: a browser may answer a scroll with a promise, which React would take for the effect's cleanup.
   useEffect(() => {
@@ -19,7 +32,12 @@ export function ReplyBox({ label, about, actions, children }: { label: string; a
   }, []);
   return (
     <section ref={own} aria-label={label} className="sheet mt-2 flex scroll-mb-6 flex-col">
-      {about ? <p className="px-(--gutter) pt-3 text-sm text-muted-foreground">{about}</p> : null}
+      {menu || about ? (
+        <div className="flex items-center gap-2 px-(--gutter) pt-2 text-sm text-muted-foreground">
+          {menu}
+          {about ? <p className="py-1">{about}</p> : null}
+        </div>
+      ) : null}
       {children}
       <div className="flex items-center gap-2 px-3 pt-1 pb-3">{actions}</div>
     </section>
