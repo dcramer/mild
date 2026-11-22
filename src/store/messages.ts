@@ -1,4 +1,4 @@
-import { type SQL, and, asc, decisions, desc, eq, inArray, lte, max, messages, notExists, or, sql } from './query.ts';
+import { type SQL, and, asc, count, decisions, desc, eq, inArray, lte, max, messages, notExists, or, sql } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
@@ -150,6 +150,28 @@ export async function latestArrival(db: Sql, accountId: string, now: number): Pr
     .from(messages)
     .where(and(eq(messages.accountId, accountId), lte(messages.receivedAt, now)));
   return row!.at;
+}
+
+// As `messages_inbox` is written, so the index serves it.
+const inInbox = sql`${messages.labelIds} @> '["INBOX"]'::jsonb`;
+
+/** The newest `most` of what the record says is in the inbox, newest first: all of it once Inbox has copied the mailbox (`copied`). */
+export async function recordedInbox(db: Sql, accountId: string, most: number): Promise<string[]> {
+  const rows = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), inInbox))
+    .orderBy(desc(messages.receivedAt), asc(messages.id))
+    .limit(most);
+  return rows.map((r) => r.id);
+}
+
+export async function recordedInboxSize(db: Sql, accountId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), inInbox));
+  return row!.n;
 }
 
 /** Message ids are asked for this many at a time: one history can name thousands, such as a whole inbox archived in Gmail. */

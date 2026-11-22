@@ -3,14 +3,15 @@ import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { people } from '../src/store/people.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { listAccounts, recordSync } from '../src/store/accounts.ts';
 import { credentials } from '../src/store/credentials.ts';
 import { setActive, setMail } from '../src/store/preferences.ts';
 import type { Judge } from '../src/triage/stages/model.ts';
 import { type RunOptions, runOnce } from '../src/work/run.ts';
 import { copyMail } from '../src/work/copy.ts';
 import { ruleInbox } from '../src/work/apply.ts';
-import { continueRuleRun } from '../src/work/inbox.ts';
+import { readingOnce } from '../src/work/bodies.ts';
+import { continueInboxRun, continueRuleRun } from '../src/work/inbox.ts';
 import { goingInboxRuns, startInboxRuns } from '../src/store/inbox.ts';
 import { addRule } from '../src/store/rules.ts';
 import { ACCOUNT, tempDir, testModel } from './helpers.ts';
@@ -183,6 +184,51 @@ describe('with Inbox on, a message is read once, whole', () => {
     expect(gmail.gmail.requests.length).toBe(asked);
     expect(again(gmail.gmail)).toEqual([]);
     expect(reads(gmail.gmail)).toEqual(['whole:answer', 'whole:asked', 'whole:again']);
+  });
+});
+
+describe('going through the inbox with Inbox on', () => {
+  it('lists and counts it from the copy, and reads nothing from Gmail', async () => {
+    gmail.gmail.deliver(mail('newer', 'Ada <ada@example.org>', { hoursAgo: 20 }), { quietly: true });
+    gmail.gmail.deliver(mail('older', 'Bo <bo@example.net>', { hoursAgo: 30 }), { quietly: true });
+    gmail.gmail.deliver(mail('archived', 'Cy <cy@example.net>', { hoursAgo: 40, labels: [] }), { quietly: true });
+    await setMail(db, true, { now: NOW, window: 'year' });
+    expect(await copyMail({ db, api: gmail.api, now: () => NOW }, ACCOUNT)).toBe(3);
+    const config = loadConfig({ MILD_HOME: tempDir() });
+    installClient(config, JSON.stringify({ web: { client_id: SECRETS.clientId, client_secret: SECRETS.clientSecret } }));
+    await (await credentials(db, 'gmail')).write(ACCOUNT, fake.google.grant(ACCOUNT));
+    const controls = await buildControls(config, { ephemeral: memoryEphemeral(), deviceId: 'device', kick: async () => {} });
+    const before = gmail.gmail.requests.length;
+
+    expect(await controls.inboxEstimate(db, [ACCOUNT], 'inbox')).toMatchObject({ messages: 2 });
+    await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10_000, now: NOW });
+    const [run] = await goingInboxRuns(db);
+    const api = { ...gmail.api, ...readingOnce(db, ACCOUNT, gmail.api, () => NOW) };
+    await continueInboxRun(
+      {
+        db,
+        api,
+        mailbox: null,
+        answers: gmail.mailbox,
+        sources: { api, mailbox: gmail.mailbox },
+        model: testModel(async () => ({ label: 'personal', reason: 'from a person', confidence: 0.95 })),
+        now: () => NOW,
+      },
+      (await listAccounts(db))[0]!,
+      run!.id,
+    );
+    expect(await raw(db).all(`SELECT messages, finished_at IS NOT NULL AS finished FROM inbox_runs`)).toEqual([
+      { messages: ['newer', 'older'], finished: true },
+    ]);
+    expect(await decided()).toEqual([
+      { message_id: 'newer', label_id: 'personal' },
+      { message_id: 'older', label_id: 'personal' },
+    ]);
+    // Whether the person has written to each sender, asked once a sender and remembered, is all it asks.
+    expect(gmail.gmail.requests.slice(before)).toEqual([
+      { method: 'users.messages.list', q: 'in:sent to:ada@example.org' },
+      { method: 'users.messages.list', q: 'in:sent to:bo@example.net' },
+    ]);
   });
 });
 

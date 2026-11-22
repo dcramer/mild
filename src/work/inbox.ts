@@ -5,7 +5,8 @@ import { type Account, recordFromInbox } from '../store/accounts.ts';
 import { currentDecision } from '../store/decisions.ts';
 import { isOwnDigest } from '../store/digests.ts';
 import { type InboxRun, addListed, advanceInboxRun, goingInboxRun, isGoing, stopInboxRuns } from '../store/inbox.ts';
-import { queuedMessage } from '../store/messages.ts';
+import { queuedMessage, recordedInbox } from '../store/messages.ts';
+import { copied } from '../store/copies.ts';
 import type { Sql } from '../store/sql.ts';
 import { applyTo, inboxQuery, rulesWith } from './apply.ts';
 import { type Decided, type TriageDeps, type TriageReport, deciderFor, emptyReport } from './triage.ts';
@@ -68,6 +69,8 @@ export async function continueInboxRun(deps: Deps, account: Account, runId: numb
   const out = () => deps.until !== undefined && now() >= deps.until;
   let run = await goingInboxRun(db, runId);
   if (!run) return null;
+  // Once Inbox holds the whole mailbox, the record says what is in the inbox and Gmail is not asked.
+  if (!run.listed && (await copied(db, account.id))) run = await addListed(db, run, await recordedInbox(db, account.id, run.most), null);
   run = await listRun(db, deps.api, run, '', out);
   if (!run.listed) return { from: run.next, to: run.next, of: run.messages.length, report: emptyReport() };
   const listed = run;
