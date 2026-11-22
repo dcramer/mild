@@ -1,6 +1,7 @@
 import {
   PHONE,
   back,
+  boxOf,
   choose,
   expect,
   forReviewLink,
@@ -139,6 +140,21 @@ test.describe('Inbox', () => {
     await expect(await label()).toContainText('Receipts');
     await expect(inboxRows(page)).toHaveCount(19);
     expect(sift.google().mailbox('me@example.org').message('m3')!.labelIds).toContain('INBOX');
+  });
+
+  test('a row’s label menu stays under its label while the pointer moves into it', async ({ page }) => {
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    await pointAt(row);
+    const label = row.getByRole('combobox', { name: 'What Your order has shipped is' });
+    await label.click();
+    const under = await boxOf(label);
+    await pointAt(page.getByRole('option', { name: 'Personal', exact: true }));
+    await expect(label).toBeVisible();
+    const list = await boxOf(page.getByRole('listbox'));
+    expect(list.y).toBeGreaterThanOrEqual(under.y + under.height);
+    expect(list.x).toBeGreaterThanOrEqual(under.x);
+    expect(list.x).toBeLessThan(under.x + under.width);
   });
 
   test('the reader’s answer is saved and the conversation stays open', async ({ page }) => {

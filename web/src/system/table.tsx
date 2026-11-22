@@ -95,7 +95,7 @@ export function Tr({
         tabIndex={0}
         data-holds={holds?.join(' ')}
         className={cn(
-          'row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill-strong) focus-within:bg-(--fill) active:bg-(--fill-strong)',
+          'row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill-strong) focus-within:bg-(--fill) has-[[data-popup-open]]:bg-(--fill) active:bg-(--fill-strong)',
           selected && 'bg-(--fill)',
           className,
         )}
@@ -241,11 +241,12 @@ export function RowActions({ phone, children }: { phone?: 'keep'; children: Reac
 
 /**
  * The row pointed at, or the one the keys are on (the row itself, or a press in it, reached by keys): not a row whose check
- * was clicked, which keeps the focus while the pointer moves on.
+ * was clicked, which keeps the focus while the pointer moves on. A row whose menu is open stays so while the pointer is in
+ * the menu, which is outside the row: hidden, the press it opened from would leave it nothing to stand under.
  */
-const ON_ROW = 'group-hover/row:flex group-focus-visible/row:flex group-has-focus-visible/row:flex';
+const ON_ROW = 'group-hover/row:flex group-focus-visible/row:flex group-has-focus-visible/row:flex group-has-[[data-popup-open]]/row:flex';
 /** What the presses take the place of, hidden where they show; Tailwind finds whole class names only. */
-const OFF_ROW = 'group-hover/row:invisible group-focus-visible/row:invisible group-has-focus-visible/row:invisible';
+const OFF_ROW = 'group-hover/row:invisible group-focus-visible/row:invisible group-has-focus-visible/row:invisible group-has-[[data-popup-open]]/row:invisible';
 
 /** The block a row's presses sit on: a shade lighter than the row, and solid, since it covers the end of the row's text. */
 const TRAY = '[background:linear-gradient(var(--fill),var(--fill)),linear-gradient(var(--fill),var(--fill)),var(--surface)]';
