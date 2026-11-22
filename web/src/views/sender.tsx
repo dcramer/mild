@@ -3,7 +3,7 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
-import { ContactHint, DomainLink, NameCell, SenderCell, SenderFacts, ruleWords, senderHref } from '@/components/sender.tsx';
+import { ContactHint, DomainNamed, NameCell, SenderCell, SenderFacts, ruleWords, senderHref } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import { STANDINGS, count, dateTime, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
@@ -341,24 +341,19 @@ function SenderView({ who }: { who: Who }) {
     ...(title ? [<span key="address">{key}</span>] : []),
     ...(domain
       ? [
-          // The hint belongs to the domain: on a phone it wraps with it, never onto a line of its own.
-          <span key="domain" className="inline-flex items-center gap-1 whitespace-nowrap">
-            <DomainLink domain={domain} />
-            <ContactHint contact={profile.domain?.contact ?? null} />
+          // On a phone the domain takes a line of its own, as how they know each other does below.
+          <span key="domain" className="phone:basis-full">
+            {title ? (
+              <span aria-hidden className="mr-2 phone:hidden">
+                ·
+              </span>
+            ) : null}
+            <DomainNamed domain={domain} contact={profile.domain?.contact ?? null} />
           </span>,
         ]
       : []),
-  ].flatMap((part, index) => [
-    ...(index > 0
-      ? [
-          <span key={`dot ${index}`} aria-hidden>
-            ·
-          </span>,
-        ]
-      : []),
-    part,
-  ]);
-  // How they know each other takes a line of its own on a phone, where a dot would end the line above.
+  ];
+  // How they know each other takes a line of its own on a phone.
   const meta =
     naming.length > 0 || profile.contact ? (
       <>

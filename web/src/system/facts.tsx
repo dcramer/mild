@@ -10,7 +10,7 @@ export function Fact({ term, children }: { term: string; children: ReactNode }) 
   return (
     <>
       <dt className="text-muted-foreground max-sm:mt-1">{term}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
+      <dd className="min-w-0 wrap-anywhere">{children}</dd>
     </>
   );
 }

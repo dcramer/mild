@@ -329,12 +329,16 @@ test.describe('with Inbox on', () => {
     expect(text).toContain('Subject: Lunch on Thursday?\r\nTo: Me <me@example.org>\r\n\r\nAre you free for lunch on Thursday?');
   });
 
-  test('on a phone Inbox has the press that writes, it covers the screen, and nothing scrolls sideways', async ({ page }) => {
+  test('on a phone Inbox has the press that writes, it covers the screen, the keyboard is for addresses, and nothing scrolls sideways', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto('/inbox');
     await compose(page).click();
     const writing = composer(page, 'New message');
-    await writing.getByRole('textbox', { name: 'To' }).fill('someone.with.a.very.long.address@a-long-domain.example.com');
+    const to = writing.getByRole('textbox', { name: 'To' });
+    await expect(to).toHaveAttribute('inputmode', 'email');
+    await expect(to).toHaveAttribute('autocapitalize', 'off');
+    await expect(to).toHaveAttribute('autocorrect', 'off');
+    await to.fill('someone.with.a.very.long.address@a-long-domain.example.com');
     await expect(writing.getByRole('button', { name: /^Send/ })).toBeEnabled();
     await sideScroll(page).toBe(0);
     expect((await boxOf(writing)).width).toBe(PHONE.width);

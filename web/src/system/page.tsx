@@ -20,7 +20,9 @@ export function PageHeader({ title, badge, meta, actions }: { title: ReactNode; 
           {badge}
           <Narrowed />
         </div>
-        {meta === undefined ? null : <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">{meta ?? <Blank />}</div>}
+        {meta === undefined ? null : (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground wrap-anywhere">{meta ?? <Blank />}</div>
+        )}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
