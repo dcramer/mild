@@ -202,6 +202,9 @@ export async function pointAt(target: Locator) {
   await target.hover();
 }
 
+/** A sender's or domain's card, open on `name` (as the name shown, or the address). */
+export const senderCard = (page: Page, name: string) => page.getByRole('group', { name: `About ${name}`, exact: true });
+
 /** The tooltip showing. */
 export const tooltip = (page: Page) => page.getByRole('tooltip');
 

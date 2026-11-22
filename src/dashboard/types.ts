@@ -336,7 +336,7 @@ export const MessageDetail = z.object({
 export type MessageDetail = z.infer<typeof MessageDetail>;
 
 /**
- * What a sender's or domain's next message gets (`nextOf`, src/dashboard/queries/contacts.ts): what the rule for all their
+ * What a contact's next message gets (`nextOf`, src/dashboard/queries/contacts.ts): what the rule for all their
  * mail does (`ruleId`), or else what their mail has been, the reader's answers included; `usually` when it is of several kinds.
  */
 const NextMail = z.object({
@@ -354,7 +354,6 @@ export const SenderPage = z.object({
   /** The name the sender last used. */
   name: held.nullable(),
   profile: SenderProfile,
-  next: NextMail,
   /** For an address that sends under more than one name: each name (null for mail with none), most mail first, with what its mail is by label. */
   names: z.array(
     z.object({
@@ -723,8 +722,8 @@ export const MailThread = z.object({
   subject: held,
   /** Its newest message's sender's address, which an answer about it names. */
   from: held,
-  /** Who wrote the messages Mild has of it, oldest first, each once: a name, or the address of a sender without one; the reader's own mailboxes as "me". */
-  who: z.array(held),
+  /** Who wrote the messages Mild has of it, oldest first, each address once: its name, or the address of a sender without one; the reader's own mailboxes as "me", with no address. */
+  who: z.array(z.object({ name: held, address: held.nullable() })),
   /** The messages Mild has recorded of it, oldest first; the newest is the one the reader opens. Sync records mail that arrives, not what the person sent. */
   messageIds: z.array(z.string()),
   unread: z.boolean(),

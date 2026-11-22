@@ -9,7 +9,7 @@ import { type AnswerLabel, answerChoices, useRecordAnswer } from '@/components/a
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
-import { Thinks, useMailPress, whoWrote } from '@/components/mail.tsx';
+import { Thinks, WhoWrote, type Writer, useMailPress } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, readAheadOnRest, useLoaded, usePages } from '@/lib/api.ts';
 import { type Copied, conversations, useWhole } from '@/lib/copy.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
@@ -60,8 +60,8 @@ const LIST_KEPT_MS = 30 * 60_000;
  */
 const COPY_PAGE = 100;
 
-/** A conversation as a row lists it: who wrote, named already. */
-type Listed = Omit<MailThread, 'who'> & { who: string };
+/** A conversation as a row lists it: who wrote, revealed. */
+type Listed = Omit<MailThread, 'who'> & { who: readonly Writer[] };
 
 /** The newest message, which the reader opens on. */
 const newest = (t: Listed) => ({ accountId: t.accountId, messageId: t.messageIds.at(-1)! });
@@ -69,13 +69,18 @@ const newest = (t: Listed) => ({ accountId: t.accountId, messageId: t.messageIds
 /** A conversation the copy holds, as its row lists it: the person's own mailboxes as "me", the label by its name. */
 function listedOf({ conversation: c, unread, newestAt }: Copied, mine: ReadonlySet<string>, names: ReadonlyMap<string, string>): Listed {
   const last = c.messages.at(-1)!;
-  const writers = c.messages.map((m) => (mine.has(reveal(m.fromAddress)) ? 'me' : reveal(m.fromName ?? m.fromAddress)));
+  const writers = new Map<string, Writer>();
+  for (const m of c.messages) {
+    const address = reveal(m.fromAddress);
+    if (mine.has(address)) writers.set('', { name: 'me', address: null });
+    else if (!writers.has(address)) writers.set(address, { name: reveal(m.fromName) ?? address, address });
+  }
   return {
     accountId: c.accountId,
     threadId: c.threadId,
     subject: last.subject,
     from: last.fromAddress,
-    who: whoWrote([...new Set(writers)]),
+    who: [...writers.values()],
     messageIds: c.messages.map((m) => m.messageId),
     unread,
     newestAt,
@@ -99,7 +104,8 @@ function useRows(manage: { labels: readonly AnswerLabel[]; accounts: readonly { 
     const rowOf = (row: Copied | MailThread): Listed => {
       let listed = made.get(row);
       if (!listed) {
-        listed = 'conversation' in row ? listedOf(row, mine, names) : { ...row, who: whoWrote(reveal(row.who)) };
+        listed =
+          'conversation' in row ? listedOf(row, mine, names) : { ...row, who: row.who.map((w) => ({ name: reveal(w.name), address: reveal(w.address) })) };
         made.set(row, listed);
       }
       return listed;
@@ -187,14 +193,18 @@ const ThreadRow = memo(function ThreadRow({
       <RowCheck checked={selected} onChange={(on) => hands.select(thread, on)} label={`Select ${subject}`} />
       <Td className="max-w-0 phone:py-2 md:w-[18%] md:min-w-40">
         <span className={`flex min-w-0 items-baseline gap-1.5 phone:hidden ${ink}`}>
-          <span className="truncate">{who}</span>
+          <span className="truncate">
+            <WhoWrote writers={who} />
+          </span>
           {many}
         </span>
         {/* On a phone, a mail app's three lines set close: who and when, the subject, the start of the text with the label. */}
         <span className="flex flex-col leading-snug md:hidden">
           <span className="flex items-baseline gap-3">
             <span className={`flex min-w-0 flex-1 items-baseline gap-1.5 ${thread.unread ? 'name leading-snug' : 'text-foreground/85'}`}>
-              <span className="truncate">{who}</span>
+              <span className="truncate">
+                <WhoWrote writers={who} />
+              </span>
               {many}
             </span>
             <span className={`shrink-0 text-sm tabular-nums ${thread.unread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>

@@ -112,11 +112,8 @@ describe('GET /api/contacts', () => {
     expect(home.rows.map((r) => plain(r.address))).not.toContain('boss@work.example.org');
   });
 
-  it('says what their next mail gets as their own page does', async () => {
-    const { base, list } = await seeded();
-    const page = (await (await fetch(`${base}/api/sender?address=billing@utility.example.net`)).json()) as SenderPage;
-    const row = (await list('?q=utility')).rows[0]!;
-    expect(row.next).toEqual(page.next);
+  it('says where a sender stands on their own page', async () => {
+    const { base } = await seeded();
     const cold = (await (await fetch(`${base}/api/sender?address=cold@example.net`)).json()) as SenderPage;
     expect(cold.profile.given).toBe('blocked');
   });

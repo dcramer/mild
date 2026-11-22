@@ -62,7 +62,10 @@ describe('Inbox’s list', () => {
     expect(threads.map((t) => t.threadId)).toEqual(['lunch', 'news']);
     expect(threads[0]).toMatchObject({
       subject: 'Re: Lunch?',
-      who: ['Ada Lovelace', 'me'],
+      who: [
+        { name: 'Ada Lovelace', address: 'ada@example.org' },
+        { name: 'me', address: null },
+      ],
       messageIds: ['q', 'mine', 'reply'],
       unread: true,
       newestAt: 300,
