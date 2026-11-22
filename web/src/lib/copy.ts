@@ -289,6 +289,9 @@ function ask(): void {
 }
 
 let collection: Collection<Copied, string> | null = null;
+let loaded: () => void = () => {};
+/** Settles once the copy has read what the device kept, and so holds every conversation a press there could be on. */
+export const opened = new Promise<void>((done) => (loaded = done));
 
 /** The copy's conversations. Made, and started, the first time it is asked for, in the browser. */
 export function conversations(): Collection<Copied, string> {
@@ -319,6 +322,7 @@ export function conversations(): Collection<Copied, string> {
         void load(markReady)
           .catch(() => {})
           .finally(() => {
+            loaded();
             // One tab asks for all of them; another takes over when it closes.
             const lead = () => {
               leading = true;
@@ -362,7 +366,7 @@ export function useWhole(): boolean {
 }
 
 /** Resolves once the copy holds every write this page made, so rows a press hid do not come back meanwhile. */
-export function caughtUp(): Promise<void> {
+function caughtUp(): Promise<void> {
   if (!collection || held >= wanted) return Promise.resolve();
   return new Promise((done) => {
     const check = () => {
@@ -374,6 +378,17 @@ export function caughtUp(): Promise<void> {
     const timer = setTimeout(() => (listeners.delete(check), done()), HOLD_MS);
     listeners.add(check);
   });
+}
+
+/** What a press does to a conversation: unread is on its newest message only, as Gmail marks it. */
+type Change = 'archive' | 'spam' | 'read' | 'unread';
+
+function changed(labelIds: readonly string[], change: Change, newest: boolean): string[] {
+  const without = (...labels: string[]) => labelIds.filter((l) => !labels.includes(l));
+  if (change === 'archive') return without('INBOX');
+  if (change === 'spam') return [...without('INBOX', 'SPAM'), 'SPAM'];
+  if (change === 'read') return without('UNREAD');
+  return newest && !labelIds.includes('UNREAD') ? [...labelIds, 'UNREAD'] : [...labelIds];
 }
 
 /**
@@ -390,22 +405,17 @@ export async function leftInbox(keys: readonly string[]): Promise<void> {
 }
 
 /**
- * Mark conversations the copy holds read or unread at once, while the change goes to Gmail: `work` sends it, and the
- * copy then shows what Gmail took. Undone if it fails.
+ * Change conversations the copy holds at once, while `work` sends the change to Gmail: the copy then shows what Gmail
+ * took. Undone if `work` fails, and dropped once it is done without sending anything (Undo).
  */
-export const markCopied = createOptimisticAction<{ keys: readonly string[]; unread: boolean; work: () => Promise<void> }>({
-  onMutate: ({ keys, unread }) => {
+export const changeCopied = createOptimisticAction<{ keys: readonly string[]; change: Change; work: () => Promise<void> }>({
+  onMutate: ({ keys, change }) => {
     for (const key of keys)
       conversations().update(key, (draft) => {
-        const messages = draft.conversation.messages.map((m, i, all) => ({
-          ...m,
-          labelIds: unread
-            ? i === all.length - 1 && !m.labelIds.includes('UNREAD')
-              ? [...m.labelIds, 'UNREAD']
-              : m.labelIds
-            : m.labelIds.filter((l) => l !== 'UNREAD'),
-        }));
-        draft.unread = unread;
+        const messages = draft.conversation.messages.map((m, i, all) => ({ ...m, labelIds: changed(m.labelIds, change, i === all.length - 1) }));
+        const labels = new Set(messages.flatMap((m) => m.labelIds));
+        draft.inbox = labels.has('INBOX');
+        draft.unread = labels.has('UNREAD');
         draft.conversation = { ...draft.conversation, messages };
       });
   },

@@ -74,9 +74,20 @@ function Receipts() {
   const { toasts, close } = Base.useToastManager();
   // A page closed or put away sends what is held: it may never be shown again to be undone.
   useEffect(() => {
-    const away = () => document.visibilityState === 'hidden' && held !== null && close(SAID);
+    // Sent here, not once the toast has closed, which is after the page has gone.
+    const away = (event: Event) => {
+      if ((event.type !== 'pagehide' && document.visibilityState !== 'hidden') || held === null) return;
+      const send = held;
+      held = null;
+      send();
+      close(SAID);
+    };
     document.addEventListener('visibilitychange', away);
-    return () => document.removeEventListener('visibilitychange', away);
+    window.addEventListener('pagehide', away);
+    return () => {
+      document.removeEventListener('visibilitychange', away);
+      window.removeEventListener('pagehide', away);
+    };
   }, [close]);
   // Only the newest that can be undone answers to Z, so it undoes the last thing done.
   const front = toasts.find((t) => t.transitionStatus !== 'ending' && !t.limited && t.data?.undo)?.id;

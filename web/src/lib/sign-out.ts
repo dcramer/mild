@@ -3,11 +3,17 @@ import { forgetDevice } from './device.ts';
 import { forgetDrafts } from './compose.ts';
 import { chooseMailbox } from './mailbox.ts';
 import { START } from './start.ts';
+import { sendAll } from './outbox.ts';
+
+/** How long sign-out waits for presses still on their way. */
+const SEND_MS = 5000;
 
 /**
  * Sign out, and leave nothing of theirs in this browser for whoever uses it next (`forgetHere`).
  */
 export async function signOut(): Promise<void> {
+  // Before the device is wiped, and with it what waits to be sent.
+  await sendAll(SEND_MS);
   await api.signOut();
   await forgetHere();
   window.location.assign('/');

@@ -19,7 +19,9 @@ import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
 import { goBack, isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
 import { useStarted } from '@/system/started.ts';
 import { useHidden } from '@/lib/action.ts';
-import { ahead } from '@/lib/format.ts';
+import { ahead, plural } from '@/lib/format.ts';
+import { useOutbox } from '@/lib/outbox.ts';
+import { useOutboxFailures } from '@/components/mail.tsx';
 import { subscription } from '@/lib/prices.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
 import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, rowHolding, useGoing } from '@/system';
@@ -261,6 +263,8 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) =>
     setParams({ message: item?.messageId ?? '', thread: item?.threadId ?? '' }, push);
   const online = useOnline();
+  const waitingPresses = useOutbox().waiting;
+  useOutboxFailures();
   // Drawn above the `Mailbox` it provides, so for all of them: whose mailboxes these are, and whose sign-in expired.
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const mailboxes = (manage.data?.accounts ?? []).map((a) => a.email);
@@ -321,7 +325,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
     ...(s.to === (inbox ? 'inbox' : '') && waiting ? { count: waiting } : {}),
   }));
   const notice = !online ? (
-    <Notice>Mild cannot be reached</Notice>
+    <Notice>Mild cannot be reached{waitingPresses > 0 ? `: ${plural(waitingPresses, 'change')} will go once it is back` : ''}</Notice>
   ) : expired.length > 0 ? (
     // Signing in again is what renews Mild's access; Google asks which account. Named when it is one that is not the viewer's own.
     <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">

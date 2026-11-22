@@ -19,8 +19,9 @@ export interface Sealed {
 }
 
 const DATABASE = 'sift-device';
-/** The copy of the inbox (`web/src/lib/copy.ts`), wiped with the device. */
+/** The copy of the inbox (`web/src/lib/copy.ts`) and the presses on their way (`web/src/lib/outbox.ts`), wiped with the device. */
 const COPY = 'sift-copy';
+const OUTBOX = 'sift-outbox';
 
 const text = new TextEncoder();
 const words = new TextDecoder();
@@ -153,7 +154,7 @@ async function wipe() {
   kept?.db.close();
   opened = null;
   held = Promise.resolve(false);
-  await Promise.all([deleteDB(DATABASE), deleteDB(COPY)]);
+  await Promise.all([deleteDB(DATABASE), deleteDB(COPY), deleteDB(OUTBOX)]);
 }
 
 /**
