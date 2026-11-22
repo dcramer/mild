@@ -1,6 +1,7 @@
 'use client';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { useAction } from '@/lib/action.ts';
+import { useQueryClient } from '@tanstack/react-query';
+import { reloadAll } from '@/lib/action.ts';
 import { type Party, type Recipient, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
 import { api, useLoaded } from '@/lib/api.ts';
 import { dateTime } from '@/lib/format.ts';
@@ -10,6 +11,7 @@ import { useChosenMailbox } from '@/lib/mailbox.ts';
 import { useHere } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
 import {
+  Ask,
   AttachButton,
   Button,
   DiscardButton,
@@ -18,7 +20,6 @@ import {
   DraftFiles,
   DraftLine,
   DraftText,
-  Failure,
   Finish,
   Input,
   Loading,
@@ -139,7 +140,7 @@ function replyDraft(message: MessageDetail, choices: readonly From[], all: boole
 function forwardDraft(message: MessageDetail, choices: readonly From[]): Draft {
   const subject = reveal(message.subject);
   const quoted = [
-    '---------- Forwarded message ---------',
+    QUOTE,
     `From: ${typed(senderOf(message))}`,
     `Date: ${dateTime(message.receivedAt)}`,
     `Subject: ${subject}`,
@@ -157,6 +158,23 @@ const suggest = async (q: string, signal: AbortSignal): Promise<Party[]> =>
 
 /** What is wrong with a line's recipients, in a sentence, or null. */
 const wrongOf = (list: readonly Recipient[]) => wrongAddresses(list.filter((r) => r.wrong).map((r) => r.address));
+
+/** Where a forward's quote begins: what the person wrote is above it. */
+const QUOTE = '---------- Forwarded message ---------';
+/** Words that say a file goes with the mail. */
+const SAYS_ATTACHED = /\b(attach(ed|ing|ment|ments)?|enclosed)\b/i;
+
+/**
+ * What Send asks first, as Gmail does, each in turn: about mail with no subject, and mail whose own words say a file is
+ * attached when none is. A reply's subject is its message's.
+ */
+function doubtsAbout(what: Writing, draft: Draft, files: number): string[] {
+  const own = draft.text.includes(QUOTE) ? draft.text.slice(0, draft.text.indexOf(QUOTE)) : draft.text;
+  return [
+    ...(what.kind !== 'reply' && draft.subject.trim() === '' ? ['Send without a subject?'] : []),
+    ...(files === 0 && SAYS_ATTACHED.test(own) ? ['You mention a file, but none is attached. Send anyway?'] : []),
+  ];
+}
 
 /** Files being uploaded, by a key of their own until Mild gives them an id. */
 interface Uploading {
@@ -252,7 +270,7 @@ function Writer({
   const toast = useToast();
   const compose = useCompose();
   const here = useHere();
-  const { busy, error, run } = useAction();
+  const client = useQueryClient();
 
   const from = choices.find((c) => c.address === draft.from) ?? choices[0];
   const addressee = draft.to[0] ?? draft.cc[0] ?? draft.bcc[0] ?? withTyped([], typing.to)[0];
@@ -313,8 +331,16 @@ function Writer({
   const nobody = everyone.length === 0 && Object.values(typing).every((t) => t.trim() === '');
   const wrong = everyone.some((r) => r.wrong);
   const waiting = uploading.length > 0;
-  const send = () => {
+  // What Send asks before it goes, when what is written needs it, with what this press has been told already.
+  const [asking, setAsking] = useState<{ question: string; answered: string[] } | null>(null);
+  const send = (answered: readonly string[] = []) => {
     if (!from.canSend || nobody || wrong || waiting) return;
+    const question = doubtsAbout(what, draft, carried.length + draft.files.length).find((q) => !answered.includes(q));
+    if (question) {
+      setAsking({ question, answered: [...answered] });
+      return;
+    }
+    setAsking(null);
     // What is still being typed goes as it would once the line is left.
     const lines = { to: withTyped(draft.to, typing.to), cc: withTyped(draft.cc, typing.cc), bcc: withTyped(draft.bcc, typing.bcc) };
     setTyping({ to: '', cc: '', bcc: '' });
@@ -335,23 +361,34 @@ function Writer({
       text: draft.text,
       uploads: draft.files.map((f) => f.id),
     };
-    run(
-      () =>
-        api.send(
-          what.kind === 'reply'
-            ? { ...mail, replyTo: { messageId: what.messageId } }
-            : {
-                ...mail,
-                subject: draft.subject,
-                ...(what.kind === 'forward' && carried.length > 0 ? { forwarding: { messageId: what.messageId, parts: carried.map((f) => f.part) } } : {}),
-              },
+    const request =
+      what.kind === 'reply'
+        ? { ...mail, replyTo: { messageId: what.messageId } }
+        : {
+            ...mail,
+            subject: draft.subject,
+            ...(what.kind === 'forward' && carried.length > 0 ? { forwarding: { messageId: what.messageId, parts: carried.map((f) => f.part) } } : {}),
+          };
+    // Held while its toast is up, as Gmail's Undo send holds it: Undo opens the draft again, which is kept until it has gone.
+    onClose();
+    toast(said, {
+      kind: 'Sending',
+      undo: () => compose?.(what),
+      onGone: () =>
+        void api.send(request).then(
+          () => {
+            keepDraft(who, what, null);
+            toast(said, { kind: 'Sent' });
+            void reloadAll(client);
+          },
+          (failure: unknown) =>
+            toast(`Not sent: ${said}`, {
+              description: failure instanceof Error ? failure.message : String(failure),
+              tone: 'failure',
+              action: { label: 'Open draft', onPress: () => compose?.(what) },
+            }),
         ),
-      () => {
-        keepDraft(who, what, null);
-        toast(said, { kind: 'Sent' });
-        onClose();
-      },
-    );
+    });
   };
   const discard = () => {
     for (const u of uploading) u.abort.abort();
@@ -413,16 +450,22 @@ function Writer({
 
   const actions = (
     <>
-      <Finish
-        busy={busy}
-        disabled={nobody || wrong || waiting}
-        {...(nobody ? { why: 'Say who it is to.' } : wrong ? { why: 'An address is wrong.' } : waiting ? { why: 'A file is still uploading.' } : {})}
-        onClick={send}
-      >
-        Send
-      </Finish>
-      <AttachButton onFiles={attach} />
-      <Failure>{error}</Failure>
+      {asking ? (
+        <Ask key={asking.question} question={asking.question} onYes={() => send([...asking.answered, asking.question])} onNo={() => setAsking(null)}>
+          Send
+        </Ask>
+      ) : (
+        <>
+          <Finish
+            disabled={nobody || wrong || waiting}
+            {...(nobody ? { why: 'Say who it is to.' } : wrong ? { why: 'An address is wrong.' } : waiting ? { why: 'A file is still uploading.' } : {})}
+            onClick={() => send()}
+          >
+            Send
+          </Finish>
+          <AttachButton onFiles={attach} />
+        </>
+      )}
       <DiscardButton onClick={discard} />
     </>
   );

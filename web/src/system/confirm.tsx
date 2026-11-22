@@ -31,27 +31,39 @@ export function ConfirmButton({
         {children}
       </Button>
     );
+  return (
+    <Ask
+      question={question}
+      onYes={() => {
+        setAsking(false);
+        onConfirm();
+      }}
+      onNo={() => setAsking(false)}
+    >
+      {children}
+    </Ask>
+  );
+}
+
+/**
+ * A question asked in place of the press that raised it: the question, the press that goes ahead (its words those of
+ * the press asked about, and focused, so Enter answers yes), and Cancel. Escape is Cancel. `ConfirmButton` asks it on
+ * its first press; the composer asks one only when what is written needs it (no subject).
+ */
+export function Ask({ question, onYes, onNo, children }: { question: string; onYes: () => void; onNo: () => void; children: string }) {
   const escape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== 'Escape') return;
     // The Escape is this question's alone, not the panel or dialog it sits in.
     event.stopPropagation();
-    setAsking(false);
+    onNo();
   };
   return (
-    <span role="group" aria-label={question} className="inline-flex items-center gap-1.5">
-      <span className="mr-1 text-sm whitespace-nowrap">{question}</span>
-      <Button
-        variant="ink"
-        autoFocus
-        onKeyDown={escape}
-        onClick={() => {
-          setAsking(false);
-          onConfirm();
-        }}
-      >
+    <span role="group" aria-label={question} className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className="mr-1 text-sm">{question}</span>
+      <Button variant="ink" autoFocus onKeyDown={escape} onClick={onYes}>
         {children}
       </Button>
-      <Button variant="quiet" onKeyDown={escape} onClick={() => setAsking(false)}>
+      <Button variant="quiet" onKeyDown={escape} onClick={onNo}>
         Cancel
       </Button>
     </span>
