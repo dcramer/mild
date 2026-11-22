@@ -14,6 +14,7 @@ import {
   TagIcon,
   Trash2Icon,
   WorkflowIcon,
+  MailOpenIcon,
 } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
@@ -116,6 +117,7 @@ import {
   StackedBars,
   Sub,
   Swatch,
+  Swipe,
   Table,
   Td,
   TextArea,
@@ -974,6 +976,32 @@ export function SystemView() {
               </Button>
               <LoadingBar on={waiting} />
             </div>
+          </Section>
+          <Section
+            title="Swipe"
+            meta="a row of mail on a phone: slid a little, a press shows; to the edge, it is done. Held, a row is selected, and the list's presses go along the bottom"
+          >
+            <Table dense>
+              <tbody>
+                {(['', 'start', 'end'] as const).map((opened) => (
+                  <Tr key={opened} onOpen={() => toast('Opened')}>
+                    <Td className="max-w-0">
+                      <Swipe
+                        {...(opened ? { opened } : {})}
+                        start={{ label: 'Read', icon: <MailOpenIcon />, onPress: () => toast('Read') }}
+                        end={{ label: 'Archive', icon: <ArchiveIcon />, onPress: () => toast('Archived') }}
+                      >
+                        <span className="flex flex-col leading-snug">
+                          <span className="name">Weekly Digest</span>
+                          <span className="truncate">This week in widgets</span>
+                          <span className="truncate text-muted-foreground">Five stories about widgets.</span>
+                        </span>
+                      </Swipe>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
           </Section>
           <Section title="Reserve" meta="holds the room for what arrives late, so nothing below moves">
             <Reserve id="specimen" ready={false} room="min-h-24" placeholder={<Loading rows={2} />}>

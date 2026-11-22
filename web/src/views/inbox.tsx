@@ -1,5 +1,5 @@
 'use client';
-import { ArchiveIcon, BanIcon, CircleHelpIcon, ShieldAlertIcon, WorkflowIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, CircleHelpIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, WorkflowIcon } from 'lucide-react';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { proposalStart, standingStart } from '@/lib/rule-start.ts';
@@ -38,6 +38,8 @@ import {
   RowCheck,
   RowPresses,
   Sub,
+  Swipe,
+  type SwipePress,
   Table,
   Td,
   Th,
@@ -45,6 +47,7 @@ import {
   Tr,
   TrGroup,
   useNow,
+  usePhone,
 } from '@/system';
 
 const VIEWS = [
@@ -158,6 +161,7 @@ function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabe
 /** What a row's presses do, the same from one draw to the next, so a row is drawn again only when its own conversation changes. */
 type Hands = {
   select: (thread: Listed, on: boolean) => void;
+  hold: (thread: Listed) => void;
   open: (thread: Listed) => void;
   press: (threads: readonly Listed[], what: 'archive' | 'spam' | 'read' | 'unread') => void;
   block: (threads: readonly Listed[]) => void;
@@ -185,10 +189,20 @@ const ThreadRow = memo(function ThreadRow({
   const { who } = thread;
   const many = thread.messageIds.length > 1 ? <span className="font-normal text-muted-foreground tabular-nums">{thread.messageIds.length}</span> : null;
   const ink = thread.unread ? 'font-semibold text-foreground' : 'text-foreground/70';
+  // Swiped right it is read, or unread again; swiped left, archived. Neither acts on its sender.
+  const start = useMemo<SwipePress>(
+    () =>
+      thread.unread
+        ? { label: 'Read', icon: <MailOpenIcon />, onPress: () => press([thread], 'read') }
+        : { label: 'Unread', icon: <MailIcon />, onPress: () => press([thread], 'unread') },
+    [thread, press],
+  );
+  const end = useMemo<SwipePress>(() => ({ label: 'Archive', icon: <ArchiveIcon />, onPress: () => press([thread], 'archive') }), [thread, press]);
   return (
     <Tr
       selected={selected}
       onOpen={() => hands.open(thread)}
+      onHold={() => hands.hold(thread)}
       onPointerEnter={() => ahead(thread)}
       onFocusCapture={() => ahead(thread)}
       holds={thread.messageIds.map((messageId) => messageKey({ accountId: thread.accountId, messageId }))}
@@ -202,29 +216,33 @@ const ThreadRow = memo(function ThreadRow({
           {many}
         </span>
         {/* On a phone, a mail app's three lines set close: who and when, the subject, the start of the text with the label. */}
-        <span className="flex flex-col leading-snug md:hidden">
-          <span className="flex items-baseline gap-3">
-            <span className={`flex min-w-0 flex-1 items-baseline gap-1.5 ${thread.unread ? 'name leading-snug' : 'text-foreground/85'}`}>
-              <span className="truncate">
-                <WhoWrote writers={who} />
+        <div className="md:hidden">
+          <Swipe start={start} end={end}>
+            <span className="flex flex-col leading-snug">
+              <span className="flex items-baseline gap-3">
+                <span className={`flex min-w-0 flex-1 items-baseline gap-1.5 ${thread.unread ? 'name leading-snug' : 'text-foreground/85'}`}>
+                  <span className="truncate">
+                    <WhoWrote writers={who} />
+                  </span>
+                  {many}
+                </span>
+                <span className={`shrink-0 text-sm tabular-nums ${thread.unread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+                  <Arrived at={thread.newestAt} />
+                </span>
               </span>
-              {many}
+              <span className={`truncate ${thread.unread ? 'font-semibold text-foreground' : 'text-foreground/85'}`}>
+                <Place thread={thread} />
+                {subject}
+              </span>
+              <span className="flex items-baseline gap-3 text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate">{thread.preview ? reveal(thread.preview) : null}</span>
+                <span className="shrink-0 text-sm">
+                  <Thinks thinks={thread.thinks} />
+                </span>
+              </span>
             </span>
-            <span className={`shrink-0 text-sm tabular-nums ${thread.unread ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
-              <Arrived at={thread.newestAt} />
-            </span>
-          </span>
-          <span className={`truncate ${thread.unread ? 'font-semibold text-foreground' : 'text-foreground/85'}`}>
-            <Place thread={thread} />
-            {subject}
-          </span>
-          <span className="flex items-baseline gap-3 text-muted-foreground">
-            <span className="min-w-0 flex-1 truncate">{thread.preview ? reveal(thread.preview) : null}</span>
-            <span className="shrink-0 text-sm">
-              <Thinks thinks={thread.thinks} />
-            </span>
-          </span>
-        </span>
+          </Swipe>
+        </div>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-full">
         <span className="block truncate">
@@ -404,28 +422,36 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
     else periods.push({ title, rows: [thread] });
   }
   const refs = threads.map((t) => ({ ...newest(t), subject: t.subject, threadId: t.threadId }));
-  const drawn = useRef({ threads, refs, press, block, onOpen });
+  // On a phone, once a row is held, a press on a row selects it or lets it go, as a phone's own mail app does.
+  const phone = usePhone();
+  const choosing = phone && selected.size > 0;
+  const drawn = useRef({ threads, refs, press, block, onOpen, choosing, selected });
   useLayoutEffect(() => {
-    drawn.current = { threads, refs, press, block, onOpen };
+    drawn.current = { threads, refs, press, block, onOpen, choosing, selected };
   });
-  const [hands] = useState<Hands>(() => ({
-    select: (thread, on) =>
+  const [hands] = useState<Hands>(() => {
+    const select = (thread: Listed, on: boolean) =>
       setSelected((was) => {
         const changed = new Set(was);
         if (on) changed.add(threadKey(thread));
         else changed.delete(threadKey(thread));
         return changed;
-      }),
-    open: (thread) => {
-      const { threads, refs, onOpen } = drawn.current;
-      onOpen(
-        refs,
-        threads.findIndex((t) => threadKey(t) === threadKey(thread)),
-      );
-    },
-    press: (threads, what) => drawn.current.press(threads, what),
-    block: (threads) => drawn.current.block(threads),
-  }));
+      });
+    return {
+      select,
+      hold: (thread) => select(thread, true),
+      open: (thread) => {
+        const { threads, refs, onOpen, choosing, selected } = drawn.current;
+        if (choosing) return select(thread, !selected.has(threadKey(thread)));
+        onOpen(
+          refs,
+          threads.findIndex((t) => threadKey(t) === threadKey(thread)),
+        );
+      },
+      press: (threads, what) => drawn.current.press(threads, what),
+      block: (threads) => drawn.current.block(threads),
+    };
+  });
 
   // An empty list is nothing only once the copy is whole, and drawn: the deferred list may still be behind it.
   const waiting = (local ? !copy.isReady || (threads.length === 0 && (!whole || deferred !== copy.data)) : !server || pages.loading) || !manage.data;
@@ -470,6 +496,14 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
           { label: chosen.length === 1 ? 'Block sender' : 'Block senders', key: 'Shift+b', onPress: () => block(chosen, () => setSelected(new Set())) },
           { label: 'Mark read', key: 'Shift+i', onPress: () => act('read') },
           { label: 'Mark unread', key: 'Shift+u', onPress: () => act('unread') },
+        ],
+        thumbs: [
+          { label: 'Archive', icon: <ArchiveIcon />, onPress: () => act('archive') },
+          chosen.some((t) => t.unread)
+            ? { label: 'Read', icon: <MailOpenIcon />, onPress: () => act('read') }
+            : { label: 'Unread', icon: <MailIcon />, onPress: () => act('unread') },
+          { label: 'Spam', icon: <ShieldAlertIcon />, onPress: () => act('spam') },
+          { label: 'Block', icon: <BanIcon />, onPress: () => block(chosen, () => setSelected(new Set())) },
         ],
       }}
     >

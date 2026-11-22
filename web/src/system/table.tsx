@@ -76,15 +76,23 @@ export function Table({ keys = false, dense = false, children }: { keys?: boolea
  * The keys of the buttons in a row are live, and drawn, only while the reader is on that row.
  * `holds` names what the row opens, so a panel that stepped away from it can come back to the row it ended on (`rowHolding`).
  * `selected`: its `RowCheck` is checked, which fills it as pointing at it does; the row the keys are on fills more.
+ * `onHold`: a finger held on it, where a phone has no `RowCheck`, selects it.
  */
 export function Tr({
   onOpen,
+  onHold,
   holds,
   selected = false,
   className,
   ...props
-}: ComponentProps<'tr'> & { onOpen?: () => void; holds?: readonly string[]; selected?: boolean }) {
+}: ComponentProps<'tr'> & { onOpen?: () => void; onHold?: () => void; holds?: readonly string[]; selected?: boolean }) {
   const [active, setActive] = useState(false);
+  // A finger held on the row (`onHold`), not moved and not taken by a scroll or a swipe. The press it ends in opens nothing.
+  const holding = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const letGo = () => {
+    if (holding.current) clearTimeout(holding.current.timer);
+    holding.current = null;
+  };
   const stop = useContext(Stops);
   const opens = onOpen !== undefined;
   useEffect(() => (opens ? stop() : undefined), [opens, stop]);
@@ -99,7 +107,31 @@ export function Tr({
           selected && 'bg-(--fill)',
           className,
         )}
+        onPointerDown={(event) => {
+          holdEnding = false;
+          if (!onHold || event.pointerType === 'mouse') return;
+          const { clientX: x, clientY: y } = event;
+          const timer = setTimeout(() => {
+            holdEnding = true;
+            holding.current = null;
+            onHold();
+          }, HOLD_MS);
+          holding.current = { timer, x, y };
+        }}
+        onPointerMove={(event) => {
+          const at = holding.current;
+          if (at && Math.hypot(event.clientX - at.x, event.clientY - at.y) > STRAY_PX) letGo();
+        }}
+        onPointerUp={letGo}
+        onPointerCancel={letGo}
+        onContextMenu={(event) => {
+          if (holdEnding) event.preventDefault();
+        }}
         onClick={(event) => {
+          if (holdEnding) {
+            holdEnding = false;
+            return;
+          }
           // React passes up presses in what a row renders elsewhere, such as a dialog it opened; those are not on the row.
           // Nor is a press on a link in it, which goes where the link does.
           const target = event.target as Element;
@@ -120,6 +152,14 @@ export function Tr({
     </RowActive>
   );
 }
+
+// The press a hold ends in, which lands on whatever row is under the finger by then: the rows may have moved.
+let holdEnding = false;
+
+/** How long a finger rests on a row to select it, as a phone's own lists take it. */
+const HOLD_MS = 500;
+/** How far it may drift meanwhile, in pixels, before it is a scroll or a swipe instead. */
+const STRAY_PX = 10;
 
 /** The row on the page that holds `name`, if one does. */
 export const rowHolding = (name: string) => document.querySelector<HTMLElement>(`tr[data-holds~="${CSS.escape(name)}"]`);

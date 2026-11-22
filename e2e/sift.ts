@@ -222,6 +222,35 @@ export async function boxOf(target: Locator) {
   return box;
 }
 
+/** A phone's touch screen, which the gestures need: what a finger does is sent as touches, which the page scrolls by. */
+export const TOUCH = { viewport: PHONE, hasTouch: true, isMobile: true };
+
+async function touches(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  return (type: 'touchStart' | 'touchMove' | 'touchEnd', at?: { x: number; y: number }) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: at ? [at] : [] });
+}
+
+/**
+ * A finger drawn across a row by `dx` pixels and lifted: its swipe scrolls that far, and the browser snaps it and says
+ * it has stopped as it does after a finger. Chrome without a screen scrolls for touches sent to it but does not snap
+ * after them, so the scroll is asked for directly.
+ */
+export async function swipe(target: Locator, dx: number) {
+  // e2e is typed without the page's DOM.
+  type Scrolls = { scrollBy: (to: { left: number; behavior: 'smooth' }) => void };
+  await target.locator('[data-swipe]').evaluate((track, by) => (track as unknown as Scrolls).scrollBy({ left: -by, behavior: 'smooth' }), dx);
+}
+
+/** A finger held on `target` until `then` shows, and lifted. */
+export async function hold(target: Locator, then: Locator) {
+  const box = await boxOf(target);
+  const touch = await touches(target.page());
+  await touch('touchStart', { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+  await expect(then).toBeVisible();
+  await touch('touchEnd');
+}
+
 /** The reader: a message, or a conversation, open in the list's place. */
 export const reader = (page: Page) => page.getByRole('region').filter({ has: page.getByRole('combobox', { name: 'What this message is' }) });
 

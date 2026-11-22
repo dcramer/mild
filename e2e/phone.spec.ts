@@ -145,6 +145,11 @@ test.describe('On a phone', () => {
     expect(box.y + box.height).toBeLessThanOrEqual((await boxOf(archive)).y);
     await expect(said.getByRole('button', { name: /^Undo/ })).toBeVisible();
   });
+});
+
+// With Inbox off, so For review, which says Mild is off, is what the page opens on: with it on, the page goes on to Inbox.
+test.describe('On a phone, with Inbox off', () => {
+  test.use({ viewport: PHONE });
 
   test("Mild's line is in the menu and on Activity, and Mild is off is said in full", async ({ page }) => {
     await page.goto('/');
