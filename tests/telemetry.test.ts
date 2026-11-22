@@ -315,8 +315,8 @@ describe('a request from the page', () => {
     expect(spans.map((s) => [s.name, s.trace_id, s.parent_span_id])).toEqual([['GET /api/suggestions', TRACE, PAGE_SPAN]]);
   });
 
-  it('read for the frame stays under the frame', async () => {
-    await traced('sift.frame', 'frame', {}, () => asked(fromPage, () => traced('http.server', 'GET /api/session', {}, async () => {})));
+  it('asked under a span already stays under it', async () => {
+    await traced('sift.work', 'frame', {}, () => asked(fromPage, () => traced('http.server', 'GET /api/session', {}, async () => {})));
     const { spans } = await delivered();
     const frame = spans.find((s) => s.name === 'frame')!;
     expect(frame.trace_id).not.toBe(TRACE);

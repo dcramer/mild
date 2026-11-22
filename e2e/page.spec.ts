@@ -1,5 +1,5 @@
 import { PAGE_HEADERS } from '../src/dashboard/policy.ts';
-import type { ManageState, Session } from '../src/dashboard/types.ts';
+import type { Session } from '../src/dashboard/types.ts';
 import { HELD, PHONE, boxOf, domainPage, expect, senderPage, sideScroll, test } from './sift.ts';
 
 test("the page cannot be framed by another site, sends no referrer, and holds nothing of anyone's", async ({ page }) => {
@@ -116,37 +116,17 @@ test('built files are kept by the browser for good, read only as what they say t
   expect((await page.request.get(`${script}.map`)).status()).toBe(404);
 });
 
-test("a screen's HTML is drawn for whoever asked, with what Mild does not encrypt and nothing it does", async ({ page }) => {
+test("a screen's HTML is the same for everyone, so the service worker can keep it: nothing of anyone's, and which build it is", async ({ page }) => {
   const { request } = page;
   const held = JSON.parse(process.env[HELD] ?? '[]') as string[];
   expect(held).toEqual(expect.arrayContaining(['Ada Lovelace', 'ada@example.org', 'Replica lag on db-3']));
-  const holdsNothing = (path: string, html: string) => {
-    for (const value of held) for (const form of new Set([value, encodeURIComponent(value)])) expect(html, `${path} holds ${form}`).not.toContain(form);
-  };
-  const manage = (await (await request.get('/api/manage')).json()) as ManageState;
   const session = (await (await request.get('/api/session')).json()) as Session;
-  for (const [path, heading] of [
-    ['/', 'For review'],
-    ['/contacts', 'Contacts'],
-    ['/activity', 'Activity'],
-    ['/labels', 'Labels'],
-    ['/rules', 'Rules'],
-  ] as const) {
-    const html = await (await request.get(path)).text();
-    expect(html, path).toContain('aria-label="Sections"');
-    expect(html, path).toContain('<footer');
-    expect(html, path).toMatch(new RegExp(`<h1[^>]*>${heading}</h1>`));
-    // Whose it is, and what For review holds, beside the sections.
-    expect(html, path).toContain(session.email!);
-    expect(html, path).toMatch(new RegExp(`>${manage.waiting}<`));
-    if (path === '/labels') for (const label of manage.labels) expect(html, `the labels' HTML names ${label.name}`).toContain(label.name);
-    holdsNothing(path, html);
-  }
-  // Their address is in the path, which what is drawn for a request holds: these are drawn once for everyone.
-  for (const path of [senderPage('ada@example.org'), domainPage('code.example.com')]) {
-    const html = await (await request.get(path)).text();
+  for (const path of ['/', '/contacts', '/activity', '/labels', '/rules', senderPage('ada@example.org'), domainPage('code.example.com')]) {
+    const response = await request.get(path);
+    const html = await response.text();
     expect(html, path).not.toContain(session.email!);
-    holdsNothing(path, html);
+    for (const value of held) for (const form of new Set([value, encodeURIComponent(value)])) expect(html, `${path} holds ${form}`).not.toContain(form);
+    expect(response.headers()['x-sift-build'], path).toBeTruthy();
   }
 });
 

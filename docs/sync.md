@@ -26,7 +26,7 @@ A message's HTML is still a frame loaded from the server under its own policy (`
 
 A conversation is one record, `SyncedConversation` (`src/dashboard/types.ts`): its recorded messages, oldest first, each as Inbox and the reader's folded rows show it (sender's name and address, subject, preview, when, Gmail's label ids), and what Mild thinks of its newest (the current decision, or the person's answer where they gave one; the label by its id, named from the person's labels so renaming one changes no conversation). It is one record because an archive in Gmail that takes its last message out of the inbox takes all of it out of the window, including messages that did not change.
 
-A message's text is not in the feed: the reader reads it with the rest of the message (`GET /api/message`), ahead of a press that opens it. Labels, rules, proposals and settings stay server reads for now (they are drawn with the page already, `src/sift/page-data.ts`); each gets a kind of its own in the feed when a screen needs it.
+A message's text is not in the feed: the reader reads it with the rest of the message (`GET /api/message`), ahead of a press that opens it. Labels, rules, proposals and settings stay server reads for now (Settings' data is kept with the frame, `web/src/lib/device.ts`); each gets a kind of its own in the feed when a screen needs it.
 
 What is `held` in a reply is `held` in these too, and the page draws it through `reveal` as before.
 
@@ -59,16 +59,17 @@ Every write's reply carries the person's counter after it, in a header (`x-sift-
 
 ## On the device
 
-Proton Mail's web client keeps a random key on the server for each session and releases it only to that session, so what is on the disk cannot be read without a live sign-in. Mild does the same:
+Proton Mail's web client keeps a random key on the server for each session and releases it only to that session, so what is on the disk cannot be read without a live sign-in. Mild did the same until 2026-11-21, when the key moved onto the device: released by the server, every opening of the page waited on it, and an installed app that waits on the network is not instant.
 
-- **A key per browser.** A random 256-bit key kept as one of the person's sign-ins (`credentials`, kind `device`), sealed through `src/secrets.ts` like the others, so the rekey covers it, and an HttpOnly cookie, `sift_device`, naming it for 400 days, the most a browser keeps one. A page drawn by Next.js cannot set a cookie, so the page makes its key the first time (`POST /api/device`, answered in `src/dashboard/server.ts`).
-- **In the page after that, not a request.** The dashboard's frame is drawn on the server for whoever asked (`src/sift/page-data.ts`), and it carries the device's key beside the session (`GET /api/device`, read in that draw). That page is never kept (`no-store`), and the service worker keeps only pages drawn for everyone. It is a key, not mail: it unlocks only this browser's copy.
-- **In the browser**, the key is imported so it cannot be exported and held in memory only. The copy is in IndexedDB, each record's value encrypted with AES-GCM and a random 12-byte IV through WebCrypto. Readable on the disk: ids, times and Gmail's label ids, what the server keeps unencrypted too, which is enough to find the newest 50 inbox conversations and decrypt them first.
-- **Signing out** deletes the device's key, so a copy left behind can never be read, answers with `Clear-Site-Data: "storage"`, and the page deletes its database. Deleting the account deletes every key with it.
-- **Unreachable,** the page cannot get its key and shows nothing it holds, as it shows nothing now.
+- **A key per browser.** A random 256-bit key kept as one of the person's sign-ins (`credentials`, kind `device`), sealed through `src/secrets.ts` like the others, so the rekey covers it, and an HttpOnly cookie, `sift_device`, naming it for 400 days, the most a browser keeps one. The page makes it the first time (`POST /api/device`, answered in `src/dashboard/server.ts`) and asks for it again (`GET /api/device`) only when it has none.
+- **Kept on the device.** The page imports it so no script can read it out (non-extractable) and keeps it in IndexedDB (`sift-device`, `web/src/lib/device.ts`), with the frame's data beside it: the session, Settings' data and usage, each sealed under the key with the build that kept it. Every page is drawn the same for everyone and the service worker serves it at once, so the page opens with no request: the frame from what it kept, the inbox from the copy, then each is asked of Mild and kept again. Another build's frame is not drawn, since it may not be what this build reads: after an update the page waits on Mild, once.
+- **Wiped**, key, frame and copy, at sign-out; when Mild says nobody is signed in (the session ended, here or by removing the person's mailbox or account, or expired); and when Mild no longer knows the device (its key removed, or the cookie gone), which then makes a new one. Only what was kept before the page opened is wiped that way: a session read before this page's first key was made says the same of a new device. Reload, where a page failed to draw, drops the frame alone, which may be what failed.
+- **In the browser**, the copy is in IndexedDB, each record's value encrypted with AES-GCM and a random 12-byte IV through WebCrypto. Readable on the disk: ids, times and Gmail's label ids, what the server keeps unencrypted too, which is enough to find the newest 50 inbox conversations and decrypt them first.
+- **Signing out** also deletes the device's key on the server and answers with `Clear-Site-Data: "storage"`. Deleting the account deletes every key with it.
+- **Unreachable,** the page still opens on what this device kept.
 - **Safari** deletes a site's storage after 7 days without a visit unless it is installed to the home screen; the copy starts again. Installed, the page asks for storage that is kept (`navigator.storage.persist()`).
 
-It holds against a lost, stolen or copied disk as far as the session does (a disk with a live session cookie on it reads the API too), against another user of the machine, and against a device after sign-out. It does not hold against a script injected into the page or malware running as the person while they are signed in: both can read the API now. [security.md](security.md) lists it.
+It holds against another person using the machine under their own account, and against a device after sign-out or once Mild has forgotten it. It does not hold against someone with this browser's files while the person is still signed in on it: the key is there with the copy, so a lost, stolen or copied disk reads the copy with no session, as the frame would show it. Nor against a script injected into the page or malware running as the person. [security.md](security.md) lists it.
 
 ## In the browser
 
@@ -83,6 +84,8 @@ All of it is `web/src/lib/copy.ts`.
 - **Where the browser cannot encrypt** (a plain-HTTP address, where WebCrypto is not offered) nothing is kept on the device: the copy is fetched whole each time the page opens and held in memory.
 
 Measured on verify-sift's seed with Inbox on, 60 ms of network and 150 ms more for each server reply, against the page without the copy: Inbox opened again from 861 ms to 690 ms until its rows show; a conversation opened from 357 ms to 237 ms; J to the next from 272 ms to 88 ms. The dashboard's frame was a Suspense boundary, which React shows no sooner than 300 ms after the page first paints; it blocks now ([architecture.md](architecture.md#dashboard)), and Inbox opened again shows its rows at 129 ms on localhost where it took 407.
+
+With the frame kept on the device (2026-11-21), a reload with the service worker in place and a server that takes a second to answer shows the frame in 194 ms and Inbox's rows in 277; drawn on the server, both waited 1.2 s. With no service worker (a browser's first visit) it is slower than before: 60 ms of network and 150 ms a reply show the frame in 1.1 s where the server's HTML had it in 376 ms, since it waits on the page's scripts and the device's store.
 
 ## What it costs
 

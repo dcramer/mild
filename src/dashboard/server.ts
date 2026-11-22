@@ -302,6 +302,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
           cloud,
           telemetry: forThePage(),
           build,
+          device: person !== null && device !== null && (await (await credentials(ctx.db, 'device')).read(device)) !== null,
         },
         renewed,
       );
@@ -378,7 +379,17 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       }
     }
     if (!signIn && method === 'GET' && url.pathname === '/api/session')
-      return json(200, { required: false, email: null, canSignIn: false, reason: null, addresses: [], cloud, telemetry: forThePage(), build });
+      return json(200, {
+        required: false,
+        email: null,
+        canSignIn: false,
+        reason: null,
+        addresses: [],
+        cloud,
+        telemetry: forThePage(),
+        build,
+        device: person !== null && device !== null && (await (await credentials(ctx.db, 'device')).read(device)) !== null,
+      });
 
     if (method === 'POST') {
       const handler = writes.get(url.pathname);

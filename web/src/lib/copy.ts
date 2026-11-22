@@ -1,8 +1,9 @@
 import { type ChangeMessageOrDeleteKeyMessage, type Collection, type SyncConfig, createCollection, createOptimisticAction } from '@tanstack/react-db';
 import { onlineManager } from '@tanstack/react-query';
-import { type DBSchema, type IDBPDatabase, deleteDB, openDB } from 'idb';
+import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import { useSyncExternalStore } from 'react';
-import { type MailConversation, type SyncPage, type SyncedConversation, api, onWrite, queryClientFor } from './api.ts';
+import { type MailConversation, type SyncPage, type SyncedConversation, api, onWrite } from './api.ts';
+import { type Sealed, device, seal, unseal } from './device.ts';
 
 /**
  * The page's copy of the person's inbox (docs/sync.md): every conversation with a message in it, kept in this browser
@@ -78,10 +79,6 @@ interface Kept extends DBSchema {
   conversations: { key: string; value: { key: string; at: number; sealed: Sealed }; indexes: { at: number } };
   standing: { key: 'standing'; value: Sealed };
 }
-interface Sealed {
-  iv: Uint8Array<ArrayBuffer>;
-  data: ArrayBuffer;
-}
 
 const DATABASE = 'sift-copy';
 const CHANNEL = 'sift-copy';
@@ -91,33 +88,6 @@ const FIRST = 50;
 const ASK_MS = 30_000;
 /** How long a press waits for the copy to hold its change before letting go of the rows it hid. */
 const HOLD_MS = 10_000;
-
-const text = new TextEncoder();
-const words = new TextDecoder();
-
-async function keyFrom(base64url: string): Promise<CryptoKey> {
-  const bytes = Uint8Array.from(atob(base64url.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
-  return await crypto.subtle.importKey('raw', bytes, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-
-/** Each value is sealed for its own key in the store, so one moved to another record does not open. */
-async function seal(key: CryptoKey, name: string, value: unknown): Promise<Sealed> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  return { iv, data: await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: text.encode(name) }, key, text.encode(JSON.stringify(value))) };
-}
-
-async function unseal<T>(key: CryptoKey, name: string, sealed: Sealed): Promise<T> {
-  return JSON.parse(words.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: sealed.iv, additionalData: text.encode(name) }, key, sealed.data))) as T;
-}
-
-/** The key the page was drawn with, else the one this browser has, else a new one; null where the browser cannot encrypt. */
-async function deviceKey(): Promise<CryptoKey | null> {
-  if (!globalThis.crypto?.subtle) return null;
-  // A sender's page is drawn for everyone, without it: that page asks.
-  const drawn = queryClientFor().getQueryData<{ key: string | null }>(['device']) ?? (await api.device(AbortSignal.timeout(30_000)));
-  const key = drawn.key ?? (await api.makeDevice()).key;
-  return await keyFrom(key);
-}
 
 let sync: Parameters<SyncConfig<Copied, string>['sync']>[0] | null = null;
 let standing: Standing | null = null;
@@ -174,12 +144,17 @@ let disk: Promise<{ db: IDBPDatabase<Kept>; key: CryptoKey } | null> | null = nu
 /** The copy on the disk, or null where there is none to keep: the browser cannot encrypt, or keeps nothing. */
 function onDisk() {
   return (disk ??= (async () => {
-    const key = await deviceKey();
+    const key = (await device())?.key;
     if (!key) return null;
     const db = await openDB<Kept>(DATABASE, 1, {
       upgrade: (upgrading) => {
         upgrading.createObjectStore('conversations', { keyPath: 'key' }).createIndex('at', 'at');
         upgrading.createObjectStore('standing');
+      },
+      // Wiped by the device (sign-out, here or in another tab), which waits until every connection to it is closed.
+      blocking: () => {
+        db.close();
+        disk = null;
       },
     });
     return { db, key };
@@ -386,10 +361,3 @@ export const markCopied = createOptimisticAction<{ keys: readonly string[]; unre
     await caughtUp();
   },
 });
-
-/** Forget the copy on this device, at sign-out. */
-export async function dropCopy(): Promise<void> {
-  const kept = await disk;
-  kept?.db.close();
-  await deleteDB(DATABASE).catch(() => {});
-}

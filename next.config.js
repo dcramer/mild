@@ -26,7 +26,13 @@ export default withWorkflow({
   // Nothing uses next/image, so /_next/image optimizes nothing for anyone.
   images: { unoptimized: true },
   // The page and its files. The API and sign-in send their own (src/dashboard/server.ts), the message frame's among them.
-  headers: async () => [{ source: '/((?!api/|auth/).*)', headers: Object.entries(PAGE_HEADERS).map(([key, value]) => ({ key, value })) }],
+  // `x-sift-build`: which build a page is, for the service worker to serve a kept one only while it is the newest.
+  headers: async () => [
+    {
+      source: '/((?!api/|auth/).*)',
+      headers: [...Object.entries(PAGE_HEADERS).map(([key, value]) => ({ key, value })), { key: 'x-sift-build', value: BUILD }],
+    },
+  ],
   // Workflow builds a route that resumes a run waiting on a webhook. Mild creates none, so a request there finds no page.
   rewrites: async () => ({
     beforeFiles: [

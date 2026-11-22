@@ -375,9 +375,9 @@ export const api = {
   session: (signal: AbortSignal) => get<Session>('/api/session', {}, signal),
   /** What changed in the page's copy since `since`; with none, the whole copy (docs/sync.md). */
   sync: (since: string | null, signal: AbortSignal) => get<SyncPage>('/api/sync', since === null ? {} : { since }, signal),
-  /** The key this browser's copy is encrypted with, where it has one; the page is drawn with it, but for a sender's page. */
+  /** The key this browser's copy is encrypted with, where the server knows the browser (`web/src/lib/device.ts`). */
   device: (signal: AbortSignal) => get<{ key: string | null }>('/api/device', {}, signal),
-  /** Make this browser a key for its copy, the first time: after that the page is drawn with it. */
+  /** Make this browser a key for its copy, the first time. */
   makeDevice: () => post<{ key: string }>('/api/device', {}),
   signOut: async () => {
     signingOut = true;
@@ -418,8 +418,7 @@ let browserClient: QueryClient | undefined;
 
 /**
  * Where what the page loaded is kept. The browser keeps one for as long as the page is open. The server never fetches:
- * it makes one for each page it draws, holding only what that page was drawn with (`src/sift/page-data.ts`), so that
- * nothing one draw had is held for the next.
+ * it makes an empty one for each page it draws.
  */
 export const queryClientFor = (): QueryClient => (environmentManager.isServer() ? makeClient() : (browserClient ??= makeClient()));
 
@@ -455,7 +454,7 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
   const under = useContext(Mailbox);
   const narrowed = mailbox ?? under;
   const query = useQuery({
-    // All mailboxes is the key alone, as the server draws it (`src/sift/page-data.ts`).
+    // All mailboxes is the key alone, as the device keeps the frame under it (`web/src/lib/device.ts`).
     queryKey: narrowed ? [key, narrowed] : [key],
     queryFn: ({ signal }) => {
       if (narrowed) narrowedBy.set(signal, narrowed);

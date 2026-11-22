@@ -203,8 +203,8 @@
             "patterns": [
               { "group": ["**/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
               {
-                "group": ["**", "!next", "!next/*", "!react", "!@/**", "!**/src/sift/page-data.ts"],
-                "message": "app/ draws the page from web/src (@/…), which gets the rest of its data from /api/: from the server only what src/sift/page-data.ts reads, which holds nothing encrypted. Server code reached from here could be handed to the browser."
+                "group": ["**", "!next", "!next/*", "!react", "!@/**"],
+                "message": "app/ draws the page from web/src (@/…), the same for everyone, which gets its data from /api/. Server code reached from here could be handed to the browser."
               }
             ]
           }

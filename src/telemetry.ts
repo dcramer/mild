@@ -157,8 +157,7 @@ export async function traced<T>(op: string, name: string, attributes: Attributes
 
 /**
  * Run `work` in the trace the page's request carries (`sentry-trace`, `baggage`), so what the server did is under
- * the page load or the press that asked for it. Already under a span, as when the frame reads through the API, it
- * stays there.
+ * the page load or the press that asked for it. Already under a span, it stays there.
  */
 export const asked = <T>(headers: Headers, work: () => Promise<T>): Promise<T> => {
   const sentryTrace = headers.get('sentry-trace');
