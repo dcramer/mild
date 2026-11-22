@@ -592,6 +592,25 @@ describe('the role sift connects to a server as', () => {
     expect(await as(`${owned}; CREATE ROLE runner; GRANT owner TO runner`, 'runner')).toBe("The database role runner can act as the tables' owner");
   });
 
+  it('analyzes a table on PGlite once it has grown by a tenth since it was last analyzed, which no autovacuum does', async () => {
+    const pg = await superuser();
+    await pg.exec('CREATE TABLE grown (n int)');
+    onTestFinished(() => void pg.exec('DROP TABLE grown'));
+    const rows = async () => (await pg.query<{ n: number }>(`SELECT reltuples AS n FROM pg_class WHERE relname = 'grown'`)).rows[0]!.n;
+    const store = storeOn(pglite(pg), loadKeyring({}));
+    await store.analyze();
+    expect(await rows()).toBe(-1);
+    await pg.exec('INSERT INTO grown SELECT generate_series(1, 5000)');
+    await store.analyze();
+    expect(await rows()).toBe(5000);
+    await pg.exec('INSERT INTO grown SELECT generate_series(1, 100)');
+    await store.analyze();
+    expect(await rows()).toBe(5000);
+    await pg.exec('INSERT INTO grown SELECT generate_series(1, 1000)');
+    await store.analyze();
+    expect(await rows()).toBe(6100);
+  });
+
   it('is warned about by the store, for whoever starts sift to be told', async () => {
     const driver = pglite(await superuser());
     expect(storeOn(driver, loadKeyring({})).warning).toBeUndefined();

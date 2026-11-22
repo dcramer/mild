@@ -160,8 +160,21 @@ export function moveAside(dir: string): string {
   return to;
 }
 
+/**
+ * The tables grown by more than a tenth since they were last analyzed. A table never analyzed counts as none; one
+ * still empty needs nothing. PGlite counts no changes (`n_mod_since_analyze` stays 0), so growth is read from its size.
+ */
+const GROWN = `SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relkind = 'r' AND pg_relation_size(c.oid) / current_setting('block_size')::int > c.relpages * 1.1`;
+
 export function pglite(db: PGliteInterface): Driver {
   return {
+    // Without statistics the planner guessed every table empty: at 15,000 messages a page's queries took seconds each
+    // where they take milliseconds, and got slower as mail came. Postgres's autovacuum does this on a server.
+    analyze: async () => {
+      const { rows } = await db.query<{ name: string }>(GROWN);
+      for (const { name } of rows) await db.exec(`ANALYZE "${name}"`);
+    },
     transaction: (opening, work) =>
       db.transaction(async (tx) => {
         await tx.exec(opening);

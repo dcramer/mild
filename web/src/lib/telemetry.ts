@@ -61,3 +61,17 @@ export function startTelemetry(where: Session['telemetry']): void {
 export function reportError(error: unknown): void {
   void import('./telemetry-sdk.ts').then(({ captureException }) => captureException(error)).catch(() => {});
 }
+
+/**
+ * A panel opened over the screen (Settings, a message, the composer) as a navigation of its own, named for it: only the
+ * address's query changed, which starts none, so what it waits on and the long frames meanwhile would be under nothing.
+ */
+export function panelOpened(panel: 'Settings' | 'Message' | 'Composer'): void {
+  if (!document.querySelector('meta[name="sentry-trace"]')) return;
+  void import('./telemetry-sdk.ts')
+    .then(({ getClient, startBrowserTracingNavigationSpan }) => {
+      const client = getClient();
+      if (client) startBrowserTracingNavigationSpan(client, { name: panel, op: 'navigation', attributes: { 'sentry.source': 'custom' } });
+    })
+    .catch(() => {});
+}

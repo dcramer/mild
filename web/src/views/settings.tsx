@@ -291,7 +291,6 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
   const { chosen, choices, signedIn } = state.model;
   const [changing, setChanging] = useState(false);
   const models = useLoaded(`models ${signedIn.join(' ')}`, (signal) => api.models(signal), 300_000);
-  const month = useLoaded('summary-30', (signal) => api.summary(30, signal), 300_000);
   const provider = chosen?.split('/')[0] ?? null;
   const choice = choices.find((c) => c.provider === provider);
   // Connecting a model is SetUp's Connect step, under this panel: the button closes the panel onto it.
@@ -307,12 +306,12 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
     );
   const offered = [...new Set([chosen, ...(models.data?.models ?? []).filter((m) => m.startsWith(`${provider}/`))])];
   const others = signedIn.filter((p) => p !== provider);
-  const spent = month.data?.totals;
+  const { spent } = state;
   return (
     <SettingsGroup
       title="Model"
       note={
-        spent && spent.costUsd > 0
+        spent.costUsd > 0
           ? `Classifies what no rule covers. ${spentLine(spent.costUsd, spent.judged, subscription(state.model))}`
           : 'Classifies what no rule covers.'
       }

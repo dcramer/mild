@@ -20,7 +20,7 @@ import { useStarted } from '@/system/started.ts';
 import { useHidden } from '@/lib/action.ts';
 import { ahead } from '@/lib/format.ts';
 import { subscription } from '@/lib/prices.ts';
-import { startTelemetry } from '@/lib/telemetry.ts';
+import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
 import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, rowHolding, useGoing } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
@@ -102,6 +102,7 @@ function Signed({ drawnForEveryone = false, children }: { drawnForEveryone?: boo
   const standIn = useStarted() && drawnForEveryone && !ADDRESSED.test(path);
   const telemetry = known?.telemetry ?? null;
   useEffect(() => startTelemetry(telemetry), [telemetry]);
+  useEffect(() => void (settings === '1' && panelOpened('Settings')), [settings]);
   const build = known?.build ?? null;
   useEffect(() => serverBuild(build), [build]);
   const answered = known !== null;
@@ -194,6 +195,8 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const [threadId] = useParam('thread');
   const [compose] = useParam('compose');
   const [to] = useParam('to');
+  useEffect(() => void (messageId && panelOpened('Message')), [messageId]);
+  useEffect(() => void (compose && panelOpened('Composer')), [compose]);
   const listed = list.findIndex((item) => item.messageId === messageId);
   const open =
     messageId === ''

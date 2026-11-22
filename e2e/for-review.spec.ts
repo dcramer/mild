@@ -35,6 +35,19 @@ test.describe('For review', () => {
     await expect(row(page, 'Notes from the review')).toHaveCount(0);
   });
 
+  test('draws a long list a hundred rows at a time, the next as the end of the list comes near', async ({ page }) => {
+    // 150 messages Sift could not place, which are never folded together.
+    await patchJson(page, '**/api/suggestions*', (waiting) => {
+      const item = waiting.items.find((i: { labelId: string | null }) => i.labelId === null);
+      const items = Array.from({ length: 150 }, (_, i) => ({ ...item, messageId: `many-${i}`, receivedAt: item.receivedAt - i * 60_000 }));
+      return { ...waiting, items, waiting: items.length };
+    });
+    await page.goto('/');
+    await expect(reviewRows(page)).toHaveCount(100);
+    await reviewRows(page).last().scrollIntoViewIfNeeded();
+    await expect(reviewRows(page)).toHaveCount(150);
+  });
+
   test('while Sift is off, says what it would have kept out of the inbox', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText(/^On, it would have kept \d+ emails out of your inbox in the last 30 days: about \d+ (s|min)\.$/)).toBeVisible();
