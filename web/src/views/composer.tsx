@@ -162,6 +162,7 @@ const wrongOf = (list: readonly Recipient[]) => wrongAddresses(list.filter((r) =
 interface Uploading {
   key: string;
   file: File;
+  added: number;
   sent: number;
   failed?: string;
   abort: AbortController;
@@ -259,11 +260,12 @@ function Writer({
   const said = (subject ?? draft.subject.trim()) || (addressee ? `To ${typed(addressee)}` : title);
 
   const attach = (picked: readonly File[]) => {
-    for (const file of picked) {
+    for (const [index, file] of picked.entries()) {
       const key = crypto.randomUUID();
+      const added = Date.now() + index;
       const abort = new AbortController();
       const set = (more: Partial<Uploading>) => setUploading((all) => all.map((u) => (u.key === key ? { ...u, ...more } : u)));
-      setUploading((all) => [...all, { key, file, sent: 0, abort }]);
+      setUploading((all) => [...all, { key, file, added, sent: 0, abort }]);
       uploadFile(file, (sent) => set({ sent }), abort.signal).then(
         (id) => {
           // Taken off as it finished: Mild need not keep it.
@@ -272,7 +274,7 @@ function Writer({
             return;
           }
           setUploading((all) => all.filter((u) => u.key !== key));
-          change((was) => ({ files: [...was.files, { id, name: file.name, size: file.size }] }));
+          change((was) => ({ files: [...was.files, { id, name: file.name, size: file.size, added }] }));
         },
         (failure: unknown) => {
           if (!abort.signal.aborted) set({ failed: failure instanceof Error ? failure.message : 'It did not upload.' });
@@ -296,8 +298,15 @@ function Writer({
   };
   const shownFiles: DraftFile[] = [
     ...carried.map((f) => ({ key: f.part, name: reveal(f.name), size: f.size })),
-    ...draft.files.map((f) => ({ key: f.id, name: f.name, size: f.size })),
-    ...uploading.map((u) => ({ key: u.key, name: u.file.name, size: u.file.size, sent: u.sent, ...(u.failed ? { failed: u.failed } : {}) })),
+    ...[
+      ...draft.files.map((f) => ({ added: f.added, file: { key: f.id, name: f.name, size: f.size } })),
+      ...uploading.map((u) => ({
+        added: u.added,
+        file: { key: u.key, name: u.file.name, size: u.file.size, sent: u.sent, ...(u.failed ? { failed: u.failed } : {}) },
+      })),
+    ]
+      .toSorted((a, b) => a.added - b.added)
+      .map((f) => f.file),
   ];
 
   const everyone = [...draft.to, ...draft.cc, ...draft.bcc];
