@@ -10,6 +10,7 @@ import {
   param,
   readSent,
   reader,
+  inboxRows,
   reviewRows,
   sideScroll,
   switchMailbox,
@@ -25,9 +26,9 @@ test.describe('with Inbox on', () => {
   test.use({ variant: 'inbox' });
 
   test('C writes a new message, each address checked as it is typed, and Ctrl+Enter sends it from the chosen address', async ({ page, sift }) => {
-    await page.goto('/');
-    // Drawn by the server; its key is bound once the page has loaded.
-    await expect(reviewRows(page).first()).toBeVisible();
+    await page.goto('/inbox');
+    // Its key is bound once the page has loaded.
+    await expect(inboxRows(page).first()).toBeVisible();
     // C works with no keycap drawn: the rail is not a list worked through.
     await expect(compose(page)).toHaveAccessibleName('Compose');
     await page.keyboard.press('c');
