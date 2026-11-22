@@ -114,24 +114,29 @@ test.describe('Inbox', () => {
 
   test('a row’s label is changed in place: saved at once, the conversation left in the inbox, and picked again to undo', async ({ page, sift }) => {
     await page.goto('/inbox');
-    const label = () => inboxRow(page, 'Your order has shipped').getByRole('combobox', { name: 'What Your order has shipped is' });
+    const row = inboxRow(page, 'Your order has shipped');
+    // On the bar the row shows while pointed at.
+    const label = async () => {
+      await pointAt(row);
+      return row.getByRole('combobox', { name: 'What Your order has shipped is' });
+    };
     const pick = async (name: string) => {
-      await label().click();
+      await (await label()).click();
       const saved = page.waitForResponse('**/api/feedback');
       await page.getByRole('option', { name, exact: true }).click();
       await saved;
     };
-    await expect(label()).toContainText('Receipts');
+    await expect(await label()).toContainText('Receipts');
 
     await pick('Personal');
     await expect(reader(page)).toHaveCount(0);
     await page.reload();
-    await expect(label()).toContainText('Personal');
+    await expect(await label()).toContainText('Personal');
     expect(sift.google().mailbox('me@example.org').message('m3')!.labelIds).toContain('INBOX');
 
     await pick('Receipts');
     await page.reload();
-    await expect(label()).toContainText('Receipts');
+    await expect(await label()).toContainText('Receipts');
     await expect(inboxRows(page)).toHaveCount(19);
     expect(sift.google().mailbox('me@example.org').message('m3')!.labelIds).toContain('INBOX');
   });
@@ -146,7 +151,9 @@ test.describe('Inbox', () => {
     await expect(open.getByRole('heading', { name: 'Your order has shipped', level: 1 })).toBeVisible();
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toContainText('Personal');
     await back(page).click();
-    await expect(inboxRow(page, 'Your order has shipped').getByRole('combobox', { name: 'What Your order has shipped is' })).toContainText('Personal');
+    const row = inboxRow(page, 'Your order has shipped');
+    await pointAt(row);
+    await expect(row.getByRole('combobox', { name: 'What Your order has shipped is' })).toContainText('Personal');
   });
 
   test('opens from the copy kept in this browser, encrypted, without asking the server for the list', async ({ page }) => {
@@ -307,19 +314,22 @@ test.describe('Inbox', () => {
     await expect(inboxRow(page, 'Widgets, part two')).toBeVisible();
   });
 
-  test('pointed at, a row puts Archive and Mark read in place of its time, which act on it alone', async ({ page }) => {
+  test('pointed at, a row puts its label, Archive, Spam and Block sender in place of its time, which act on it alone', async ({ page }) => {
     await page.goto('/inbox');
     const row = inboxRow(page, 'Widgets, part two');
+    const label = row.getByRole('combobox', { name: 'What Widgets, part two is' });
+    await expect(label).toBeHidden();
     await expect(row.getByRole('button', { name: 'Archive' })).toBeHidden();
     await expect(row.getByRole('cell').last()).toHaveText(/\d:\d\d [AP]M/);
     await pointAt(row);
     await expect(row.getByRole('cell').last().locator('time')).toBeHidden();
-    await pointAt(row.getByRole('button', { name: 'Mark read' }));
-    await expect(tooltip(page)).toHaveText('Mark read');
-    await row.getByRole('button', { name: 'Mark read' }).click();
-    await expect(row.getByRole('button', { name: 'Mark unread' })).toBeVisible();
-    await expect(row).toHaveCount(1);
-    await expect(reader(page)).toHaveCount(0);
+    await expect(label).toBeVisible();
+    await expect(label).toContainText('Newsletters');
+    await expect(row.getByRole('button', { name: 'Spam' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Block sender' })).toBeVisible();
+    await expect(row.getByRole('button', { name: /^Mark (un)?read$/ })).toHaveCount(0);
+    await pointAt(row.getByRole('button', { name: 'Archive' }));
+    await expect(tooltip(page)).toHaveText('Archive');
 
     // A row whose check was pressed keeps the focus, but shows its presses no longer once the pointer moves on.
     const other = inboxRow(page, 'This week in widgets');
@@ -330,9 +340,27 @@ test.describe('Inbox', () => {
     await expect(toast(page, 'Widgets, part two')).toBeVisible();
     await expect(row).toHaveCount(0);
     await expect(inboxRows(page)).toHaveCount(18);
+
+    // Read and unread are for what is selected.
+    const read = page.waitForResponse('**/api/mail/change');
+    await page.keyboard.press('Shift+I');
+    await read;
     await page.goto('/inbox?unread=1');
-    await expect(inboxRow(page, 'This week in widgets')).toBeVisible();
+    await expect(inboxRows(page).first()).toBeVisible();
+    await expect(inboxRow(page, 'This week in widgets')).toHaveCount(0);
     await expect(inboxRow(page, 'Widgets, part two')).toHaveCount(0);
+  });
+
+  test('mail Mild could not place is marked before its time, and its label says so when pointed at', async ({ page }) => {
+    await page.goto('/inbox');
+    const unplaced = inboxRow(page, '48 hours only: 30% off');
+    const placed = inboxRow(page, 'Your order has shipped');
+    const mark = (row: typeof placed) => row.getByRole('cell').last().getByText('Unlabelled', { exact: true }).filter({ visible: true });
+    await expect(mark(unplaced)).toHaveCount(1);
+    await expect(mark(placed)).toHaveCount(0);
+    // Pointed at, the bar takes the mark's place and says it in words.
+    await pointAt(unplaced);
+    await expect(unplaced.getByRole('combobox', { name: 'What 48 hours only: 30% off is' })).toHaveText('Unlabelled');
   });
 
   test('X selects, E archives what is selected, and Undo puts it back', async ({ page }) => {

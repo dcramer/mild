@@ -25,9 +25,6 @@ export default function Inbox() {
             <Td phone="hide" className="max-w-0 md:w-full">
               <Blank />
             </Td>
-            <Td phone="hide">
-              <Blank word />
-            </Td>
             <Td phone="hide" num>
               <Blank word />
             </Td>

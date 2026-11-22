@@ -93,9 +93,9 @@ export function AnswerPicker({
 }
 
 /**
- * What something is, down a list where most rows are left as they are (Inbox): Mild's label as plain words, or
- * nothing where it gave none, the dropdown only when its row is pointed at. Picking saves it at once, with no check, since there is nothing to agree
- * to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back.
+ * What a row's mail is, changed in place from the block its presses sit on when the row is pointed at (`RowPresses`'
+ * `lead`): the meter and the label, or Unlabelled, and a chevron. Picking saves it at once, with no check, since there is
+ * nothing to agree to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back.
  */
 export function LabelPick({
   label,
@@ -124,21 +124,20 @@ export function LabelPick({
     >
       <Base.Trigger
         aria-label={label}
-        className="group/pick press -mx-2 inline-flex h-(--control) cursor-pointer items-center gap-2 px-2 text-sm whitespace-nowrap text-muted-foreground select-none hover:bg-(--fill-strong) hover:text-foreground group-hover/row:bg-(--fill-strong) data-popup-open:bg-(--fill-strong) data-popup-open:text-foreground"
+        className="press inline-flex h-7 cursor-pointer items-center gap-2 px-2 text-sm whitespace-nowrap text-foreground/75 select-none hover:bg-(--fill-strong) hover:text-foreground data-popup-open:bg-(--fill-strong) data-popup-open:text-foreground"
       >
-        {/* Never cut short: a column of these is as wide as its longest label, as the words were before. */}
-        {/* Without a label, nothing but the chevron once the row is pointed at, as a list of mail leaves it blank. */}
-        {current ? (
-          <span className="relative top-px flex items-baseline gap-2">
-            {current.lead}
-            {current.label}
-          </span>
-        ) : null}
-        {/* A touch screen has no pointing at, so the chevron always shows there. */}
-        <ChevronDownIcon
-          aria-hidden
-          className="size-3.5 shrink-0 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 group-data-popup-open/pick:opacity-100 pointer-coarse:opacity-100"
-        />
+        {/* The meter stands on the label's baseline, and both sit a pixel down, as a button's words do. */}
+        <span className="relative top-px flex items-baseline gap-2">
+          {current ? (
+            <>
+              {current.lead}
+              {current.label}
+            </>
+          ) : (
+            'Unlabelled'
+          )}
+        </span>
+        <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       </Base.Trigger>
       <Choices groups={groups} />
     </Base.Root>
