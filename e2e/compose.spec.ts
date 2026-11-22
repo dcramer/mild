@@ -120,7 +120,9 @@ test.describe('with Inbox on', () => {
     await page.goto('/inbox');
     await compose(page).click();
     const writing = composer(page, 'New message');
+    // Tab makes it a chip, and closes the suggestions, which hide the rest of the composer from assistive tech while open.
     await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
     await writing.getByRole('textbox', { name: 'Subject' }).fill('Plans');
     const picked = page.waitForEvent('filechooser');
     await writing.getByRole('button', { name: 'Attach files' }).click();
@@ -162,6 +164,7 @@ test.describe('with Inbox on', () => {
       await compose(page).click();
       const writing = composer(page, 'New message');
       await recipients(writing, 'To').input.fill('ada@example.org');
+      await page.keyboard.press('Tab');
       await writing.getByRole('textbox', { name: 'Subject' }).fill('Lunch');
       await writing.getByRole('textbox', { name: 'Message' }).fill('See you at noon.');
       const sendIt = writing.getByRole('button', { name: /^Send/ });
@@ -188,6 +191,7 @@ test.describe('with Inbox on', () => {
     await compose(page).click();
     const writing = composer(page, 'New message');
     await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
     await writing.getByRole('textbox', { name: 'Message' }).fill('Half written');
     await page.reload();
     await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Half written');
@@ -239,6 +243,7 @@ test.describe('with Inbox on', () => {
     await page.getByRole('option', { name: ME, exact: true }).click();
     await expect(writing.getByRole('link', { name: 'Let Mild send' })).toHaveCount(0);
     await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
     await expect(writing.getByRole('button', { name: /^Send/ })).toBeEnabled();
     expect(sift.sent()).toEqual([]);
   });
@@ -415,6 +420,7 @@ test.describe('with Inbox on', () => {
     const files = writing.getByRole('list', { name: 'Attachments' });
     await expect(files.getByRole('listitem')).toHaveText([/review-notes\.pdf/]);
     await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
     await writing.getByRole('button', { name: /^Send/ }).click();
     await expect(toast(page, 'Fwd: Notes from the review')).toContainText('Sent');
     expect(sift.sent()[0]!.raw).toContain(`filename*=UTF-8''review-notes.pdf`);
@@ -425,6 +431,7 @@ test.describe('with Inbox on', () => {
     await files.getByRole('button', { name: 'Remove review-notes.pdf' }).click();
     await expect(files).toHaveCount(0);
     await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
     await writing.getByRole('button', { name: /^Send/ }).click();
     await expect(writing).toHaveCount(0);
     await expect.poll(() => sift.sent().length).toBe(2);

@@ -63,8 +63,8 @@ export interface Draft {
   showBcc: boolean;
   subject: string;
   text: string;
-  /** Files uploaded for it, which Mild keeps a day. */
-  files: { id: string; name: string; size: number }[];
+  /** Files uploaded for it, which Mild keeps a day. `added` orders them as they were added, whichever finished first. */
+  files: { id: string; name: string; size: number; added: number }[];
   /** A forward's files taken off it, by their parts; every other file of the message forwarded goes with it. */
   dropped: string[];
   /** Its Message-ID, made at the first press of Send and kept until it has gone, so trying again cannot send it twice. */
