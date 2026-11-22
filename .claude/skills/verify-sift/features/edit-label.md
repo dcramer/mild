@@ -14,7 +14,7 @@ A label is what mail is; its outcome is what happens to it. Labels are the perso
 
 - Labels, a row, then `Save`.
 - Labels, `Add labels`.
-- Labels, a row, then `Remove`.
+- Labels, a row, then `Remove…`.
 
 ## Driving it with verify.sh
 
@@ -22,22 +22,22 @@ Preconditions:
 
 - Fresh seed. Labels lists Newsletters once, under `Archived`, with 2 messages.
 
-- **Open.** `ab open "$B/labels"`, then `ab find text "Newsletters" click --exact`. It opens: a level-2 heading `Newsletters` with `Name`, `What it is`, `What Mild does with it: Archive`, and `Unsubscribe, when the sender offers a safe way` unchecked.
-- **Change the outcome.** `ab find role combobox click --name "What Mild does with it"` lists `Keep`, `Archive`, `Spam`, `Block`; then `ab find role option click --name "Keep"`.
+- **Open.** `ab open "$B/labels"`, then `ab find text "Newsletters" click --exact`. It opens at `/labels/newsletter`: a level-2 heading `Newsletters` with `Name`, `What it is`, `What Mild does with it` reading `Archive`, and `Mark it read` and `Unsubscribe, when the sender offers a safe way` unchecked.
+- **Change the outcome.** `ab find role combobox click --name "What Mild does with it"` lists `Keep`, `Archive`, `Digest`, `Spam`, `Block`; then `ab find role option click --name "Keep"`.
 - **Save.** `ab find role button click --name "Save"`. The panel stays open (`/labels/newsletter`). `Close`: Newsletters is now under `Kept in your inbox`.
 - **Second view.** `ab reload`. It is still under `Kept in your inbox`. `ab open "$B/"`: Deals (`48 hours only: 30% off`) is gone (see Gotchas).
 - **Spam drops Mark it read.** `ab open "$B/labels/marketing"`, tick `Mark it read`, then choose `Spam`: the box goes. `Save`; `SELECT disposition, mark_read FROM labels WHERE id = 'marketing'` is `spam`, `false`.
-- **Add, suggested.** `Add labels`, `ab find role textbox fill "Archive sales pitches and my receipts" --name "What mail"`, `Suggest labels`. `Not in these labels` says `Your Receipts and transactions label covers receipts already.`, above one suggestion, `Sales pitches`, checked (`Use Sales pitches`). `ab find role button click --name "Add this label"`: it is under `Archived`, and the `N of 30` count above `Add labels` goes up by one. Words naming neither pitches nor receipts show `The model could not suggest labels (the model did not suggest any usable labels). Try again.`; words naming only receipts show the note alone, with `Back` and no add button.
+- **Add, suggested.** `Add labels`, `ab find role textbox fill "Archive sales pitches and my receipts" --name "What mail"`, `Suggest labels`. `Not in these labels` says `Your Receipts and transactions label covers receipts already.`, above one suggestion, `Sales pitches`, checked (`Use Sales pitches`). `ab find role button click --name "Add this label"`: it is under `Archived`, and the count beside `Add labels` (`10 of 30` on a fresh seed, none on a phone) goes up by one. Words naming builds suggest `Build results`, which goes under `In a daily digest`. Words naming neither pitches nor receipts show `The model could not suggest labels (the model did not suggest any usable labels). Try again.`; words naming only receipts show the note alone, with `Back` and no add button.
 - **Add, by hand.** `Write one yourself`, `ab find role textbox fill "Field trips" --name "Name"`, `ab find role button click --name "Add label" --exact`.
-- **Stored.** `verify.sh sql "$RUN" "SELECT disposition, block, mark_read, unsubscribe FROM labels WHERE user_id = 1 AND id = 'newsletter'"` returns one row, `keep`, `false`, `false`, `false`. No `actions` row but the seed's filters.
-- **Remove.** In the Newsletters panel, `ab find role button click --name "Remove" --exact`. It asks `Remove Newsletters and its 1 rule?` beside a second `Remove` and `Cancel`; the second `Remove` is inside the group named by the question. Pressing it closes the panel with the toast `Label removed` over `Newsletters`, and the `N of 30` count drops by one.
+- **Stored.** `verify.sh sql "$RUN" "SELECT disposition, block, digest, mark_read, unsubscribe FROM labels WHERE user_id = 1 AND id = 'newsletter'"` returns one row, `keep`, `false`, `false`, `false`, `false`. No `actions` row but the seed's filters.
+- **Remove.** In the Newsletters panel, `ab find role button click --name "Remove…"`. A dialog asks `Remove Newsletters and its 1 rule?`, with `Remove` and `Cancel`. `ab find role button click --name "Remove" --exact` closes the panel with the toast `Label removed` over `Newsletters`, and the count drops by one.
 - **Stored after removing.** `verify.sh sql "$RUN" "SELECT removed_at IS NOT NULL AS removed FROM labels WHERE user_id = 1 AND id = 'newsletter'"` is `true`: the row stays. `SELECT label_id FROM rules` no longer has `newsletter`. `m1` and `m2` keep their `newsletter` decisions, and the sender page for `digest@news.example.com` still names Newsletters.
 
 ## Gotchas
 
-- `Unsubscribe…` survives any change of outcome; `Mark it read` exists only for Keep and Archive, and a block only for Block. The row's group says the outcome alone, never its extras.
+- `Unsubscribe…` survives any change of outcome; `Mark it read` exists only for Keep, Archive and Digest, and a block only for Block. The row's group (`Kept in your inbox`, `Archived`, `In a daily digest`, `Marked spam`) says the outcome alone, never its extras.
 - `Suggest labels` asks `serve.ts`'s stand-in (SKILL.md), never a provider: its answers are fixed by the words, as above. Each ask is a `label_proposals` row; its `labels` and `note` are sealed.
-- `Remove`'s question replaces the button with one of the same name: wait for `Remove <label>?` before the second press, or it presses nothing.
-- `Block` is spam plus blocking the sender, stored as `disposition = 'spam'`, `block = true`.
+- `Remove…` opens a dialog whose title is the question; wait for `Remove <label> and its <n> rules?` (`… its 1 rule?` here) before pressing its `Remove`.
+- `Block` is spam plus blocking the sender, stored as `disposition = 'spam'`, `block = true`. `Digest` is `disposition = 'archive'`, `digest = true`, and gives Settings a `Daily digest` section.
 - Changing or removing any label re-decides every waiting suggestion. The seed adds its spam rule for `promo.example.com` without doing that, so the first save moves `m4` from `Unlabelled` to that rule, and For review drops from 12 to 11. That comes from the seed, not from the label.
-- Leave in inbox opens on its figures and a line saying it is Mild's own: nothing to edit, and no `Remove`. Removing the last label besides it is refused under the button, since Mild reads no mail without one.
+- Leave in inbox opens on its figures and a line saying it is Mild's own: nothing to edit, and no `Remove`. Removing the last label besides it is refused in the dialog, under its `Remove` (`<Name> is the last of your labels, and Mild reads no mail without one. Add another first.`).
