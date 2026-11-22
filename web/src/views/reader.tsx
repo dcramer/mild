@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAnswer, useRecordAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts, useMessageView } from '@/components/message-parts.tsx';
+import { DigestBody } from '@/components/digest.tsx';
 import { useMailPress } from '@/components/mail.tsx';
 import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
@@ -274,7 +275,7 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
             }
           : {})}
       />
-      <MessageBody key={id} detail={detail} html={html} />
+      {detail.digest ? <DigestBody digest={detail.digest} /> : <MessageBody key={id} detail={detail} html={html} />}
     </>
   );
 }
@@ -538,7 +539,8 @@ function OpenedMessage({
   // A reply answers the newest in the inbox, or another message of its conversation.
   const answered = conversation?.messages.some((m) => m.messageId === answering) ? answering : detail.messageId;
   const written = compose ? writing(composeAs, answered) : null;
-  const reply = inInbox && compose ? compose : undefined;
+  // A digest is Mild's own: nothing to answer, and no label of its own to say.
+  const reply = inInbox && compose && !detail.digest ? compose : undefined;
 
   return (
     <Reader
@@ -547,24 +549,26 @@ function OpenedMessage({
       thumbs={written && written.kind !== 'new' ? [] : thumbs}
       title={reveal(detail.subject) || '(no subject)'}
       answer={
-        <AnswerRow
-          key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
-          picker={{
-            label: 'What this message is',
-            value: shownLabel,
-            groups: choices(target, current ? sureness(current) : 1, alternatives),
-            empty: outcomeName('review'),
-            // In Inbox the reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
-            onSubmit: (id) => (inInbox ? record(target, id) : answer(target, id)),
-            extra: { label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) },
-          }}
-          why={why}
-          whyOpen={!inInbox}
-        >
-          <Button variant="quiet" aria-label="Make a rule…" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
-            Rule…
-          </Button>
-        </AnswerRow>
+        detail.digest ? undefined : (
+          <AnswerRow
+            key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
+            picker={{
+              label: 'What this message is',
+              value: shownLabel,
+              groups: choices(target, current ? sureness(current) : 1, alternatives),
+              empty: outcomeName('review'),
+              // In Inbox the reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
+              onSubmit: (id) => (inInbox ? record(target, id) : answer(target, id)),
+              extra: { label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) },
+            }}
+            why={why}
+            whyOpen={!inInbox}
+          >
+            <Button variant="quiet" aria-label="Make a rule…" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
+              Rule…
+            </Button>
+          </AnswerRow>
+        )
       }
       side={
         inInbox ? undefined : (
@@ -726,12 +730,12 @@ export function MessageReader({
 
   const archive = () => pressed && press([pressed], 'archive', next);
   const unread = () => pressed && press([pressed], 'unread', onBack);
-  // In Inbox, as the bar and the foot of the conversation have them. Reply answers the newest, once it has loaded.
+  // In Inbox, as the bar and the foot of the conversation have them. Reply answers the newest, once it has loaded; a digest has none.
   const thumbs: Thumb[] = threadId
     ? [
         { label: 'Archive', icon: <ArchiveIcon aria-hidden />, disabled: !pressed, onPress: archive },
         { label: 'Unread', icon: <MailIcon aria-hidden />, disabled: !pressed, onPress: unread },
-        ...(compose
+        ...(compose && !data?.digest
           ? [
               {
                 label: 'Reply',

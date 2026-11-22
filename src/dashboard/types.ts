@@ -288,6 +288,18 @@ export type SenderProfile = z.infer<typeof SenderProfile>;
 
 const address = z.object({ address: held, name: held.optional() });
 
+/** One of Mild's digests, as the reader shows it in place of the message Mild wrote (`digestShown`, src/store/digests.ts). */
+const DigestShown = z.object({
+  labelId: z.string(),
+  labelName: z.string(),
+  since: z.number(),
+  until: z.number(),
+  /** What the model thought worth a look, and why in a line, by the message's id. */
+  picks: z.array(z.object({ messageId: z.string(), why: held })),
+  /** What it lists now, newest first: mail answered for or put back since has left it. */
+  mail: z.array(z.object({ accountId: z.string(), messageId: z.string(), from: address, subject: held, receivedAt: z.number(), archivedAt: z.number() })),
+});
+
 export const MessageDetail = z.object({
   accountId: z.string(),
   messageId: z.string(),
@@ -316,6 +328,8 @@ export const MessageDetail = z.object({
    * email sent or a page opened, or the message did not prove who sent it). `none`: it offers no way.
    */
   unsubscribe: z.enum(['available', 'done', 'manual', 'none']),
+  /** Set where the message is one of Mild's digests. */
+  digest: DigestShown.nullable(),
   /** Every decision made about this message, oldest first. */
   decisions: z.array(
     DecisionRow.extend({
