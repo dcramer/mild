@@ -4,7 +4,7 @@ import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { proposalStart, standingStart } from '@/lib/rule-start.ts';
 import { eq, inArray, isNull, or, useLiveQuery } from '@tanstack/react-db';
-import { type ReactNode, useContext, useDeferredValue, useState } from 'react';
+import { type ReactNode, memo, useContext, useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type AnswerLabel, answerChoices, useRecordAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
@@ -85,6 +85,29 @@ function listedOf({ conversation: c, unread, newestAt }: Copied, mine: ReadonlyS
   };
 }
 
+const NO_LABELS: readonly AnswerLabel[] = [];
+
+/**
+ * Each conversation as its row lists it, made once for each version of it the copy or the server gave: a row whose
+ * conversation is the same object as last time gets the same props, and is not drawn again.
+ */
+function useRows(manage: { labels: readonly AnswerLabel[]; accounts: readonly { email: string }[] } | null | undefined) {
+  return useMemo(() => {
+    const names = new Map((manage?.labels ?? []).map((l) => [l.id, l.name] as const));
+    const mine = new Set((manage?.accounts ?? []).map((a) => a.email));
+    const made = new WeakMap<object, Listed>();
+    const rowOf = (row: Copied | MailThread): Listed => {
+      let listed = made.get(row);
+      if (!listed) {
+        listed = 'conversation' in row ? listedOf(row, mine, names) : { ...row, who: whoWrote(reveal(row.who)) };
+        made.set(row, listed);
+      }
+      return listed;
+    };
+    return { names, rowOf };
+  }, [manage?.labels, manage?.accounts]);
+}
+
 /** Its newest message read ahead of a press that opens it, which then waits on nothing. */
 const ahead = (t: Listed) =>
   readAheadOnRest(`message/${t.accountId}/${newest(t).messageId}`, (signal) => api.message(newest(t).messageId, signal, t.accountId));
@@ -123,29 +146,32 @@ function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabe
   );
 }
 
+/** What a row's presses do, the same from one draw to the next, so a row is drawn again only when its own conversation changes. */
+type Hands = {
+  select: (thread: Listed, on: boolean) => void;
+  open: (thread: Listed) => void;
+  press: (threads: readonly Listed[], what: 'archive' | 'spam' | 'read' | 'unread') => void;
+  block: (threads: readonly Listed[]) => void;
+};
+
 /**
  * One conversation, on one line as Gmail lists it: who wrote and how many messages, the subject and the start of the
  * newest, and when, marked where Mild could not place it; pointed at, its label, Archive, Spam and Block take the time's
  * place. Unread is bold and bright, read is plain and dimmer. On a phone it reads as For review's rows do: who and when, the subject, then a
  * line of the text with the label.
  */
-function ThreadRow({
+const ThreadRow = memo(function ThreadRow({
   thread,
   labels,
   selected,
-  onSelect,
-  onOpen,
-  press,
-  block,
+  hands,
 }: {
   thread: Listed;
   labels: readonly AnswerLabel[];
   selected: boolean;
-  onSelect: (on: boolean) => void;
-  onOpen: () => void;
-  press: (threads: readonly Listed[], what: 'archive' | 'spam' | 'read' | 'unread') => void;
-  block: (threads: readonly Listed[]) => void;
+  hands: Hands;
 }) {
+  const { press, block } = hands;
   const subject = reveal(thread.subject) || '(no subject)';
   const { who } = thread;
   const many = thread.messageIds.length > 1 ? <span className="font-normal text-muted-foreground tabular-nums">{thread.messageIds.length}</span> : null;
@@ -153,12 +179,12 @@ function ThreadRow({
   return (
     <Tr
       selected={selected}
-      onOpen={onOpen}
+      onOpen={() => hands.open(thread)}
       onPointerEnter={() => ahead(thread)}
       onFocusCapture={() => ahead(thread)}
       holds={thread.messageIds.map((messageId) => messageKey({ accountId: thread.accountId, messageId }))}
     >
-      <RowCheck checked={selected} onChange={onSelect} label={`Select ${subject}`} />
+      <RowCheck checked={selected} onChange={(on) => hands.select(thread, on)} label={`Select ${subject}`} />
       <Td className="max-w-0 phone:py-2 md:w-[18%] md:min-w-40">
         <span className={`flex min-w-0 items-baseline gap-1.5 phone:hidden ${ink}`}>
           <span className="truncate">{who}</span>
@@ -223,7 +249,7 @@ function ThreadRow({
       </RowPresses>
     </Tr>
   );
-}
+});
 
 /**
  * A rule Mild proposes, drawn as mail is: from Mild, the rule as its subject and why as its text. Pressing it opens why in full; pointed at, it can be made or dismissed in place.
@@ -334,13 +360,14 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   });
   const whole = useWhole();
   const hidden = useHidden();
-  const labels = manage.data?.labels ?? [];
-  const names = new Map(labels.map((l) => [l.id, l.name] as const));
-  const mine = new Set((manage.data?.accounts ?? []).map((a) => a.email));
-  const more = local ? (copy.data?.length ?? 0) > reach : pages.more;
-  const listed: Listed[] = local
-    ? (copy.data ?? []).slice(0, reach).map((row) => listedOf(row, mine, names))
-    : pages.pages.flatMap((page) => page.threads).map((t) => ({ ...t, who: whoWrote(reveal(t.who)) }));
+  const labels = manage.data?.labels ?? NO_LABELS;
+  const { names, rowOf } = useRows(manage.data);
+  // The copy hands its rows over as an urgent update, which would mount a view's or the next hundred's rows in one go:
+  // deferred, React draws them in slices while the rows shown stay up.
+  const copied = useDeferredValue(copy.data);
+  const reached = useDeferredValue(reach);
+  const more = local ? (copied?.length ?? 0) > reached : pages.more;
+  const listed: Listed[] = local ? (copied ?? []).slice(0, reached).map(rowOf) : pages.pages.flatMap((page) => page.threads).map(rowOf);
   const threads = listed.filter((t) => !hidden.has(threadKey(t)));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const chosen = threads.filter((t) => selected.has(threadKey(t)));
@@ -356,6 +383,28 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
     else periods.push({ title, rows: [thread] });
   }
   const refs = threads.map((t) => ({ ...newest(t), subject: t.subject, threadId: t.threadId }));
+  const drawn = useRef({ threads, refs, press, block, onOpen });
+  useLayoutEffect(() => {
+    drawn.current = { threads, refs, press, block, onOpen };
+  });
+  const [hands] = useState<Hands>(() => ({
+    select: (thread, on) =>
+      setSelected((was) => {
+        const changed = new Set(was);
+        if (on) changed.add(threadKey(thread));
+        else changed.delete(threadKey(thread));
+        return changed;
+      }),
+    open: (thread) => {
+      const { threads, refs, onOpen } = drawn.current;
+      onOpen(
+        refs,
+        threads.findIndex((t) => threadKey(t) === threadKey(thread)),
+      );
+    },
+    press: (threads, what) => drawn.current.press(threads, what),
+    block: (threads) => drawn.current.block(threads),
+  }));
 
   if (manage.data && !on)
     return (
@@ -432,23 +481,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
               <tbody key={title ?? ''}>
                 {title ? <TrGroup title={title} span={4} /> : null}
                 {rows.map((thread) => (
-                  <ThreadRow
-                    block={block}
-                    key={threadKey(thread)}
-                    thread={thread}
-                    labels={labels}
-                    selected={selected.has(threadKey(thread))}
-                    onSelect={(next) =>
-                      setSelected((was) => {
-                        const changed = new Set(was);
-                        if (next) changed.add(threadKey(thread));
-                        else changed.delete(threadKey(thread));
-                        return changed;
-                      })
-                    }
-                    onOpen={() => onOpen(refs, threads.indexOf(thread))}
-                    press={press}
-                  />
+                  <ThreadRow key={threadKey(thread)} thread={thread} labels={labels} selected={selected.has(threadKey(thread))} hands={hands} />
                 ))}
               </tbody>
             ))}
