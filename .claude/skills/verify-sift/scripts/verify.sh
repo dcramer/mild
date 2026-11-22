@@ -15,7 +15,10 @@ dir="$(mkdir -p "$dir" && cd "$dir" && pwd)"
 session="verify-sift-$(basename "$dir")"
 
 # Chrome's own sandbox needs unprivileged user namespaces, which Ubuntu's AppArmor refuses here. The page is synthetic and local.
-ab() { npx -y "agent-browser@$AB_VERSION" --session "$session" --args --no-sandbox "$@"; }
+# Headless Chrome reports no pointer at all, (hover: none), so whatever the page shows only under a resting pointer (a row's
+# presses) never appears: the Blink settings make it a mouse. Newline-separated, as the settings hold commas.
+AB_ARGS=$'--no-sandbox\n--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4'
+ab() { npx -y "agent-browser@$AB_VERSION" --session "$session" --args "$AB_ARGS" "$@"; }
 
 doctor() {
   local pid port cookie session_json
@@ -30,6 +33,10 @@ doctor() {
     *) echo "doctor: port $port is not this run's sift (or the cookie no longer signs in): $session_json"; return 1 ;;
   esac
   [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/api/suggestions")" = 401 ] || { echo "doctor: /api/ answers without a session"; return 1; }
+  # Each build has an id of its own, in the page and in the server started on it; a page of another build draws only the wordmark.
+  local build
+  build="$(printf '%s' "$session_json" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')"
+  grep -rqF "$build" "$ROOT/.next/static/chunks" || { echo "doctor: .next was rebuilt after this instance started, so its page is another build's; down and up again"; return 1; }
   echo "ok  pid $pid  http://127.0.0.1:$port  home $dir/home  build $(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet HEAD -- src web/src || echo '+changes')"
 }
 
@@ -55,7 +62,11 @@ case "$cmd" in
     # The real app on this home, as `mild run` starts it, with the fake Google and a stand-in model (stand-ins.ts says
     # what they answer) and no minute's tick, on a build of the code as it is now: Next.js's cache makes that seconds.
     cd "$ROOT"
-    pnpm -s build:web > "$dir/build.log" 2>&1 || { tail -20 "$dir/build.log" >&2; exit 1; }
+    # A rebuild gives the page a new build id, which every instance already running then no longer serves: build only
+    # when something the build reads changed, so runs started on the same code share one build.
+    if [ ! -f .next/BUILD_ID ] || [ -n "$(find app web src public next.config.js package.json pnpm-lock.yaml tsconfig.json -newer .next/BUILD_ID -print -quit)" ]; then
+      pnpm -s build:web > "$dir/build.log" 2>&1 || { tail -20 "$dir/build.log" >&2; exit 1; }
+    fi
     nohup node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/serve.ts" "$dir/home" "$port" "$dir/google.json" $listing > "$dir/dashboard.log" 2>&1 &
     echo $! > "$dir/pid"
     for _ in $(seq 1 240); do
