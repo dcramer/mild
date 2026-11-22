@@ -139,6 +139,8 @@ test.describe('After Mild is updated under an open page', () => {
   test('the next screen gone to is loaded whole, from the new build', async ({ page }) => {
     await patchJson(page, '**/api/session*', (session) => ({ ...session, build: 'a-newer-build' }));
     await page.goto(SENDER);
+    // Just opened, it loads itself again once as the newer build, which may be after the screen was drawn from the device.
+    await expect.poll(() => page.evaluate<string>("performance.getEntriesByType('navigation')[0].type").catch(() => 'loading')).toBe('reload');
     await expect(page.getByRole('heading', { name: 'notifications@code.example.com' })).toBeVisible();
     await page.evaluate('window.stayed = true');
     await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Rules' }).click();
