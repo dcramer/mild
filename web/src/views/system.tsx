@@ -21,6 +21,7 @@ import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint } from '@/components/sender.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { Mailbox } from '@/lib/narrowed.ts';
+import { type Recipient, wrongAddresses } from '@/lib/addresses.ts';
 import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, moneyTick, outcomeName } from '@/lib/format.ts';
 import {
   Ago,
@@ -40,7 +41,11 @@ import {
   Code,
   ConfirmButton,
   DeleteButton,
+  AttachButton,
   DiscardButton,
+  type DraftFile,
+  DraftFiles,
+  Recipients,
   Copyable,
   Dialog,
   Clause,
@@ -1562,6 +1567,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
               sending === 'allowed' ? (
                 <>
                   <Finish onClick={() => setReplying(null)}>Send</Finish>
+                  <AttachButton onFiles={(files) => toast(`Attaches ${files.length === 1 ? files[0].name : `${files.length} files`}`)} />
                   <DiscardButton onClick={() => setReplying(null)} />
                 </>
               ) : (
@@ -1577,18 +1583,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             }
           >
             {sending === 'allowed' ? (
-              <>
-                <DraftLine label="To">
-                  <Input
-                    bare
-                    aria-label="To"
-                    className="flex-1"
-                    defaultValue={replying.title === 'Forward' ? '' : `${replying.to.from} <${replying.to.address}>`}
-                  />
-                  <Button variant="quiet">Cc</Button>
-                </DraftLine>
-                <DraftText aria-label="Message" className="min-h-48" />
-              </>
+              <SpecimenDraft to={replying.title === 'Forward' ? [] : [{ address: replying.to.address, name: replying.to.from }]} />
             ) : (
               <DraftBlocked title="Mild can’t send from ada@example.org yet">Google asks you once before Mild can send as you.</DraftBlocked>
             )}
@@ -1618,5 +1613,69 @@ function Row({ label, note, children }: { label: string; note?: string; children
         {note ? <p className="text-muted-foreground">{note}</p> : null}
       </div>
     </div>
+  );
+}
+
+const PEOPLE = [
+  { address: 'ada@example.org', name: 'Ada Lovelace' },
+  { address: 'grace@example.org', name: 'Grace Hopper' },
+  { address: 'alan@example.com', name: 'Alan Turing' },
+  { address: 'billing@example.com' },
+];
+
+/** The composer's suggestions, from a few people: whose name or address has a word starting as typed. */
+const suggestPeople = async (typed: string) => {
+  const words = typed.toLowerCase().split(/\W+/).filter(Boolean);
+  return PEOPLE.filter((p) =>
+    words.every((w) =>
+      `${p.name ?? ''} ${p.address}`
+        .toLowerCase()
+        .split(/\W+/)
+        .some((v) => v.startsWith(w)),
+    ),
+  );
+};
+
+/** A draft's lines as the composer draws them: To with a chip and a wrong one, Cc and Bcc behind their presses, and files in each state. */
+function SpecimenDraft({ to: start }: { to: Recipient[] }) {
+  const [to, setTo] = useState<Recipient[]>([...start, { address: 'not an address', wrong: true }]);
+  const [cc, setCc] = useState<Recipient[] | null>(null);
+  const [bcc, setBcc] = useState<Recipient[] | null>(null);
+  const [typing, setTyping] = useState({ to: '', cc: '', bcc: '' });
+  const typed = (line: 'to' | 'cc' | 'bcc') => ({ text: typing[line], onText: (text: string) => setTyping((was) => ({ ...was, [line]: text })) });
+  const [files, setFiles] = useState<DraftFile[]>([
+    { key: 'plans', name: 'Roof plans.pdf', size: 2_400_000 },
+    { key: 'photo', name: 'IMG_2041.jpg', size: 6_100_000, sent: 2_440_000 },
+    { key: 'scan', name: 'Scan.tiff', size: 31_000_000, failed: 'Scan.tiff is larger than the 25 MB Gmail sends.' },
+  ]);
+  const wrong = (list: Recipient[]) => wrongAddresses(list.filter((r) => r.wrong).map((r) => r.address));
+  return (
+    <>
+      <DraftLine label="To" error={wrong(to)}>
+        <Recipients label="To" value={to} onChange={setTo} {...typed('to')} suggest={suggestPeople} />
+        {cc ? null : (
+          <Button variant="quiet" onClick={() => setCc([])}>
+            Cc
+          </Button>
+        )}
+        {bcc ? null : (
+          <Button variant="quiet" onClick={() => setBcc([])}>
+            Bcc
+          </Button>
+        )}
+      </DraftLine>
+      {cc ? (
+        <DraftLine label="Cc">
+          <Recipients label="Cc" value={cc} onChange={setCc} {...typed('cc')} suggest={suggestPeople} />
+        </DraftLine>
+      ) : null}
+      {bcc ? (
+        <DraftLine label="Bcc">
+          <Recipients label="Bcc" value={bcc} onChange={setBcc} {...typed('bcc')} suggest={suggestPeople} />
+        </DraftLine>
+      ) : null}
+      <DraftText aria-label="Message" className="min-h-48" />
+      <DraftFiles files={files} onRemove={(key) => setFiles((all) => all.filter((f) => f.key !== key))} />
+    </>
   );
 }

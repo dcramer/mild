@@ -73,6 +73,8 @@ export interface Write<B extends z.ZodType = z.ZodType, R extends z.ZodType = z.
   path: string;
   body: B;
   reply: R;
+  /** The longest body it takes, in characters, when it takes more than most (`MAX_BODY`, server.ts). */
+  largest?: number;
   touches(ctx: Context, body: z.output<B>): Touches | Promise<Touches>;
   run(ctx: Context, body: z.output<B>, scope: Scope): z.input<R> | null | Promise<z.input<R> | null>;
   /** The reply means the session has ended: the server clears its cookie. */

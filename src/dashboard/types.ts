@@ -237,6 +237,10 @@ const MessageFactSet = z.object({
 type MessageFactSet = z.infer<typeof MessageFactSet>;
 
 /** What Mild knows about one sender, or about everyone at one domain, to judge their mail by. */
+/** A file a message carries, by its part. Its name came in the mail. */
+export const MessageAttachment = z.object({ part: z.string(), name: held, type: held, size: z.int() });
+export type MessageAttachment = z.infer<typeof MessageAttachment>;
+
 /** A standing the owner gives a sender or domain: a rule for exactly them that says only what happens to their mail. */
 export const Given = z.enum(GIVEN);
 export type Given = z.infer<typeof Given>;
@@ -302,6 +306,8 @@ export const MessageDetail = z.object({
   body: held.nullable(),
   /** Whether Mild holds its HTML, beside the text, to show in a frame (`/api/message/html`). */
   hasHtml: z.boolean(),
+  /** Its files, where Inbox keeps its text. Null when they were not kept with it: `/api/mail/attachments` reads them. */
+  attachments: z.array(MessageAttachment).nullable(),
   facts: MessageFactSet,
   sender: SenderProfile,
   /**
@@ -614,7 +620,10 @@ const sending = {
   from: party,
   to: z.array(party).max(100),
   cc: z.array(party).max(100),
+  bcc: z.array(party).max(100),
   text: z.string().max(200_000),
+  /** Files uploaded for it (`/api/mail/upload`), in the order they go. */
+  uploads: z.array(text(64)).max(50),
 };
 
 /**
@@ -622,10 +631,19 @@ const sending = {
  * subject, conversation and the Message-IDs it follows are read from the record, not sent.
  */
 export const SendRequest = z.union([
-  z.strictObject({ ...sending, subject: z.string().max(900) }),
+  z.strictObject({
+    ...sending,
+    subject: z.string().max(900),
+    /** A forward: the message's files that go with it, by their parts. */
+    forwarding: z.strictObject({ messageId: text(), parts: z.array(text(64)).max(50) }).optional(),
+  }),
   z.strictObject({ ...sending, replyTo: z.strictObject({ messageId: text() }) }),
 ]);
 export type SendRequest = z.infer<typeof SendRequest>;
+
+/** Someone the composer suggests as an address is typed: whom the person has written to first, then who wrote to them. */
+export const AddressSuggestion = z.object({ address: held, name: held.nullable() });
+export type AddressSuggestion = z.infer<typeof AddressSuggestion>;
 
 /** A label: what mail is, and what Mild does with it. */
 export const LabelSummary = z.object({

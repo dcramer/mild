@@ -11,6 +11,7 @@ import {
   path,
   readSent,
   reader,
+  recipients,
   inboxRows,
   reviewRows,
   sideScroll,
@@ -26,7 +27,7 @@ const compose = (page: Page) => page.getByRole('button', { name: /Compose/ });
 test.describe('with Inbox on', () => {
   test.use({ variant: 'inbox' });
 
-  test('C writes a new message, each address checked as it is typed, and Ctrl+Enter sends it from the chosen address', async ({ page, sift }) => {
+  test('C writes a new message, each address a chip once it is typed, and Ctrl+Enter sends it from the chosen address', async ({ page, sift }) => {
     await page.goto('/inbox');
     // Its key is bound once the page has loaded.
     await expect(inboxRows(page).first()).toBeVisible();
@@ -34,21 +35,40 @@ test.describe('with Inbox on', () => {
     await expect(compose(page)).toHaveAccessibleName('Compose');
     await page.keyboard.press('c');
     const writing = composer(page, 'New message');
-    const to = writing.getByRole('textbox', { name: 'To' });
-    await expect(to).toBeFocused();
+    const to = recipients(writing, 'To');
+    await expect(to.input).toBeFocused();
     await expect(writing.getByRole('combobox', { name: 'From' })).toContainText(ME);
 
     await page.keyboard.type('ada@example.org, nope');
+    await expect(to.chip('ada@example.org')).toBeVisible();
     // Still being typed.
+    await expect(to.input).toHaveValue('nope');
     await expect(writing.getByText('“nope” is not an address.')).toHaveCount(0);
     await writing.getByRole('textbox', { name: 'Subject' }).click();
     await expect(writing.getByText('“nope” is not an address.')).toBeVisible();
     await expect(writing.getByRole('button', { name: /^Send/ })).toBeDisabled();
 
-    await to.fill('Ada <ada@example.org>');
+    // Pressed, a wrong one is typed again.
+    await to.chip('nope, not an address').getByRole('button', { name: 'nope', exact: true }).click();
+    await expect(to.input).toHaveValue('nope');
+    await to.input.fill('Ada Lovelace <ada@example.org>');
+    await page.keyboard.press('Enter');
+    // The same address once.
+    await expect(to.chips).toHaveCount(1);
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Backspace');
+    await expect(to.chips).toHaveCount(0);
+    await page.keyboard.type('Ada <ada@example.org>');
+    await page.keyboard.press('Tab');
+    await expect(to.chip('Ada <ada@example.org>')).toBeVisible();
+
     await writing.getByRole('button', { name: 'Cc', exact: true }).click();
-    await expect(writing.getByRole('textbox', { name: 'Cc' })).toBeFocused();
+    await expect(recipients(writing, 'Cc').input).toBeFocused();
     await page.keyboard.type('grace@example.net');
+    await writing.getByRole('button', { name: 'Bcc', exact: true }).click();
+    await expect(recipients(writing, 'Bcc').input).toBeFocused();
+    // Left unfinished as Send is pressed, it goes all the same.
+    await page.keyboard.type('bo@example.com');
     await writing.getByRole('combobox', { name: 'From' }).click();
     await page.getByRole('option', { name: 'me+lists@example.org' }).click();
     await writing.getByRole('textbox', { name: 'Subject' }).fill('Lunch');
@@ -62,12 +82,68 @@ test.describe('with Inbox on', () => {
     expect(more).toEqual([]);
     expect(sent!.mailbox).toBe(ME);
     const { headers, text } = readSent(sent!.raw);
-    expect(headers).toMatchObject({ From: 'me+lists@example.org', To: '"Ada" <ada@example.org>', Cc: 'grace@example.net', Subject: 'Lunch' });
+    expect(headers).toMatchObject({
+      From: 'me+lists@example.org',
+      To: '"Ada" <ada@example.org>',
+      Cc: 'grace@example.net',
+      Bcc: 'bo@example.com',
+      Subject: 'Lunch',
+    });
     expect(text).toBe('See you at noon.\r\nBring the plans.');
 
     // Sent, it is not kept as a draft.
     await compose(page).click();
-    await expect(composer(page, 'New message').getByRole('textbox', { name: 'To' })).toHaveValue('');
+    await expect(recipients(composer(page, 'New message'), 'To').chips).toHaveCount(0);
+  });
+
+  test('as an address is typed it suggests whom the person knows, by any word of their name, and a pick is a chip', async ({ page }) => {
+    await page.goto('/inbox');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    const to = recipients(writing, 'To');
+    await to.input.fill('lovel');
+    const ada = page.getByRole('option', { name: /Ada Lovelace/ });
+    await expect(ada).toContainText('ada@example.org');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(to.chip('Ada Lovelace <ada@example.org>')).toBeVisible();
+    await expect(to.input).toHaveValue('');
+    await to.input.fill('grace hop');
+    await page.getByRole('option', { name: /Grace Hopper/ }).click();
+    await expect(to.chip('Grace Hopper <grace@example.net>')).toBeVisible();
+    // Mail sent in bulk is nobody to suggest.
+    await to.input.fill('store');
+    await expect(page.getByRole('option')).toHaveCount(0);
+  });
+
+  test('attaches files, which go with the mail, and one taken off does not', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    await recipients(writing, 'To').input.fill('ada@example.org');
+    await writing.getByRole('textbox', { name: 'Subject' }).fill('Plans');
+    const picked = page.waitForEvent('filechooser');
+    await writing.getByRole('button', { name: 'Attach files' }).click();
+    await (
+      await picked
+    ).setFiles([
+      { name: 'roof.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 roof') },
+      { name: 'old.txt', mimeType: 'text/plain', buffer: Buffer.from('old') },
+    ]);
+    const files = writing.getByRole('list', { name: 'Attachments' });
+    await expect(files.getByRole('listitem')).toHaveText([/roof\.pdf/, /old\.txt/]);
+    await files.getByRole('button', { name: 'Remove old.txt' }).click();
+    await expect(files.getByRole('listitem')).toHaveText([/roof\.pdf/]);
+    // A reload keeps it with the draft.
+    await page.reload();
+    await expect(files.getByRole('listitem')).toHaveText([/roof\.pdf/]);
+    await writing.getByRole('button', { name: /^Send/ }).click();
+
+    await expect(toast(page, 'Plans')).toContainText('Sent');
+    const [sent] = sift.sent();
+    expect(sent!.raw).toContain(`filename*=UTF-8''roof.pdf`);
+    expect(sent!.raw).not.toContain('old.txt');
+    expect(sent!.raw).toContain(Buffer.from('%PDF-1.4 roof').toString('base64'));
   });
 
   test.describe('when Mild could not answer', () => {
@@ -84,7 +160,7 @@ test.describe('with Inbox on', () => {
       await page.goto('/inbox');
       await compose(page).click();
       const writing = composer(page, 'New message');
-      await writing.getByRole('textbox', { name: 'To' }).fill('ada@example.org');
+      await recipients(writing, 'To').input.fill('ada@example.org');
       await writing.getByRole('textbox', { name: 'Subject' }).fill('Lunch');
       await writing.getByRole('textbox', { name: 'Message' }).fill('See you at noon.');
       const sendIt = writing.getByRole('button', { name: /^Send/ });
@@ -110,11 +186,11 @@ test.describe('with Inbox on', () => {
     await page.goto('/');
     await compose(page).click();
     const writing = composer(page, 'New message');
-    await writing.getByRole('textbox', { name: 'To' }).fill('ada@example.org');
+    await recipients(writing, 'To').input.fill('ada@example.org');
     await writing.getByRole('textbox', { name: 'Message' }).fill('Half written');
     await page.reload();
     await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Half written');
-    await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('ada@example.org');
+    await expect(recipients(writing, 'To').chip('ada@example.org')).toBeVisible();
 
     await writing.getByRole('button', { name: 'Discard' }).click();
     await expect(writing).toHaveCount(0);
@@ -127,7 +203,7 @@ test.describe('with Inbox on', () => {
     await expect(inboxRows(page).first()).toBeVisible();
     await compose(page).click();
     const writing = composer(page, 'New message');
-    await expect(writing.getByRole('textbox', { name: 'To' })).toBeFocused();
+    await expect(recipients(writing, 'To').input).toBeFocused();
     // Whether a composer is drawn open again once this one has begun to close; it is a new panel, not this one.
     await page.evaluate(`
       window.composer = { closing: false, reopened: false };
@@ -161,7 +237,7 @@ test.describe('with Inbox on', () => {
     await writing.getByRole('combobox', { name: 'From' }).click();
     await page.getByRole('option', { name: ME, exact: true }).click();
     await expect(writing.getByRole('link', { name: 'Let Mild send' })).toHaveCount(0);
-    await writing.getByRole('textbox', { name: 'To' }).fill('ada@example.org');
+    await recipients(writing, 'To').input.fill('ada@example.org');
     await expect(writing.getByRole('button', { name: /^Send/ })).toBeEnabled();
     expect(sift.sent()).toEqual([]);
   });
@@ -175,7 +251,7 @@ test.describe('with Inbox on', () => {
     await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await expect(reader(page).getByText('Are you free for lunch on Thursday?', { exact: true })).toBeVisible();
     await expect(writing.getByRole('combobox', { name: 'From' })).toContainText(ME);
-    await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('Ada Lovelace <ada@example.org>');
+    await expect(recipients(writing, 'To').chip('Ada Lovelace <ada@example.org>')).toBeVisible();
     await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveCount(0);
     await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
     await page.keyboard.type('Thursday works.');
@@ -204,7 +280,7 @@ test.describe('with Inbox on', () => {
     await expect(open.getByRole('button', { name: /^Reply all(?!,)/ })).toBeVisible();
     await page.keyboard.press('r');
     const writing = composer(page, 'Reply');
-    await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('Ada Lovelace <ada@example.org>');
+    await expect(recipients(writing, 'To').chip('Ada Lovelace <ada@example.org>')).toBeVisible();
     await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
     // Written in place under the conversation, which stays on the page above it.
     const asked = open.getByText('Are you free for lunch on Thursday?', { exact: true });
@@ -301,7 +377,7 @@ test.describe('with Inbox on', () => {
     const writing = composer(page, 'Forward');
     await expect(writing.getByText(/^Forwarding Utility’s message, /)).toBeVisible();
     await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveValue('Fwd: Your May bill');
-    await expect(writing.getByRole('textbox', { name: 'To' })).toBeFocused();
+    await expect(recipients(writing, 'To').input).toBeFocused();
     await param(page, 'compose').toBe('forward');
     await param(page, 'answering').toBe('m13');
   });
@@ -313,8 +389,7 @@ test.describe('with Inbox on', () => {
       .getByRole('button', { name: /^Forward/ })
       .click();
     const writing = composer(page, 'Forward');
-    const to = writing.getByRole('textbox', { name: 'To' });
-    await expect(to).toBeFocused();
+    await expect(recipients(writing, 'To').input).toBeFocused();
     await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveValue('Fwd: Lunch on Thursday?');
     await page.keyboard.type('grace@example.net');
     await writing.getByRole('textbox', { name: 'Message' }).focus();
@@ -329,16 +404,43 @@ test.describe('with Inbox on', () => {
     expect(text).toContain('Subject: Lunch on Thursday?\r\nTo: Me <me@example.org>\r\n\r\nAre you free for lunch on Thursday?');
   });
 
+  test('Forward carries the message’s files, and one taken off stays behind', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Notes from the review').getByRole('cell').nth(2).click();
+    await reader(page)
+      .getByRole('button', { name: /^Forward/ })
+      .click();
+    const writing = composer(page, 'Forward');
+    const files = writing.getByRole('list', { name: 'Attachments' });
+    await expect(files.getByRole('listitem')).toHaveText([/review-notes\.pdf/]);
+    await recipients(writing, 'To').input.fill('ada@example.org');
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await expect(toast(page, 'Fwd: Notes from the review')).toContainText('Sent');
+    expect(sift.sent()[0]!.raw).toContain(`filename*=UTF-8''review-notes.pdf`);
+
+    await reader(page)
+      .getByRole('button', { name: /^Forward/ })
+      .click();
+    await files.getByRole('button', { name: 'Remove review-notes.pdf' }).click();
+    await expect(files).toHaveCount(0);
+    await recipients(writing, 'To').input.fill('ada@example.org');
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await expect(writing).toHaveCount(0);
+    await expect.poll(() => sift.sent().length).toBe(2);
+    expect(sift.sent()[1]!.raw).not.toContain('review-notes.pdf');
+  });
+
   test('on a phone Inbox has the press that writes, it covers the screen, the keyboard is for addresses, and nothing scrolls sideways', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto('/inbox');
     await compose(page).click();
     const writing = composer(page, 'New message');
-    const to = writing.getByRole('textbox', { name: 'To' });
+    const to = recipients(writing, 'To').input;
     await expect(to).toHaveAttribute('inputmode', 'email');
     await expect(to).toHaveAttribute('autocapitalize', 'off');
     await expect(to).toHaveAttribute('autocorrect', 'off');
     await to.fill('someone.with.a.very.long.address@a-long-domain.example.com');
+    await page.keyboard.press('Enter');
     await expect(writing.getByRole('button', { name: /^Send/ })).toBeEnabled();
     await sideScroll(page).toBe(0);
     expect((await boxOf(writing)).width).toBe(PHONE.width);

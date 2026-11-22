@@ -1,15 +1,35 @@
 'use client';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAction } from '@/lib/action.ts';
-import { type Party, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
+import { type Party, type Recipient, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
 import { api, useLoaded } from '@/lib/api.ts';
 import { dateTime } from '@/lib/format.ts';
-import { type Draft, type Writing, keepDraft, keptDraft, newMessageId, useCompose } from '@/lib/compose.ts';
+import { type Draft, type Writing, emptyDraft, keepDraft, keptDraft, newMessageId, useCompose } from '@/lib/compose.ts';
+import { uploadFile } from '@/lib/upload.ts';
 import { useChosenMailbox } from '@/lib/mailbox.ts';
 import { useHere } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
-import { Button, DiscardButton, DraftBlocked, DraftLine, DraftText, Failure, Finish, Input, Loading, Panel, ReplyBox, Select, useToast } from '@/system';
-import type { ManageState, MessageDetail } from '../../../src/dashboard/types.ts';
+import {
+  AttachButton,
+  Button,
+  DiscardButton,
+  DraftBlocked,
+  type DraftFile,
+  DraftFiles,
+  DraftLine,
+  DraftText,
+  Failure,
+  Finish,
+  Input,
+  Loading,
+  Panel,
+  Recipients,
+  ReplyBox,
+  withTyped,
+  Select,
+  useToast,
+} from '@/system';
+import type { ManageState, MessageAttachment, MessageDetail } from '../../../src/dashboard/types.ts';
 
 /** An address mail can be from: a mailbox's own, or one of its aliases, and whether Google lets Mild send from that mailbox. */
 interface From {
@@ -26,8 +46,6 @@ const answering = (subject: string) => (/^re:/i.test(subject.trim()) ? subject.t
 /** "Fwd: " once. */
 const forwarding = (subject: string) => (/^fwd?:/i.test(subject.trim()) ? subject.trim() : `Fwd: ${subject.trim()}`);
 
-/** A phone's keyboard for addresses: with @ on it, and nothing capitalised or corrected. */
-const ADDRESSES = { inputMode: 'email', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false } as const;
 const TITLES = { new: 'New message', reply: 'Reply', all: 'Reply to all', forward: 'Forward' } as const;
 
 /**
@@ -53,7 +71,7 @@ export function Composer({ to, onClose }: { to: string; onClose: () => void }) {
       what={to ? { kind: 'new', to } : { kind: 'new' }}
       title={TITLES.new}
       choices={accounts.filter((a) => a.canSend || a === start).flatMap(addressesOf)}
-      start={{ from: start.email, to, cc: '', showCc: false, subject: '', text: '', id: null }}
+      start={emptyDraft(start.email, { to: readAddresses(to).parties })}
       onClose={onClose}
     />
   );
@@ -89,6 +107,7 @@ export function InlineComposer({
       {...(what.kind === 'reply' ? { subject: answering(reveal(message.subject)) } : {})}
       choices={choices}
       start={what.kind === 'reply' ? replyDraft(message, choices, what.all) : forwardDraft(message, choices)}
+      {...(what.kind === 'forward' ? { forwarded: message } : {})}
       onClose={onClose}
     />
   );
@@ -113,18 +132,10 @@ function replyDraft(message: MessageDetail, choices: readonly From[], all: boole
   const to = isOwn(sender) ? shown(message.to).filter((p) => !isOwn(p)) : asked.length > 0 ? asked : [sender];
   const answered = new Set(to.map((p) => p.address.toLowerCase()));
   const cc = all ? recipients.filter((p) => !isOwn(p) && !answered.has(p.address.toLowerCase())) : [];
-  return {
-    from: answeredFrom(message, choices),
-    to: to.map(typed).join(', '),
-    cc: cc.map(typed).join(', '),
-    showCc: cc.length > 0,
-    subject: '',
-    text: '',
-    id: null,
-  };
+  return emptyDraft(answeredFrom(message, choices), { to, cc, showCc: cc.length > 0 });
 }
 
-/** Gmail's quote of a forwarded message, under two empty lines for the reader's own text. Its attachments do not go with it. */
+/** Gmail's quote of a forwarded message, under two empty lines for the reader's own text. Its files go with it (`ForwardedFiles`). */
 function forwardDraft(message: MessageDetail, choices: readonly From[]): Draft {
   const subject = reveal(message.subject);
   const quoted = [
@@ -137,7 +148,42 @@ function forwardDraft(message: MessageDetail, choices: readonly From[]): Draft {
     '',
     reveal(message.body) ?? '',
   ];
-  return { from: answeredFrom(message, choices), to: '', cc: '', showCc: false, subject: forwarding(subject), text: `\n\n${quoted.join('\n')}`, id: null };
+  return emptyDraft(answeredFrom(message, choices), { subject: forwarding(subject), text: `\n\n${quoted.join('\n')}` });
+}
+
+/** Whom to suggest as an address is typed: the person's own address book, on the server. */
+const suggest = async (q: string, signal: AbortSignal): Promise<Party[]> =>
+  (await api.addresses(q, signal)).addresses.map((a) => ({ address: reveal(a.address), ...(a.name ? { name: reveal(a.name) } : {}) }));
+
+/** What is wrong with a line's recipients, in a sentence, or null. */
+const wrongOf = (list: readonly Recipient[]) => wrongAddresses(list.filter((r) => r.wrong).map((r) => r.address));
+
+/** Files being uploaded, by a key of their own until Mild gives them an id. */
+interface Uploading {
+  key: string;
+  file: File;
+  sent: number;
+  failed?: string;
+  abort: AbortController;
+}
+
+/** The forwarded message's files, as the record has them; read from Gmail once where it does not. */
+function useForwarded(message: MessageDetail | undefined): MessageAttachment[] {
+  const [read, setRead] = useState<MessageAttachment[] | null>(null);
+  const kept = message?.attachments ?? null;
+  const unknown = message !== undefined && kept === null;
+  useEffect(() => {
+    if (!unknown) return;
+    let current = true;
+    api.attachments(message.accountId, message.messageId).then(
+      (r) => current && setRead(r.attachments),
+      () => current && setRead([]),
+    );
+    return () => {
+      current = false;
+    };
+  }, [unknown, message?.accountId, message?.messageId]);
+  return kept ?? read ?? [];
 }
 
 /** The composer's fields, text and presses: in a panel of their own for new mail, in place under the conversation (`inline`) for a reply or a forward. */
@@ -147,6 +193,7 @@ function Writer({
   subject,
   choices,
   start,
+  forwarded,
   inline = false,
   about,
   onClose,
@@ -157,30 +204,48 @@ function Writer({
   subject?: string;
   choices: readonly From[];
   start: Draft;
+  /** The message a forward carries the files of. */
+  forwarded?: MessageDetail;
   inline?: boolean;
   about?: ReactNode;
   onClose: () => void;
 }) {
   const who = useLoaded('session', (signal) => api.session(signal), 300_000, '').data?.email ?? '';
   const [draft, setDraft] = useState(() => keptDraft(who, what) ?? start);
-  const change = (next: Partial<Draft>) => {
-    // A changed draft is mail of its own: a try before the change may have gone, and must not be found and called this one.
-    const changed = { ...draft, ...('id' in next ? {} : { id: null }), ...next };
-    setDraft(changed);
-    keepDraft(who, what, changed);
+  const change = (next: Partial<Draft> | ((was: Draft) => Partial<Draft>)) => {
+    setDraft((was) => {
+      const asked = typeof next === 'function' ? next(was) : next;
+      // A changed draft is mail of its own: a try before the change may have gone, and must not be found and called this one.
+      const changed = { ...was, ...('id' in asked ? {} : { id: null }), ...asked };
+      keepDraft(who, what, changed);
+      return changed;
+    });
   };
-  // A field the reader is in is checked only up to the address they are typing; one they have left, or a press of Send, all of it.
-  const [typing, setTyping] = useState<'to' | 'cc' | null>(null);
+  const [uploading, setUploading] = useState<Uploading[]>([]);
+  // What is typed in each line that is not a chip yet.
+  const [typing, setTyping] = useState({ to: '', cc: '', bcc: '' });
+  const files = useForwarded(forwarded);
+  const carried = files.filter((f) => !draft.dropped.includes(f.part));
   const toField = useRef<HTMLInputElement>(null);
-  // Cc asked for: entered once it is drawn.
-  const ccAsked = useRef(false);
+  // Cc or Bcc asked for: entered once it is drawn.
+  const asked = useRef<'cc' | 'bcc' | null>(null);
+  // One for each line, made once: a ref that changed each render would be attached again each render.
+  const [entered] = useState(() => {
+    const enter = (line: 'cc' | 'bcc') => (field: HTMLInputElement | null) => {
+      if (field && asked.current === line) {
+        field.focus();
+        asked.current = null;
+      }
+    };
+    return { cc: enter('cc'), bcc: enter('bcc') };
+  });
   const textField = useRef<HTMLTextAreaElement>(null);
   // A forward's text starts with the quote; the reader writes above it.
   useEffect(() => {
     if (what.kind === 'forward') textField.current?.setSelectionRange(0, 0);
   }, [what.kind]);
   // A panel is given where to start; in place, it starts there as it opens, below the conversation it answers.
-  const first = what.kind !== 'reply' && draft.to === '' ? toField : textField;
+  const first = what.kind !== 'reply' && draft.to.length === 0 ? toField : textField;
   const [opening] = useState(() => (inline ? first : null));
   useEffect(() => opening?.current?.focus(), [opening]);
   const toast = useToast();
@@ -189,20 +254,84 @@ function Writer({
   const { busy, error, run } = useAction();
 
   const from = choices.find((c) => c.address === draft.from) ?? choices[0];
-  const to = readAddresses(draft.to, typing === 'to');
-  const cc = readAddresses(draft.cc, typing === 'cc');
-  const addressee = to.parties[0] ?? cc.parties[0];
+  const addressee = draft.to[0] ?? draft.cc[0] ?? draft.bcc[0] ?? withTyped([], typing.to)[0];
   // What a toast calls it: its subject, or who it is to.
   const said = (subject ?? draft.subject.trim()) || (addressee ? `To ${typed(addressee)}` : title);
 
+  const attach = (picked: readonly File[]) => {
+    for (const file of picked) {
+      const key = crypto.randomUUID();
+      const abort = new AbortController();
+      const set = (more: Partial<Uploading>) => setUploading((all) => all.map((u) => (u.key === key ? { ...u, ...more } : u)));
+      setUploading((all) => [...all, { key, file, sent: 0, abort }]);
+      uploadFile(file, (sent) => set({ sent }), abort.signal).then(
+        (id) => {
+          setUploading((all) => all.filter((u) => u.key !== key));
+          change((was) => ({ files: [...was.files, { id, name: file.name, size: file.size }] }));
+        },
+        (failure: unknown) => {
+          if (!abort.signal.aborted) set({ failed: failure instanceof Error ? failure.message : 'It did not upload.' });
+        },
+      );
+    }
+  };
+  const detach = (key: string) => {
+    const going = uploading.find((u) => u.key === key);
+    if (going) {
+      going.abort.abort();
+      setUploading((all) => all.filter((u) => u.key !== key));
+      return;
+    }
+    if (files.some((f) => f.part === key)) {
+      change((was) => ({ dropped: [...was.dropped, key] }));
+      return;
+    }
+    change((was) => ({ files: was.files.filter((f) => f.id !== key) }));
+    api.removeUpload(key).catch(() => {});
+  };
+  const shownFiles: DraftFile[] = [
+    ...carried.map((f) => ({ key: f.part, name: reveal(f.name), size: f.size })),
+    ...draft.files.map((f) => ({ key: f.id, name: f.name, size: f.size })),
+    ...uploading.map((u) => ({ key: u.key, name: u.file.name, size: u.file.size, sent: u.sent, ...(u.failed ? { failed: u.failed } : {}) })),
+  ];
+
+  const everyone = [...draft.to, ...draft.cc, ...draft.bcc];
+  const nobody = everyone.length === 0 && Object.values(typing).every((t) => t.trim() === '');
+  const wrong = everyone.some((r) => r.wrong);
+  const waiting = uploading.length > 0;
   const send = () => {
-    const all = [readAddresses(draft.to), readAddresses(draft.cc)];
-    if (!from.canSend || all.some((read) => read.wrong.length > 0) || all.every((read) => read.parties.length === 0)) return;
+    if (!from.canSend || nobody || wrong || waiting) return;
+    // What is still being typed goes as it would once the line is left.
+    const lines = { to: withTyped(draft.to, typing.to), cc: withTyped(draft.cc, typing.cc), bcc: withTyped(draft.bcc, typing.bcc) };
+    setTyping({ to: '', cc: '', bcc: '' });
+    if ([...lines.to, ...lines.cc, ...lines.bcc].some((r) => r.wrong)) {
+      change(lines);
+      return;
+    }
     const id = draft.id ?? newMessageId(from.address);
-    change({ id });
-    const mail = { accountId: from.accountId, id, from: { address: from.address }, to: all[0].parties, cc: all[1].parties, text: draft.text };
+    change({ ...lines, id });
+    const parties = (list: readonly Recipient[]) => list.map(({ address, name }) => (name ? { address, name } : { address }));
+    const mail = {
+      accountId: from.accountId,
+      id,
+      from: { address: from.address },
+      to: parties(lines.to),
+      cc: parties(lines.cc),
+      bcc: parties(lines.bcc),
+      text: draft.text,
+      uploads: draft.files.map((f) => f.id),
+    };
     run(
-      () => api.send(what.kind === 'reply' ? { ...mail, replyTo: { messageId: what.messageId } } : { ...mail, subject: draft.subject }),
+      () =>
+        api.send(
+          what.kind === 'reply'
+            ? { ...mail, replyTo: { messageId: what.messageId } }
+            : {
+                ...mail,
+                subject: draft.subject,
+                ...(what.kind === 'forward' && carried.length > 0 ? { forwarding: { messageId: what.messageId, parts: carried.map((f) => f.part) } } : {}),
+              },
+        ),
       () => {
         keepDraft(who, what, null);
         toast(said, { kind: 'Sent' });
@@ -211,6 +340,7 @@ function Writer({
     );
   };
   const discard = () => {
+    for (const u of uploading) u.abort.abort();
     keepDraft(who, what, null);
     toast(said, {
       kind: 'Draft discarded',
@@ -222,8 +352,6 @@ function Writer({
     onClose();
   };
 
-  const nobody = to.parties.length + cc.parties.length === 0;
-  const wrong = to.wrong.length + cc.wrong.length > 0;
   const fromLine =
     choices.length > 1 ? (
       <DraftLine label="From">
@@ -271,62 +399,74 @@ function Writer({
 
   const actions = (
     <>
-      <Finish busy={busy} disabled={nobody || wrong} {...(nobody ? { why: 'Say who it is to.' } : wrong ? { why: 'An address is wrong.' } : {})} onClick={send}>
+      <Finish
+        busy={busy}
+        disabled={nobody || wrong || waiting}
+        {...(nobody ? { why: 'Say who it is to.' } : wrong ? { why: 'An address is wrong.' } : waiting ? { why: 'A file is still uploading.' } : {})}
+        onClick={send}
+      >
         Send
       </Finish>
+      <AttachButton onFiles={attach} />
       <Failure>{error}</Failure>
       <DiscardButton onClick={discard} />
     </>
   );
 
+  const lineFor = (line: 'cc' | 'bcc') => (
+    <DraftLine label={line === 'cc' ? 'Cc' : 'Bcc'} error={wrongOf(draft[line])}>
+      <Recipients
+        label={line === 'cc' ? 'Cc' : 'Bcc'}
+        value={draft[line]}
+        onChange={(next) => change({ [line]: next })}
+        text={typing[line]}
+        onText={(text) => setTyping((was) => ({ ...was, [line]: text }))}
+        suggest={suggest}
+        inputRef={entered[line]}
+      />
+    </DraftLine>
+  );
+  const ask = (line: 'cc' | 'bcc') => (
+    <Button
+      variant="quiet"
+      onClick={() => {
+        asked.current = line;
+        change(line === 'cc' ? { showCc: true } : { showBcc: true });
+      }}
+    >
+      {line === 'cc' ? 'Cc' : 'Bcc'}
+    </Button>
+  );
+
   // Not a Form: Enter in To or Subject must not send.
   const fields = (
-    <>
+    <div
+      className="contents"
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        if (event.dataTransfer.files.length === 0) return;
+        event.preventDefault();
+        attach([...event.dataTransfer.files]);
+      }}
+    >
       {fromLine}
-      <DraftLine label="To" error={wrongAddresses(to.wrong)}>
-        <Input
-          ref={toField}
-          bare
-          aria-label="To"
-          className="flex-1"
-          autoComplete="off"
-          {...ADDRESSES}
+      <DraftLine label="To" error={wrongOf(draft.to)}>
+        <Recipients
+          label="To"
           value={draft.to}
-          onFocus={() => setTyping('to')}
-          onBlur={() => setTyping(null)}
-          onChange={(event) => change({ to: event.target.value })}
+          onChange={(to) => change({ to })}
+          text={typing.to}
+          onText={(to) => setTyping((was) => ({ ...was, to }))}
+          suggest={suggest}
+          inputRef={toField}
         />
-        {draft.showCc ? null : (
-          <Button
-            variant="quiet"
-            onClick={() => {
-              ccAsked.current = true;
-              change({ showCc: true });
-            }}
-          >
-            Cc
-          </Button>
-        )}
+        {draft.showCc ? null : ask('cc')}
+        {draft.showBcc ? null : ask('bcc')}
       </DraftLine>
-      {draft.showCc ? (
-        <DraftLine label="Cc" error={wrongAddresses(cc.wrong)}>
-          <Input
-            ref={(field) => {
-              if (field && ccAsked.current) field.focus();
-              ccAsked.current = false;
-            }}
-            bare
-            aria-label="Cc"
-            className="flex-1"
-            autoComplete="off"
-            {...ADDRESSES}
-            value={draft.cc}
-            onFocus={() => setTyping('cc')}
-            onBlur={() => setTyping(null)}
-            onChange={(event) => change({ cc: event.target.value })}
-          />
-        </DraftLine>
-      ) : null}
+      {draft.showCc ? lineFor('cc') : null}
+      {draft.showBcc ? lineFor('bcc') : null}
       {what.kind === 'reply' ? null : (
         <DraftLine label="Subject">
           <Input bare aria-label="Subject" className="flex-1" value={draft.subject} onChange={(event) => change({ subject: event.target.value })} />
@@ -339,7 +479,8 @@ function Writer({
         value={draft.text}
         onChange={(event) => change({ text: event.target.value })}
       />
-    </>
+      <DraftFiles files={shownFiles} onRemove={detach} />
+    </div>
   );
   if (inline)
     return (

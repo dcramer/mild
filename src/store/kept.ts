@@ -4,8 +4,9 @@ import { openEnvelope, openPart, sealFacts, sealMessage, sealPart } from './cont
 import { type Searched, searchIndex } from './search.ts';
 import { plain } from '../plain.ts';
 import { mailboxAliases } from './accounts.ts';
+import { rememberMail } from './addresses.ts';
 import { type ContentFacts, deriveFacts } from '../triage/facts.ts';
-import { heldContent } from '../gmail/body.ts';
+import { type Attachment, heldContent } from '../gmail/body.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 /**
@@ -23,6 +24,8 @@ async function whileInboxOn<T>(db: Sql, write: (tx: Sql) => Promise<T>): Promise
 export interface Text {
   text: string;
   html: string | null;
+  /** Kept in Inbox's copy alone. Absent when not known: a message read before Mild kept them. */
+  attachments?: Attachment[];
   read: ContentFacts;
 }
 
@@ -37,6 +40,7 @@ const bodyOf = (db: Sql, accountId: string, messageId: string, text: Text, envel
   messageId,
   bodyText: sealPart(db, accountId, messageId, 'text', text.text)!,
   bodyHtml: sealPart(db, accountId, messageId, 'html', text.html),
+  attachments: text.attachments ? sealPart(db, accountId, messageId, 'attachments', JSON.stringify(text.attachments)) : null,
   preview: sealPart(db, accountId, messageId, 'preview', previewOf(text.text)),
   search: searchIndex(db, { ...envelope, text: text.text }),
   fetchedAt: now,
@@ -61,6 +65,7 @@ async function envelopeOf(db: Sql, accountId: string, messageId: string): Promis
 export async function recordKept(db: Sql, accountId: string, mail: { facts: MessageFacts; text: Text }, now: number): Promise<boolean> {
   const aliases = await mailboxAliases(db, accountId);
   const { facts: m } = mail;
+  const facts = deriveFacts(m, mail.text.read, aliases);
   const kept = await whileInboxOn(db, async (tx) => {
     await tx
       .insert(messages)
@@ -72,10 +77,11 @@ export async function recordKept(db: Sql, accountId: string, mail: { facts: Mess
         ...sealMessage(tx, accountId, m.messageId, m),
         labelIds: [...m.labelIds],
         syncedAt: now,
-        facts: sealFacts(deriveFacts(m, mail.text.read, aliases)),
+        facts: sealFacts(facts),
         decided: true,
       })
       .onConflictDoNothing();
+    await rememberMail(tx, accountId, [{ message: m, facts }], aliases);
     await tx
       .insert(mailBodies)
       .values(bodyOf(tx, accountId, m.messageId, mail.text, { fromName: m.from.name ?? null, fromAddress: m.from.address, subject: m.subject }, now))
@@ -273,4 +279,26 @@ export async function indexKept(db: Sql, accountId: string, most: number, over: 
     done += rows.length;
   }
   return done;
+}
+
+/**
+ * The files of a message whose text Inbox keeps, as a read of it listed them: null when they were not kept with it, and
+ * undefined when Inbox keeps none of the message.
+ */
+export async function keptAttachments(db: Sql, accountId: string, messageId: string): Promise<Attachment[] | null | undefined> {
+  const [row] = await db
+    .select({ attachments: mailBodies.attachments })
+    .from(mailBodies)
+    .where(and(eq(mailBodies.accountId, accountId), eq(mailBodies.messageId, messageId)));
+  if (!row) return undefined;
+  const opened = plain(openPart(db, accountId, messageId, 'attachments', row.attachments));
+  return opened === null ? null : (JSON.parse(opened) as Attachment[]);
+}
+
+/** Keep the files a read of the message listed, with its text. */
+export async function keepAttachments(db: Sql, accountId: string, messageId: string, attachments: readonly Attachment[]): Promise<void> {
+  await db
+    .update(mailBodies)
+    .set({ attachments: sealPart(db, accountId, messageId, 'attachments', JSON.stringify(attachments)) })
+    .where(and(eq(mailBodies.accountId, accountId), eq(mailBodies.messageId, messageId)));
 }

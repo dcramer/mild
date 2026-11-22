@@ -1,6 +1,8 @@
 import { press, undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import { sendMail } from '../actions/send.ts';
+import { attachmentsOf, forwardedFiles } from '../work/attachments.ts';
+import { removeUploads, uploaded } from '../store/uploads.ts';
 import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
@@ -311,7 +313,22 @@ export async function buildControls(
       const token = await (await credentials(db, 'gmail')).read(email).catch(() => undefined);
       return token === null || (token !== undefined && (await revokeGrant(token)));
     },
-    send: async (db, sending) => await sendMail({ db, mailbox: (await gmail(db, sending.accountId)).mailbox }, sending),
+    send: async (db, { uploads, forwarding, ...sending }) => {
+      const { api, mailbox } = await gmail(db, sending.accountId);
+      const attach = async () => [
+        ...(await uploaded(db, uploads)),
+        ...(forwarding ? await forwardedFiles(db, api, sending.accountId, forwarding.messageId, forwarding.parts) : []),
+      ];
+      const sent = await sendMail({ db, mailbox }, { ...sending, attach });
+      await removeUploads(db, uploads);
+      return sent;
+    },
+    attachments: async (db, { accountId, messageId }) =>
+      (await attachmentsOf(db, (await gmail(db, accountId)).api, accountId, messageId)).map(({ part, name, type, size }) => ({
+        part,
+        size,
+        ...seal({ name, type }),
+      })),
     mailboxIcons: async (domains) =>
       Object.fromEntries(
         await Promise.all(

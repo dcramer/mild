@@ -120,6 +120,7 @@ describe('as little chrome as it takes', () => {
     'menu.tsx',
     'answer-picker.tsx',
     'select.tsx',
+    'recipients.tsx',
     'toast.tsx',
     'hover-card.tsx',
     'tooltip.tsx',

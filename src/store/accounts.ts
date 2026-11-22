@@ -2,6 +2,7 @@ import { and, asc, eq, gt, isNull, lte, accounts, credentials, labels, mailboxes
 import { startCopies } from './copies.ts';
 import { windowStart } from '../mail-window.ts';
 import { inboxRow } from './labels.ts';
+import { rememberMail } from './addresses.ts';
 import type { Sql } from './sql.ts';
 import { sealFacts, sealMessage } from './content.ts';
 import type { Store } from './store.ts';
@@ -251,10 +252,11 @@ async function insertMessages(
 ): Promise<number> {
   if (messages.length === 0) return 0;
   const aliases = await mailboxAliases(db, accountId);
+  const mail = messages.map((message) => ({ message, facts: deriveFacts(message, {}, aliases) }));
   const added = await db
     .insert(messageRows)
     .values(
-      messages.map((m) => ({
+      mail.map(({ message: m, facts }) => ({
         accountId,
         id: m.messageId,
         threadId: m.threadId,
@@ -264,11 +266,12 @@ async function insertMessages(
         syncedAt: now,
         suggestOnly,
         decided,
-        facts: sealFacts(deriveFacts(m, {}, aliases)),
+        facts: sealFacts(facts),
       })),
     )
     .onConflictDoNothing()
     .returning({ id: messageRows.id });
+  await rememberMail(db, accountId, mail, aliases);
   return added.length;
 }
 

@@ -84,17 +84,28 @@ describe('readContent', () => {
     expect(content).toEqual({
       text: 'Shop the sale',
       html: CAMPAIGN,
+      attachments: [],
       facts: { hasAttachments: false, words: 3, trackingPixel: true, linkHosts: 2, trackedLinks: true, linksOffDomain: true },
     });
   });
 
-  it('counts a file as an attachment, not an image shown inline', () => {
-    const withFile = { ...payload, parts: [...payload.parts, { mimeType: 'application/pdf', filename: 'invoice.pdf' }] };
-    expect(readContent(withFile).facts.hasAttachments).toBe(true);
+  it('counts a file as an attachment, not an image shown inline, and lists the files Gmail gives an id for', () => {
+    const withFile = {
+      ...payload,
+      parts: [...payload.parts, { partId: '2', mimeType: 'application/pdf', filename: 'invoice.pdf', body: { attachmentId: 'a1', size: 2048 } }],
+    };
+    const content = readContent(withFile);
+    expect(content.facts.hasAttachments).toBe(true);
+    expect(content.attachments).toEqual([{ part: '2', name: 'invoice.pdf', type: 'application/pdf', size: 2048, gmailId: 'a1' }]);
   });
 
   it('leaves the HTML facts out for mail with no HTML part', () => {
-    expect(readContent({ mimeType: 'text/plain', body: { data: b64('hi') } })).toEqual({ text: 'hi', html: null, facts: { hasAttachments: false, words: 1 } });
+    expect(readContent({ mimeType: 'text/plain', body: { data: b64('hi') } })).toEqual({
+      text: 'hi',
+      html: null,
+      attachments: [],
+      facts: { hasAttachments: false, words: 1 },
+    });
   });
 
   it('counts the words of the whole text, past where the model’s copy is cut', () => {

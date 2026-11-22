@@ -1,3 +1,4 @@
+import type { Confidential } from '../confidential.ts';
 import type { Sql } from '../store/sql.ts';
 import type { Reach } from '../store/inbox.ts';
 import type { InboxEstimate, LabelProposal, MailAsk, MailChange, MailReach, RuleDraft, RuleInbox } from './types.ts';
@@ -88,7 +89,21 @@ export interface Controls {
    * (`sendMail`, src/actions/send.ts). Resolves with Gmail's id for it and its conversation; rejects with a sentence for
    * them when they may not send or Gmail refused.
    */
-  send(db: Sql, sending: { accountId: string; id: string; threadId?: string; mail: Outgoing }): Promise<{ id: string; threadId: string }>;
+  send(
+    db: Sql,
+    sending: {
+      accountId: string;
+      id: string;
+      threadId?: string;
+      mail: Outgoing;
+      /** Files the page uploaded for it (`startUpload`), removed once it has gone. */
+      uploads: string[];
+      /** The files of the message it forwards that go with it, by their parts, fetched from Gmail as it is sent. */
+      forwarding?: { messageId: string; parts: string[] };
+    },
+  ): Promise<{ id: string; threadId: string }>;
+  /** A message's files, read from Gmail once for mail Inbox kept before it kept these. */
+  attachments(db: Sql, message: { accountId: string; messageId: string }): Promise<{ part: string; name: Confidential; type: Confidential; size: number }[]>;
   /** Pass this person's mailboxes now instead of at the next tick. */
   checkNow(db: Sql): Promise<void>;
   /** How the last passes over these mailboxes went. */
@@ -105,6 +120,7 @@ interface Outgoing {
   from: Party;
   to: Party[];
   cc: Party[];
+  bcc: Party[];
   subject: string;
   text: string;
   inReplyTo?: string;

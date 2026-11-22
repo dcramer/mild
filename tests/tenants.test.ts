@@ -93,7 +93,9 @@ const mail = (accountId: string) => ({
   from: { address: accountId },
   to: [{ address: 'x@example.com' }],
   cc: [],
+  bcc: [],
   text: 'Hello',
+  uploads: [],
 });
 
 const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: unknown) => {
@@ -153,6 +155,7 @@ beforeEach(async () => {
     mailboxIcons: async (domains) => Object.fromEntries(domains.map((domain) => [domain, `data:image/png;base64,${domain}`])),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     send: async (_db, { accountId, threadId }) => (calls.push(`send ${accountId} ${threadId}`), { id: 's', threadId: threadId ?? 's' }),
+    attachments: async (_db, { accountId }) => (calls.push(`attachments ${accountId}`), []),
     checkNow: async () => void calls.push('check'),
     activity: async () => ({
       running: true,
@@ -194,6 +197,8 @@ const READS = (account: string, mark: string) => [
   `/api/rules/inbox?id=${ids[account]!.rule}`,
   '/api/inbox?reach=inbox',
   '/api/mail/threads',
+  `/api/mail/addresses?q=${mark}`,
+  '/api/mail/addresses?q=sender',
   `/api/mail/threads?q=${mark}&view=needs&unread=1`,
   `/api/mail/threads?from=sender@${mark}.example.com&domain=${mark}.example.com&since=0`,
   `/api/mail/thread?thread=t1&mailbox=${encodeURIComponent(account)}`,
@@ -302,8 +307,11 @@ describe("nobody sees or changes another person's mail", () => {
     const theirs = ids[ALPHA_WORK]!;
     expect(theirs.action).not.toBe(ids[BRAVO]!.action);
     const db = await dbOf(ALPHA);
+    await raw(db).run(`INSERT INTO uploads (id, about, size, pieces, created_at) VALUES ('up-alpha', 'x', 1, 1, 0)`);
     const state = async () =>
       JSON.stringify([
+        await raw(db).all('SELECT * FROM uploads'),
+        await raw(db).all('SELECT * FROM upload_pieces'),
         await listRules(db),
         await raw(db).all('SELECT * FROM labels'),
         await raw(db).all('SELECT * FROM proposals'),
@@ -346,6 +354,16 @@ describe("nobody sees or changes another person's mail", () => {
       ],
 
       ['/api/mail/send', { ...mail(ALPHA), subject: 'Hi' }, { ...mail(NOBODY), subject: 'Hi' }],
+      // A forward from their own mailbox, carrying the files of someone else's message.
+      [
+        '/api/mail/send',
+        { ...mail(BRAVO), subject: 'Fwd', forwarding: { messageId: `m-${MARK[ALPHA]}`, parts: ['1'] } },
+        { ...mail(BRAVO), subject: 'Fwd', forwarding: { messageId: 'm-nobody', parts: ['1'] } },
+      ],
+      ['/api/mail/send', { ...mail(BRAVO), subject: 'Hi', uploads: ['up-alpha'] }, { ...mail(BRAVO), subject: 'Hi', uploads: ['up-nobody'] }],
+      ['/api/mail/attachments', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
+      ['/api/mail/upload/piece', { id: 'up-alpha', piece: 0, data: 'AA==' }, { id: 'up-nobody', piece: 0, data: 'AA==' }],
+      ['/api/mail/upload/remove', { id: 'up-alpha' }, { id: 'up-nobody' }],
       // From their own mailbox, answering someone else's message.
       ['/api/mail/send', { ...mail(BRAVO), replyTo: { messageId: `m-${MARK[ALPHA]}` } }, { ...mail(BRAVO), replyTo: { messageId: 'm-nobody' } }],
     ];
@@ -392,6 +410,7 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/digest', { hour: 6, timeZone: 'Europe/Berlin' }],
       // Inbox is on now: Ask looks up only their own senders, under their own mailbox.
       ['/api/mail/ask', { words: 'from alpha', today: '2026-11-19' }],
+      ['/api/mail/upload', { name: 'plans.pdf', type: 'application/pdf', size: 1 }],
     ] as const)
       expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
     expect(calls.filter((c) => c !== 'check')).toEqual([

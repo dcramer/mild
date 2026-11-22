@@ -1,12 +1,13 @@
 import type { Confidential, Sealed } from '../confidential.ts';
 import { seal as held } from '../plain.ts';
-import { currentPrefix, keyedHash, openSecret, openToRekey, sealSecret, staleSecret } from '../secrets.ts';
+import { currentPrefix, keyedHash, openBytes, openSecret, openToRekey, sealBytes, sealSecret, staleSecret } from '../secrets.ts';
 import type { Facts } from '../triage/facts.ts';
 import { envelopeOf, parseListId } from '../triage/features.ts';
 import { nameKey, subjectPattern } from '../triage/fewshot.ts';
 import type { Address, MessageFacts } from '../triage/types.ts';
 import {
   actions,
+  addresses,
   and,
   asc,
   correspondents,
@@ -19,6 +20,7 @@ import {
   labelProposals,
   mailAsks,
   mailBodies,
+  mailboxes,
   messages,
   notLike,
   or,
@@ -34,7 +36,7 @@ import { searchIndex } from './search.ts';
 import type { Sql } from './sql.ts';
 
 /** What Mild holds of a message that came from the message: its body, and the headers its record keeps. */
-type Part = 'text' | 'html' | 'preview' | 'headers' | 'reason';
+type Part = 'text' | 'html' | 'preview' | 'headers' | 'reason' | 'attachments';
 
 /** Each is encrypted for its person, message and part, so one copied into another row does not open. */
 const nameOf = (db: Sql, accountId: string, messageId: string, part: Part) => `person ${db.person} ${part} of ${accountId} ${messageId}`;
@@ -46,6 +48,8 @@ export const labelProposalName = (db: Sql, accountId: string, field: 'goal' | 'l
 export const ruleDraftName = (db: Sql, accountId: string, field: 'goal' | 'rule') => `person ${db.person} rule draft ${field} of ${accountId}`;
 export const askName = (db: Sql, accountId: string, field: 'words' | 'answer') => `person ${db.person} ask ${field} of ${accountId}`;
 export const digestName = (db: Sql, id: number) => `person ${db.person} digest ${id} highlights`;
+export const uploadName = (db: Sql, id: string, piece: number | 'about') => `person ${db.person} upload ${id} ${piece}`;
+export const addressName = (db: Sql, accountId: string, hash: string) => `person ${db.person} address ${hash} of ${accountId}`;
 
 /**
  * Marks a value stored without a key. Content comes from whoever sent the mail, so a subject that only
@@ -59,6 +63,17 @@ function open(db: Sql, name: string, stored: string): string {
   if (!stored.startsWith(PLAIN)) return openSecret(name, stored, db.keys);
   if (db.keys.current) throw new Error(`${name} is stored unencrypted though MILD_KEY is set.`);
   return stored.slice(PLAIN.length);
+}
+
+/** Bytes as they are stored, as `seal` keeps text: encrypted with the install's key, marked plain without one. */
+export const sealData = (db: Sql, name: string, bytes: Uint8Array): Uint8Array =>
+  db.keys.current ? sealBytes(name, bytes, db.keys) : Buffer.concat([Buffer.from(PLAIN), bytes]);
+
+export function openData(db: Sql, name: string, stored: Uint8Array): Buffer {
+  const opened = openBytes(name, stored, db.keys);
+  if (opened) return opened;
+  if (db.keys.current) throw new Error(`${name} is stored unencrypted though MILD_KEY is set.`);
+  return Buffer.from(stored).subarray(PLAIN.length);
 }
 
 /** A part as it is stored: encrypted with the install's key (marked plain without one), and null when there is none. */
@@ -439,6 +454,7 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
         text: mailBodies.bodyText,
         html: mailBodies.bodyHtml,
         preview: mailBodies.preview,
+        attachments: mailBodies.attachments,
         indexed: sql<boolean>`${mailBodies.search} IS NOT NULL`,
         headers: messages.headers,
       })
@@ -465,6 +481,7 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
           text: sealPart(db, r.accountId, r.messageId, 'text', text)!,
           html: sealPart(db, r.accountId, r.messageId, 'html', forRekey(db, r.accountId, r.messageId, 'html', r.html)),
           preview: sealPart(db, r.accountId, r.messageId, 'preview', forRekey(db, r.accountId, r.messageId, 'preview', r.preview)),
+          attachments: sealPart(db, r.accountId, r.messageId, 'attachments', forRekey(db, r.accountId, r.messageId, 'attachments', r.attachments)),
           search: r.indexed ? searchIndex(db, { text, fromName: envelope.fromName, fromAddress: envelope.fromAddress, subject: envelope.subject }) : null,
         };
       });
@@ -474,7 +491,7 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
         for (const r of resealed)
           await tx
             .update(mailBodies)
-            .set({ bodyText: r.text, bodyHtml: r.html, preview: r.preview, search: r.search })
+            .set({ bodyText: r.text, bodyHtml: r.html, preview: r.preview, attachments: r.attachments, search: r.search })
             .where(and(eq(mailBodies.accountId, r.accountId), eq(mailBodies.messageId, r.messageId)));
       });
     const last: { accountId: string; messageId: string } = rows.at(-1)!;
@@ -518,9 +535,12 @@ async function rekeyMail(db: Sql, prefix: string, write: boolean): Promise<numbe
   }
 
   // Who the owner has written to is a cache kept only as hashes, which a new key makes useless: it refills as mail arrives.
-  // Examples are found by hashes too, which `keyExamples` makes again.
+  // The address book is found by hashes too, and the pass makes it again from the record. Examples are found by hashes,
+  // which `keyExamples` makes again.
   if (write && touched.size > 0) {
     await db.delete(correspondents);
+    await db.delete(addresses);
+    await db.update(mailboxes).set({ addressesFrom: '' });
     await db.update(examples).set({ nameHash: UNSET, subjectHash: UNSET });
   }
   return touched.size;

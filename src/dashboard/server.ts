@@ -66,14 +66,14 @@ const replied = (schema: z.ZodType, body: unknown): { status: number; body: unkn
     : { status: 500, body: { error: `The reply did not match its schema (${refusedBy(parsed.error)}).` } };
 };
 
-/** Read a small JSON body. Null if it is too large or not a JSON object. */
-async function readJson(request: Request): Promise<Record<string, unknown> | null> {
+/** Read a JSON body of at most `largest` characters. Null if it is longer or not a JSON object. */
+async function readJson(request: Request, largest: number): Promise<Record<string, unknown> | null> {
   let body = '';
   if (request.body) {
     const decoder = new TextDecoder();
     for await (const chunk of request.body) {
       body += decoder.decode(chunk, { stream: true });
-      if (body.length > MAX_BODY) return null;
+      if (body.length > largest) return null;
     }
   }
   try {
@@ -396,7 +396,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       if (!handler) return json(405, { error: 'Not something this dashboard does.' });
       if (!fromOwnPage(request)) return json(403, { error: 'This request did not come from the dashboard.' });
       try {
-        const raw = await readJson(request);
+        const raw = await readJson(request, handler.largest ?? MAX_BODY);
         if (raw === null) return json(400, { error: 'That request is not well formed.' });
         const body = handler.body.safeParse(raw);
         if (!body.success) return json(400, { error: refusedBy(body.error) });

@@ -136,6 +136,9 @@ export const mailboxes = pgTable(
     canSend: boolean('can_send').notNull().default(false), // Google granted `gmail.send` to the sign-in Mild holds for it
     signedInAt: time('signed_in_at'), // when its Gmail sign-in was given; null for one given before this was kept
     weeklySignIn: boolean('weekly_sign_in').notNull().default(false), // Google ended its last sign-in a week after it was given: the client is in Testing
+    // Where the pass has got to adding mail recorded before there was an address book to it, as `<received at>:<id>`; '' from
+    // the start, null when there is nothing left (a mailbox connected since is filled as its mail is recorded).
+    addressesFrom: text('addresses_from'),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.id] }),
@@ -491,6 +494,61 @@ export const proposals = pgTable(
   ],
 ).enableRLS();
 
+/**
+ * Everyone the person has written to, or had mail from that was not sent in bulk, per mailbox: what the composer suggests
+ * as an address is typed. Filled as mail is recorded and sent, and for mail recorded before, by the pass (`addressesFrom`).
+ */
+export const addresses = pgTable(
+  'addresses',
+  {
+    userId: userId(),
+    accountId: text('account_id').notNull(),
+    addressHash: text('address_hash').notNull(), // keyed hash, as `messages.sender_hash`
+    // `{ address, name }`, encrypted: the newest name seen with it, or the address alone when none ever was.
+    who: text('who').notNull(),
+    named: boolean('named').notNull(),
+    // What it is found by as it is typed: a keyed Bloom filter of the starts of its words (src/store/search.ts).
+    search: bytes('search').notNull(),
+    seenAt: time('seen_at').notNull(), // the newest message `who` was read from
+    wroteAt: time('wrote_at'), // the newest mail the person sent to it; null if they never have
+    heardAt: time('heard_at'), // the newest mail from it that was not bulk; null if none was
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.accountId, t.addressHash] }), mailbox(t), own()],
+).enableRLS();
+
+/**
+ * A file being attached to mail not yet sent, held between the requests that bring it in pieces (a request is at most a
+ * few megabytes on Vercel) and the press of Send, which removes it; one left longer than `UPLOAD_KEEP_MS` the pass removes.
+ */
+export const uploads = pgTable(
+  'uploads',
+  {
+    userId: userId(),
+    id: text('id').notNull(), // random, made by the server
+    about: text('about').notNull(), // `{ name, type }`, encrypted
+    size: integer('size').notNull(),
+    pieces: integer('pieces').notNull(),
+    createdAt: time('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.id] }), index('uploads_created').on(t.createdAt), own()],
+).enableRLS();
+
+/** An upload's bytes, a piece to a request, each encrypted (`sealBytes`, src/secrets.ts). */
+export const uploadPieces = pgTable(
+  'upload_pieces',
+  {
+    userId: userId(),
+    uploadId: text('upload_id').notNull(),
+    piece: integer('piece').notNull(),
+    data: bytes('data').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.uploadId, t.piece] }),
+    foreignKey({ columns: [t.userId, t.uploadId], foreignColumns: [uploads.userId, uploads.id] }).onDelete('cascade'),
+    own(),
+  ],
+).enableRLS();
+
 /** Whether the owner has ever written to an address. Cached, because finding out is a mailbox search. */
 export const correspondents = pgTable(
   'correspondents',
@@ -611,6 +669,9 @@ export const mailBodies = pgTable(
     // What search finds it by: a keyed Bloom filter of its words, its sender's and its subject's (src/store/search.ts).
     // Null until the pass indexes text kept before there was one. Kept in the row (STORAGE MAIN), where a search scans it.
     search: bytes('search'),
+    // Its attachments, `{ part, name, type, size, gmailId }[]` (src/gmail/body.ts), encrypted: their names come from mail.
+    // Null when the text was kept before they were.
+    attachments: text('attachments'),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.accountId, t.messageId] }),

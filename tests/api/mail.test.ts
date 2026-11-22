@@ -19,6 +19,23 @@ type Thread = { threadId: string; subject: string; messageIds: string[]; unread:
 const threadsOf = (reply: { body: Record<string, unknown> }) => reply.body['threads'] as Thread[];
 
 /** Signed in with a label of their own and Inbox on, its copy of their mail made. */
+/** The files of a message as sent: each one's name, type and bytes. */
+function filesOf(raw: string): { name: string; type: string; data: Buffer }[] {
+  const boundary = /boundary="([^"]+)"/.exec(raw)?.[1];
+  if (!boundary) return [];
+  return raw
+    .split(`--${boundary}`)
+    .filter((part) => /Content-Disposition: attachment/.test(part))
+    .map((part) => {
+      const [head, body] = [part.slice(0, part.indexOf('\r\n\r\n')), part.slice(part.indexOf('\r\n\r\n') + 4)];
+      return {
+        name: decodeURIComponent(/filename\*=UTF-8''([^\s;]+)/.exec(head)![1]!),
+        type: /Content-Type: ([^;\r\n]+)/.exec(head)![1]!,
+        data: Buffer.from(body.replaceAll(/\s/g, ''), 'base64'),
+      };
+    });
+}
+
 async function withInbox(model?: ReturnType<typeof fauxModel>) {
   const sift = await startSift(fake.google, model ? { model: model.chosen } : {});
   const box = fake.google.mailbox(ME);
@@ -265,7 +282,9 @@ describe('sending mail', () => {
     from: { address: ME, name: 'Me' },
     to: [{ address: 'ada@example.com', name: 'Ada' }],
     cc: [],
+    bcc: [],
     text: 'See you Friday.',
+    uploads: [] as string[],
   });
   const mail = (id: string, more: Record<string, unknown> = {}) => ({ ...written(id), subject: 'Friday', ...more });
 
@@ -348,6 +367,107 @@ describe('sending mail', () => {
     const edited = await me.call('POST', '/api/mail/send', mail('<retry.2@example.org>', { text: 'See you Saturday.' }));
     expect(edited.status).toBe(200);
     expect(box.sent().map((m) => m.header('message-id'))).toEqual(['<retry.1@example.org>', '<retry.2@example.org>']);
+  });
+
+  it('sends to Bcc, whom only the sent copy names, and keeps them in the record', async () => {
+    const { box, me } = await canSend();
+    const sent = await me.call('POST', '/api/mail/send', mail('<bcc.1@example.org>', { bcc: [{ address: 'bo@example.com', name: 'Bo' }] }));
+    expect(sent.status).toBe(200);
+    const { id } = sent.body as { id: string };
+    expect(box.message(id)!.header('bcc')).toBe('"Bo" <bo@example.com>');
+    expect((await me.call('GET', `/api/message?id=${id}`)).body).toMatchObject({ headers: { bcc: '"Bo" <bo@example.com>' } });
+  });
+
+  it('attaches files uploaded in pieces, which go once the mail has', async () => {
+    const { box, me } = await canSend();
+    // Over one piece, so it comes in two.
+    const plans = Buffer.alloc(3_500_000, 7);
+    const started = await me.call('POST', '/api/mail/upload', { name: 'Plans – roof.pdf', type: 'application/pdf', size: plans.length });
+    expect(started.status).toBe(200);
+    const { id: upload, piece } = started.body as { id: string; piece: number };
+    expect(await me.call('POST', '/api/mail/send', mail('<files.1@example.org>', { uploads: [upload] }))).toMatchObject({ status: 409 });
+    for (let at = 0, index = 0; at < plans.length; at += piece, index++)
+      expect(
+        (await me.call('POST', '/api/mail/upload/piece', { id: upload, piece: index, data: plans.subarray(at, at + piece).toString('base64') })).status,
+      ).toBe(200);
+
+    const sent = await me.call('POST', '/api/mail/send', mail('<files.1@example.org>', { uploads: [upload] }));
+    expect(sent.status).toBe(200);
+    const [file] = filesOf(box.message((sent.body as { id: string }).id)!.raw);
+    expect(file).toMatchObject({ name: 'Plans – roof.pdf', type: 'application/pdf' });
+    expect(file!.data.equals(plans)).toBe(true);
+    expect(await me.call('POST', '/api/mail/upload/piece', { id: upload, piece: 0, data: 'AA==' })).toMatchObject({
+      status: 409,
+      body: { error: 'That file is no longer attached. Attach it again.' },
+    });
+  });
+
+  it('refuses a file over 25 MB, a piece of the wrong size, and one taken off', async () => {
+    const { me } = await canSend();
+    expect((await me.call('POST', '/api/mail/upload', { name: 'scan.tiff', type: 'image/tiff', size: 30_000_000 })).status).toBe(400);
+    const { id } = (await me.call('POST', '/api/mail/upload', { name: 'a.txt', type: 'text/plain', size: 3 })).body as { id: string };
+    expect((await me.call('POST', '/api/mail/upload/piece', { id, piece: 0, data: 'AAAAAA==' })).status).toBe(409);
+    expect((await me.call('POST', '/api/mail/upload/remove', { id })).status).toBe(200);
+    expect(await me.call('POST', '/api/mail/send', mail('<gone.1@example.org>', { uploads: [id] }))).toMatchObject({
+      status: 409,
+      body: { error: 'An attachment did not finish uploading. Remove it and attach it again.' },
+    });
+  });
+
+  it('forwards a message with the files left on it, fetched from Gmail as it goes, the message itself not read again', async () => {
+    const { sift, box, me } = await canSend();
+    const asked = box.deliver({
+      from: 'Ada <ada@example.com>',
+      subject: 'Plans',
+      text: 'Both attached.',
+      attachments: [
+        { filename: 'roof.pdf', mimeType: 'application/pdf', data: 'roof' },
+        { filename: 'notes.txt', mimeType: 'text/plain', data: 'notes' },
+      ],
+    });
+    await arrives(sift, me);
+    const detail = (await me.call('GET', `/api/message?id=${asked}`)).body as { attachments: { part: string; name: string; size: number }[] };
+    expect(detail.attachments.map((a) => a.name)).toEqual(['roof.pdf', 'notes.txt']);
+    const reads = box.asked('users.messages.get').filter((r) => r.id === asked).length;
+
+    const forward = { ...mail('<fwd.1@example.org>', { subject: 'Fwd: Plans' }), forwarding: { messageId: asked, parts: [detail.attachments[0]!.part] } };
+    const sent = await me.call('POST', '/api/mail/send', forward);
+    expect(sent.status).toBe(200);
+    expect(filesOf(box.message((sent.body as { id: string }).id)!.raw).map((f) => [f.name, f.data.toString()])).toEqual([['roof.pdf', 'roof']]);
+    expect(box.asked('users.messages.get').filter((r) => r.id === asked)).toHaveLength(reads);
+
+    // Ids Gmail gave at the first read that it no longer takes: the message is read again once, for the ids it has now.
+    box.renewAttachmentIds();
+    const again = await me.call('POST', '/api/mail/send', { ...forward, id: '<fwd.2@example.org>' });
+    expect(again.status).toBe(200);
+    expect(filesOf(box.message((again.body as { id: string }).id)!.raw).map((f) => f.name)).toEqual(['roof.pdf']);
+    expect(box.asked('users.messages.get').filter((r) => r.id === asked)).toHaveLength(reads + 1);
+    expect((await me.call('POST', '/api/mail/attachments', { accountId: ME, messageId: asked })).body).toMatchObject({
+      attachments: [{ name: 'roof.pdf' }, { name: 'notes.txt' }],
+    });
+    expect(box.asked('users.messages.get').filter((r) => r.id === asked)).toHaveLength(reads + 1);
+  });
+
+  it('suggests, as an address is typed, whom the person wrote to, then who wrote to them, never a list', async () => {
+    const { sift, box, me } = await canSend();
+    box.deliver({ from: 'Ada Lovelace <ada@example.com>', subject: 'Hello' });
+    box.deliver({
+      from: 'Adverts <ads@example.net>',
+      subject: 'Sale',
+      headers: { 'List-Id': '<offers.example.net>', 'List-Unsubscribe': '<https://example.net/u>' },
+    });
+    await arrives(sift, me);
+    expect((await me.call('POST', '/api/mail/send', mail('<adam.1@example.org>', { to: [{ address: 'adam@example.org', name: 'Adam Smith' }] }))).status).toBe(
+      200,
+    );
+
+    const suggested = async (q: string) =>
+      ((await me.call('GET', `/api/mail/addresses?q=${encodeURIComponent(q)}`)).body as { addresses: { address: string }[] }).addresses.map((a) => a.address);
+    expect(await suggested('ad')).toEqual(['adam@example.org', 'ada@example.com']);
+    expect(await suggested('love')).toEqual(['ada@example.com']);
+    expect(await suggested('ada lov')).toEqual(['ada@example.com']);
+    expect(await suggested('example.net')).toEqual([]);
+    expect(await suggested('')).toEqual([]);
   });
 
   it('sends nothing from someone else’s mailbox', async () => {

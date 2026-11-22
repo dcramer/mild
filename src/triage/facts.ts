@@ -214,6 +214,9 @@ export function describeFacts(facts: Facts): string[] {
 }
 
 /** The signs that a message was sent to many, each named; the sender writes all of them. */
+/** Sent to many by a list or a mail service, as its headers say: not mail a person wrote to the owner. */
+export const sentInBulk = (facts: Facts): boolean => bulkMarks(facts).length > 0;
+
 function bulkMarks(facts: Facts): string[] {
   return [
     ...(facts.unsubscribe === 'none' ? [] : [facts.unsubscribe === 'one-click' ? 'one-click unsubscribe' : 'unsubscribe header']),

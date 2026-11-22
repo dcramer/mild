@@ -4,6 +4,8 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { READ_KEEP_DAYS, indexKept, purgeRead, searchDue } from '../store/kept.ts';
 import { pruneGone } from '../store/sync.ts';
+import { addressesDue, fillAddresses } from '../store/addresses.ts';
+import { pruneUploads } from '../store/uploads.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
@@ -74,6 +76,9 @@ export interface PassResult {
  * 100 passes, which the look begins one a minute while any is left (`searchDue`).
  */
 const INDEX_PER_PASS = 1_000;
+
+/** Mail recorded before the address book, added to it by each pass: headers only, so several times as many as are indexed. */
+const ADDRESSES_PER_PASS = 5_000;
 
 /** Whether a person is still there: one deleted while a pass ran is skipped, not reported. */
 const stillThere = async (store: Store, id: number) => (await listUsers(store.central)).some((u) => u.id === id);
@@ -326,6 +331,7 @@ async function recordWants(db: Sql, account: Account, options: RunOptions, now: 
   if (await bodiesDue(db, account.id, now)) return true;
   if (await mailBodiesDue(db, account.id)) return true;
   if (await searchDue(db, account.id)) return true;
+  if (await addressesDue(db, account.id)) return true;
   if (await examplesDue(db, account.id)) return true;
   if (await filtersDue(db, account.id, active, now)) return true;
   // With no model, what no rule covers waits for one and a pass leaves it be. A rule added since decides it at the next
@@ -371,6 +377,8 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
     await keepMailBodies(db, api, account.id, options.now);
     if (over()) return finish(result, active, options, true);
     result.indexed = await indexKept(db, account.id, INDEX_PER_PASS, over);
+    if (over()) return finish(result, active, options, true);
+    await fillAddresses(db, account.id, ADDRESSES_PER_PASS, over);
     if (over()) return finish(result, active, options, true);
     result.captured = await captureExamples(db, api, account.id);
     try {
@@ -452,4 +460,5 @@ export async function upkeep(db: Sql, options: Pick<RunOptions, 'log' | 'now'>):
   const since = mail ? windowStart(mailWindow, now) : null;
   if (since !== null) await dropTextBefore(db, since);
   await pruneGone(db, now);
+  await pruneUploads(db, now);
 }
