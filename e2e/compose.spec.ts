@@ -8,6 +8,7 @@ import {
   inboxRow,
   readerHeading,
   param,
+  path,
   readSent,
   reader,
   inboxRows,
@@ -119,6 +120,29 @@ test.describe('with Inbox on', () => {
     await expect(writing).toHaveCount(0);
     await toast(page, 'To ada@example.org').getByRole('button', { name: /^Undo/ }).click();
     await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Half written');
+  });
+
+  test('a press outside slides the composer away once, without it coming back while Back is followed', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(inboxRows(page).first()).toBeVisible();
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    await expect(writing.getByRole('textbox', { name: 'To' })).toBeFocused();
+    // Whether a composer is drawn open again once this one has begun to close; it is a new panel, not this one.
+    await page.evaluate(`
+      window.composer = { closing: false, reopened: false };
+      new MutationObserver(() => {
+        if (!document.querySelector('[role="dialog"][data-open]')) composer.closing = true;
+        else if (composer.closing) composer.reopened = true;
+      }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-open'] });
+    `);
+    await page.mouse.click(20, 300);
+    await expect(writing).toHaveCount(0);
+    await param(page, 'compose').toBeNull();
+    // The press landed on nothing under the panel.
+    await path(page).toBe('/inbox');
+    await param(page, 'message').toBeNull();
+    expect(await page.evaluate('composer')).toEqual({ closing: true, reopened: false });
   });
 
   test('from a mailbox Google has not let Mild send from, there is nothing to write in, only the press that asks', async ({ page, sift }) => {
