@@ -173,7 +173,10 @@ async function load(markReady: () => void) {
   if (!kept) return;
   const { db, key } = kept;
   start = performance.now();
-  const sealed = await db.get('standing', 'standing');
+  // idb's own reads (db.get) leave their transaction's done unawaited: aborted under them, as by the page leaving at
+  // sign-out, it is an unhandled rejection. Every read and write here awaits its transaction whole.
+  const stands = db.transaction('standing');
+  const [sealed] = await Promise.all([stands.store.get('standing'), stands.done]);
   standing = sealed ? await unseal<Standing>(key, 'standing', sealed).catch(() => null) : null;
   if (!standing) {
     await db.clear('conversations');
@@ -181,9 +184,14 @@ async function load(markReady: () => void) {
   }
   // The newest first: reading all of them first is most of the wait at thousands. A cursor stepping through them is a
   // trip to the database each, so it goes once to the oldest of the first, and they are read from there in one.
-  const cursor = await db.transaction('conversations').store.index('at').openKeyCursor(null, 'prev');
-  const oldest = cursor ? ((await cursor.advance(FIRST - 1)) ?? null) : null;
-  const first = (await db.getAllFromIndex('conversations', 'at', oldest ? IDBKeyRange.lowerBound(oldest.key) : undefined)).toReversed();
+  const tx = db.transaction('conversations');
+  const at = tx.store.index('at');
+  const newest = async () => {
+    const cursor = await at.openKeyCursor(null, 'prev');
+    const oldest = cursor ? ((await cursor.advance(FIRST - 1)) ?? null) : null;
+    return await at.getAll(oldest ? IDBKeyRange.lowerBound(oldest.key) : undefined);
+  };
+  const first = (await Promise.all([newest(), tx.done]))[0].toReversed();
   timed('Copy read', 'mild.copy', start, { rows: first.length });
   const opened = async (part: typeof first) =>
     await Promise.all(part.map(async (r) => ({ key: r.key, value: copiedOf(await unseal<SyncedConversation>(key, r.key, r.sealed)) })));
@@ -195,7 +203,8 @@ async function load(markReady: () => void) {
   await new Promise((idle) => ('requestIdleCallback' in window ? requestIdleCallback(idle, { timeout: 1000 }) : setTimeout(idle)));
   start = performance.now();
   const read = new Set(first.map((r) => r.key));
-  const rest = (await db.getAllFromIndex('conversations', 'at')).filter((r) => !read.has(r.key)).toReversed();
+  const all = db.transaction('conversations');
+  const rest = (await Promise.all([all.store.index('at').getAll(), all.done]))[0].filter((r) => !read.has(r.key)).toReversed();
   await apply({ reset: false, changes: await opened(rest), mailboxes: standing.mailboxes, seq: standing.seq });
   timed("Copy's rest", 'mild.copy', start, { rows: rest.length });
   whole = true;
@@ -208,12 +217,16 @@ async function keep({ reset, changes, mailboxes, seq, cursor }: Changes) {
   if (!kept) return;
   const { db, key } = kept;
   const sealed = await Promise.all(changes.map(async (c) => ({ ...c, sealed: c.value ? await seal(key, c.key, c.value.conversation) : null })));
+  // Sealed before the transaction: one waiting on anything but the database commits meanwhile.
+  const where = await seal(key, 'standing', { cursor, seq, mailboxes });
   const tx = db.transaction(['conversations', 'standing'], 'readwrite');
   const store = tx.objectStore('conversations');
-  if (reset) await store.clear();
-  for (const c of sealed) await (c.sealed && c.value ? store.put({ key: c.key, at: c.value.newestAt, sealed: c.sealed }) : store.delete(c.key));
-  await tx.objectStore('standing').put(await seal(key, 'standing', { cursor, seq, mailboxes }), 'standing');
-  await tx.done;
+  await Promise.all([
+    ...(reset ? [store.clear()] : []),
+    ...sealed.map((c) => (c.sealed && c.value ? store.put({ key: c.key, at: c.value.newestAt, sealed: c.sealed }) : store.delete(c.key))),
+    tx.objectStore('standing').put(where, 'standing'),
+    tx.done,
+  ]);
 }
 
 let channel: BroadcastChannel | null = null;

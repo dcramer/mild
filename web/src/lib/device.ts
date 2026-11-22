@@ -67,7 +67,8 @@ export function device(): Promise<{ db: IDBPDatabase<Kept>; key: CryptoKey } | n
   return (opened ??= (async () => {
     if (!globalThis.crypto?.subtle || typeof indexedDB === 'undefined') return null;
     const db = await store();
-    const kept = await db.get('key', 'key');
+    const tx = db.transaction('key');
+    const [kept] = await Promise.all([tx.store.get('key'), tx.done]);
     if (kept) return { db, key: kept };
     const key = await fromServer();
     await db.put('key', key, 'key');
@@ -99,21 +100,20 @@ async function readFrame(): Promise<{ key: boolean; frame: Record<string, unknow
 async function readKept(): Promise<{ key: boolean; frame: Record<string, unknown> }> {
   if (!globalThis.crypto?.subtle || typeof indexedDB === 'undefined') return { key: false, frame: {} };
   const db = await store().catch(() => null);
-  const key = await db?.get('key', 'key');
-  if (!db || !key) {
-    db?.close();
-    return { key: false, frame: {} };
-  }
-  const names = await db.getAllKeys('frame');
+  if (!db) return { key: false, frame: {} };
+  // idb's own reads (db.get) leave their transaction's done unawaited: aborted under them, as by the page leaving at
+  // sign-out, it is an unhandled rejection. Every read here awaits its transaction whole.
+  const tx = db.transaction(['key', 'frame']);
+  const frame = tx.objectStore('frame');
+  const [key, names, sealed] = await Promise.all([tx.objectStore('key').get('key'), frame.getAllKeys(), frame.getAll(), tx.done]).finally(() => db.close());
+  if (!key) return { key: false, frame: {} };
   const values = await Promise.all(
-    names.map(async (name) => {
-      const sealed = await db.get('frame', name);
-      const kept = sealed ? await unseal<{ build: string | null; value: unknown }>(key, name, sealed).catch(() => null) : null;
+    names.map(async (name, at) => {
+      const kept = await unseal<{ build: string | null; value: unknown }>(key, name, sealed[at]).catch(() => null);
       // Another build's may not be what this one reads: the page waits on Mild instead, once.
       return [name, kept?.build === BUILT ? kept.value : undefined] as const;
     }),
   );
-  db.close();
   return { key: true, frame: Object.fromEntries(values.filter(([, value]) => value !== undefined)) };
 }
 
