@@ -32,7 +32,7 @@ import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { hashOf } from '../store/content.ts';
 import { credentials } from '../store/credentials.ts';
-import { recordLabels, recordedInboxSize } from '../store/messages.ts';
+import { recordedInboxSize } from '../store/messages.ts';
 import { copied } from '../store/copies.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
@@ -188,10 +188,7 @@ export async function buildControls(
       const action = await getAction(db, actionId);
       if (!action) throw new Refusal(`There is no change #${actionId}.`);
       const outcome = await undo({ db, mailbox: (await gmail(db, action.accountId)).mailbox }, actionId);
-      if (outcome.status === 'done') {
-        await recordLabels(db, action.accountId, action.messageId, outcome.finalLabels);
-        return null;
-      }
+      if (outcome.status === 'done') return null;
       if (outcome.status === 'skipped') return 'Already put back by hand';
       throw new Refusal(outcome.reason);
     },
@@ -201,8 +198,7 @@ export async function buildControls(
       let missed = 0;
       for (const messageId of messageIds) {
         try {
-          const { outcome, labels } = await press(deps, accountId, messageId, change);
-          if (labels) await recordLabels(db, accountId, messageId, labels);
+          const outcome = await press(deps, accountId, messageId, change);
           // A change whose answer was lost may have landed: Undo is offered, and settles it from Gmail first.
           if (outcome.status === 'done' || outcome.status === 'unknown') landed.push(outcome.actionId);
           else if (outcome.status !== 'skipped') missed++;
