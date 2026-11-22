@@ -8,7 +8,7 @@ import { traceIds } from '../store/content.ts';
 import { examplesFor } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
-import { type QueuedMessage, listUndecided } from '../store/messages.ts';
+import { type QueuedMessage, listUndecided, recordLabels } from '../store/messages.ts';
 import { excuseRuns, finishRun, startRun } from '../store/runs.ts';
 import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
@@ -187,6 +187,8 @@ function carrier(deps: TriageDeps, account: Account, report: TriageReport) {
       return 'none';
     }
     const outcome = await execute({ db, mailbox: box, now }, account.id, messageId, action, decisionId);
+    // So Inbox shows the change now, not once a later sync reads it back from Gmail's history.
+    if (outcome.status === 'done') await recordLabels(db, account.id, messageId, outcome.finalLabels);
     if (outcome.status === 'failed' || outcome.status === 'unknown') {
       // Left unsettled, so the next pass asks again, from the labels as they are then.
       const { tries } = await changeTries(db, decisionId);

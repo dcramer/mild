@@ -276,6 +276,8 @@ describe('an answer pressed in the dashboard', () => {
     await triageAccount({ db, mailbox: null, answers: gmail.mailbox }, await firstAccount(db));
     expect(labelsOf('m1')).not.toContain('INBOX');
     expect(labelsOf('left')).toEqual(['INBOX']);
+    // Recorded as Gmail gave them back, so Inbox's list has it gone before a later sync reads the change.
+    expect(await raw(db).get(`SELECT label_ids FROM messages WHERE id = 'm1'`)).toEqual({ label_ids: labelsOf('m1') });
     expect(await raw(db).get(`SELECT by_user, carry_out, outcome FROM decisions WHERE message_id = 'm1' ORDER BY id DESC LIMIT 1`)).toEqual({
       by_user: true,
       carry_out: true,

@@ -92,6 +92,11 @@ const FIRST = 120;
 const ASK_MS = 30_000;
 /** How long a press waits for the copy to hold its change before letting go of the rows it hid. */
 const HOLD_MS = 10_000;
+/**
+ * When the page asks the feed again for conversations an answer moves out of the inbox, each wait after the last: about
+ * half a minute in all, which a pass on a host that begins runs late still fits. Spaced out, so it is a few asks, not a poll.
+ */
+const MOVING_MS = [2_000, 4_000, 8_000, 16_000];
 
 let sync: Parameters<SyncConfig<Copied, string>['sync']>[0] | null = null;
 let standing: Standing | null = null;
@@ -369,6 +374,19 @@ export function caughtUp(): Promise<void> {
     const timer = setTimeout(() => (listeners.delete(check), done()), HOLD_MS);
     listeners.add(check);
   });
+}
+
+/**
+ * Resolves once the copy holds none of `keys` in the inbox, or has stopped asking. An answer is carried out by the pass it
+ * begins, after its write, so the counter its reply gives does not cover the move: the feed is asked again until it does.
+ */
+export async function leftInbox(keys: readonly string[]): Promise<void> {
+  const out = () => keys.every((key) => conversations().get(key)?.inbox !== true);
+  for (const wait of MOVING_MS) {
+    await new Promise((later) => setTimeout(later, wait));
+    if (out()) return;
+    ask();
+  }
 }
 
 /**

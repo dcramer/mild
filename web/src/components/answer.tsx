@@ -1,8 +1,9 @@
 'use client';
 import { api } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
-import { INBOX, outcomeName, plural } from '@/lib/format.ts';
-import { messageKey } from '@/lib/params.ts';
+import { copiedKey, leftInbox } from '@/lib/copy.ts';
+import { INBOX, MOVES_OUT, outcomeName, plural } from '@/lib/format.ts';
+import { messageKey, threadKey } from '@/lib/params.ts';
 import { Meter, type Pick, useToast } from '@/system';
 
 /** A message whose label the user can say, as the list and the panel both hold it. */
@@ -32,31 +33,13 @@ export interface AnswerLabel {
 export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answerable[], onDone?: () => void) {
   const { hide } = useAction();
   const toast = useToast();
-  const say = (target: Answerable, labelId: string) =>
-    api.feedback({
-      accountId: target.accountId,
-      sender: target.sender,
-      messageId: target.messageId,
-      ...(target.decisionId === undefined ? {} : { decisionId: target.decisionId }),
-      label: labelId,
-    });
-
-  /** The answer, as every list says it: "Archive as Marketing", or "Left in your inbox". */
-  const saying = (labelId: string) => {
-    if (labelId === INBOX) return 'Left in your inbox';
-    const label = labels.find((l) => l.id === labelId);
-    return label ? `${outcomeName(label.disposition)} as ${label.name}` : 'Answered';
-  };
-
-  /** Says it with Undo, and resolves with whether to send it: false when Undo was pressed. */
-  const held = (title: string, action?: { label: string; onPress: () => void }) =>
-    new Promise<boolean>((done) => toast(title, { ...(action ? { action } : {}), undo: () => done(false), onGone: () => done(true) }));
+  const saying = (labelId: string) => said(labels, labelId);
 
   /** Takes `targets` off the page, holds them while their toast shows, and then sends them. */
   const send = (targets: readonly Answerable[], labelId: string, title: string, action?: { label: string; onPress: () => void }) =>
     hide(targets.map(messageKey), 'Could not save your answer', async () => {
-      if (!(await held(title, action))) return;
-      const replies = await Promise.all(targets.map((t) => say(t, labelId)));
+      if (!(await held(toast, title, action))) return;
+      const replies = await Promise.all(targets.map((t) => api.feedback(feedbackOf(t, labelId))));
       // The answer is saved; what Mild itself did to the message could not be taken back in Gmail.
       const notFixed = replies.find((r) => r.notFixed !== null)?.notFixed;
       if (notFixed) toast('Could not put the message back in Gmail', { tone: 'failure', description: notFixed });
@@ -92,6 +75,25 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
   return { answer, answerAll, choices };
 }
 
+const feedbackOf = (target: Answerable, labelId: string) => ({
+  accountId: target.accountId,
+  sender: target.sender,
+  messageId: target.messageId,
+  ...(target.decisionId === undefined ? {} : { decisionId: target.decisionId }),
+  label: labelId,
+});
+
+/** The answer, as every list says it: "Archive as Marketing", or "Left in your inbox". */
+function said(labels: readonly AnswerLabel[], labelId: string) {
+  if (labelId === INBOX) return 'Left in your inbox';
+  const label = labels.find((l) => l.id === labelId);
+  return label ? `${outcomeName(label.disposition)} as ${label.name}` : 'Answered';
+}
+
+/** Says it with Undo, and resolves with whether to send it: false when Undo was pressed. */
+const held = (toast: ReturnType<typeof useToast>, title: string, action?: { label: string; onPress: () => void }) =>
+  new Promise<boolean>((done) => toast(title, { ...(action ? { action } : {}), undo: () => done(false), onGone: () => done(true) }));
+
 /** A label the sender's other mail has had, and what share of it. */
 interface Alternative {
   id: string;
@@ -125,23 +127,17 @@ export function answerChoices(
 }
 
 /**
- * Saying what a message is in Inbox, where the reader handles their own mail: saved at once and the mail left where it
- * is, since Archive is their press, so picking again is the undo. Resolves once saved; a failure is said in a toast.
+ * Saying what a message is in Inbox's reader, where the reader handles their own mail: saved at once and the mail left
+ * where it is, since Archive is their press, so picking again is the undo. Resolves once saved; a failure is said in a
+ * toast. `carryOut` does what the label does after all, as Inbox's list does for a label that keeps mail.
  */
-export function useRecordAnswer(): (target: Answerable, labelId: string) => Promise<void> {
+export function useRecordAnswer(carryOut = false): (target: Answerable, labelId: string) => Promise<void> {
   const { settle } = useAction();
   const toast = useToast();
   return async (target, labelId) => {
     try {
       await settle(async () => {
-        const reply = await api.feedback({
-          accountId: target.accountId,
-          sender: target.sender,
-          messageId: target.messageId,
-          ...(target.decisionId === undefined ? {} : { decisionId: target.decisionId }),
-          label: labelId,
-          carryOut: false,
-        });
+        const reply = await api.feedback({ ...feedbackOf(target, labelId), carryOut });
         // The answer is saved; Mild's own label on the message could not be taken back in Gmail.
         if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
       });
@@ -149,5 +145,28 @@ export function useRecordAnswer(): (target: Answerable, labelId: string) => Prom
       toast('Could not save your answer', { tone: 'failure', description: failure instanceof Error ? failure.message : String(failure) });
       throw failure;
     }
+  };
+}
+
+/**
+ * Saying what a conversation on Inbox's list is, as For review's answer does: about its newest message, and Mild does what
+ * the label does to it. Mail the label moves out of the inbox leaves the list at once and is sent once its toast goes; it
+ * is kept off the list until the copy shows it moved, which Mild's pass does after the answer is saved. Mail the label
+ * keeps stays on the list with its new label, saved at once, so picking again is the undo.
+ */
+export function useListAnswer(labels: readonly AnswerLabel[]): (target: Answerable & { threadId: string }, labelId: string) => Promise<void> {
+  const { hide } = useAction();
+  const record = useRecordAnswer(true);
+  const toast = useToast();
+  return async (target, labelId) => {
+    const label = labels.find((l) => l.id === labelId);
+    if (!label || !MOVES_OUT.includes(label.disposition)) return await record(target, labelId);
+    hide([threadKey(target)], 'Could not save your answer', async () => {
+      if (!(await held(toast, said(labels, labelId)))) return;
+      const reply = await api.feedback(feedbackOf(target, labelId));
+      // The answer is saved; Mild's own label on the message could not be taken back in Gmail.
+      if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });
+      await leftInbox([copiedKey(target.accountId, target.threadId)]);
+    });
   };
 }

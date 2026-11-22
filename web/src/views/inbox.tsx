@@ -5,7 +5,7 @@ import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { proposalStart, standingStart } from '@/lib/rule-start.ts';
 import { eq, inArray, isNull, or, useLiveQuery } from '@tanstack/react-db';
 import { type ReactNode, memo, startTransition, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { type AnswerLabel, answerChoices, useRecordAnswer } from '@/components/answer.tsx';
+import { type AnswerLabel, answerChoices, useListAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
@@ -17,7 +17,7 @@ import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
 import { useCompose } from '@/lib/compose.ts';
-import { count, inboxFirst, period, sureness } from '@/lib/format.ts';
+import { MOVES_OUT, count, inboxFirst, period, sureness } from '@/lib/format.ts';
 import { messageKey, proposalKey, setParams, threadKey, useParam } from '@/lib/params.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -133,15 +133,13 @@ function Place({ thread }: { thread: Listed }) {
 /** Mild looked at the newest message and could not say which label it is. */
 const unplaced = (t: Listed) => t.thinks?.disposition === 'review' && t.thinks.labelId === null;
 
-/**
- * What Mild thinks the newest message is, as a dropdown that says it otherwise: saved at once and the mail left where
- * it is, so picking again is the undo. Mail Mild never placed is answered all the same.
- */
+/** What Mild thinks the newest message is, as a dropdown that says it otherwise (`useListAnswer`). Mail Mild never placed is answered all the same. */
 function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabel[] }) {
-  const record = useRecordAnswer();
+  const answer = useListAnswer(labels);
   const { thinks } = thread;
   const target = {
     accountId: thread.accountId,
+    threadId: thread.threadId,
     sender: reveal(thread.from),
     messageId: newest(thread).messageId,
     labelId: thinks?.labelId ?? null,
@@ -153,7 +151,7 @@ function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabe
       label={`What ${reveal(thread.subject) || '(no subject)'} is`}
       value={thinks?.labelId ?? null}
       groups={answerChoices(labels, target, thinks ? sureness(thinks) : 1, [])}
-      onSubmit={(id) => record(target, id)}
+      onSubmit={(id) => answer(target, id)}
     />
   );
 }
@@ -382,7 +380,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
       if (unread === '1') rows = rows.where(({ c }) => eq(c.unread, true));
       if (label) rows = rows.where(({ c }) => eq(c.labelId, label));
       if (view === 'needs') rows = rows.where(({ c }) => or(isNull(c.disposition), inArray(c.disposition, ['keep', 'review'])));
-      if (view === 'sorted') rows = rows.where(({ c }) => inArray(c.disposition, ['archive', 'spam', 'block', 'digest']));
+      if (view === 'sorted') rows = rows.where(({ c }) => inArray(c.disposition, [...MOVES_OUT]));
       // One past the rows drawn, to know there are more.
       return rows.orderBy(({ c }) => c.newestAt, 'desc').limit(reach + 1);
     },

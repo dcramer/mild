@@ -44,6 +44,8 @@ export const ACTIONS = [
   ['block', 'Block'],
 ] as const;
 export type ActionKey = (typeof ACTIONS)[number][0];
+/** What a label or a rule does that takes mail out of the inbox. */
+export const MOVES_OUT: readonly string[] = ['archive', 'spam', 'block', 'digest'];
 
 /**
  * Leave in inbox: what mail is when it is none of the person's labels. It is a choice as good as any label, so
