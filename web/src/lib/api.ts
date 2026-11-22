@@ -1,7 +1,7 @@
 import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useContext, useSyncExternalStore } from 'react';
 import { Mailbox } from './narrowed.ts';
-import { traceHeaders } from './trace.ts';
+import { called, traceHeaders } from './trace.ts';
 
 export type {
   Contact,
@@ -156,9 +156,12 @@ function fromSift(response: Response): boolean {
 
 async function send(path: string, init: RequestInit, unreachable: string): Promise<Response> {
   let response: Response;
+  const start = performance.now();
   try {
     response = await fetch(path, init);
+    called(init.method ?? 'GET', path, start, response.status);
   } catch (error) {
+    called(init.method ?? 'GET', path, start, null);
     if (init.signal?.aborted) throw error;
     lost();
     throw new Unreachable(unreachable, { cause: error });

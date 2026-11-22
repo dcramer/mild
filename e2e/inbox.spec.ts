@@ -74,6 +74,44 @@ test.describe('Inbox, off', () => {
 test.describe('Inbox', () => {
   test.use({ variant: 'inbox' });
 
+  test('opened again from the device, with more in it than a screen, on a phone’s processor, goes from loading to its rows without saying it is empty', async ({
+    page,
+  }) => {
+    // Three hundred older conversations, so the copy on the device is more than its first part.
+    await patchJson(
+      page,
+      '**/api/sync*',
+      (sync: {
+        reset: boolean;
+        conversations: { accountId: string; threadId: string; conversation: { threadId: string; messages: { receivedAt: number }[] } | null }[];
+      }) => {
+        const oldest = sync.conversations.findLast((c) => c.conversation !== null);
+        if (!sync.reset || !oldest?.conversation) return sync;
+        const older = Array.from({ length: 300 }, (_, i) => ({
+          ...oldest,
+          threadId: `older-${i}`,
+          conversation: {
+            ...oldest.conversation!,
+            threadId: `older-${i}`,
+            messages: oldest.conversation!.messages.map((m) => ({ ...m, receivedAt: m.receivedAt - (i + 1) * 3_600_000 })),
+          },
+        }));
+        return { ...sync, conversations: [...sync.conversations, ...older] };
+      },
+    );
+    await page.addInitScript(
+      'new MutationObserver(() => { if (document.body?.textContent?.includes("Nothing is in your inbox")) window.saidEmpty = true; }).observe(document, { subtree: true, childList: true, characterData: true })',
+    );
+    await page.goto('/inbox');
+    await expect(inboxRows(page).first()).toBeVisible();
+    await page.unrouteAll();
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    await page.reload();
+    await expect(inboxRows(page).first()).toBeVisible();
+    expect(await page.evaluate<boolean>("'saidEmpty' in window")).toBe(false);
+  });
+
   test('lists conversations newest first, with what Mild thinks of each, and narrows by it', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);

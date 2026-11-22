@@ -4,7 +4,7 @@ import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { proposalStart, standingStart } from '@/lib/rule-start.ts';
 import { eq, inArray, isNull, or, useLiveQuery } from '@tanstack/react-db';
-import { type ReactNode, memo, useContext, useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, memo, startTransition, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type AnswerLabel, answerChoices, useRecordAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
@@ -12,6 +12,7 @@ import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { Thinks, WhoWrote, type Writer, useMailPress } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, readAheadOnRest, useLoaded, usePages } from '@/lib/api.ts';
 import { type Copied, conversations, useWhole } from '@/lib/copy.ts';
+import { useShown } from '@/lib/telemetry.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
@@ -59,6 +60,8 @@ const LIST_KEPT_MS = 30 * 60_000;
  * thousands froze the page for seconds at every change the copy took in.
  */
 const COPY_PAGE = 100;
+/** Rows drawn first, more than a screen holds: on a phone, drawing a hundred at once is most of a second before any shows. */
+const FIRST_DRAWN = 30;
 
 /** A conversation as a row lists it: who wrote, revealed. */
 type Listed = Omit<MailThread, 'who'> & { who: readonly Writer[] };
@@ -374,10 +377,18 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const { names, rowOf } = useRows(manage.data);
   // The copy hands its rows over as an urgent update, which would mount a view's or the next hundred's rows in one go:
   // deferred, React draws them in slices while the rows shown stay up.
-  const copied = useDeferredValue(copy.data);
+  const deferred = useDeferredValue(copy.data);
+  // Except the first rows, drawn as soon as the copy has them: deferred, anything else the page does goes first.
+  const copied = deferred?.length ? deferred : copy.data;
   const reached = useDeferredValue(reach);
-  const more = local ? (copied?.length ?? 0) > reached : pages.more;
-  const listed: Listed[] = local ? (copied ?? []).slice(0, reached).map(rowOf) : pages.pages.flatMap((page) => page.threads).map(rowOf);
+  // The first screen of rows, then the rest behind it.
+  const [drawing, setDrawing] = useState(FIRST_DRAWN);
+  const some = (copied?.length ?? 0) > 0;
+  useEffect(() => {
+    if (some && drawing === FIRST_DRAWN) startTransition(() => setDrawing(Infinity));
+  }, [some, drawing]);
+  const more = local ? (copied?.length ?? 0) > reached && drawing > reached : pages.more;
+  const listed: Listed[] = local ? (copied ?? []).slice(0, Math.min(reached, drawing)).map(rowOf) : pages.pages.flatMap((page) => page.threads).map(rowOf);
   const threads = listed.filter((t) => !hidden.has(threadKey(t)));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const chosen = threads.filter((t) => selected.has(threadKey(t)));
@@ -415,6 +426,10 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
     press: (threads, what) => drawn.current.press(threads, what),
     block: (threads) => drawn.current.block(threads),
   }));
+
+  // An empty list is nothing only once the copy is whole, and drawn: the deferred list may still be behind it.
+  const waiting = (local ? !copy.isReady || (threads.length === 0 && (!whole || deferred !== copy.data)) : !server || pages.loading) || !manage.data;
+  useShown('Inbox rows', !waiting, { rows: threads.length, from: local ? 'copy' : 'server' });
 
   if (manage.data && !on)
     return (
@@ -467,7 +482,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
           <p>{ask.said}</p>
         </Note>
       ) : null}
-      {(local ? !copy.isReady || (threads.length === 0 && !whole) : !server || pages.loading) || !manage.data ? (
+      {waiting ? (
         loadingRows
       ) : threads.length === 0 ? (
         <Empty>{q !== '' || ask.narrowed ? 'No mail matches.' : narrowed ? 'Nothing in your inbox matches.' : 'Nothing is in your inbox.'}</Empty>

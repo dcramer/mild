@@ -1,6 +1,7 @@
 import { type DBSchema, type IDBPDatabase, deleteDB, openDB } from 'idb';
 import { api } from './api.ts';
 import { BUILT } from './build.ts';
+import { timed } from './trace.ts';
 
 /**
  * What this browser keeps of the person, so the page opens on it without waiting for Mild (docs/sync.md): the key the
@@ -88,6 +89,13 @@ export function keptFrame(): Promise<Record<string, unknown>> {
 }
 
 async function readFrame(): Promise<{ key: boolean; frame: Record<string, unknown> }> {
+  const start = performance.now();
+  const read = await readKept();
+  timed('Frame from the device', 'mild.device', start, { kept: Object.keys(read.frame).length });
+  return read;
+}
+
+async function readKept(): Promise<{ key: boolean; frame: Record<string, unknown> }> {
   if (!globalThis.crypto?.subtle || typeof indexedDB === 'undefined') return { key: false, frame: {} };
   const db = await store().catch(() => null);
   const key = await db?.get('key', 'key');

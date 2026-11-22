@@ -1,6 +1,7 @@
+import { useEffect, useRef } from 'react';
 import type { Session } from './api.ts';
 import type { captureMessage } from './telemetry-sdk.ts';
-import { opening, stopCarrying } from './trace.ts';
+import { type Timing, drain, opening, stopCarrying, timed } from './trace.ts';
 
 /**
  * How long the page took to load and to go between screens, and what failed in it, sent to the server's Sentry project
@@ -33,30 +34,79 @@ function scrub<T>(value: T): T {
  * made before it arrives already carry the page load's trace (`traceHeaders`, `web/src/lib/trace.ts`).
  */
 export function startTelemetry(where: Session['telemetry']): void {
-  if (!where) stopCarrying();
+  if (!where) {
+    stopCarrying();
+    drain(() => {});
+  }
   if (!where || !opening || document.querySelector('meta[name="sentry-trace"]')) return;
   const meta = document.createElement('meta');
   meta.name = 'sentry-trace';
   meta.content = opening;
   document.head.append(meta);
   void import('./telemetry-sdk.ts')
-    .then(({ browserTracingIntegration, captureMessage, init }) => {
-      init({
+    .then((sdk) => {
+      sdk.init({
         dsn: where.dsn,
         ...(where.release ? { release: where.release } : {}),
         ...(where.environment ? { environment: where.environment } : {}),
-        integrations: [browserTracingIntegration({ beforeStartSpan: (span) => ({ ...span, name: routeOf(span.name) }) })],
+        // Streamed, the SDK names every load "Pageload" and every navigation "Navigation": each is named for its screen.
+        integrations: [
+          sdk.browserTracingIntegration({ beforeStartSpan: (span) => ({ ...span, name: routeOf(FALLBACK.has(span.name) ? location.pathname : span.name) }) }),
+        ],
         // One person's dashboard: every load is worth having.
         tracesSampleRate: 1,
         // What was clicked and logged can quote the mail on screen.
         beforeBreadcrumb: () => null,
         beforeSend: (event) => scrub(event),
-        beforeSendSpan: (span) => scrub(span),
+        beforeSendSpan: (span) => scrub(calledFor(span)),
       });
       stopCarrying();
-      watchFreezes(captureMessage);
+      timeFrom(sdk);
+      watchFreezes(sdk.captureMessage);
     })
     .catch(() => {});
+}
+
+const FALLBACK = new Set(['Pageload', 'Navigation']);
+
+/** A call to the API by what it asked for (`GET /api/manage`), where the SDK names it by the host alone. */
+function calledFor<T extends { name: string; attributes?: object }>(span: T): T {
+  const attributes = (span.attributes ?? {}) as Record<string, unknown>;
+  // An attribute is its value, or `{ value }` once serialized.
+  const of = (name: string) => {
+    const value = attributes[name];
+    return value !== null && typeof value === 'object' && 'value' in value ? value.value : value;
+  };
+  const url = of('url.full');
+  const method = of('http.request.method');
+  if (of('sentry.op') !== 'http.client' || typeof url !== 'string' || typeof method !== 'string') return span;
+  return { ...span, name: `${method} ${new URL(url, location.href).pathname}` };
+}
+
+/**
+ * The first time `ready`, the screen shows what it is for (its rows, or that there are none), timed from when it began:
+ * the load, or the navigation to it. Once each time it is opened.
+ */
+export function useShown(name: string, ready: boolean, attributes: Record<string, string | number | boolean>): void {
+  const told = useRef(false);
+  useEffect(() => {
+    if (!ready || told.current) return;
+    told.current = true;
+    timed(name, 'ui.shown', null, attributes);
+  });
+}
+
+/** What was timed before the SDK was up under the page load it began, and what is timed from now on under its screen's. */
+function timeFrom(sdk: typeof import('./telemetry-sdk.ts')) {
+  const at = (ms: number) => (performance.timeOrigin + ms) / 1000;
+  drain(({ name, op, start, end, attributes }: Timing) => {
+    const active = sdk.getActiveSpan();
+    // After a screen's span has ended, nothing is under it.
+    if (!active) return;
+    const screen = sdk.getRootSpan(active);
+    const begun = start === null ? sdk.spanToJSON(screen).start_timestamp : at(start);
+    sdk.startInactiveSpan({ name, op, startTime: begun, attributes, parentSpan: screen }).end(at(end));
+  });
 }
 
 /** A frame this long is the page not answering, which the person feels whatever caused it. */

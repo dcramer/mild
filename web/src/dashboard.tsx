@@ -11,7 +11,7 @@ import { forgetDevice, keepFrame as keep, keptFrame, unknownDevice } from '@/lib
 import { serverBuild } from '@/lib/build.ts';
 import { useKeptPlace } from '@/lib/place.ts';
 import { signOut } from '@/lib/sign-out.ts';
-import { keepStart } from '@/lib/start.ts';
+import { keepStart, startsOnInbox } from '@/lib/start.ts';
 import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
@@ -210,6 +210,10 @@ function useStartsOn(inbox: boolean | null) {
     } else if (start) setParams({ start: '' });
   }, [inbox, start, path, router]);
 }
+
+// Where this browser last found Inbox on, its copy starts reading the disk as the page's code loads, while React is
+// still starting: on a phone that is a few hundred milliseconds off the first rows.
+if (typeof window !== 'undefined' && startsOnInbox()) void import('@/lib/copy.ts').then((copy) => copy.conversations());
 
 /** While Inbox is on, the copy of it starts as the page does, so it is there before Inbox is opened (docs/sync.md). */
 function useCopy(on: boolean) {

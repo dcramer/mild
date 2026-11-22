@@ -39,6 +39,7 @@ import { fold } from '@/lib/fold.ts';
 import { proposalStart } from '@/lib/rule-start.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
+import { useShown } from '@/lib/telemetry.ts';
 
 /** Rows drawn at first, and added as the end of the list comes near: all of them at once took seconds to draw. */
 const ROWS = 100;
@@ -233,6 +234,7 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
   const narrowed = search !== '' || label !== '' || does !== '' || fact !== '' || includeKept;
   // Nothing at all is waiting: there is nothing to search or narrow.
   const nothing = data !== null && !loading && items.length === 0 && proposals.length === 0 && !data.importing && !narrowed;
+  useShown('For review rows', !loading, { rows: shown.length });
   const rows = fold(shown);
   const [reach, setReach] = useState(ROWS);
   // Newest first, under the part of the past each falls in.
