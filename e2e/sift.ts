@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
-import { FRAME_POLICY, PAGE_HEADERS } from '../src/dashboard/policy.ts';
+import { FRAME_POLICY, IMAGES_FRAME_POLICY, PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import { FakeGoogle } from '../tests/google.ts';
 
 const SCRIPTS = resolve(import.meta.dirname, '../.claude/skills/verify-sift/scripts');
@@ -34,7 +34,7 @@ const withTimeout = <T>(work: Promise<T>, ms: number, what: string) =>
 const directives = (policy: string) => new Set(policy.split('; '));
 const onPage = directives(PAGE_HEADERS['content-security-policy']);
 /** Directives only a message's HTML frame has: what it refuses (a remote image in its inline style) is it working. */
-const FRAME_ONLY = [...directives(FRAME_POLICY)].filter((d) => !onPage.has(d));
+const FRAME_ONLY = [...directives(FRAME_POLICY), ...directives(IMAGES_FRAME_POLICY)].filter((d) => !onPage.has(d));
 
 /**
  * Whether a console error is the message frame refusing something, which is it working: its policy refusing a

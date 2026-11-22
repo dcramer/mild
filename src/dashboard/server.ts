@@ -11,18 +11,18 @@ import { Refusal } from '../refusal.ts';
 import { asked, forThePage, identify, httpStatus, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
-import { FRAME_POLICY, NOSNIFF } from './policy.ts';
+import { FRAME_POLICY, IMAGES_FRAME_POLICY, NOSNIFF } from './policy.ts';
 
-/** A message's own HTML, in a frame on the page (`FRAMES`). A link it opens learns nothing of where it was opened from. */
-const FRAME_HEADERS = {
-  'content-security-policy': FRAME_POLICY,
+/** A message's own HTML, in a frame on the page (`FRAMES`). A link it opens, or an image it shows, learns nothing of where it was opened from. */
+const frameHeaders = (images: boolean) => ({
+  'content-security-policy': images ? IMAGES_FRAME_POLICY : FRAME_POLICY,
   ...NOSNIFF,
   'referrer-policy': 'no-referrer',
   // A link's host would otherwise be looked up ahead of a click, which tells its DNS the message was opened.
   'x-dns-prefetch-control': 'off',
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'no-store',
-};
+});
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 /** Answered here rather than by a route module. */
@@ -409,7 +409,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       const mailbox = query.get('mailbox');
       const scope = mailbox ? narrow(whole, mailbox) : whole;
       const params = shown.query.safeParse(Object.fromEntries(query));
-      const reply = !scope
+      const reply: { status: number; html: string; images?: boolean } = !scope
         ? { status: 404, html: frameNote('There is no such message here.') }
         : !params.success
           ? { status: 400, html: frameNote(refusedBy(params.error)) }
@@ -417,7 +417,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
               const { status, error: note } = failed(request, error);
               return { status, html: frameNote(note) };
             });
-      return new Response(reply.html, { status: reply.status, headers: FRAME_HEADERS });
+      return new Response(reply.html, { status: reply.status, headers: frameHeaders(reply.images === true) });
     }
     if (url.pathname.startsWith('/api/')) {
       const route = reads.get(url.pathname);

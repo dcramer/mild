@@ -2,7 +2,7 @@ import { FRAME_SCRIPT } from './frame-script.ts';
 
 /**
  * A message's HTML made fit to show in the dashboard's frame. The frame's own policy is what keeps it
- * harmless (no script runs, nothing loads from elsewhere: `FRAME_HEADERS` in server.ts); this is the second
+ * harmless (no script runs, nothing loads from elsewhere: `frameHeaders` in server.ts); this is the second
  * wall, so a browser that ignored the policy would still get nothing that runs or fetches by itself.
  *
  * The output is rebuilt from what was read, never passed through: every tag is written out again from
@@ -11,7 +11,10 @@ import { FRAME_SCRIPT } from './frame-script.ts';
  *
  * Remote `src`, `srcset` and `background` are dropped rather than left for the policy to block: a plain
  * image is the usual tracking pixel, dropping it costs nothing, and the frame then has no violation to
- * report for each one. `url(...)` in CSS is left to the policy, since CSS can spell a URL in too many ways
+ * report for each one. What held one is marked `data-sift-remote`, so the frame can tell the page there is
+ * something for Show images to load (a `cid:` picture is not: Sift does not keep it). Once the reader asks
+ * for them, HTTPS ones are kept; plain HTTP ones never, since they would name what is being read to anyone
+ * on the network. `url(...)` in CSS is left to the policy, since CSS can spell a URL in too many ways
  * (escapes, comments, `image-set`) for a rewrite to be sure of catching them all.
  */
 
@@ -41,8 +44,10 @@ const DROP = new Set([
 const RAW_TEXT = new Set(['style', 'script', 'title']);
 /** The only links kept: anything else (`javascript:`, `data:`, a relative path) loses its address. */
 const LINK = /^(https?:\/\/|mailto:)/i;
-/** The only images that can show, since the frame loads nothing from elsewhere. */
+/** The only images that can show until the reader asks for the message's images (`SHOWN_IMAGE`). */
 const INLINE_IMAGE = /^data:image\//i;
+const SHOWN_IMAGE = /^(data:image\/|https:\/\/)/i;
+const REMOTE = /^https?:\/\//i;
 const IMAGE_ATTRIBUTES = new Set(['src', 'srcset', 'background', 'poster', 'lowsrc', 'dynsrc', 'data', 'xlink:href']);
 /** Never kept: they act, fetch, or would undo what is set here. */
 const NEVER = new Set(['formaction', 'action', 'ping', 'srcdoc', 'target', 'rel', 'http-equiv', 'download', 'xmlns', 'nonce', 'integrity']);
@@ -112,10 +117,11 @@ function readTag(html: string, at: number): Tag | null {
 const escapeText = (text: string) => text.replaceAll('<', '&lt;');
 const quote = (value: string) => `"${value.replaceAll('"', '&quot;')}"`;
 
-function writeTag({ name, attributes, selfClosing }: Tag): string {
+function writeTag({ name, attributes, selfClosing }: Tag, images: boolean): string {
   const kept: string[] = [];
   const seen = new Set<string>();
   let link = false;
+  let remote = false;
   for (const [key, raw] of attributes) {
     if (seen.has(key) || !/^[a-z][a-z0-9_.:-]*$/.test(key) || key.startsWith('on') || NEVER.has(key)) continue;
     seen.add(key);
@@ -124,15 +130,22 @@ function writeTag({ name, attributes, selfClosing }: Tag): string {
     if (key === 'href') {
       if (value === null || !LINK.test(value)) continue;
       link = name === 'a' || name === 'area';
-    } else if (IMAGE_ATTRIBUTES.has(key) && (value === null || !INLINE_IMAGE.test(value))) continue;
+    } else if (IMAGE_ATTRIBUTES.has(key) && (value === null || !(images ? SHOWN_IMAGE : INLINE_IMAGE).test(value))) {
+      remote ||= !images && value !== null && REMOTE.test(value);
+      continue;
+    }
     kept.push(value === null ? key : `${key}=${quote(value)}`);
   }
   if (link) kept.push('target="_blank"', 'rel="noopener noreferrer"');
+  if (remote) kept.push('data-sift-remote');
   return `<${name}${kept.map((a) => ` ${a}`).join('')}${selfClosing ? ' /' : ''}>`;
 }
 
-/** `html` with nothing left that runs, submits, redirects or loads by itself, and every link opening in a new tab. */
-export function cleanHtml(html: string): string {
+/**
+ * `html` with nothing left that runs, submits, redirects or loads by itself, and every link opening in a new tab.
+ * `images`: the reader asked for its images, so those over HTTPS are kept.
+ */
+export function cleanHtml(html: string, images: boolean): string {
   let out = '';
   let at = 0;
   /** Inside an element dropped with its content: its name and how deep. */
@@ -175,7 +188,7 @@ export function cleanHtml(html: string): string {
       const end = html.slice(at).search(new RegExp(`</${tag.name}[\\t\\n\\f\\r />]`, 'i'));
       const content = end === -1 ? html.slice(at) : html.slice(at, at + end);
       // A style element is text to the browser up to its closing tag, which `content` cannot hold.
-      if (tag.name === 'style') out += `${writeTag(tag)}${content}</style>`;
+      if (tag.name === 'style') out += `${writeTag(tag, images)}${content}</style>`;
       const close = end === -1 ? -1 : html.indexOf('>', at + end);
       at = close === -1 ? html.length : close + 1;
       continue;
@@ -185,7 +198,7 @@ export function cleanHtml(html: string): string {
       continue;
     }
     // A name the browser would take for something odd (`scr<script`) is not written out at all.
-    if (!DROP.has(tag.name) && NAME.test(tag.name)) out += writeTag(tag);
+    if (!DROP.has(tag.name) && NAME.test(tag.name)) out += writeTag(tag, images);
   }
   return out;
 }
@@ -241,8 +254,8 @@ export function isLetter(cleaned: string): boolean {
 }
 
 /** The document the frame shows: the cleaned message, as a letter or on paper, with the frame's own script. */
-export function mailDocument(html: string): string {
-  const cleaned = cleanHtml(html);
+export function mailDocument(html: string, images: boolean): string {
+  const cleaned = cleanHtml(html, images);
   const doctype = /^\s*<!doctype[^<>]*>/i.exec(cleaned)?.[0] ?? '';
   return `${doctype.trim()}${isLetter(cleaned) ? LETTER : PAPER}${SCRIPT}${cleaned.slice(doctype.length)}`;
 }

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from './tooltip.tsx';
 import { Anchor } from './anchor.tsx';
@@ -80,6 +80,20 @@ export function TextLink({ href, away, children, className }: { href: string; aw
     >
       {children}
     </Anchor>
+  );
+}
+
+/** A press inside text, drawn as a `TextLink` is. On a touch screen it reaches a finger's height above and below the line. */
+export function TextPress({ onPress, children, ...rest }: { onPress: () => void; children: ReactNode } & Pick<ComponentProps<'button'>, 'aria-expanded'>) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      className="cursor-pointer underline decoration-foreground/35 underline-offset-[0.2em] hover:decoration-foreground focus-visible:decoration-foreground pointer-coarse:-my-3 pointer-coarse:py-3"
+      {...rest}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -117,6 +117,7 @@ import {
   Td,
   TextArea,
   TextLink,
+  TextPress,
   Th,
   Timeline,
   TimelineEvent,
@@ -290,7 +291,7 @@ export function SystemView() {
                 <TextLink href="https://example.com" away>
                   another site
                 </TextLink>
-                , a key <Kbd>Enter</Kbd>.
+                , a press <TextPress onPress={() => toast('Pressed')}>in a line</TextPress>, a key <Kbd>Enter</Kbd>.
               </p>
             </Row>
             <Row label="slug" note="A figure’s label. Not a heading, and not a column head, which is Th.">
