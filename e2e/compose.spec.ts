@@ -131,12 +131,13 @@ test.describe('with Inbox on', () => {
       { name: 'old.txt', mimeType: 'text/plain', buffer: Buffer.from('old') },
     ]);
     const files = writing.getByRole('list', { name: 'Attachments' });
-    await expect(files.getByRole('listitem')).toHaveText([/roof\.pdf/, /old\.txt/]);
+    // Each says its size once it has uploaded, and how much has gone until then.
+    await expect(files.getByRole('listitem')).toHaveText(['roof.pdf13 bytes', 'old.txt3 bytes']);
     await files.getByRole('button', { name: 'Remove old.txt' }).click();
-    await expect(files.getByRole('listitem')).toHaveText([/roof\.pdf/]);
-    // A reload keeps it with the draft.
+    await expect(files.getByRole('listitem')).toHaveText(['roof.pdf13 bytes']);
+    // A reload keeps what has uploaded with the draft.
     await page.reload();
-    await expect(files.getByRole('listitem')).toHaveText([/roof\.pdf/]);
+    await expect(files.getByRole('listitem')).toHaveText(['roof.pdf13 bytes']);
     await writing.getByRole('button', { name: /^Send/ }).click();
 
     await expect(toast(page, 'Plans')).toContainText('Sent');

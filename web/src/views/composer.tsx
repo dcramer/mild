@@ -266,6 +266,11 @@ function Writer({
       setUploading((all) => [...all, { key, file, sent: 0, abort }]);
       uploadFile(file, (sent) => set({ sent }), abort.signal).then(
         (id) => {
+          // Taken off as it finished: Mild need not keep it.
+          if (abort.signal.aborted) {
+            api.removeUpload(id).catch(() => {});
+            return;
+          }
           setUploading((all) => all.filter((u) => u.key !== key));
           change((was) => ({ files: [...was.files, { id, name: file.name, size: file.size }] }));
         },
