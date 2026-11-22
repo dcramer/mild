@@ -50,6 +50,22 @@ beforeEach(async () => {
 });
 
 describe('copying a mailbox for Inbox', () => {
+  it('records a digest Mild put in the mailbox as the person’s mail, and triages none of it', async () => {
+    await setMail(db, true, { now: NOW });
+    const messageId = '<digest.copied@sift.invalid>';
+    await raw(db).run(
+      'INSERT INTO digests (label_id, account_id, since, until, message_id, count, created_at) VALUES (?, ?, 0, 1, ?, 1, 0)',
+      'newsletter',
+      ACCOUNT,
+      messageId,
+    );
+    deliver([{ id: 'digest', from: ACCOUNT, to: ACCOUNT, subject: 'Newsletters digest', at: NOW - 60_000, headers: { 'Message-ID': messageId } }]);
+    await copy();
+    expect(await ids('messages', 'id')).toEqual(['digest']);
+    expect(await ids('mail_bodies')).toEqual(['digest']);
+    expect(await listUndecided(db, ACCOUNT, 500)).toEqual([]);
+  });
+
   it('starts with Inbox, from as far back as it keeps, and lists what is in the inbox however old', async () => {
     await setMail(db, true, { now: NOW, window: 'year' });
     expect(await copies()).toEqual([{ account_id: ACCOUNT, since: NOW - YEAR, before: NOW, finished: false }]);
