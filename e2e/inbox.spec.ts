@@ -1,5 +1,6 @@
 import {
   PHONE,
+  answersSent,
   back,
   boxOf,
   choose,
@@ -15,6 +16,7 @@ import {
   patchJson,
   path,
   pointAt,
+  putAway,
   reader,
   readerHeading,
   senderCard,
@@ -48,6 +50,12 @@ const diskHolds = (words: string) => `(async () => {
   db.close();
   return rows.some((row) => JSON.stringify(row).includes(${JSON.stringify(words)}) || new TextDecoder().decode(row.sealed.data).includes(${JSON.stringify(words)}));
 })()`;
+
+/** Watches for a row with `subject` coming back on the page, setting `window.shownAgain`. */
+const SHOWN_AGAIN = (subject: string) => `window.shownAgain = false;
+new MutationObserver(() => {
+  if ([...document.querySelectorAll('tbody tr')].some((tr) => tr.textContent.includes(${JSON.stringify(subject)}))) window.shownAgain = true;
+}).observe(document.body, { subtree: true, childList: true, characterData: true });`;
 
 /** The names of the page's databases. */
 const databases = '(async () => (await indexedDB.databases()).map((d) => d.name))()';
@@ -154,7 +162,11 @@ test.describe('Inbox', () => {
     await expect(inboxRows(page)).toHaveCount(249);
   });
 
-  test('a row’s label is changed in place: saved at once, the conversation left in the inbox, and picked again to undo', async ({ page, sift }) => {
+  test('a row’s label does what the label does: one that keeps is saved in place, one that archives takes the conversation out of the inbox once its toast goes', async ({
+    page,
+    sift,
+  }) => {
+    const sent = answersSent(page);
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');
     // On the bar the row shows while pointed at.
@@ -164,23 +176,40 @@ test.describe('Inbox', () => {
     };
     const pick = async (name: string) => {
       await (await label()).click();
-      const saved = page.waitForResponse('**/api/feedback');
       await page.getByRole('option', { name, exact: true }).click();
-      await saved;
     };
+    const inGmail = () => sift.google().mailbox('me@example.org').message('m3')!.labelIds;
     await expect(await label()).toContainText('Receipts');
 
+    // Personal keeps its mail: saved at once, and the row stays.
+    const saved = page.waitForResponse('**/api/feedback');
     await pick('Personal');
+    await saved;
     await expect(reader(page)).toHaveCount(0);
     await page.reload();
     await expect(await label()).toContainText('Personal');
-    expect(sift.google().mailbox('me@example.org').message('m3')!.labelIds).toContain('INBOX');
+    expect(inGmail()).toContain('INBOX');
+
+    // Receipts archives: the row goes at once, and Undo puts it back with nothing sent.
+    await pick('Receipts');
+    await expect(toast(page, 'Archive as Receipts')).toBeVisible();
+    await expect(row).toHaveCount(0);
+    await toast(page, 'Archive as Receipts').getByRole('button', { name: 'Undo' }).click();
+    await expect(await label()).toContainText('Personal');
+    expect(sent()).toBe(1);
 
     await pick('Receipts');
+    await expect(row).toHaveCount(0);
+    // Mild's pass archives it after the answer is saved: the row stays gone meanwhile.
+    await page.evaluate(SHOWN_AGAIN('Your order has shipped'));
+    await putAway(page);
+    await expect.poll(sent).toBe(2);
+    await expect.poll(inGmail).not.toContain('INBOX');
+    await expect(inboxRows(page)).toHaveCount(18);
+    expect(await page.evaluate<boolean>('window.shownAgain')).toBe(false);
     await page.reload();
-    await expect(await label()).toContainText('Receipts');
-    await expect(inboxRows(page)).toHaveCount(19);
-    expect(sift.google().mailbox('me@example.org').message('m3')!.labelIds).toContain('INBOX');
+    await expect(inboxRows(page)).toHaveCount(18);
+    await expect(row).toHaveCount(0);
   });
 
   test('a row’s label menu stays under its label while the pointer moves into it', async ({ page }) => {
