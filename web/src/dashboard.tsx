@@ -99,8 +99,16 @@ function keepFrame() {
     const session = client.getQueryData<Session>(['session']);
     // Signed out, here or by the server: nothing more is kept, nor a key asked for that would be refused.
     if (!session || (session.required && session.email === null)) return void (name === 'session' && forgetDevice());
-    // In turn: the wipe first, then what is kept, under a key made again.
-    if (name === 'session' && !session.device) void unknownDevice();
+    // In turn: the wipe first, then what is kept, under a key made again. What answered before the session was kept
+    // under the old key and wiped with it, so all Mild has answered of the frame is kept again.
+    if (name === 'session' && !session.device) {
+      void unknownDevice();
+      for (const kept of FRAME) {
+        const state = client.getQueryState([kept]);
+        if (state && state.dataUpdatedAt > 0) void keep(kept, state.data);
+      }
+      return;
+    }
     void keep(name, data);
   });
 }
