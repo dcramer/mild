@@ -680,7 +680,7 @@ function Writer({
   );
 }
 
-/** The times Gmail offers to send later, from `now`: tomorrow morning and afternoon, and Monday morning. */
+/** The times Gmail offers to send later, from `now`: tomorrow morning and afternoon, and Monday morning unless that is tomorrow's. */
 function laterTimes(now: Date): (readonly [string, number])[] {
   const at = (days: number, hour: number) => {
     const day = new Date(now);
@@ -689,11 +689,7 @@ function laterTimes(now: Date): (readonly [string, number])[] {
     return day.getTime();
   };
   const toMonday = (8 - now.getDay()) % 7 || 7;
-  return [
-    ['Tomorrow morning', at(1, 8)],
-    ['Tomorrow afternoon', at(1, 13)],
-    ['Monday morning', at(toMonday, 8)],
-  ];
+  return [['Tomorrow morning', at(1, 8)], ['Tomorrow afternoon', at(1, 13)], ...(toMonday === 1 ? [] : [['Monday morning', at(toMonday, 8)] as const])];
 }
 
 /** `ms` as a `datetime-local` input writes it, in this browser's zone. */
