@@ -66,6 +66,20 @@ test.describe('The reader, from For review', () => {
   });
 });
 
+test.describe('The reader, after a pass with Mild on', () => {
+  test.use({ variant: 'on' });
+
+  test('names the labels each change in Gmail added and removed, as Gmail shows them', async ({ page }) => {
+    await page.goto('/activity');
+    const open = await openMessage(page, 'Widgets, part three');
+    await open.getByText(/^History · \d+$/).click();
+    const archived = open.getByRole('listitem').filter({ hasText: 'Archived in Gmail' });
+    await expect(archived).toContainText('Addedmild/newsletters');
+    await expect(archived).toContainText('RemovedInbox');
+    await expect(archived).not.toContainText('Label_');
+  });
+});
+
 test.describe('The reader, from Inbox', () => {
   test.use({ variant: 'inbox' });
 

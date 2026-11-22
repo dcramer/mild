@@ -4,6 +4,7 @@ import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt, openPayload } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
 import { digestShown } from '../../store/digests.ts';
+import { labelNames } from '../../store/accounts.ts';
 import { openEnvelope, openPart } from '../../store/content.ts';
 import { bulkSignals, passedDmarc } from '../../triage/features.ts';
 import { Refusal } from '../../refusal.ts';
@@ -84,6 +85,7 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
     .where(and(eq(actions.accountId, accountId), eq(actions.messageId, messageId)))
     .orderBy(asc(actions.id));
 
+  const names = changes.length === 0 ? {} : await labelNames(db, accountId);
   const body = await storedBody(db, accountId, messageId);
   const files = facts.hasAttachments === false ? [] : await keptAttachments(db, accountId, messageId);
   return {
@@ -106,9 +108,20 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
     decisions: shown.map((r) => ({ ...toDecisionRow(db, r), ...costs.get(r.id)! })),
     actions: changes.map(({ payload: stored, ...a }) => {
       const payload = openPayload(db, accountId, stored);
-      return { ...a, added: seal(payload.add), removed: seal(payload.remove) };
+      const named = (ids: string[]) => seal(ids.map((id) => names[id] ?? gmailWords(id)));
+      return { ...a, added: named(payload.add), removed: named(payload.remove) };
     }),
   };
+}
+
+/**
+ * A label Mild has no name for, as Gmail shows it: one of Gmail's own (`INBOX`, `CATEGORY_PROMOTIONS`) in words. Another is a
+ * label Mild put on mail before it kept their names (`Label_150`), shown by its id until Mild puts it on mail again.
+ */
+function gmailWords(id: string): string {
+  if (!/^[A-Z_]+$/.test(id)) return id;
+  const word = id.replace(/^CATEGORY_/, '');
+  return word.charAt(0) + word.slice(1).toLowerCase();
 }
 
 /** A message as Mild holds it, as text and HTML: Inbox's whole copy, a suggestion's temporary one, or an example the user made. */

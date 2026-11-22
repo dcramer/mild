@@ -15,6 +15,7 @@ import {
 } from '../store/actions.ts';
 import { earlierInInbox, recordLabels } from '../store/messages.ts';
 import { cachedCorrespondent, rememberCorrespondent } from '../store/senders.ts';
+import { rememberLabelName } from '../store/accounts.ts';
 import type { Mailbox } from './mailbox.ts';
 import { Refusal } from '../refusal.ts';
 import { reportError, traced } from '../telemetry.ts';
@@ -160,7 +161,11 @@ export async function execute(deps: ActionDeps, accountId: string, messageId: st
     if (refusal) return { status: 'skipped', reason: refusal };
   }
   const add: string[] = [];
-  for (const name of new Set(action.labels ?? [])) add.push(await deps.mailbox.ensureLabel(name));
+  for (const name of new Set(action.labels ?? [])) {
+    const id = await deps.mailbox.ensureLabel(name);
+    await rememberLabelName(deps.db, accountId, id, name);
+    add.push(id);
+  }
   const read = action.markRead && action.type !== 'spam' ? ['UNREAD'] : [];
   const change: LabelChange =
     action.type === 'label' ? { add, remove: read } : { add: [...add, ...(action.type === 'spam' ? ['SPAM'] : [])], remove: ['INBOX', ...read] };
