@@ -166,7 +166,7 @@ test.describe('The reader, from Inbox', () => {
   test.describe('on a phone', () => {
     test.use({ viewport: PHONE });
 
-    test('reads top to bottom: the title, Mild’s row, the conversation, the replies; nothing wraps or scrolls sideways', async ({ page }) => {
+    test('reads top to bottom: the title, Mild’s row, the conversation; nothing wraps or scrolls sideways', async ({ page }) => {
       await page.goto('/inbox');
       await page.getByRole('row').filter({ hasText: 'Your March bill' }).click();
       const open = reader(page);
@@ -177,29 +177,49 @@ test.describe('The reader, from Inbox', () => {
       const title = await boxOf(readerHeading(page, 'Your March bill'));
       const answer = await boxOf(open.getByRole('combobox', { name: 'What this message is' }));
       const first = await boxOf(open.getByRole('article').first());
-      const reply = await boxOf(open.getByRole('button', { name: 'Reply', exact: true }));
       expect(title.y).toBeLessThan(answer.y);
       expect(answer.y).toBeLessThan(first.y);
-      expect(first.y).toBeLessThan(reply.y);
 
-      // Mild's row, the bar's presses and each message's head each keep to one line.
+      // Mild's row, the bar and each message's head each keep to one line.
       const rule = await boxOf(open.getByRole('button', { name: 'Make a rule…' }));
       expect(rule.y + rule.height / 2).toBeCloseTo(answer.y + answer.height / 2, 0);
-      const archive = await boxOf(open.getByRole('button', { name: 'Archive', exact: true }));
+      const backTo = await boxOf(open.getByRole('button', { name: 'Back to Inbox' }));
       const next = await boxOf(open.getByRole('button', { name: 'Next' }));
-      expect(next.y + next.height / 2).toBeCloseTo(archive.y + archive.height / 2, 0);
+      expect(next.y + next.height / 2).toBeCloseTo(backTo.y + backTo.height / 2, 0);
       const head = open.getByRole('article').first();
       const sender = await boxOf(head.getByRole('link', { name: 'Utility', exact: true }));
       const more = await boxOf(head.getByRole('button', { name: 'Reply all, forward and more' }));
       expect(more.y + more.height / 2).toBeCloseTo(sender.y + sender.height / 2, 0);
-      const forward = await boxOf(open.getByRole('button', { name: 'Forward', exact: true }));
-      expect(forward.y).toBe(reply.y);
       await sideScroll(page).toBe(0);
 
       // Answering an earlier message, the box at the foot still fits the screen.
       await head.getByRole('button', { name: 'Reply to Utility' }).click();
       await expect(composer(page, 'Reply').getByText(/^Replying to Utility, /)).toBeVisible();
       await sideScroll(page).toBe(0);
+    });
+
+    test('has its presses along the bottom of the screen, put away while the reply box is open', async ({ page }) => {
+      await page.goto('/inbox');
+      await page.getByRole('row').filter({ hasText: 'Lunch on Thursday?' }).click();
+      const open = reader(page);
+      await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
+      // One of each, and none at the top or under the conversation.
+      await expect(open.getByRole('button', { name: /^(Archive|Unread|Mark unread|Reply|Reply all|Forward)$/ })).toHaveText(['Archive', 'Unread', 'Reply']);
+      const [archive, unread, reply] = await Promise.all(['Archive', 'Unread', 'Reply'].map((name) => boxOf(open.getByRole('button', { name, exact: true }))));
+      for (const press of [archive!, unread!, reply!]) {
+        expect(press.y + press.height).toBeCloseTo(PHONE.height, 0);
+        expect(press.height).toBeGreaterThanOrEqual(44);
+      }
+      expect(archive!.x + archive!.width).toBeLessThanOrEqual(unread!.x);
+      expect(unread!.x + unread!.width).toBeLessThanOrEqual(reply!.x);
+
+      await open.getByRole('button', { name: 'Reply', exact: true }).click();
+      await expect(composer(page, 'Reply')).toBeVisible();
+      await expect(open.getByRole('button', { name: 'Archive', exact: true })).toBeHidden();
+      await expect(open.getByRole('button', { name: 'Unread', exact: true })).toBeHidden();
+
+      await composer(page, 'Reply').getByRole('button', { name: 'Discard' }).click();
+      await expect(open.getByRole('button', { name: 'Archive', exact: true })).toBeVisible();
     });
   });
 });

@@ -96,13 +96,16 @@ test.describe('On a phone', () => {
     expect(box.y + box.height).toBeLessThan(PHONE.height / 2);
   });
 
-  test('archiving from the reader says so in one line', async ({ page }) => {
+  test('archiving from the reader says so in one line, above the presses at the bottom', async ({ page }) => {
     await page.goto('/inbox');
     await conversations(page).filter({ hasText: 'Your March bill' }).click();
-    await reader(page).getByRole('button', { name: 'Archive', exact: true }).click();
+    const archive = reader(page).getByRole('button', { name: 'Archive', exact: true });
+    await archive.click();
     const said = toast(page, 'Your March bill');
     await expect(said).toBeVisible();
-    expect((await boxOf(said)).height).toBeLessThan(64);
+    const box = await boxOf(said);
+    expect(box.height).toBeLessThan(64);
+    expect(box.y + box.height).toBeLessThanOrEqual((await boxOf(archive)).y);
     await expect(said.getByRole('button', { name: /^Undo/ })).toBeVisible();
   });
 

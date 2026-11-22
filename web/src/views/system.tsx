@@ -5,6 +5,7 @@ import {
   ArrowRightIcon,
   CircleHelpIcon,
   ListChecksIcon,
+  MailIcon,
   MegaphoneIcon,
   PlusIcon,
   ReplyIcon,
@@ -1438,6 +1439,15 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             onNext={() => toast('The one after')}
           />
         }
+        thumbs={
+          inbox && !replying
+            ? [
+                { label: 'Archive', icon: <ArchiveIcon aria-hidden />, onPress: () => toast('Archived') },
+                { label: 'Unread', icon: <MailIcon aria-hidden />, onPress: () => toast('Marked unread') },
+                { label: 'Reply', icon: <ReplyIcon aria-hidden />, onPress: () => answer('Reply') },
+              ]
+            : []
+        }
         title="Lunch on Thursday?"
         answer={
           <AnswerRow
@@ -1556,13 +1566,15 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             )}
           </ReplyBox>
         ) : (
-          <Presses
-            presses={[
-              { label: 'Reply', key: 'r', onPress: () => answer('Reply') },
-              { label: 'Reply all', key: 'a', onPress: () => answer('Reply to all') },
-              { label: 'Forward', key: 'f', onPress: () => answer('Forward') },
-            ]}
-          />
+          <div className="phone:hidden">
+            <Presses
+              presses={[
+                { label: 'Reply', key: 'r', onPress: () => answer('Reply') },
+                { label: 'Reply all', key: 'a', onPress: () => answer('Reply to all') },
+                { label: 'Forward', key: 'f', onPress: () => answer('Forward') },
+              ]}
+            />
+          </div>
         )}
       </Reader>
     </div>
