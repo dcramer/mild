@@ -4,6 +4,7 @@ import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import { useSyncExternalStore } from 'react';
 import { type MailConversation, type SyncPage, type SyncedConversation, api, onWrite } from './api.ts';
 import { type Sealed, device, seal, unseal } from './device.ts';
+import { timed } from './trace.ts';
 
 /**
  * The page's copy of the person's inbox (docs/sync.md): every conversation with a message in it, kept in this browser
@@ -82,8 +83,11 @@ interface Kept extends DBSchema {
 
 const DATABASE = 'sift-copy';
 const CHANNEL = 'sift-copy';
-/** Drawn first from the disk, before the rest is decrypted: about a screen of the inbox. */
-const FIRST = 50;
+/**
+ * Read first from the disk, before the rest is decrypted: more than Inbox draws at first (`COPY_PAGE`, and one to know
+ * there are more), so the rest, all older, leaves its rows as they are instead of drawing them again.
+ */
+const FIRST = 120;
 /** How often the page asks for what changed while it is in view. Mail reaches Mild at the minute tick's pace. */
 const ASK_MS = 30_000;
 /** How long a press waits for the copy to hold its change before letting go of the rows it hid. */
@@ -163,21 +167,37 @@ function onDisk() {
 
 /** Read what the disk holds into the collection, newest first, the first screen before the rest. A copy under another key, from someone signed in before, is dropped. */
 async function load(markReady: () => void) {
+  let start = performance.now();
   const kept = await onDisk();
+  timed('Copy opened', 'mild.copy', start, { kept: kept !== null });
   if (!kept) return;
   const { db, key } = kept;
+  start = performance.now();
   const sealed = await db.get('standing', 'standing');
   standing = sealed ? await unseal<Standing>(key, 'standing', sealed).catch(() => null) : null;
   if (!standing) {
     await db.clear('conversations');
     return;
   }
-  const rows = (await db.getAllFromIndex('conversations', 'at')).toReversed();
-  const opened = async (part: typeof rows) =>
+  // The newest first: reading all of them first is most of the wait at thousands. A cursor stepping through them is a
+  // trip to the database each, so it goes once to the oldest of the first, and they are read from there in one.
+  const cursor = await db.transaction('conversations').store.index('at').openKeyCursor(null, 'prev');
+  const oldest = cursor ? ((await cursor.advance(FIRST - 1)) ?? null) : null;
+  const first = (await db.getAllFromIndex('conversations', 'at', oldest ? IDBKeyRange.lowerBound(oldest.key) : undefined)).toReversed();
+  timed('Copy read', 'mild.copy', start, { rows: first.length });
+  const opened = async (part: typeof first) =>
     await Promise.all(part.map(async (r) => ({ key: r.key, value: copiedOf(await unseal<SyncedConversation>(key, r.key, r.sealed)) })));
-  await apply({ reset: true, changes: await opened(rows.slice(0, FIRST)), mailboxes: standing.mailboxes, seq: standing.seq });
+  start = performance.now();
+  await apply({ reset: true, changes: await opened(first), mailboxes: standing.mailboxes, seq: standing.seq });
+  timed("Copy's first screen", 'mild.copy', start, { rows: first.length });
   markReady();
-  await apply({ reset: false, changes: await opened(rows.slice(FIRST)), mailboxes: standing.mailboxes, seq: standing.seq });
+  // The rest once the first screen is drawn, which would otherwise wait on it.
+  await new Promise((idle) => ('requestIdleCallback' in window ? requestIdleCallback(idle, { timeout: 1000 }) : setTimeout(idle)));
+  start = performance.now();
+  const read = new Set(first.map((r) => r.key));
+  const rest = (await db.getAllFromIndex('conversations', 'at')).filter((r) => !read.has(r.key)).toReversed();
+  await apply({ reset: false, changes: await opened(rest), mailboxes: standing.mailboxes, seq: standing.seq });
+  timed("Copy's rest", 'mild.copy', start, { rows: rest.length });
   whole = true;
   told();
 }
@@ -203,6 +223,7 @@ let again = false;
 
 /** Everything that changed since the copy last asked, every page of it, kept and handed to the other tabs. */
 async function askOnce() {
+  const start = performance.now();
   const pages: SyncPage[] = [];
   let since = standing?.cursor ?? null;
   do {
@@ -226,6 +247,7 @@ async function askOnce() {
   standing = { cursor: last.cursor, seq: last.seq, mailboxes: last.mailboxes };
   if (changes.reset) whole = true;
   await apply(changes);
+  timed('Copy asked Mild', 'mild.copy', start, { pages: pages.length, changes: changes.changes.length, reset: changes.reset });
   channel?.postMessage(changes);
   await keep(changes).catch(() => {});
 }

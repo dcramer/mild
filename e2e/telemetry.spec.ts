@@ -67,3 +67,26 @@ test.describe('What the page sends Sentry', () => {
     await expect.poll(() => sent.find((envelope) => envelope.includes('The page froze for')), { timeout: 15_000 }).toContain('"screen":"/"');
   });
 });
+
+test.describe('What an Inbox opened again sends Sentry', () => {
+  test.use({ sentry: true, variant: 'inbox' });
+
+  test('its load named for it, with the frame and the copy read from the device, each call by its path, and when its rows were shown', async ({ page }) => {
+    const sent: string[] = [];
+    await page.route(`${new URL(SENTRY_DSN).origin}/**`, async (route) => {
+      sent.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 200, body: '{}' });
+    });
+    await page.goto('/inbox');
+    await expect(page.getByRole('heading', { name: 'Inbox', level: 1 })).toBeVisible();
+    // Kept on the device for the next time, which is the open timed.
+    await expect.poll(() => sent.some((envelope) => envelope.includes('"Inbox rows"'))).toBe(true);
+    sent.length = 0;
+    await page.reload();
+
+    const named = (name: string) => () => sent.some((envelope) => envelope.includes(`"name":"${name}"`));
+    for (const name of ['/inbox', 'Frame from the device', 'Copy read', "Copy's first screen", 'Inbox rows', 'GET /api/session', 'GET /api/sync'])
+      await expect.poll(named(name), name).toBe(true);
+    expect(sent.join('\n')).not.toContain('"name":"GET 127.0.0.1"');
+  });
+});

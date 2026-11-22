@@ -12,3 +12,12 @@ export function keepStart(inbox: boolean): void {
     // The app opens on For review and goes on once it knows.
   }
 }
+
+/** Whether this browser last found Inbox on. */
+export function startsOnInbox(): boolean {
+  try {
+    return window.localStorage.getItem(START) === '/inbox';
+  } catch {
+    return false;
+  }
+}
