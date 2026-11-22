@@ -1,4 +1,5 @@
 import type { Session } from './api.ts';
+import type { captureMessage } from './telemetry-sdk.ts';
 import { opening, stopCarrying } from './trace.ts';
 
 /**
@@ -39,7 +40,7 @@ export function startTelemetry(where: Session['telemetry']): void {
   meta.content = opening;
   document.head.append(meta);
   void import('./telemetry-sdk.ts')
-    .then(({ browserTracingIntegration, init }) => {
+    .then(({ browserTracingIntegration, captureMessage, init }) => {
       init({
         dsn: where.dsn,
         ...(where.release ? { release: where.release } : {}),
@@ -53,8 +54,55 @@ export function startTelemetry(where: Session['telemetry']): void {
         beforeSendSpan: (span) => scrub(span),
       });
       stopCarrying();
+      watchFreezes(captureMessage);
     })
     .catch(() => {});
+}
+
+/** A frame this long is the page not answering, which the person feels whatever caused it. */
+const FROZE_MS = 500;
+// One cause tends to freeze the page again and again; the first few say it.
+const MOST_A_LOAD = 5;
+const APART_MS = 10_000;
+
+type Frame = PerformanceEntry & {
+  blockingDuration: number;
+  scripts: { invoker: string; invokerType: string; sourceURL: string; sourceFunctionName: string; sourceCharPosition: number; duration: number }[];
+};
+
+/**
+ * Each frame of 500 ms or more while the page is in front of the person, as an error in Sentry, grouped by the screen
+ * and what started the work (a timer, a click, a database read) since the functions' names change with every build.
+ * Only Chromium reports long frames.
+ */
+function watchFreezes(tell: typeof captureMessage) {
+  if (!PerformanceObserver.supportedEntryTypes.includes('long-animation-frame')) return;
+  let told = 0;
+  let last = -APART_MS;
+  const observer = new PerformanceObserver((list) => {
+    for (const frame of list.getEntries() as Frame[]) {
+      if (frame.duration < FROZE_MS || document.visibilityState !== 'visible' || frame.startTime - last < APART_MS) continue;
+      last = frame.startTime;
+      const scripts = frame.scripts
+        .toSorted((a, b) => b.duration - a.duration)
+        .slice(0, 5)
+        .map((s) => ({
+          invoker: s.invoker,
+          function: s.sourceFunctionName || '(anonymous)',
+          source: `${s.sourceURL.split('/').pop()}:${s.sourceCharPosition}`,
+          ms: Math.round(s.duration),
+        }));
+      const screen = routeOf(location.pathname);
+      tell(`The page froze for ${(frame.duration / 1000).toFixed(1)} s`, {
+        level: 'error',
+        fingerprint: ['freeze', screen, scripts[0]?.invoker ?? 'rendering'],
+        tags: { screen },
+        contexts: { freeze: { ms: Math.round(frame.duration), blocking_ms: Math.round(frame.blockingDuration), scripts } },
+      });
+      if (++told === MOST_A_LOAD) return observer.disconnect();
+    }
+  });
+  observer.observe({ type: 'long-animation-frame', buffered: true });
 }
 
 /** A failure the page caught itself (`Failed`), which the SDK would otherwise never see. Dropped when nothing was started. */

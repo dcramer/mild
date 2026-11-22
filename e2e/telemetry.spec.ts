@@ -52,4 +52,17 @@ test.describe('What the page sends Sentry', () => {
     await expect.poll(() => traces.get('/api/models')).toBeDefined();
     await expect.poll(() => sent.some((envelope) => envelope.includes('"transaction":"Settings"') && envelope.includes(traces.get('/api/models')!))).toBe(true);
   });
+
+  test('a frame of half a second or more is an error, under the screen it froze', async ({ page }) => {
+    const sent: string[] = [];
+    await page.route(`${new URL(SENTRY_DSN).origin}/**`, async (route) => {
+      sent.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 200, body: '{}' });
+    });
+    await page.goto('/');
+    await expect.poll(() => sent.some((envelope) => envelope.includes('"pageload"'))).toBe(true);
+    // Work that holds the page for most of a second, as drawing a long list in one go can.
+    await page.evaluate('{ const end = performance.now() + 700; while (performance.now() < end); }');
+    await expect.poll(() => sent.find((envelope) => envelope.includes('The page froze for'))).toContain('"screen":"/"');
+  });
 });

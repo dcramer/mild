@@ -129,7 +129,29 @@ const told = () => listeners.forEach((listener) => listener());
 let held = 0;
 let wanted = 0;
 
-function apply({ reset, changes, mailboxes, seq }: Pick<Changes, 'reset' | 'changes' | 'mailboxes' | 'seq'>) {
+/** Rows written to the collection at a time, the page drawing between: a whole copy at once holds it for most of a second. */
+const PART = 500;
+let applying = Promise.resolve();
+
+/**
+ * Write changes into the collection, a part at a time, newest first so the top of the inbox fills first, and each
+ * after the last so a part read from the disk never lands over a newer change. Told once the last part is in.
+ */
+function apply({ reset, changes, mailboxes, seq }: Pick<Changes, 'reset' | 'changes' | 'mailboxes' | 'seq'>): Promise<void> {
+  const ordered = changes.toSorted((a, b) => (b.value?.newestAt ?? Infinity) - (a.value?.newestAt ?? Infinity));
+  const done = applying.then(async () => {
+    for (let at = 0; at === 0 || at < ordered.length; at += PART) {
+      if (at > 0) await new Promise((next) => setTimeout(next));
+      writePart({ reset: reset && at === 0, changes: ordered.slice(at, at + PART), mailboxes });
+    }
+    held = Math.max(held, seq);
+    told();
+  });
+  applying = done.catch(() => {});
+  return done;
+}
+
+function writePart({ reset, changes, mailboxes }: Pick<Changes, 'reset' | 'changes' | 'mailboxes'>) {
   if (!sync) return;
   const { begin, write, commit } = sync;
   begin(reset ? { snapshot: true } : undefined);
@@ -145,8 +167,6 @@ function apply({ reset, changes, mailboxes, seq }: Pick<Changes, 'reset' | 'chan
   // Removing a mailbox marks none of its conversations: what is not theirs any more goes.
   if (!reset) for (const row of conversations().state.values()) if (!theirs.has(row.accountId)) write({ type: 'delete', key: row.key });
   void commit();
-  held = Math.max(held, seq);
-  told();
 }
 
 let disk: Promise<{ db: IDBPDatabase<Kept>; key: CryptoKey } | null> | null = null;
@@ -180,9 +200,9 @@ async function load(markReady: () => void) {
   const rows = (await db.getAllFromIndex('conversations', 'at')).toReversed();
   const opened = async (part: typeof rows) =>
     await Promise.all(part.map(async (r) => ({ key: r.key, value: copiedOf(await unseal<SyncedConversation>(key, r.key, r.sealed)) })));
-  apply({ reset: true, changes: await opened(rows.slice(0, FIRST)), mailboxes: standing.mailboxes, seq: standing.seq });
+  await apply({ reset: true, changes: await opened(rows.slice(0, FIRST)), mailboxes: standing.mailboxes, seq: standing.seq });
   markReady();
-  apply({ reset: false, changes: await opened(rows.slice(FIRST)), mailboxes: standing.mailboxes, seq: standing.seq });
+  await apply({ reset: false, changes: await opened(rows.slice(FIRST)), mailboxes: standing.mailboxes, seq: standing.seq });
   whole = true;
   told();
 }
@@ -230,7 +250,7 @@ async function askOnce() {
   };
   standing = { cursor: last.cursor, seq: last.seq, mailboxes: last.mailboxes };
   if (changes.reset) whole = true;
-  apply(changes);
+  await apply(changes);
   channel?.postMessage(changes);
   await keep(changes).catch(() => {});
 }
@@ -272,7 +292,7 @@ export function conversations(): Collection<Copied, string> {
           } else if (!leading) {
             standing = { cursor: data.cursor, seq: data.seq, mailboxes: data.mailboxes };
             if (data.reset) whole = true;
-            apply(data);
+            void apply(data);
           }
         });
         let ready = false;
