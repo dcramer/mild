@@ -3,7 +3,6 @@ import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { NOT_MAIL, toFacts } from '../gmail/sync.ts';
 import { type MailCopy, advanceCopy, countCopy, goingCopy } from '../store/copies.ts';
-import { isOwnDigest, knownDigests } from '../store/digests.ts';
 import { heldText, keepText, recordKept } from '../store/kept.ts';
 import { textOf } from './bodies.ts';
 import { QUOTA_PER_MINUTE } from '../gmail/quota.ts';
@@ -79,10 +78,9 @@ export async function copyMail(
     }
     const page = await api.searchMail(copyQuery(copy), PAGE, copy.pageToken ?? undefined);
     const known = await recorded(db, accountId, page.ids);
-    const digests = await knownDigests(db, accountId, page.ids);
     for (const id of page.ids) {
       const state = known.get(id);
-      if (state?.text || state?.inbox || digests.has(id)) continue;
+      if (state?.text || state?.inbox) continue;
       if (out()) return read;
       let kept: boolean;
       if (state) {
@@ -91,7 +89,8 @@ export async function copyMail(
       } else {
         const whole = await api.getMessage(id);
         const facts = whole && !whole.raw.labelIds.some((l) => NOT_MAIL.includes(l)) ? toFacts(accountId, whole.raw) : null;
-        kept = !facts || (await isOwnDigest(db, facts.headers)) || (await recordKept(db, accountId, { facts, text: textOf(whole!.content) }, now()));
+        // Mild's own digests too: they are the person's mail, never triaged.
+        kept = !facts || (await recordKept(db, accountId, { facts, text: textOf(whole!.content) }, now()));
       }
       read++;
       if (!kept) return read;
