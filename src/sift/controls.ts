@@ -32,7 +32,8 @@ import { listAccounts, personOf } from '../store/accounts.ts';
 import { getAction, lastStandingChange } from '../store/actions.ts';
 import { hashOf } from '../store/content.ts';
 import { credentials } from '../store/credentials.ts';
-import { recordLabels } from '../store/messages.ts';
+import { recordLabels, recordedInboxSize } from '../store/messages.ts';
+import { copied } from '../store/copies.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
@@ -216,7 +217,9 @@ export async function buildControls(
       let messages = 0;
       for (const account of await listAccounts(db)) {
         if (!mailboxes.includes(account.id) || !(await hasOwnLabels(db))) continue;
-        const size = await counted(`count:inbox:${account.number}`, async () => await (await gmail(db, account.id)).api.inboxSize());
+        const size = (await copied(db, account.id))
+          ? await recordedInboxSize(db, account.id)
+          : await counted(`count:inbox:${account.number}`, async () => await (await gmail(db, account.id)).api.inboxSize());
         messages += Math.min(size, REACH[reach]);
       }
       // As much of it as went to the model lately; with nothing to go by, all of it.
