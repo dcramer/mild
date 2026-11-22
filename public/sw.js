@@ -1,10 +1,13 @@
-// The service worker: keeps the page and its files so the installed app opens when Mild cannot be reached,
-// and then says so. It never keeps anything under /api/ or /auth/: that is private mail data and sign-in.
+// The service worker: keeps the page and its files, so the app opens at once, drawn from what the device kept, and opens
+// when Mild cannot be reached, and then says so. It never keeps anything under /api/ or /auth/: that is private mail
+// data and sign-in. Every page is drawn the same for everyone (docs/sync.md).
 
-const CACHE = 'sift-shell-2';
+const CACHE = 'sift-shell-3';
+/** The newest build Mild has said it is, as a page's `x-sift-build` or the page told: a kept page of another is not served first. */
+const NEWEST = '/__sift-build';
 /** A sender's and a domain's page is one page for all of them. */
 const pageOf = (url) => url.pathname.replace(/^\/(sender|domain)\/.*/, '/$1');
-/** Only a page drawn the same for everyone is kept: a screen drawn for whoever asked is theirs, and says so (`no-store`). */
+/** A page that says it is not to be kept (`no-store`, `private`) is not. */
 const forEveryone = (response) => response.ok && !/no-store|private/.test(response.headers.get('cache-control') ?? '');
 /** Drawn for everyone, and with no session to read says Mild cannot be reached: where a screen not kept falls back to. */
 const SHELL = '/sender';
@@ -51,26 +54,50 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// The page says so when Mild answers as a newer build than the page was: kept pages are then fetched again first.
+self.addEventListener('message', (event) => {
+  const build = event.data && event.data.build;
+  if (typeof build === 'string') event.waitUntil(caches.open(CACHE).then((cache) => cache.put(NEWEST, new Response(build))));
+});
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || /^\/(api|auth)\//.test(url.pathname)) return;
 
-  // The server's copy when it answers in time, since it may be newer; otherwise the one kept for that page, or else the
-  // shell, which says Mild cannot be reached and loads the page once it can.
+  // The page kept for it, at once, while it is of the newest build, fetched again behind it for next time. Otherwise the
+  // server's when it answers in time; else the one kept, or the shell, which says Mild cannot be reached and loads the
+  // page once it can.
   if (request.mode === 'navigate') {
     const page = pageOf(url);
     const fetched = fetch(request).then((response) => {
       const copy = forEveryone(response) ? response.clone() : null;
-      event.waitUntil(caches.open(CACHE).then(async (cache) => (copy ? await cache.put(page, copy) : undefined)).then(prune));
+      const build = response.headers.get('x-sift-build');
+      event.waitUntil(
+        caches
+          .open(CACHE)
+          .then(async (cache) => {
+            if (!copy) return;
+            await cache.put(page, copy);
+            if (build) await cache.put(NEWEST, new Response(build));
+          })
+          .then(prune),
+      );
       return response;
     });
-    const late = new Promise((resolve) => setTimeout(resolve, PATIENCE, null));
     event.respondWith(
-      Promise.race([fetched.catch(() => null), late]).then(
-        async (response) =>
-          response ?? (await caches.match(page, { cacheName: CACHE })) ?? (await caches.match(SHELL, { cacheName: CACHE })) ?? Response.error(),
-      ),
+      (async () => {
+        const cache = await caches.open(CACHE);
+        const kept = await cache.match(page);
+        const newest = await (await cache.match(NEWEST))?.text();
+        const built = kept?.headers.get('x-sift-build');
+        if (kept && built && built === newest) {
+          event.waitUntil(fetched.catch(() => {}));
+          return kept;
+        }
+        const late = new Promise((resolve) => setTimeout(resolve, PATIENCE, null));
+        return (await Promise.race([fetched.catch(() => null), late])) ?? kept ?? (await cache.match(SHELL)) ?? Response.error();
+      })(),
     );
     return;
   }

@@ -6,6 +6,21 @@ import { back, boxOf, composer, messageQuery, expect, PHONE, patchJson, path, qu
 
 const SENDER = senderPage('notifications@code.example.com');
 const menu = (page: Page) => page.getByRole('dialog', { name: 'Menu' });
+/** What this device keeps of the frame, by name, and whether it holds a key. */
+const kept = `new Promise((done) => {
+  const opening = indexedDB.open('sift-device');
+  // Not made here: the page would find it made without its stores.
+  opening.onupgradeneeded = () => opening.transaction.abort();
+  opening.onerror = () => done({ key: 0, frame: [] });
+  opening.onsuccess = () => {
+    const db = opening.result;
+    const reading = db.transaction(['key', 'frame']);
+    const key = reading.objectStore('key').count();
+    const frame = reading.objectStore('frame').getAllKeys();
+    reading.oncomplete = () => (db.close(), done({ key: key.result, frame: frame.result }));
+  };
+})`;
+const keptAll = { key: 1, frame: ['manage', 'session', 'usage'] };
 
 test("the page is drawn to the screen's edges, under a status bar in its own colour, with a picture of its opening for each iPhone", async ({ page }) => {
   await page.goto('/');
@@ -211,6 +226,44 @@ test.describe('The installed app', () => {
       await page.getByRole('menuitem', { name: 'Sign out' }).click();
       await expect(page.getByRole('button', { name: /^Account, / })).toHaveCount(0);
       await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((key) => /^sift:(draft:|mailbox|start)/.test(key)))).toEqual([]);
+    });
+  });
+
+  test('opens on the frame this device kept before Mild answers, and asks Mild all the same', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
+    await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+    const waiting: (() => Promise<void>)[] = [];
+    await page.route('**/api/session*', (route) => void waiting.push(() => route.continue()));
+    await page.reload();
+    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Account, / })).toBeVisible();
+    await expect.poll(() => waiting.length).toBeGreaterThan(0);
+    await Promise.all(waiting.map((answer) => answer()));
+  });
+
+  test('a device Mild no longer knows is wiped, and made again', async ({ page }) => {
+    await page.goto('/');
+    await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+    const made: string[] = [];
+    page.on('request', (request) => void (request.method() === 'POST' && new URL(request.url()).pathname === '/api/device' && made.push(request.url())));
+    await page.context().clearCookies({ name: 'sift_device' });
+    await page.reload();
+    await expect.poll(() => made.length).toBe(1);
+    await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+  });
+
+  test.describe('signed out elsewhere', () => {
+    // The frame kept says who was signed in, so the screen asks for its list before Mild says nobody is.
+    test.use({ allow: ['status of 401'] });
+
+    test('the sign-in screen replaces the frame kept, and nothing of theirs is left', async ({ page }) => {
+      await page.goto('/');
+      await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+      await page.context().clearCookies({ name: 'sift_session' });
+      await page.reload();
+      await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible();
+      await expect.poll(() => page.evaluate<string[]>('indexedDB.databases().then((all) => all.map((d) => d.name))')).not.toContain('sift-device');
     });
   });
 

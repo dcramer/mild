@@ -6,13 +6,11 @@ test.describe('A Mild run as a service', () => {
   test.describe('signed out', () => {
     test.use({ signedOut: true });
 
-    test('the security page is linked at the foot of the sign-in page, drawn by the server, says where to report a problem privately, and links to the privacy policy', async ({
+    test('the security page is linked at the foot of the sign-in page, says where to report a problem privately, and links to the privacy policy', async ({
       page,
     }) => {
-      const html = await (await page.request.get('/')).text();
-      expect(html).toContain('Sign in with Google');
-      expect(html).not.toContain('aria-label="Sections"');
       await page.goto('/');
+      await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible();
       await page.getByRole('contentinfo').getByRole('link', { name: 'Security' }).click();
       await expect(page.getByRole('heading', { name: 'Security', level: 1 })).toBeVisible();
       await path(page).toBe('/security');

@@ -192,7 +192,7 @@ test.describe('Inbox', () => {
     expect(await page.evaluate<boolean>(diskHolds('This week in widgets'))).toBe(false);
   });
 
-  test('a conversation archived stays gone once the feed has it, and the copy goes at sign-out', async ({ page }) => {
+  test('a conversation archived stays gone once the feed has it, and the copy and its key go at sign-out', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
     await pointAt(inboxRow(page, 'This week in widgets'));
@@ -206,6 +206,7 @@ test.describe('Inbox', () => {
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page.getByRole('button', { name: /^Account, / })).toHaveCount(0);
     await expect.poll(() => page.evaluate<string[]>(databases)).not.toContain('sift-copy');
+    await expect.poll(() => page.evaluate<string[]>(databases)).not.toContain('sift-device');
   });
 
   test('a name in a row opens their card on hover, and a press on it opens the conversation', async ({ page }) => {

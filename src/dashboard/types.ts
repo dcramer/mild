@@ -920,6 +920,8 @@ export const Session = z.object({
   telemetry: z.object({ dsn: z.string(), release: z.string().nullable(), environment: z.string().nullable() }).nullable(),
   /** Which build of the page this server came with; null when it was not built with one (tests). */
   build: z.string().nullable(),
+  /** Whether Mild knows this browser's device (`sift_device`): one it does not wipes what it kept, and is made again. */
+  device: z.boolean(),
 });
 export type Session = z.infer<typeof Session>;
 

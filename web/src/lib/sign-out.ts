@@ -1,15 +1,26 @@
 import { api } from './api.ts';
+import { forgetDevice } from './device.ts';
 import { forgetDrafts } from './compose.ts';
 import { chooseMailbox } from './mailbox.ts';
 import { START } from './start.ts';
 
 /**
- * Sign out, and leave nothing of theirs in this browser for whoever uses it next: the copy of their mail (whose key the
- * server deletes, and which the browser is told to clear, but not over plain HTTP), unsent drafts, the mailbox chosen, where the app opens.
+ * Sign out, and leave nothing of theirs in this browser for whoever uses it next (`forgetHere`).
  */
 export async function signOut(): Promise<void> {
   await api.signOut();
-  await (await import('./copy.ts')).dropCopy();
+  await forgetHere();
+  window.location.assign('/');
+}
+
+/**
+ * Everything this browser kept of the person: what the device kept (the copy of their mail, the frame and the key; the
+ * browser is told to clear it too, but not over plain HTTP), unsent drafts, the mailbox chosen, where the app opens.
+ * Also for a session the server ended (their mailbox or account removed), before the page leaves: the page opens on
+ * the frame the device kept, which would still say they are signed in.
+ */
+export async function forgetHere(): Promise<void> {
+  await forgetDevice();
   forgetDrafts();
   chooseMailbox('');
   try {
@@ -17,5 +28,4 @@ export async function signOut(): Promise<void> {
   } catch {
     // Nothing was kept.
   }
-  window.location.assign('/');
 }

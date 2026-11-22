@@ -83,23 +83,6 @@ export async function respond(request: Request): Promise<Response> {
   }
 }
 
-/**
- * `work`, the page's frame read for one request (src/sift/page-data.ts), as one span, begun once Mild is up: Sentry
- * starts with it, so on a new instance a span begun before would not be sent. `sift.opened_ms` is how long this request
- * waited for Mild to open, which only the first on an instance does.
- */
-export async function framed<T>(work: () => Promise<T>): Promise<T> {
-  const cold = opened === undefined;
-  const started = Date.now();
-  // Failing to open is `respond`'s to say, in the reads `work` makes.
-  await sift().catch(() => {});
-  try {
-    return await traced('sift.frame', 'frame', cold ? { 'sift.opened_ms': Date.now() - started } : {}, work);
-  } finally {
-    waitUntil(flushTelemetry());
-  }
-}
-
 /** Whether a call carries the host's cron secret. On Vercel, checked before anything is opened. */
 async function fromCron(request: Request): Promise<boolean> {
   const expected = Buffer.from(`Bearer ${await chosen().cronSecret()}`);

@@ -1,12 +1,13 @@
 'use client';
-import { type DehydratedState, HydrationBoundary, useIsFetching } from '@tanstack/react-query';
+import { useIsFetching } from '@tanstack/react-query';
 import { ActivityIcon, ContactRoundIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail, useNow } from '@/components/status.tsx';
-import { api, useLoaded, useOnline } from '@/lib/api.ts';
+import { type Session, api, queryClientFor, useLoaded, useOnline } from '@/lib/api.ts';
+import { forgetDevice, keepFrame as keep, keptFrame, unknownDevice } from '@/lib/device.ts';
 import { serverBuild } from '@/lib/build.ts';
 import { useKeptPlace } from '@/lib/place.ts';
 import { signOut } from '@/lib/sign-out.ts';
@@ -72,18 +73,47 @@ const openSettings = () => setParams({ settings: '1' }, { state: { panel: true }
 // A failed sign-in said in Settings (`signin`) goes with it.
 const closeSettings = () => (panelEntry() ? goBack() : setParams({ settings: '', signin: '' }));
 
+/** What the frame is drawn with, kept on the device for the next time the page opens (`web/src/lib/device.ts`). */
+const FRAME = new Set(['session', 'manage', 'usage']);
+let keeping = false;
+
 /**
- * The dashboard around `children`, the screen the address names, for whoever the server read the session as (`drawn`,
- * `src/sift/page-data.ts`, with what else it holds that is not encrypted): the sign-in screen for nobody, the
- * setting-up steps until there is something to show, and otherwise the sections, the screen and its foot.
+ * Draw the frame from what this device kept, at once, and keep what Mild answers for next time: the page is one shell for
+ * everyone, which the service worker serves without asking Mild, so who is signed in comes from here first and from Mild
+ * after. What was kept is marked out of date, so Mild is still asked. Nobody signed in, or a device Mild no longer
+ * knows, wipes what was kept; then a device is made again.
  */
-export function Dashboard({ drawn, children }: { drawn: DehydratedState | null; children: ReactNode }) {
-  if (!drawn) return <Signed drawnForEveryone>{children}</Signed>;
-  return (
-    <HydrationBoundary state={drawn}>
-      <Signed>{children}</Signed>
-    </HydrationBoundary>
-  );
+function keepFrame() {
+  if (keeping || typeof window === 'undefined') return;
+  keeping = true;
+  const client = queryClientFor();
+  void keptFrame().then((kept) => {
+    for (const [name, value] of Object.entries(kept)) if (client.getQueryData([name]) === undefined) client.setQueryData([name], value, { updatedAt: 0 });
+  });
+  client.getQueryCache().subscribe((event) => {
+    // Only what Mild answered: the frame put back from the device (`setQueryData`, `manual`) is what was kept.
+    if (event.type !== 'updated' || event.action.type !== 'success' || event.action.manual) return;
+    const [name, ...narrowed] = event.query.queryKey as unknown[];
+    if (narrowed.length > 0 || typeof name !== 'string' || !FRAME.has(name)) return;
+    const data = event.query.state.data;
+    const session = client.getQueryData<Session>(['session']);
+    // Signed out, here or by the server: nothing more is kept, nor a key asked for that would be refused.
+    if (!session || (session.required && session.email === null)) return void (name === 'session' && forgetDevice());
+    // In turn: the wipe first, then what is kept, under a key made again.
+    if (name === 'session' && !session.device) void unknownDevice();
+    void keep(name, data);
+  });
+}
+
+/**
+ * The dashboard around `children`, the screen the address names: the sign-in screen for nobody, the setting-up steps
+ * until there is something to show, and otherwise the sections, the screen and its foot. Drawn the same for everyone,
+ * so the service worker can keep it; `addressed`, a sender's or a domain's page, which stands in for any page it has not
+ * kept.
+ */
+export function Dashboard({ addressed = false, children }: { addressed?: boolean; children: ReactNode }) {
+  useEffect(keepFrame, []);
+  return <Signed addressed={addressed}>{children}</Signed>;
 }
 
 /**
@@ -92,7 +122,7 @@ export function Dashboard({ drawn, children }: { drawn: DehydratedState | null; 
  */
 const ADDRESSED = /^\/(sender|domain)(\/|$)/;
 
-function Signed({ drawnForEveryone = false, children }: { drawnForEveryone?: boolean; children: ReactNode }) {
+function Signed({ addressed, children }: { addressed: boolean; children: ReactNode }) {
   const [settings] = useParam('settings');
   const [signin] = useParam('signin');
   const session = useLoaded('session', (signal) => api.session(signal), 300_000);
@@ -100,19 +130,21 @@ function Signed({ drawnForEveryone = false, children }: { drawnForEveryone?: boo
   const known = session.data;
   // The router's path, not the address bar's, which Next.js moves only once the page it goes to is drawn.
   const path = usePathname();
-  const standIn = useStarted() && drawnForEveryone && !ADDRESSED.test(path);
+  const standIn = useStarted() && addressed && !ADDRESSED.test(path);
   const telemetry = known?.telemetry ?? null;
-  useEffect(() => startTelemetry(telemetry), [telemetry]);
+  // Not before the session is known: no telemetry then would stop the page load's trace being carried.
+  useEffect(() => void (known && startTelemetry(telemetry)), [known, telemetry]);
   useEffect(() => void (settings === '1' && panelOpened('Settings')), [settings]);
-  const build = known?.build ?? null;
+  // Only a session Mild just answered says which build it is: one this device kept (read at time 0) may be from before an update.
+  const build = session.at > 0 ? (known?.build ?? null) : null;
   useEffect(() => serverBuild(build), [build]);
   const answered = known !== null;
   useEffect(() => {
     if (standIn && answered) window.location.reload();
   }, [standIn, answered]);
   const nobody = known?.required === true && known.email === null;
-  // Drawn for everyone (`drawn` null), or the server could not read the session: only the opening until the browser has, so a
-  // sign-in screen is not drawn over a dashboard, nor one over the other. Not set up, or not answering, it says so.
+  // Until the device's kept frame or Mild has said who is signed in: only the opening, so a sign-in screen is not drawn
+  // over a dashboard, nor one over the other. Not set up, or not answering, it says so.
   if (!known || standIn)
     return session.missing || session.error || !online ? <Boot missing={session.missing} error={session.error} online={online} /> : <Opening />;
   if (nobody)

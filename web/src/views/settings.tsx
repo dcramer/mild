@@ -9,6 +9,7 @@ import { MailWindowDialog, TurnInboxOn, windowName } from '@/components/inbox-sw
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { costLine, spentLine, subscription } from '@/lib/prices.ts';
 import { type ManageState, type Removed, api, useLoaded } from '@/lib/api.ts';
+import { forgetHere } from '@/lib/sign-out.ts';
 import { useAction } from '@/lib/action.ts';
 import { useParam } from '@/lib/params.ts';
 import {
@@ -495,7 +496,10 @@ async function removed(sent: Promise<Removed>, onDone?: (notRevoked: string | nu
   const reply = await sent;
   const note = notRevoked(reply);
   // Never settles, so nothing is fetched again with the session just ended while the page leaves.
-  if (reply.signedOut) return new Promise<never>(() => window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/'));
+  if (reply.signedOut) {
+    await forgetHere();
+    return new Promise<never>(() => window.location.assign(note ? `/?signin=${encodeURIComponent(note)}` : '/'));
+  }
   onDone?.(note);
 }
 
