@@ -37,7 +37,7 @@ export async function sendScheduled(
       const wrong = [...writing.to, ...writing.cc, ...writing.bcc].find((r) => r.wrong);
       if (wrong) throw new Refusal(`“${wrong.address}” is not an address.`);
       const parties = (list: typeof writing.to) => list.map(({ address, name }) => (name ? { address, name } : { address }));
-      const forwarded = writing.of.kind === 'forward' ? writing.of.messageId : null;
+      const forwarded = writing.of.kind === 'forward' || (writing.of.kind === 'reply' && writing.withFiles) ? writing.of.messageId : null;
       const attach = async (): Promise<Attached[]> => {
         const parts = forwarded
           ? (await attachmentsOf(db, gmail.api, accountId, forwarded)).map((a) => a.part).filter((p) => !writing.dropped.includes(p))
@@ -55,13 +55,13 @@ export async function sendScheduled(
         {
           accountId,
           id: writing.id,
-          ...(answered ? { threadId: answered.threadId } : {}),
+          ...(answered && !(writing.editSubject && writing.subject.trim()) ? { threadId: answered.threadId } : {}),
           mail: {
             from: { address: writing.from || accountId },
             to: parties(writing.to),
             cc: parties(writing.cc),
             bcc: parties(writing.bcc),
-            subject: answered?.subject ?? writing.subject,
+            subject: (answered && !writing.editSubject ? answered.subject : writing.subject.trim()) || (answered?.subject ?? ''),
             text: writing.text,
             ...(answered?.inReplyTo ? { inReplyTo: answered.inReplyTo } : {}),
             ...(answered ? { references: answered.references } : {}),

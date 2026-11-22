@@ -1,7 +1,7 @@
 'use client';
 import { Combobox } from '@base-ui/react/combobox';
 import { XIcon } from 'lucide-react';
-import { type Ref, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { type Party, type Recipient, readRecipients, sameAddress, typed } from '@/lib/addresses';
 import { cn } from '@/lib/utils';
 import { Tooltip } from './tooltip.tsx';
@@ -11,6 +11,9 @@ export const withTyped = (list: readonly Recipient[], typedText: string): Recipi
   ...list,
   ...readRecipients(typedText).filter((r, i, all) => !list.some((v) => sameAddress(v, r)) && all.findIndex((o) => sameAddress(o, r)) === i),
 ];
+
+/** The chip being dragged, and the line it is from: the browser hands a drop only text, and a drop on its own line moves nothing. */
+let dragging: { from: string; recipient: Recipient } | null = null;
 
 /** A pause in typing before suggestions are asked for, so a word typed quickly is one request. */
 const PAUSE_MS = 120;
@@ -38,9 +41,26 @@ export function Recipients({
   text: string;
   onText: (text: string) => void;
   suggest: (typed: string, signal: AbortSignal) => Promise<Party[]>;
-  inputRef?: Ref<HTMLInputElement>;
+  /** Told the box typed in, as it is drawn: made once, since one that changed each render would be told again each render. */
+  inputRef?: (input: HTMLInputElement | null) => void;
 }) {
   const setText = onText;
+  const field = useId();
+  const own = useRef<HTMLInputElement | null>(null);
+  // Made once for the `inputRef` it is given: a ref that changed each render would be attached again each render.
+  const attach = useCallback(
+    (input: HTMLInputElement | null) => {
+      own.current = input;
+      inputRef?.(input);
+    },
+    [inputRef],
+  );
+  /** A chip back in the box, as it was written, to change. */
+  const retype = (r: Recipient) => {
+    onChange(value.filter((v) => v !== r));
+    setText(r.wrong ? r.address : typed(r));
+    own.current?.focus();
+  };
   const [found, setFound] = useState<Party[]>([]);
   const [open, setOpen] = useState(false);
   const highlighted = useRef<Party | undefined>(undefined);
@@ -89,8 +109,13 @@ export function Recipients({
         setText('');
         setFound([]);
       }}
-      onInputValueChange={(next, { reason }) => {
-        if (reason === 'item-press') return;
+      onInputValueChange={(next, { reason, isItemPress }) => {
+        if (reason === 'item-press' || isItemPress) return;
+        // The list closing as the box is left, with an address typed: the combobox clears it, and it goes in as a chip.
+        if (next === '' && reason !== 'input-change' && text.trim() !== '') {
+          commit(text);
+          return;
+        }
         // Pasted or typed: everything up to the last separator is chips at once.
         const cut = Math.max(next.lastIndexOf(','), next.lastIndexOf(';'));
         if (cut >= 0 && !/"[^"]*$/.test(next.slice(0, cut))) commit(next.slice(0, cut).replaceAll(';', ','), next.slice(cut + 1).trimStart());
@@ -98,10 +123,34 @@ export function Recipients({
         else setText(next.trimStart());
       }}
     >
-      <Combobox.Chips className="flex min-h-(--control) min-w-0 flex-1 flex-wrap items-center gap-1 py-1" aria-label={value.length > 0 ? label : undefined}>
+      <Combobox.Chips
+        className="flex min-h-(--control) min-w-0 flex-1 flex-wrap items-center gap-1 py-1"
+        aria-label={value.length > 0 ? label : undefined}
+        onDragOver={(event) => {
+          if (!dragging || dragging.from === field) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        }}
+        onDrop={(event) => {
+          if (!dragging || dragging.from === field) return;
+          event.preventDefault();
+          onChange(withTyped(value, typed(dragging.recipient)).map((v) => (sameAddress(v, dragging!.recipient) ? dragging!.recipient : v)));
+        }}
+      >
         {value.map((r) => (
           <Combobox.Chip
             key={r.address.toLowerCase()}
+            // Dragged to another of the draft's lines, it moves there.
+            draggable
+            onDragStart={(event) => {
+              dragging = { from: field, recipient: r };
+              event.dataTransfer.setData('text/plain', typed(r));
+              event.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragEnd={(event) => {
+              if (event.dataTransfer.dropEffect === 'move') onChange(value.filter((v) => v !== r));
+              dragging = null;
+            }}
             aria-label={r.wrong ? `${r.address}, not an address` : typed(r)}
             aria-description="Press Backspace or Delete to remove"
             className="group/chip flex h-6 max-w-full items-center gap-0.5 rounded-(--corner) bg-(--fill) pr-0.5 pl-2 text-sm outline-none focus-within:bg-(--fill-strong) data-highlighted:bg-(--fill-strong) pointer-coarse:h-8"
@@ -111,12 +160,9 @@ export function Recipients({
                 type="button"
                 tabIndex={-1}
                 className={cn('max-w-full truncate', r.wrong && 'underline decoration-destructive decoration-wavy underline-offset-4')}
-                // Pressed, a wrong one goes back to be typed again.
-                onClick={() => {
-                  if (!r.wrong) return;
-                  onChange(value.filter((v) => v !== r));
-                  setText(r.address);
-                }}
+                // A wrong one is typed again at a press; any other at a double press, as Gmail's are.
+                onClick={() => r.wrong && retype(r)}
+                onDoubleClick={() => retype(r)}
               >
                 {r.name ?? r.address}
               </button>
@@ -130,7 +176,7 @@ export function Recipients({
           </Combobox.Chip>
         ))}
         <Combobox.Input
-          ref={inputRef}
+          ref={attach}
           aria-label={label}
           autoComplete="off"
           // A phone's keyboard for addresses: with @ on it, and nothing capitalised or corrected.

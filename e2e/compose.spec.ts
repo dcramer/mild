@@ -67,7 +67,10 @@ test.describe('with Inbox on', () => {
     await writing.getByRole('button', { name: 'Cc', exact: true }).click();
     await expect(recipients(writing, 'Cc').input).toBeFocused();
     await page.keyboard.type('grace@example.net');
-    await writing.getByRole('button', { name: 'Bcc', exact: true }).click();
+    // Left with Grace suggested, it is a chip all the same.
+    await expect(page.getByRole('option', { name: /Grace Hopper/ })).toBeVisible();
+    await writing.getByRole('button', { name: 'Bcc', exact: true, includeHidden: true }).click();
+    await expect(recipients(writing, 'Cc').chip('grace@example.net')).toBeVisible();
     await expect(recipients(writing, 'Bcc').input).toBeFocused();
     // Left unfinished as Send is pressed, it goes all the same.
     await page.keyboard.type('bo@example.com');
@@ -551,6 +554,67 @@ test.describe('with Inbox on', () => {
     expect(headers['In-Reply-To']).toBeUndefined();
     expect(text).toMatch(/^Are you free too\?\r\n\r\n---------- Forwarded message ---------\r\nFrom: Ada Lovelace <ada@example\.org>\r\nDate: .+\r\n/);
     expect(text).toContain('Subject: Lunch on Thursday?\r\nTo: Me <me@example.org>\r\n\r\nAre you free for lunch on Thursday?');
+  });
+
+  test('a reply turns into a forward or a reply to all with what was written, and its subject and the files it answers can go with it', async ({
+    page,
+    sift,
+  }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Notes from the review').getByRole('cell').nth(2).click();
+    await reader(page)
+      .getByRole('button', { name: /^Reply(?! all)/ })
+      .first()
+      .click();
+    let writing = composer(page, 'Reply');
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    await page.keyboard.type('Thanks for these.');
+
+    await writing.getByRole('button', { name: 'Reply: change it' }).click();
+    await page.getByRole('menuitemradio', { name: 'Forward' }).click();
+    writing = composer(page, 'Forward');
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue(/^Thanks for these\.\n\n---------- Forwarded message/);
+    await expect(writing.getByRole('list', { name: 'Attachments' }).getByRole('listitem')).toHaveText([/review-notes\.pdf/]);
+
+    await writing.getByRole('button', { name: 'Forward: change it' }).click();
+    await page.getByRole('menuitemradio', { name: 'Reply to all' }).click();
+    writing = composer(page, 'Reply to all');
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Thanks for these.');
+    await expect(writing.getByRole('list', { name: 'Attachments' })).toHaveCount(0);
+
+    await writing.getByRole('button', { name: 'Reply to all: change it' }).click();
+    await page.getByRole('menuitem', { name: 'Edit subject' }).click();
+    const subject = writing.getByRole('textbox', { name: 'Subject' });
+    await expect(subject).toHaveValue('Re: Notes from the review');
+    await subject.fill('Review notes, with mine');
+    await writing.getByRole('button', { name: 'Reply to all: change it' }).click();
+    await page.getByRole('menuitemradio', { name: 'Include original attachments' }).click();
+    await expect(writing.getByRole('list', { name: 'Attachments' }).getByRole('listitem')).toHaveText([/review-notes\.pdf/]);
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await sendNow(page, 'Review notes, with mine');
+    const { headers } = readSent(sift.sent()[0]!.raw);
+    expect(headers['Subject']).toBe('Review notes, with mine');
+    expect(sift.sent()[0]!.raw).toContain(`filename*=UTF-8''review-notes.pdf`);
+  });
+
+  test('a chip is edited by a double press, and dragged from one line to another', async ({ page }) => {
+    await page.goto('/inbox');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    const to = recipients(writing, 'To');
+    await to.input.fill('ada@example.org, grace@example.net,');
+    await to.chip('ada@example.org').getByRole('button', { name: 'ada@example.org', exact: true }).dblclick();
+    await expect(to.input).toHaveValue('ada@example.org');
+    await expect(to.input).toBeFocused();
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type('g, ');
+    await expect(to.chip('ada@example.org')).toBeVisible();
+
+    await writing.getByRole('button', { name: 'Cc', exact: true }).click();
+    const cc = recipients(writing, 'Cc');
+    await to.chip('grace@example.net').dragTo(cc.input);
+    await expect(cc.chip('grace@example.net')).toBeVisible();
+    await expect(to.chips).toHaveCount(1);
   });
 
   test('Forward carries the message’s files, and one taken off stays behind', async ({ page, sift }) => {

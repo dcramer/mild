@@ -1563,6 +1563,17 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
           <ReplyBox
             key={`${replying.title}/${replying.to.id}`}
             label={replying.title}
+            menu={
+              <Menu
+                label={`${replying.title}: change it`}
+                trigger={<span className="flex h-(--control) items-center px-1.5 font-semibold text-foreground">{replying.title}</span>}
+                items={(['Reply', 'Reply to all', 'Forward'] as const).map((title) => ({
+                  label: title,
+                  on: title === replying.title,
+                  onSelect: () => answer(title),
+                }))}
+              />
+            }
             {...(replying.to === NEWEST
               ? {}
               : {

@@ -1,6 +1,6 @@
 'use client';
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ClockIcon } from 'lucide-react';
+import { ChevronDownIcon, ClockIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { reloadAll } from '@/lib/action.ts';
 import { type Party, type Recipient, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
@@ -128,8 +128,9 @@ export function InlineComposer({
       title={TITLES[what.kind === 'reply' && what.all ? 'all' : what.kind]}
       {...(what.kind === 'reply' ? { subject: answering(reveal(message.subject)) } : {})}
       choices={choices}
-      start={what.kind === 'reply' ? replyDraft(message, choices, what.all) : forwardDraft(message, choices)}
-      {...(what.kind === 'forward' ? { forwarded: message } : {})}
+      start={startOf(message, choices, what)}
+      startFor={(other) => startOf(message, choices, other)}
+      answered={message}
       onClose={onClose}
     />
   );
@@ -156,6 +157,10 @@ function replyDraft(message: MessageDetail, choices: readonly From[], all: boole
   const cc = all ? recipients.filter((p) => !isOwn(p) && !answered.has(p.address.toLowerCase())) : [];
   return emptyDraft(answeredFrom(message, choices), { to, cc, showCc: cc.length > 0 });
 }
+
+/** How a reply or forward of `message` starts. */
+const startOf = (message: MessageDetail, choices: readonly From[], what: Exclude<Writing, { kind: 'new' }>) =>
+  what.kind === 'reply' ? replyDraft(message, choices, what.all) : forwardDraft(message, choices);
 
 /** Gmail's quote of a forwarded message, under two empty lines for the reader's own text. Its files go with it (`ForwardedFiles`). */
 function forwardDraft(message: MessageDetail, choices: readonly From[]): Draft {
@@ -244,8 +249,9 @@ function Writer({
   subject,
   choices,
   start,
+  startFor,
   saved,
-  forwarded,
+  answered,
   inline = false,
   about,
   onClose,
@@ -258,8 +264,10 @@ function Writer({
   subject?: string;
   choices: readonly From[];
   start: Draft;
-  /** The message a forward carries the files of. */
-  forwarded?: MessageDetail;
+  /** How a reply or forward of the same message starts, for the menu that changes one into another. */
+  startFor?: (what: Exclude<Writing, { kind: 'new' }>) => Draft;
+  /** The message a reply or forward answers, whose files a forward carries, and a reply that asks. */
+  answered?: MessageDetail;
   inline?: boolean;
   about?: ReactNode;
   onClose: () => void;
@@ -317,9 +325,12 @@ function Writer({
   const [uploading, setUploading] = useState<Uploading[]>([]);
   // What is typed in each line that is not a chip yet.
   const [typing, setTyping] = useState({ to: '', cc: '', bcc: '' });
-  const files = useForwarded(forwarded);
+  const files = useForwarded(what.kind === 'forward' || draft.withFiles ? answered : undefined);
   const carried = files.filter((f) => !draft.dropped.includes(f.part));
   const toField = useRef<HTMLInputElement>(null);
+  const [toInput] = useState(() => (input: HTMLInputElement | null) => {
+    toField.current = input;
+  });
   // Cc or Bcc asked for: entered once it is drawn.
   const asked = useRef<'cc' | 'bcc' | null>(null);
   // One for each line, made once: a ref that changed each render would be attached again each render.
@@ -348,7 +359,7 @@ function Writer({
   const from = choices.find((c) => c.address === draft.from) ?? choices[0];
   const addressee = draft.to[0] ?? draft.cc[0] ?? draft.bcc[0] ?? withTyped([], typing.to)[0];
   // What a toast calls it: its subject, or who it is to.
-  const said = (subject ?? draft.subject.trim()) || (addressee ? `To ${typed(addressee)}` : title);
+  const said = ((draft.editSubject ? draft.subject.trim() : subject) ?? draft.subject.trim()) || (addressee ? `To ${typed(addressee)}` : title);
 
   const attach = (picked: readonly File[]) => {
     for (const [index, file] of picked.entries()) {
@@ -477,13 +488,14 @@ function Writer({
       uploads: draft.files.map((f) => f.id),
       draft: draftId(what),
     };
+    const carrying = carried.length > 0 && what.kind !== 'new' ? { forwarding: { messageId: what.messageId, parts: carried.map((f) => f.part) } } : {};
     const request =
       what.kind === 'reply'
-        ? { ...mail, replyTo: { messageId: what.messageId } }
+        ? { ...mail, replyTo: { messageId: what.messageId }, ...(draft.editSubject && draft.subject.trim() ? { subject: draft.subject } : {}), ...carrying }
         : {
             ...mail,
             subject: draft.subject,
-            ...(what.kind === 'forward' && carried.length > 0 ? { forwarding: { messageId: what.messageId, parts: carried.map((f) => f.part) } } : {}),
+            ...carrying,
           };
     // Held while its toast is up, as Gmail's Undo send holds it: Undo opens the draft again, which is kept until it has gone.
     onClose();
@@ -523,6 +535,21 @@ function Writer({
       },
     });
     onClose();
+  };
+
+  /** Reply, Reply to all or Forward of the same message instead, with what was written carried over, as Gmail's does. */
+  const switchTo = (other: Exclude<Writing, { kind: 'new' }>) => {
+    if (!startFor) return;
+    const started = startFor(other);
+    const own = draft.text.includes(QUOTE) ? draft.text.slice(0, draft.text.indexOf(QUOTE)).trimEnd() : draft.text;
+    finished();
+    keepDraft(who, what, null);
+    void api.removeDraft(draftId(what)).then(
+      () => client.invalidateQueries({ queryKey: ['drafts'] }),
+      () => {},
+    );
+    keepDraft(who, other, { ...started, text: other.kind === 'forward' ? `${own}${started.text}` : own, files: draft.files, at: Date.now() });
+    compose?.(other);
   };
 
   const fromLine =
@@ -645,14 +672,14 @@ function Writer({
           text={typing.to}
           onText={(to) => setTyping((was) => ({ ...was, to }))}
           suggest={suggest}
-          inputRef={toField}
+          inputRef={toInput}
         />
         {draft.showCc ? null : ask('cc')}
         {draft.showBcc ? null : ask('bcc')}
       </DraftLine>
       {draft.showCc ? lineFor('cc') : null}
       {draft.showBcc ? lineFor('bcc') : null}
-      {what.kind === 'reply' ? null : (
+      {what.kind === 'reply' && !draft.editSubject ? null : (
         <DraftLine label="Subject">
           <Input bare aria-label="Subject" className="flex-1" value={draft.subject} onChange={(event) => change({ subject: event.target.value })} />
         </DraftLine>
@@ -669,7 +696,12 @@ function Writer({
   );
   if (inline)
     return (
-      <ReplyBox label={title} about={about} actions={actions}>
+      <ReplyBox
+        label={title}
+        about={about}
+        menu={what.kind === 'new' ? null : <AnswerKind what={what} draft={draft} subject={subject ?? ''} onSwitch={switchTo} onChange={change} />}
+        actions={actions}
+      >
         {fields}
       </ReplyBox>
     );
@@ -742,5 +774,56 @@ function ScheduleSend({ onSchedule }: { onSchedule: (at: number) => void }) {
         </Field>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * A reply's or forward's menu, at the head of its box: what it is, changed to Reply, Reply to all or Forward, and for a
+ * reply, its subject to edit and the files of the message it answers to include, as Gmail's reply menu has them.
+ */
+function AnswerKind({
+  what,
+  draft,
+  subject,
+  onSwitch,
+  onChange,
+}: {
+  what: Exclude<Writing, { kind: 'new' }>;
+  draft: Draft;
+  /** A reply's subject as it goes unless edited. */
+  subject: string;
+  onSwitch: (what: Exclude<Writing, { kind: 'new' }>) => void;
+  onChange: (next: Partial<Draft>) => void;
+}) {
+  const shown = what.kind === 'forward' ? 'Forward' : what.all ? 'Reply to all' : 'Reply';
+  const kinds = [
+    ['Reply', { kind: 'reply', messageId: what.messageId, all: false }],
+    ['Reply to all', { kind: 'reply', messageId: what.messageId, all: true }],
+    ['Forward', { kind: 'forward', messageId: what.messageId }],
+  ] as const;
+  return (
+    <Menu
+      label={`${shown}: change it`}
+      trigger={
+        <span className="flex h-(--control) items-center gap-1 px-1.5 font-semibold text-foreground">
+          {shown}
+          <ChevronDownIcon aria-hidden className="size-3.5" />
+        </span>
+      }
+      items={[
+        ...kinds.map(([label, other]) => ({ label, on: label === shown, onSelect: () => label !== shown && onSwitch(other) })),
+        ...(what.kind === 'reply'
+          ? [
+              {
+                group: 'More',
+                items: [
+                  { label: 'Edit subject', disabled: draft.editSubject === true, onSelect: () => onChange({ editSubject: true, subject }) },
+                  { label: 'Include original attachments', on: draft.withFiles === true, onSelect: () => onChange({ withFiles: !draft.withFiles }) },
+                ],
+              },
+            ]
+          : []),
+      ]}
+    />
   );
 }

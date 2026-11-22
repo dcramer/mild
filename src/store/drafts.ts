@@ -17,6 +17,8 @@ export interface Writing {
   text: string;
   files: { id: string; name: string; size: number; added: number }[];
   dropped: string[];
+  withFiles?: boolean;
+  editSubject?: boolean;
   id: string | null;
   at: number;
 }
