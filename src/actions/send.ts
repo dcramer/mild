@@ -86,9 +86,10 @@ const dated = (at: number) => new Date(at).toUTCString().replace('GMT', '+0000')
 /**
  * The message as RFC 2822 text: plain text in UTF-8 and the files after it, every address checked and every header value refused if it could break
  * a line, names and a subject outside ASCII encoded (RFC 2047). `id` is its Message-ID, made by the page once for the press of Send.
+ * A `draft`, for Gmail's Drafts, may be to nobody yet.
  */
-export function buildMessage(mail: Outgoing, id: string, at: number, attached: readonly Attached[] = []): string {
-  if (mail.to.length + mail.cc.length + mail.bcc.length === 0) throw new Refusal('Say who the mail is to.');
+export function buildMessage(mail: Outgoing, id: string, at: number, attached: readonly Attached[] = [], draft = false): string {
+  if (!draft && mail.to.length + mail.cc.length + mail.bcc.length === 0) throw new Refusal('Say who the mail is to.');
   const subject = headerText(mail.subject, 'subject');
   const headers = [
     `From: ${party(mail.from)}`,

@@ -98,6 +98,27 @@ const mail = (accountId: string) => ({
   uploads: [],
 });
 
+/** A draft saved from one mailbox, as the composer saves it. */
+const draftOf = (accountId: string) => ({
+  id: 'd1',
+  accountId,
+  writing: {
+    of: { kind: 'new' },
+    from: accountId,
+    to: [],
+    cc: [],
+    bcc: [],
+    showCc: false,
+    showBcc: false,
+    subject: 'Hi',
+    text: '',
+    files: [],
+    dropped: [],
+    id: null,
+    at: 1,
+  },
+});
+
 const call = (method: 'GET' | 'POST', path: string, who: string | null, body?: unknown) => {
   if (who) called.add(new URL(path, 'http://sift').pathname);
   return dashboard.call(method, path, body, who ? { cookie: cookies[who]! } : {});
@@ -156,6 +177,7 @@ beforeEach(async () => {
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     send: async (_db, { accountId, threadId }) => (calls.push(`send ${accountId} ${threadId}`), { id: 's', threadId: threadId ?? 's' }),
     attachments: async (_db, { accountId }) => (calls.push(`attachments ${accountId}`), []),
+    dropDraft: async (_db, { accountId }) => void calls.push(`drop draft ${accountId}`),
     checkNow: async () => void calls.push('check'),
     activity: async () => ({
       running: true,
@@ -198,6 +220,7 @@ const READS = (account: string, mark: string) => [
   '/api/inbox?reach=inbox',
   '/api/mail/threads',
   `/api/mail/addresses?q=${mark}`,
+  '/api/mail/drafts',
   '/api/mail/addresses?q=sender',
   `/api/mail/threads?q=${mark}&view=needs&unread=1`,
   `/api/mail/threads?from=sender@${mark}.example.com&domain=${mark}.example.com&since=0`,
@@ -308,9 +331,11 @@ describe("nobody sees or changes another person's mail", () => {
     expect(theirs.action).not.toBe(ids[BRAVO]!.action);
     const db = await dbOf(ALPHA);
     await raw(db).run(`INSERT INTO uploads (id, about, size, pieces, created_at) VALUES ('up-alpha', 'x', 1, 1, 0)`);
+    await raw(db).run(`INSERT INTO drafts (id, account_id, writing, changed_at) VALUES ('d1', ?, 'x', 0)`, ALPHA);
     const state = async () =>
       JSON.stringify([
         await raw(db).all('SELECT * FROM uploads'),
+        await raw(db).all('SELECT * FROM drafts'),
         await raw(db).all('SELECT * FROM upload_pieces'),
         await listRules(db),
         await raw(db).all('SELECT * FROM labels'),
@@ -364,6 +389,7 @@ describe("nobody sees or changes another person's mail", () => {
       ['/api/mail/attachments', { accountId: ALPHA, messageId: `m-${MARK[ALPHA]}` }, { accountId: NOBODY, messageId: `m-${MARK[ALPHA]}` }],
       ['/api/mail/upload/piece', { id: 'up-alpha', piece: 0, data: 'AA==' }, { id: 'up-nobody', piece: 0, data: 'AA==' }],
       ['/api/mail/upload/remove', { id: 'up-alpha' }, { id: 'up-nobody' }],
+      ['/api/mail/drafts/save', draftOf(ALPHA), draftOf(NOBODY)],
       // From their own mailbox, answering someone else's message.
       ['/api/mail/send', { ...mail(BRAVO), replyTo: { messageId: `m-${MARK[ALPHA]}` } }, { ...mail(BRAVO), replyTo: { messageId: 'm-nobody' } }],
     ];
@@ -411,6 +437,9 @@ describe("nobody sees or changes another person's mail", () => {
       // Inbox is on now: Ask looks up only their own senders, under their own mailbox.
       ['/api/mail/ask', { words: 'from alpha', today: '2026-11-19' }],
       ['/api/mail/upload', { name: 'plans.pdf', type: 'application/pdf', size: 1 }],
+      ['/api/mail/drafts/save', draftOf(BRAVO)],
+      // Alpha's has the same id; Bravo's own goes, and Alpha's stays.
+      ['/api/mail/drafts/remove', { id: 'd1' }],
     ] as const)
       expect((await call('POST', path, BRAVO, body)).status, path).toBe(200);
     expect(calls.filter((c) => c !== 'check')).toEqual([

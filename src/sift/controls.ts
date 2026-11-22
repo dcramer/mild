@@ -2,6 +2,7 @@ import { press, undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import { sendMail } from '../actions/send.ts';
 import { attachmentsOf, forwardedFiles } from '../work/attachments.ts';
+import { dropGmailDraft } from '../actions/drafts.ts';
 import { removeUploads, uploaded } from '../store/uploads.ts';
 import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
@@ -323,6 +324,7 @@ export async function buildControls(
       await removeUploads(db, uploads);
       return sent;
     },
+    dropDraft: async (db, draft) => await dropGmailDraft(db, (await gmail(db, draft.accountId)).mailbox, draft, Date.now()),
     attachments: async (db, { accountId, messageId }) =>
       (await attachmentsOf(db, (await gmail(db, accountId)).api, accountId, messageId)).map(({ part, name, type, size }) => ({
         part,

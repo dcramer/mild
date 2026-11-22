@@ -32,6 +32,9 @@ import syncRead from './routes/sync/get.ts';
 
 import mailSendWrite from './routes/mail/send/post.ts';
 import mailAddressesRead from './routes/mail/addresses/get.ts';
+import mailDraftsRead from './routes/mail/drafts/get.ts';
+import mailDraftsSaveWrite from './routes/mail/drafts/save/post.ts';
+import mailDraftsRemoveWrite from './routes/mail/drafts/remove/post.ts';
 import mailAttachmentsWrite from './routes/mail/attachments/post.ts';
 import mailUploadWrite from './routes/mail/upload/post.ts';
 import mailUploadPieceWrite from './routes/mail/upload/piece/post.ts';
@@ -84,6 +87,7 @@ export const READS: readonly Read[] = [
   labelsProposalRead,
   mailReachRead,
   mailAddressesRead,
+  mailDraftsRead,
   mailboxIconsRead,
   mailThreadRead,
   mailThreadsRead,
@@ -122,6 +126,8 @@ export const WRITES: readonly Write[] = [
   mailOnWrite,
   mailSendWrite,
   mailAttachmentsWrite,
+  mailDraftsSaveWrite,
+  mailDraftsRemoveWrite,
   mailUploadWrite,
   mailUploadPieceWrite,
   mailUploadRemoveWrite,

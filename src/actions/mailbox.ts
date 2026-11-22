@@ -25,4 +25,13 @@ export interface Mailbox {
    * calls it, which records it first and checks they may.
    */
   send(message: { raw: string; threadId?: string }): Promise<{ id: string; threadId: string; labelIds: string[] }>;
+  /**
+   * Puts mail being written into Gmail's Drafts, or (`draftId`) in place of the draft there. Returns its draft id; a draft
+   * Gmail no longer has is made again. Only `src/work/drafts.ts` calls it.
+   */
+  saveDraft(draft: { raw: string; threadId?: string; draftId?: string }): Promise<string>;
+  /** Resolves when it is already gone, too. */
+  deleteDraft(draftId: string): Promise<void>;
+  /** Whether Gmail's Drafts still hold it: a draft sent or deleted in Gmail is not. */
+  hasDraft(draftId: string): Promise<boolean>;
 }

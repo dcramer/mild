@@ -9,6 +9,7 @@ import { type AnswerLabel, answerChoices, useListAnswer } from '@/components/ans
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
+import { DraftList } from '@/components/drafts.tsx';
 import { Thinks, WhoWrote, type Writer, useMailPress } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, readAheadOnRest, useLoaded, usePages } from '@/lib/api.ts';
 import { type Copied, conversations, copiedKey, useWhole } from '@/lib/copy.ts';
@@ -51,11 +52,15 @@ import {
   usePhone,
 } from '@/system';
 
+/** What Inbox shows: its conversations, narrowed or not, or the mail begun and not sent. */
+type Shown = MailView | 'drafts';
+
 const VIEWS = [
   ['all', 'Everything'],
   ['needs', 'Needs you'],
   ['sorted', 'Sorted'],
-] as const satisfies readonly (readonly [MailView, string])[];
+  ['drafts', 'Drafts'],
+] as const satisfies readonly (readonly [Shown, string])[];
 
 /** How long a narrowing of the list is kept once nothing shows it: longer than a conversation is read for. */
 const LIST_KEPT_MS = 30 * 60_000;
@@ -354,8 +359,11 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   // Everything is the list unnarrowed, with nothing in the address.
-  const [asked, setView] = useParam<MailView | ''>('view', VIEWS);
-  const view = asked || 'all';
+  const [asked, setView] = useParam<Shown | ''>('view', VIEWS);
+  const shown = asked || 'all';
+  const drafting = shown === 'drafts';
+  // Drafts are not conversations: the list of them stands in for the inbox's.
+  const view: MailView = drafting ? 'all' : shown;
   const [unread, setUnread] = useParam('unread');
   // Rules Mild proposes, at the top of the inbox: For review is not a section of its own while Inbox is on.
   const suggestions = useLoaded('suggestions-false', (signal) => api.suggestions(false, '', signal));
@@ -365,9 +373,9 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const on = manage.data?.mail === true;
   const started = useStarted();
   // The inbox is drawn from the copy in this browser; a search, or what Ask made of one, looks through all the mail Mild keeps, which only the server can.
-  const local = on && started && q === '' && !ask.narrowed;
+  const local = on && started && q === '' && !ask.narrowed && !drafting;
   // Asked only once the page has started: until then it cannot say whether the copy will draw the list.
-  const server = on && started && !local;
+  const server = on && started && !local && !drafting;
   const pages = usePages(`mail-threads-${server}-${query.view}-${label}-${query.unread}-${q}-${JSON.stringify(ask.query)}`, (before, signal) =>
     server ? api.mailThreads(query, before, signal) : Promise.resolve({ threads: [], next: null }),
   );
@@ -471,7 +479,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   return (
     <ListView
       search={{ value: search, onChange: setSearch, placeholder: 'Search mail', ask: { onAsk: () => ask.ask(search.trim()), busy: ask.busy } }}
-      view={{ label: 'Show', value: view, options: VIEWS, onChange: (next) => setView(next === 'all' ? '' : (next as MailView)) }}
+      view={{ label: 'Show', value: shown, options: VIEWS, onChange: (next) => setView(next === 'all' ? '' : (next as Shown)) }}
       filters={{
         active: [
           ...(label === '' ? [] : [{ label: `Label: ${names.get(label) ?? label}`, clear: () => setLabel('') }]),
@@ -515,7 +523,9 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
           <p>{ask.said}</p>
         </Note>
       ) : null}
-      {waiting ? (
+      {drafting ? (
+        <DraftList mailbox={mailbox} />
+      ) : waiting ? (
         loadingRows
       ) : threads.length === 0 ? (
         <Empty>{q !== '' || ask.narrowed ? 'No mail matches.' : narrowed ? 'Nothing in your inbox matches.' : 'Nothing is in your inbox.'}</Empty>

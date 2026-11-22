@@ -45,7 +45,7 @@ export const DECISION_OUTCOMES = ['none', 'done', 'skipped', 'failed', 'unknown'
  * `digest`: a digest put into the mailbox, which changes no message Mild recorded. `send`: mail the person sent through Mild.
  * `read` and `unread`: the person's own press in Inbox, as is an `archive` with no decision.
  */
-export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter', 'digest', 'send', 'read', 'unread'] as const;
+export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 'filter', 'unfilter', 'digest', 'send', 'read', 'unread', 'draft'] as const;
 export const ACTION_STATUSES = ['pending', 'done', 'failed', 'unknown', 'undone'] as const;
 /** `learned`: Mild made it (blocking a sender). */
 export const RULE_SOURCES = ['user', 'learned', 'correction'] as const;
@@ -531,6 +531,28 @@ export const uploads = pgTable(
     createdAt: time('created_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.id] }), index('uploads_created').on(t.createdAt), own()],
+).enableRLS();
+
+/**
+ * Mail the person is writing, saved from the composer as they pause, so it is on every device and, a few minutes after
+ * the last change, in Gmail's Drafts (`pushDrafts`, src/work/drafts.ts). Sent or discarded, it goes, and so does Gmail's.
+ */
+export const drafts = pgTable(
+  'drafts',
+  {
+    userId: userId(),
+    id: text('id').notNull(), // made by the page
+    accountId: text('account_id').notNull(), // the mailbox it is from
+    // What the composer holds (`{ what, draft }`, web/src/lib/compose.ts), encrypted.
+    writing: text('writing').notNull(),
+    uploads: jsonb('uploads').$type<string[]>().notNull().default([]), // the ids of its files in `uploads`, kept while it is
+    changedAt: time('changed_at').notNull(),
+    gmailId: text('gmail_id'), // its id in Gmail's Drafts; null until pushed
+    pushedAt: time('pushed_at'), // the `changed_at` Gmail has; behind it, it is pushed again
+    sendAt: time('send_at'), // scheduled: sent then by the pass (`sendScheduled`)
+    sendError: text('send_error'), // why a scheduled send did not go, for the person to put right; cleared as it is changed
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.id] }), mailbox(t), index('drafts_changed').on(t.userId, t.changedAt), own()],
 ).enableRLS();
 
 /** An upload's bytes, a piece to a request, each encrypted (`sealBytes`, src/secrets.ts). */

@@ -48,6 +48,7 @@ export const labelProposalName = (db: Sql, accountId: string, field: 'goal' | 'l
 export const ruleDraftName = (db: Sql, accountId: string, field: 'goal' | 'rule') => `person ${db.person} rule draft ${field} of ${accountId}`;
 export const askName = (db: Sql, accountId: string, field: 'words' | 'answer') => `person ${db.person} ask ${field} of ${accountId}`;
 export const digestName = (db: Sql, id: number) => `person ${db.person} digest ${id} highlights`;
+export const draftName = (db: Sql, id: string) => `person ${db.person} draft ${id}`;
 export const uploadName = (db: Sql, id: string, piece: number | 'about') => `person ${db.person} upload ${id} ${piece}`;
 export const addressName = (db: Sql, accountId: string, hash: string) => `person ${db.person} address ${hash} of ${accountId}`;
 

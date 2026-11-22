@@ -44,6 +44,8 @@ export type {
 export type { Confidential } from '../../../src/confidential.ts';
 import type {
   AddressSuggestion,
+  DraftSave,
+  SavedDraft,
   MessageAttachment,
   ContactPage,
   DecisionPage,
@@ -305,6 +307,11 @@ export const api = {
    * closing page send (64 KB); a longer one waits in the draft, which Send sends once.
    */
   send: (mail: SendRequest) => post<{ id: string; threadId: string }>('/api/mail/send', mail, JSON.stringify(mail).length < 60_000),
+  /** The person's drafts, whole. */
+  drafts: (signal: AbortSignal) => get<{ drafts: SavedDraft[] }>('/api/mail/drafts', {}, signal),
+  /** Keep what the composer holds; sent as the page closes too, while it is small enough for a closing page to send. */
+  saveDraft: (draft: DraftSave) => post('/api/mail/drafts/save', draft, JSON.stringify(draft).length < 60_000),
+  removeDraft: (id: string) => post('/api/mail/drafts/remove', { id }),
   /** Whom to suggest as an address is typed in the composer. */
   addresses: (q: string, signal: AbortSignal) => get<{ addresses: AddressSuggestion[] }>('/api/mail/addresses', { q }, signal),
   /** A message's files, read from Gmail once where Mild has not kept them. */

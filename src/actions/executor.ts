@@ -227,6 +227,7 @@ export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome>
   if (action.type === 'filter' || action.type === 'unfilter') throw new Refusal('A Gmail filter is added or taken out from its rule, not undone.');
   if (action.type === 'digest') throw new Refusal('A digest is a message of its own in your inbox. Archive it there.');
   if (action.type === 'send') throw new Refusal('Mail once sent cannot be taken back.');
+  if (action.type === 'draft') throw new Refusal('A draft is changed or discarded in the composer.');
   if (action.type === 'unsubscribe') throw new Refusal('An unsubscribe cannot be undone from here. Subscribe again with the sender.');
   if (action.status !== 'done') throw new Refusal(`Change #${actionId} is ${action.status}; only completed changes can be undone.`);
 

@@ -253,6 +253,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   // A rule Mild proposes, opened from Inbox in its place, as a message is.
   const [proposal] = useParam('proposal');
   const [to] = useParam('to');
+  const [draftParam] = useParam('draft');
   useEffect(() => void (messageId && panelOpened('Message')), [messageId]);
   useEffect(() => void (compose && panelOpened('Composer')), [compose]);
   const listed = list.findIndex((item) => item.messageId === messageId);
@@ -414,7 +415,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
               </BarSlot>
               <PageFoot />
             </div>
-            {writingNew ? <Composer key={to} to={to} onClose={closeComposer} /> : null}
+            {writingNew ? <Composer key={`${to}/${draftParam}`} to={to} draft={draftParam} onClose={closeComposer} /> : null}
           </div>
         </Mailbox>
       </ComposeContext>

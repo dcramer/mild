@@ -124,6 +124,40 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
       return { id: data.id, threadId: data.threadId, labelIds: data.labelIds ?? [] };
     },
 
+    async saveDraft({ raw, threadId, draftId }) {
+      const requestBody = { message: threadId ? { threadId } : {} };
+      const media = { mimeType: 'message/rfc822', body: raw };
+      if (draftId)
+        try {
+          const data = await call('users.drafts.update', 15, () => client.users.drafts.update({ userId, id: draftId, requestBody, media }));
+          if (data.id) return data.id;
+        } catch (error) {
+          // Sent or deleted in Gmail since: made again.
+          if (!isNotFound(error)) throw error;
+        }
+      const data = await call('users.drafts.create', 10, () => client.users.drafts.create({ userId, requestBody, media }));
+      if (!data.id) throw new Error('Gmail did not return an id for the draft');
+      return data.id;
+    },
+
+    async deleteDraft(draftId) {
+      try {
+        await call('users.drafts.delete', 10, () => client.users.drafts.delete({ userId, id: draftId }));
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
+      }
+    },
+
+    async hasDraft(draftId) {
+      try {
+        await call('users.drafts.get', 5, () => client.users.drafts.get({ userId, id: draftId, format: 'minimal' }));
+        return true;
+      } catch (error) {
+        if (isNotFound(error)) return false;
+        throw error;
+      }
+    },
+
     async findByMessageId(messageId) {
       // It goes into a search query, so refuse anything that could change the query's meaning.
       if (!/^<[\w.-]+@[\w.-]+>$/.test(messageId)) throw new Error('message id cannot be searched safely');

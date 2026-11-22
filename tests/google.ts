@@ -343,6 +343,8 @@ export class FakeGmail {
   now: () => number = () => Date.now();
 
   private readonly messages = new Map<string, Stored>();
+  /** Each draft in Drafts, by its id: the message it is now. */
+  private readonly drafts = new Map<string, string>();
   private attachmentEpoch = 0;
   private readonly history: HistoryRecord[] = [];
   private historyId = 1000;
@@ -447,6 +449,18 @@ export class FakeGmail {
   }
 
   /** What was sent from it, oldest first. */
+  /** A draft sent or deleted in Gmail itself. */
+  dropDraft(draftId: string): void {
+    const was = this.drafts.get(draftId);
+    this.drafts.delete(draftId);
+    if (was) this.messages.delete(was);
+  }
+
+  /** What Gmail's Drafts hold, by draft id: each as the message it is now. */
+  draftsHeld() {
+    return new Map([...this.drafts].map(([id, messageId]) => [id, this.message(messageId)!]));
+  }
+
   sent() {
     return [...this.messages.values()].filter((m) => m.labelIds.includes('SENT')).map((m) => this.message(m.id)!);
   }
@@ -685,6 +699,34 @@ export class FakeGmail {
         if (this.lagSearch) this.unindexed.add(newId);
         return HttpResponse.json({ id: stored.id, threadId: stored.threadId, labelIds: stored.labelIds });
       }
+      case 'users.drafts.create':
+      case 'users.drafts.update': {
+        const message = (body['message'] ?? {}) as { raw?: string; threadId?: string };
+        const raw = Buffer.from(message.raw ?? '', 'base64url').toString('utf8');
+        if (!raw.includes('\n')) return refused(400, 'Missing draft message', 'invalidArgument');
+        const was = id ? this.drafts.get(id) : undefined;
+        if (id && !was) return refused(404, 'Requested entity was not found.', 'notFound');
+        // Gmail keeps a draft as a message labelled DRAFT, made again each time it is saved.
+        if (was) this.messages.delete(was);
+        const messageId = this.newId();
+        const thread = message.threadId && this.newest().some((m) => m.threadId === message.threadId) ? message.threadId : messageId;
+        this.put({ id: messageId, threadId: thread, labelIds: ['DRAFT'], internalDate: this.now(), raw });
+        const draftId = id ?? `r${messageId}`;
+        this.drafts.set(draftId, messageId);
+        return HttpResponse.json({ id: draftId, message: { id: messageId, threadId: thread, labelIds: ['DRAFT'] } });
+      }
+      case 'users.drafts.get': {
+        const was = this.drafts.get(id!);
+        if (!was) return refused(404, 'Requested entity was not found.', 'notFound');
+        return HttpResponse.json({ id, message: { id: was, threadId: this.messages.get(was)?.threadId } });
+      }
+      case 'users.drafts.delete': {
+        const was = this.drafts.get(id!);
+        if (!was) return refused(404, 'Requested entity was not found.', 'notFound');
+        this.drafts.delete(id!);
+        this.messages.delete(was);
+        return new HttpResponse(null, { status: 204 });
+      }
       case 'users.messages.attachments.get': {
         const m = this.messages.get(params['messageId']!);
         const [partId, epoch] = (id ?? '').split('~');
@@ -772,6 +814,8 @@ const ROUTES: [method: string, verb: 'get' | 'post' | 'patch' | 'delete', path: 
   ['users.settings.filters.list', 'get', '/settings/filters'],
   ['users.settings.filters.create', 'post', '/settings/filters'],
   ['users.settings.filters.delete', 'delete', '/settings/filters/:id'],
+  ['users.drafts.delete', 'delete', '/drafts/:id'],
+  ['users.drafts.get', 'get', '/drafts/:id'],
 ];
 
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/:user';
@@ -914,26 +958,34 @@ export class FakeGoogle {
           return answered;
         }),
       ),
-      // Mail sent through the upload address, as Mild sends it: the JSON and the message, as parts of one body.
-      http.post(`${GMAIL_UPLOAD}/messages/send`, async ({ request }) => {
-        const mailbox = this.mailboxOf(request);
-        if (!mailbox) return refused(401, 'Request had invalid authentication credentials.', 'unauthenticated');
-        const boundary = param(request.headers.get('content-type') ?? '', 'boundary');
-        const text = await request.text();
-        const parts = boundary ? text.split(`--${boundary}`).slice(1, -1) : [];
-        const bodyOf = (part: string) =>
-          part
-            .slice(part.search(/\r?\n\r?\n/))
-            .replace(/^\r?\n\r?\n/, '')
-            .replace(/\r?\n$/, '');
-        const json = parts[0] ? (JSON.parse(bodyOf(parts[0]) || '{}') as Record<string, unknown>) : {};
-        const raw = parts[1] ? bodyOf(parts[1]) : '';
-        const answered = await mailbox.answer('users.messages.send', {}, () =>
-          mailbox.respond('users.messages.send', request, {}, { ...json, raw: Buffer.from(raw).toString('base64url') }),
-        );
-        this.onChange();
-        return answered;
-      }),
+      // Mail sent and drafts saved through the upload address, as Mild sends them: the JSON and the message, as parts of one body.
+      ...(
+        [
+          ['users.messages.send', 'post', '/messages/send'],
+          ['users.drafts.create', 'post', '/drafts'],
+          ['users.drafts.update', 'put', '/drafts/:id'],
+        ] as const
+      ).map(([method, verb, path]) =>
+        http[verb](`${GMAIL_UPLOAD}${path}`, async ({ request, params }) => {
+          const mailbox = this.mailboxOf(request);
+          if (!mailbox) return refused(401, 'Request had invalid authentication credentials.', 'unauthenticated');
+          const boundary = param(request.headers.get('content-type') ?? '', 'boundary');
+          const text = await request.text();
+          const parts = boundary ? text.split(`--${boundary}`).slice(1, -1) : [];
+          const bodyOf = (part: string) =>
+            part
+              .slice(part.search(/\r?\n\r?\n/))
+              .replace(/^\r?\n\r?\n/, '')
+              .replace(/\r?\n$/, '');
+          const json = parts[0] ? (JSON.parse(bodyOf(parts[0]) || '{}') as Record<string, unknown>) : {};
+          const raw = Buffer.from(parts[1] ? bodyOf(parts[1]) : '').toString('base64url');
+          const id = typeof params['id'] === 'string' ? params['id'] : undefined;
+          const body = method === 'users.messages.send' ? { ...json, raw } : { message: { ...(json['message'] as object), raw } };
+          const answered = await mailbox.answer(method, id ? { id } : {}, () => mailbox.respond(method, request, id ? { id } : {}, body));
+          this.onChange();
+          return answered;
+        }),
+      ),
     ];
   }
 }

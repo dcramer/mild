@@ -23,6 +23,8 @@ export interface ActionPayload extends LabelChange {
   digest?: number;
   /** For `send` actions, which change no message: the mail sent, by its Message-ID, and to whom. */
   send?: { messageId: string; to: string[]; cc: string[]; bcc?: string[]; subject: string };
+  /** For `draft` actions, which change no message Mild records: the draft, saved in Gmail's Drafts or (`removed`) taken out. */
+  draft?: { id: string; gmailId?: string; removed?: true };
 }
 
 export interface ActionRecord {

@@ -1,11 +1,12 @@
 'use client';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ClockIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { reloadAll } from '@/lib/action.ts';
 import { type Party, type Recipient, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
 import { api, useLoaded } from '@/lib/api.ts';
 import { dateTime } from '@/lib/format.ts';
-import { type Draft, type Writing, emptyDraft, keepDraft, keptDraft, newMessageId, useCompose } from '@/lib/compose.ts';
+import { type Draft, type Writing, draftId, emptyDraft, keepDraft, keptDraft, newMessageId, useCompose } from '@/lib/compose.ts';
 import { uploadFile } from '@/lib/upload.ts';
 import { useChosenMailbox } from '@/lib/mailbox.ts';
 import { useHere } from '@/lib/params.ts';
@@ -13,6 +14,9 @@ import { reveal } from '@/lib/reveal.ts';
 import {
   Ask,
   AttachButton,
+  Dialog,
+  Field,
+  Menu,
   Button,
   DiscardButton,
   DraftBlocked,
@@ -28,6 +32,7 @@ import {
   ReplyBox,
   withTyped,
   Select,
+  useNow,
   useToast,
 } from '@/system';
 import type { ManageState, MessageAttachment, MessageDetail } from '../../../src/dashboard/types.ts';
@@ -54,14 +59,27 @@ const TITLES = { new: 'New message', reply: 'Reply', all: 'Reply to all', forwar
  * on a press, a subject and the text. What is written is kept in this browser until it is sent or discarded, so closing
  * it, or a reload, loses nothing.
  */
-/** A new message, in a panel of its own; `to` someone already, from their page. */
-export function Composer({ to, onClose }: { to: string; onClose: () => void }) {
+/** The person's drafts as Mild has them, which another device may have written: the composer waits for them to open one. */
+const useSaved = () => useLoaded('drafts', (signal) => api.drafts(signal), 60_000, '');
+
+/** Mild's copy of the draft for `what`, as the composer holds one, and when it is scheduled to go or why it did not. */
+function savedFor(saved: ReturnType<typeof useSaved>['data'], what: Writing): { draft: Draft; sendAt: number | null; sendError: string | null } | null {
+  const found = saved?.drafts.find((d) => d.id === draftId(what));
+  if (!found) return null;
+  const { of: _of, ...draft } = reveal(found.writing);
+  return { draft, sendAt: found.sendAt, sendError: found.sendError };
+}
+
+/** A new message, in a panel of its own; `to` someone already, from their page. `draft` names it, made as it opened. */
+export function Composer({ to, draft, onClose }: { to: string; draft: string; onClose: () => void }) {
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000, '');
+  const saved = useSaved();
   const accounts = manage.data?.accounts ?? [];
   const chosen = useChosenMailbox(accounts.map((a) => a.email));
   // Every address that may send, and the one it starts on even if it may not yet, so the composer can say so.
   const start = accounts.find((a) => a.id === chosen) ?? accounts.find((a) => a.primary && a.canSend) ?? accounts.find((a) => a.canSend) ?? accounts[0];
-  if (!start)
+  const what: Writing = { kind: 'new', ...(to ? { to } : {}), ...(draft ? { draft } : {}) };
+  if (!start || (!saved.data && !saved.error))
     return (
       <Panel narrow open onClose={onClose} title={TITLES.new}>
         <Loading />
@@ -69,7 +87,8 @@ export function Composer({ to, onClose }: { to: string; onClose: () => void }) {
     );
   return (
     <Writer
-      what={to ? { kind: 'new', to } : { kind: 'new' }}
+      what={what}
+      saved={savedFor(saved.data, what)}
       title={TITLES.new}
       choices={accounts.filter((a) => a.canSend || a === start).flatMap(addressesOf)}
       start={emptyDraft(start.email, { to: readAddresses(to).parties })}
@@ -96,12 +115,14 @@ export function InlineComposer({
   onClose: () => void;
 }) {
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000, '');
+  const saved = useSaved();
   const account = manage.data?.accounts.find((a) => a.id === message.accountId);
-  if (!account) return <Loading rows={3} />;
+  if (!account || (!saved.data && !saved.error)) return <Loading rows={3} />;
   const choices = addressesOf(account);
   return (
     <Writer
       inline
+      saved={savedFor(saved.data, what)}
       about={about}
       what={what}
       title={TITLES[what.kind === 'reply' && what.all ? 'all' : what.kind]}
@@ -159,6 +180,17 @@ const suggest = async (q: string, signal: AbortSignal): Promise<Party[]> =>
 /** What is wrong with a line's recipients, in a sentence, or null. */
 const wrongOf = (list: readonly Recipient[]) => wrongAddresses(list.filter((r) => r.wrong).map((r) => r.address));
 
+/** What a saved draft answers, as Mild keeps it. */
+const ofWhat = (what: Writing) =>
+  what.kind === 'new'
+    ? ({ kind: 'new' } as const)
+    : what.kind === 'reply'
+      ? ({ kind: 'reply', messageId: what.messageId, all: what.all } as const)
+      : ({ kind: 'forward', messageId: what.messageId } as const);
+
+/** A pause in writing long enough to save the draft to Mild, which gives it to Gmail only once the writing has stopped. */
+const SAVE_PAUSE_MS = 1500;
+
 /** Where a forward's quote begins: what the person wrote is above it. */
 const QUOTE = '---------- Forwarded message ---------';
 /** Words that say a file goes with the mail. */
@@ -212,12 +244,15 @@ function Writer({
   subject,
   choices,
   start,
+  saved,
   forwarded,
   inline = false,
   about,
   onClose,
 }: {
   what: Writing;
+  /** Mild's copy of this draft, kept if it is newer than this browser's, and its schedule. */
+  saved: { draft: Draft; sendAt: number | null; sendError: string | null } | null;
   title: string;
   /** A reply's, which the server sets. */
   subject?: string;
@@ -230,16 +265,55 @@ function Writer({
   onClose: () => void;
 }) {
   const who = useLoaded('session', (signal) => api.session(signal), 300_000, '').data?.email ?? '';
-  const [draft, setDraft] = useState(() => keptDraft(who, what) ?? start);
+  const client = useQueryClient();
+  const [draft, setDraft] = useState(() => keptDraft(who, what, saved?.draft ?? null) ?? start);
+  // Said over the draft until it changes, which makes it a draft again, as in Gmail.
+  const scheduled = saved !== null && draft.at <= saved.draft.at ? saved : null;
+  // Saved to Mild once the writing pauses, and as the composer closes; never once it is sent or discarded.
+  const saving = useRef<{ timer: ReturnType<typeof setTimeout> | null; latest: Draft | null; done: boolean }>({ timer: null, latest: null, done: false });
+  const save = () => {
+    const { latest, done } = saving.current;
+    if (saving.current.timer) clearTimeout(saving.current.timer);
+    saving.current.timer = null;
+    saving.current.latest = null;
+    if (!latest || done) return;
+    const account = choices.find((c) => c.address === latest.from) ?? choices[0];
+    void api
+      .saveDraft({
+        id: draftId(what),
+        accountId: account.accountId,
+        writing: { ...latest, of: ofWhat(what) },
+      })
+      .then(
+        () => client.invalidateQueries({ queryKey: ['drafts'] }),
+        () => {},
+      );
+  };
+  const flush = useRef(save);
+  useLayoutEffect(() => {
+    flush.current = save;
+  });
+  useEffect(() => () => flush.current(), []);
+  const finished = () => {
+    if (saving.current.timer) clearTimeout(saving.current.timer);
+    saving.current = { timer: null, latest: null, done: true };
+  };
   const change = (next: Partial<Draft> | ((was: Draft) => Partial<Draft>)) => {
     setDraft((was) => {
       const asked = typeof next === 'function' ? next(was) : next;
       // A changed draft is mail of its own: a try before the change may have gone, and must not be found and called this one.
-      const changed = { ...was, ...('id' in asked ? {} : { id: null }), ...asked };
+      const changed = { ...was, ...('id' in asked ? {} : { id: null }), ...asked, at: Date.now() };
       keepDraft(who, what, changed);
       return changed;
     });
   };
+  // Each change, once the writing pauses.
+  useEffect(() => {
+    if (draft.at === 0 || saving.current.done) return;
+    saving.current.latest = draft;
+    if (saving.current.timer) clearTimeout(saving.current.timer);
+    saving.current.timer = setTimeout(() => flush.current(), SAVE_PAUSE_MS);
+  }, [draft]);
   const [uploading, setUploading] = useState<Uploading[]>([]);
   // What is typed in each line that is not a chip yet.
   const [typing, setTyping] = useState({ to: '', cc: '', bcc: '' });
@@ -270,7 +344,6 @@ function Writer({
   const toast = useToast();
   const compose = useCompose();
   const here = useHere();
-  const client = useQueryClient();
 
   const from = choices.find((c) => c.address === draft.from) ?? choices[0];
   const addressee = draft.to[0] ?? draft.cc[0] ?? draft.bcc[0] ?? withTyped([], typing.to)[0];
@@ -331,6 +404,53 @@ function Writer({
   const nobody = everyone.length === 0 && Object.values(typing).every((t) => t.trim() === '');
   const wrong = everyone.some((r) => r.wrong);
   const waiting = uploading.length > 0;
+  /**
+   * The draft as it goes, with what is still being typed in each line as it would be once the line is left, and the
+   * Message-ID of this press; null, with the draft showing what is wrong, when an address is.
+   */
+  const ready = () => {
+    const lines = { to: withTyped(draft.to, typing.to), cc: withTyped(draft.cc, typing.cc), bcc: withTyped(draft.bcc, typing.bcc) };
+    setTyping({ to: '', cc: '', bcc: '' });
+    if ([...lines.to, ...lines.cc, ...lines.bcc].some((r) => r.wrong)) {
+      change(lines);
+      return null;
+    }
+    const id = draft.id ?? newMessageId(from.address);
+    change({ ...lines, id });
+    return { lines, id };
+  };
+  /** Saved to go at `at`, as Mild then sends it; Undo makes it a draft again. */
+  const schedule = (at: number) => {
+    if (!from.canSend || nobody || wrong || waiting) return;
+    const going = ready();
+    if (!going) return;
+    finished();
+    const writing = { ...draft, ...going.lines, id: going.id, at: Date.now(), of: ofWhat(what) };
+    keepDraft(who, what, null);
+    onClose();
+    void api.saveDraft({ id: draftId(what), accountId: from.accountId, writing, sendAt: at }).then(
+      () => {
+        void client.invalidateQueries({ queryKey: ['drafts'] });
+        toast(said, {
+          kind: `Scheduled for ${dateTime(at)}`,
+          undo: () => {
+            const again = { ...writing, at: Date.now() };
+            keepDraft(who, what, again);
+            void api.saveDraft({ id: draftId(what), accountId: from.accountId, writing: again }).then(() => client.invalidateQueries({ queryKey: ['drafts'] }));
+            compose?.(what);
+          },
+        });
+      },
+      (failure: unknown) => {
+        keepDraft(who, what, writing);
+        toast(`Not scheduled: ${said}`, {
+          description: failure instanceof Error ? failure.message : String(failure),
+          tone: 'failure',
+          action: { label: 'Open draft', onPress: () => compose?.(what) },
+        });
+      },
+    );
+  };
   // What Send asks before it goes, when what is written needs it, with what this press has been told already.
   const [asking, setAsking] = useState<{ question: string; answered: string[] } | null>(null);
   const send = (answered: readonly string[] = []) => {
@@ -341,15 +461,10 @@ function Writer({
       return;
     }
     setAsking(null);
-    // What is still being typed goes as it would once the line is left.
-    const lines = { to: withTyped(draft.to, typing.to), cc: withTyped(draft.cc, typing.cc), bcc: withTyped(draft.bcc, typing.bcc) };
-    setTyping({ to: '', cc: '', bcc: '' });
-    if ([...lines.to, ...lines.cc, ...lines.bcc].some((r) => r.wrong)) {
-      change(lines);
-      return;
-    }
-    const id = draft.id ?? newMessageId(from.address);
-    change({ ...lines, id });
+    const going = ready();
+    if (!going) return;
+    const { lines, id } = going;
+    finished();
     const parties = (list: readonly Recipient[]) => list.map(({ address, name }) => (name ? { address, name } : { address }));
     const mail = {
       accountId: from.accountId,
@@ -360,6 +475,7 @@ function Writer({
       bcc: parties(lines.bcc),
       text: draft.text,
       uploads: draft.files.map((f) => f.id),
+      draft: draftId(what),
     };
     const request =
       what.kind === 'reply'
@@ -373,6 +489,7 @@ function Writer({
     onClose();
     toast(said, {
       kind: 'Sending',
+      // Saved again, since it is a draft once more.
       undo: () => compose?.(what),
       onGone: () =>
         void api.send(request).then(
@@ -392,11 +509,16 @@ function Writer({
   };
   const discard = () => {
     for (const u of uploading) u.abort.abort();
+    finished();
     keepDraft(who, what, null);
+    void api.removeDraft(draftId(what)).then(
+      () => client.invalidateQueries({ queryKey: ['drafts'] }),
+      () => {},
+    );
     toast(said, {
       kind: 'Draft discarded',
       undo: () => {
-        keepDraft(who, what, draft);
+        keepDraft(who, what, { ...draft, at: Date.now() });
         compose?.(what);
       },
     });
@@ -463,6 +585,7 @@ function Writer({
           >
             Send
           </Finish>
+          {nobody || wrong || waiting ? null : <ScheduleSend onSchedule={schedule} />}
           <AttachButton onFiles={attach} />
         </>
       )}
@@ -508,6 +631,11 @@ function Writer({
         attach([...event.dataTransfer.files]);
       }}
     >
+      {scheduled?.sendAt ? (
+        <p className="px-(--gutter) pt-3 text-sm text-muted-foreground">Scheduled for {dateTime(scheduled.sendAt)}. A change makes it a draft again.</p>
+      ) : scheduled?.sendError ? (
+        <p className="px-(--gutter) pt-3 text-sm text-muted-foreground">Not sent as scheduled: {scheduled.sendError}</p>
+      ) : null}
       {fromLine}
       <DraftLine label="To" error={wrongOf(draft.to)}>
         <Recipients
@@ -549,5 +677,74 @@ function Writer({
     <Panel narrow open onClose={onClose} title={title} actions={actions} focus={first}>
       {fields}
     </Panel>
+  );
+}
+
+/** The times Gmail offers to send later, from `now`: tomorrow morning and afternoon, and Monday morning. */
+function laterTimes(now: Date): (readonly [string, number])[] {
+  const at = (days: number, hour: number) => {
+    const day = new Date(now);
+    day.setDate(day.getDate() + days);
+    day.setHours(hour, 0, 0, 0);
+    return day.getTime();
+  };
+  const toMonday = (8 - now.getDay()) % 7 || 7;
+  return [
+    ['Tomorrow morning', at(1, 8)],
+    ['Tomorrow afternoon', at(1, 13)],
+    ['Monday morning', at(toMonday, 8)],
+  ];
+}
+
+/** `ms` as a `datetime-local` input writes it, in this browser's zone. */
+const localInput = (ms: number) => {
+  const d = new Date(ms);
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
+};
+
+/** Send later: beside Send, the times Gmail offers, and one picked. */
+function ScheduleSend({ onSchedule }: { onSchedule: (at: number) => void }) {
+  const [picking, setPicking] = useState(false);
+  const [times] = useState(() => laterTimes(new Date()));
+  const [picked, setPicked] = useState(() => localInput(times[0][1]));
+  const now = useNow();
+  const at = new Date(picked).getTime();
+  const past = !Number.isFinite(at) || (now !== null && at <= now);
+  return (
+    <>
+      <Menu
+        label="Schedule send"
+        trigger={
+          <span className="flex size-(--control) items-center justify-center">
+            <ClockIcon aria-hidden className="size-4" />
+          </span>
+        }
+        heading={<p className="font-medium">Schedule send</p>}
+        items={[
+          ...times.map(([label, ms]) => ({ label, note: dateTime(ms), onSelect: () => onSchedule(ms) })),
+          { label: 'Pick a date and time…', onSelect: () => setPicking(true) },
+        ]}
+      />
+      <Dialog
+        open={picking}
+        onClose={() => setPicking(false)}
+        title="Schedule send"
+        footer={
+          <>
+            <Button variant="ink" disabled={past} {...(past ? { why: 'Choose a time from now on.' } : {})} onClick={() => (setPicking(false), onSchedule(at))}>
+              Schedule send
+            </Button>
+            <Button variant="quiet" onClick={() => setPicking(false)}>
+              Cancel
+            </Button>
+          </>
+        }
+      >
+        <Field label="Send at">
+          <Input type="datetime-local" value={picked} onChange={(event) => setPicked(event.target.value)} />
+        </Field>
+      </Dialog>
+    </>
   );
 }
