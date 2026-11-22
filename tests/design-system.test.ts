@@ -127,6 +127,7 @@ describe('as little chrome as it takes', () => {
     'chart.tsx',
     'confirm.tsx',
     'table.tsx',
+    'thumbs.tsx',
   ]);
 
   test('only a part that floats has a surface', () => {

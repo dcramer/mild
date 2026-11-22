@@ -1,6 +1,6 @@
 'use client';
 import { eq, useLiveQuery } from '@tanstack/react-db';
-import { PlusIcon } from 'lucide-react';
+import { ArchiveIcon, MailIcon, PlusIcon, ReplyIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAnswer, useRecordAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
@@ -42,6 +42,7 @@ import {
   Presses,
   Reader,
   ReaderBar,
+  type Thumb,
   Section,
   SomeOf,
   Table,
@@ -362,11 +363,11 @@ const stacked = (conversation: MailConversation) =>
  * A conversation the copy holds, drawn while its newest message loads: its subject, a place for Mild's row, and its
  * messages, the newest and the unread open on their text to come, as the conversation draws once it has.
  */
-function Arriving({ conversation, subject, bar }: { conversation: MailConversation; subject: Confidential; bar: ReactNode }) {
+function Arriving({ conversation, subject, bar, thumbs }: { conversation: MailConversation; subject: Confidential; bar: ReactNode; thumbs: readonly Thumb[] }) {
   const messages = stacked(conversation);
   const open = new Set([messages.at(-1)!.id, ...conversation.messages.filter((m) => m.unread).map((m) => m.messageId)]);
   return (
-    <Reader bar={bar} title={reveal(subject) || '(no subject)'} answer={<Blank className="h-(--control) w-60 py-0" />}>
+    <Reader bar={bar} thumbs={thumbs} title={reveal(subject) || '(no subject)'} answer={<Blank className="h-(--control) w-60 py-0" />}>
       <MessageStack messages={messages} open={open} onToggle={() => {}}>
         {(id) => {
           const m = conversation.messages.find((one) => one.messageId === id)!;
@@ -422,6 +423,7 @@ function OpenedMessage({
   detail,
   conversation,
   bar,
+  thumbs,
   onPick,
   onAnswered,
   onUndone,
@@ -430,6 +432,8 @@ function OpenedMessage({
   detail: MessageDetail;
   conversation: MailConversation | null;
   bar: ReactNode;
+  /** The presses at the bottom of a phone's screen, put away while the reply box is open. */
+  thumbs: readonly Thumb[];
   /** Show another message from the same sender here. */
   onPick: (message: Pick<MessageRef, 'accountId' | 'messageId'>) => void;
   onAnswered: () => void;
@@ -540,6 +544,7 @@ function OpenedMessage({
     <Reader
       ref={root}
       bar={bar}
+      thumbs={written && written.kind !== 'new' ? [] : thumbs}
       title={reveal(detail.subject) || '(no subject)'}
       answer={
         <AnswerRow
@@ -612,13 +617,16 @@ function OpenedMessage({
           }}
         />
       ) : reply ? (
-        <Presses
-          presses={[
-            { label: 'Reply', key: 'r', onPress: () => reply({ kind: 'reply', messageId: detail.messageId, all: false }) },
-            { label: 'Reply all', key: 'a', onPress: () => reply({ kind: 'reply', messageId: detail.messageId, all: true }) },
-            { label: 'Forward', key: 'f', onPress: () => reply({ kind: 'forward', messageId: detail.messageId }) },
-          ]}
-        />
+        // On a phone Reply is at the bottom of the screen, and Reply all and Forward in each message's ⋮.
+        <div className="phone:hidden">
+          <Presses
+            presses={[
+              { label: 'Reply', key: 'r', onPress: () => reply({ kind: 'reply', messageId: detail.messageId, all: false }) },
+              { label: 'Reply all', key: 'a', onPress: () => reply({ kind: 'reply', messageId: detail.messageId, all: true }) },
+              { label: 'Forward', key: 'f', onPress: () => reply({ kind: 'forward', messageId: detail.messageId }) },
+            ]}
+          />
+        </div>
       ) : null}
       {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
       {ruling ? (
@@ -692,6 +700,7 @@ export function MessageReader({
       if (near?.accountId) readAhead(`message/${near.accountId}/${near.messageId}`, (signal) => api.message(near.messageId, signal, near.accountId));
   }, [items, index]);
   const { press } = useMailPress();
+  const compose = useCompose();
   // Each message starts at its top, as a page does.
   const go = (to: number) => {
     onIndex(to);
@@ -715,6 +724,25 @@ export function MessageReader({
     if (listed) onShown(listed);
   }, [listed, onShown]);
 
+  const archive = () => pressed && press([pressed], 'archive', next);
+  const unread = () => pressed && press([pressed], 'unread', onBack);
+  // In Inbox, as the bar and the foot of the conversation have them. Reply answers the newest, once it has loaded.
+  const thumbs: Thumb[] = threadId
+    ? [
+        { label: 'Archive', icon: <ArchiveIcon aria-hidden />, disabled: !pressed, onPress: archive },
+        { label: 'Unread', icon: <MailIcon aria-hidden />, disabled: !pressed, onPress: unread },
+        ...(compose
+          ? [
+              {
+                label: 'Reply',
+                icon: <ReplyIcon aria-hidden />,
+                disabled: !data,
+                onPress: () => data && compose({ kind: 'reply', messageId: data.messageId, all: false }),
+              },
+            ]
+          : []),
+      ]
+    : [];
   const bar = (
     <ReaderBar
       back={back}
@@ -722,8 +750,8 @@ export function MessageReader({
       presses={
         threadId
           ? [
-              { label: 'Archive', key: 'e', disabled: !pressed, onPress: () => pressed && press([pressed], 'archive', next) },
-              { label: 'Mark unread', key: 'Shift+u', quiet: true, disabled: !pressed, onPress: () => pressed && press([pressed], 'unread', onBack) },
+              { label: 'Archive', key: 'e', disabled: !pressed, onPress: archive },
+              { label: 'Mark unread', key: 'Shift+u', quiet: true, disabled: !pressed, onPress: unread },
             ]
           : []
       }
@@ -732,16 +760,16 @@ export function MessageReader({
       onNext={index < items.length - 1 ? () => go(index + 1) : undefined}
     />
   );
-  if (loading && fromCopy && conversation) return <Arriving conversation={conversation} subject={subject!} bar={bar} />;
+  if (loading && fromCopy && conversation) return <Arriving conversation={conversation} subject={subject!} bar={bar} thumbs={thumbs} />;
   if (loading || (threadId && !conversation && thread.loading))
     return (
-      <Reader bar={bar} title={<Blank />}>
+      <Reader bar={bar} thumbs={thumbs} title={<Blank />}>
         <Loading rows={6} />
       </Reader>
     );
   if (!data)
     return (
-      <Reader bar={bar} title={reveal(item.subject) || '(no subject)'}>
+      <Reader bar={bar} thumbs={thumbs} title={reveal(item.subject) || '(no subject)'}>
         <Note tone="failure" title="Could not load this message">
           <p>{error}</p>
         </Note>
@@ -753,6 +781,7 @@ export function MessageReader({
       detail={data}
       conversation={conversation}
       bar={bar}
+      thumbs={thumbs}
       onPick={pick}
       onUndone={reload}
       onAnswered={next}

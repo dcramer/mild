@@ -51,7 +51,7 @@ function liftToasts() {
 }
 
 /** A layer's footer, which toasts sit above while it is open. */
-export function AboveToasts({ children }: { children: ReactNode }) {
+export function AboveToasts({ children, className = 'shrink-0' }: { children: ReactNode; className?: string }) {
   const foot = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const element = foot.current;
@@ -64,7 +64,7 @@ export function AboveToasts({ children }: { children: ReactNode }) {
     };
   }, []);
   return (
-    <div ref={foot} {...{ [FOOT]: '' }} className="shrink-0">
+    <div ref={foot} {...{ [FOOT]: '' }} className={className}>
       {children}
     </div>
   );

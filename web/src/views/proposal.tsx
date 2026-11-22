@@ -1,4 +1,5 @@
 'use client';
+import { WorkflowIcon, XIcon } from 'lucide-react';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useState } from 'react';
 import { Thinks } from '@/components/mail.tsx';
@@ -30,6 +31,8 @@ export function ProposalReader({ id, onBack }: { id: string; onBack: () => void 
     const from = reveal(row.conversation.messages.at(-1)!.fromAddress).toLowerCase();
     return addresses.has(from) || domains.has(from.split('@')[1] ?? '');
   });
+  const make = () => setMaking(true);
+  const drop = () => proposal && dismiss.run(() => api.dismissProposal(proposal.id), onBack);
   const bar = (
     <ReaderBar
       back="Inbox"
@@ -37,13 +40,19 @@ export function ProposalReader({ id, onBack }: { id: string; onBack: () => void 
       presses={
         proposal
           ? [
-              { label: 'Make the rule…', key: 'm', onPress: () => setMaking(true) },
-              { label: 'Dismiss', key: 'd', quiet: true, onPress: () => dismiss.run(() => api.dismissProposal(proposal.id), onBack) },
+              { label: 'Make the rule…', key: 'm', onPress: make },
+              { label: 'Dismiss', key: 'd', quiet: true, onPress: drop },
             ]
           : []
       }
     />
   );
+  const thumbs = proposal
+    ? [
+        { label: 'Make the rule…', icon: <WorkflowIcon aria-hidden />, onPress: make },
+        { label: 'Dismiss', icon: <XIcon aria-hidden />, onPress: drop },
+      ]
+    : [];
   if (!proposal)
     return (
       <Reader bar={bar} title="Mild no longer proposes it">
@@ -51,7 +60,7 @@ export function ProposalReader({ id, onBack }: { id: string; onBack: () => void 
       </Reader>
     );
   return (
-    <Reader bar={bar} title={<ProposalWords proposal={proposal} />} answer={<p className="text-muted-foreground">{proposalWhy(proposal)}</p>}>
+    <Reader bar={bar} thumbs={thumbs} title={<ProposalWords proposal={proposal} />} answer={<p className="text-muted-foreground">{proposalWhy(proposal)}</p>}>
       <Section title="In your inbox" meta={count(theirs.length)}>
         {theirs.length === 0 ? (
           <Empty>None of their mail is in your inbox.</Empty>

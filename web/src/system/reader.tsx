@@ -6,6 +6,7 @@ import { AnswerPicker } from './answer-picker.tsx';
 import { Button } from './button.tsx';
 import { keyName, useShortcut } from './keys.tsx';
 import { Menu } from './menu.tsx';
+import { type Thumb, ThumbBar } from './thumbs.tsx';
 import { Tooltip } from './tooltip.tsx';
 import { Kbd } from './type.tsx';
 
@@ -16,7 +17,8 @@ const READING = 'max-w-[46rem]';
  * One message or conversation, opened from a list in the list's place, inside the frame: the bar (`ReaderBar`), the
  * subject as the page's heading, Mild's part (`AnswerRow`), then the conversation and whatever answers it. `side` is a
  * column beside the conversation on a wide screen, and under it narrower, for what is said about the message rather
- * than in it. It takes the focus as it opens, so Enter presses nothing and the keys are its own.
+ * than in it. On a phone `thumbs` are its presses along the bottom of the screen (`ThumbBar`), in place of the bar's and
+ * those under the conversation. It takes the focus as it opens, so Enter presses nothing and the keys are its own.
  */
 export function Reader({
   ref,
@@ -24,6 +26,7 @@ export function Reader({
   title,
   answer,
   side,
+  thumbs = NO_THUMBS,
   children,
 }: {
   ref?: Ref<HTMLElement>;
@@ -31,6 +34,7 @@ export function Reader({
   title: ReactNode;
   answer?: ReactNode;
   side?: ReactNode;
+  thumbs?: readonly Thumb[];
   children: ReactNode;
 }) {
   const own = useRef<HTMLElement>(null);
@@ -53,10 +57,12 @@ export function Reader({
         <div className="flex min-w-0 flex-col gap-6">{children}</div>
         {side ? <aside className="flex min-w-0 flex-col gap-8">{side}</aside> : null}
       </div>
+      {thumbs.length > 0 ? <ThumbBar thumbs={thumbs} /> : null}
     </section>
   );
 }
 
+const NO_THUMBS: readonly Thumb[] = [];
 const NO_PRESSES: readonly Press[] = [];
 
 interface Press {
@@ -82,7 +88,8 @@ export function Presses({ presses }: { presses: readonly Press[] }) {
 
 /**
  * The top of the reader: back to the list by its name (Esc), the presses on what it shows, where it is in the list,
- * and previous and next (K and J, or ← and →). On a phone the presses take a line under Back, without keycaps; nothing wraps.
+ * and previous and next (K and J, or ← and →). On a phone it is Back and the steps alone: the presses are the `Reader`'s
+ * `thumbs`, at the bottom of the screen.
  */
 export function ReaderBar({
   back,
@@ -115,7 +122,11 @@ export function ReaderBar({
         <span className="phone:hidden">{back}</span>
       </Button>
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        {presses.length > 0 ? <Presses presses={presses} /> : null}
+        {presses.length > 0 ? (
+          <span className="contents phone:hidden">
+            <Presses presses={presses} />
+          </span>
+        ) : null}
         {position ? <span className="ml-auto px-2 text-sm whitespace-nowrap text-muted-foreground tabular-nums phone:hidden">{position}</span> : null}
         {stepping && !position ? <span className="ml-auto" /> : null}
         {stepping && position ? <span className="ml-auto md:hidden" /> : null}
