@@ -10,7 +10,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { Thinks, useMailPress, whoWrote } from '@/components/mail.tsx';
-import { type MailThread, type MailView, api, readAhead, useLoaded, usePages } from '@/lib/api.ts';
+import { type MailThread, type MailView, api, readAheadOnRest, useLoaded, usePages } from '@/lib/api.ts';
 import { type Copied, conversations, useWhole } from '@/lib/copy.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';
@@ -80,7 +80,8 @@ function listedOf({ conversation: c, unread, newestAt }: Copied, mine: ReadonlyS
 }
 
 /** Its newest message read ahead of a press that opens it, which then waits on nothing. */
-const ahead = (t: Listed) => readAhead(`message/${t.accountId}/${newest(t).messageId}`, (signal) => api.message(newest(t).messageId, signal, t.accountId));
+const ahead = (t: Listed) =>
+  readAheadOnRest(`message/${t.accountId}/${newest(t).messageId}`, (signal) => api.message(newest(t).messageId, signal, t.accountId));
 
 /** Where a conversation a search found is, when that is not the inbox, in front of its subject as Gmail puts a label. */
 function Place({ thread }: { thread: Listed }) {

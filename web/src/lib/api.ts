@@ -473,8 +473,31 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
 /** Read what `useLoaded(key, …, '')` will draw ahead of a press that draws it, unless it was read in the last minute. */
 export function readAhead<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>): void {
   queryClientFor()
-    .query({ queryKey: [key], queryFn: ({ signal }) => fetcher(signal), staleTime: 60_000 })
+    // `ahead`: nobody is waiting on it, so the loading bar does not count it.
+    .query({ queryKey: [key], queryFn: ({ signal }) => fetcher(signal), staleTime: 60_000, meta: { ahead: true } })
     .catch(() => {});
+}
+
+/** How long the pointer, or the keys, rest on a row before what it opens is read ahead: passing over rows reads nothing. */
+const REST_MS = 200;
+let resting: ReturnType<typeof setTimeout> | null = null;
+let restedOn: string | null = null;
+
+/**
+ * `readAhead` for the row the pointer or the keys are on, once they rest there, one row at a time: moving to another
+ * first lets go of this one, and stops its read while nothing shows it yet. Each read is a call to the server, which a
+ * sweep down the list would otherwise make once a row and put ahead of the one pressed.
+ */
+export function readAheadOnRest<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>): void {
+  if (resting) clearTimeout(resting);
+  const left = restedOn;
+  if (left !== null && left !== key)
+    void queryClientFor().cancelQueries({ queryKey: [left], predicate: (query) => query.getObserversCount() === 0 && query.state.data === undefined });
+  restedOn = key;
+  resting = setTimeout(() => {
+    resting = null;
+    readAhead(key, fetcher);
+  }, REST_MS);
 }
 
 /**

@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../web/src/lib/api.ts';
+import { environmentManager } from '@tanstack/react-query';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { api, queryClientFor, readAheadOnRest } from '../web/src/lib/api.ts';
 
 const answer = (status: number, body: string, type: string) => vi.fn(async () => new Response(body, { status, headers: { 'content-type': type } }));
 // A change is refused before it is sent while Sift cannot be reached.
@@ -26,6 +27,39 @@ describe('the dashboard client', () => {
     await expect(api.rules(new AbortController().signal)).rejects.toThrow('Something broke.');
     vi.stubGlobal('fetch', answer(200, '{}', 'application/json'));
     await expect(api.saveModelKey('anthropic', 'key')).resolves.toEqual({});
+  });
+
+  it('reads ahead only the row the pointer rests on, one at a time, and never as something waited on', async () => {
+    // In the browser, where the page keeps one store of what it read; on the server each draw gets its own.
+    environmentManager.setIsServer(() => false);
+    onTestFinished(() => environmentManager.setIsServer(() => true));
+    vi.useFakeTimers();
+    const read: string[] = [];
+    const stopped: string[] = [];
+    const reader = (key: string) => (signal: AbortSignal) =>
+      new Promise<string>((done) => {
+        read.push(key);
+        signal.addEventListener('abort', () => stopped.push(key));
+        setTimeout(() => done(key), 1000);
+      });
+    // Passing over rows reads none of them.
+    for (const key of ['a', 'b', 'c']) {
+      readAheadOnRest(key, reader(key));
+      await vi.advanceTimersByTimeAsync(50);
+    }
+    expect(read).toEqual([]);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(read).toEqual(['c']);
+    expect(
+      queryClientFor()
+        .getQueryCache()
+        .find({ queryKey: ['c'] })?.meta,
+    ).toEqual({ ahead: true });
+    // Resting on another before it came stops it.
+    readAheadOnRest('d', reader('d'));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(stopped).toEqual(['c']);
+    expect(read).toEqual(['c', 'd']);
   });
 
   // Last: the page this leaves is signed out for good, as a page on its way to `/` is.

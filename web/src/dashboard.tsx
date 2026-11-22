@@ -180,8 +180,11 @@ function useCopy(on: boolean) {
 /** How long before Google ends a sign-in the page says so: two days, so someone who looks in once a day sees it. */
 const SIGN_IN_WARNING_MS = 2 * 86_400_000;
 
-/** Data a screen or panel has none of yet: a search, a sender's page, a message just opened. Not a list read again. */
-const firstLoad = { predicate: (query: { state: { data: unknown } }) => query.state.data === undefined };
+/** Data a screen or panel has none of yet: a search, a sender's page, a message just opened. Not a list read again, nor what is read ahead of a press. */
+const firstLoad = {
+  predicate: (query: { state: { data: unknown }; meta: Record<string, unknown> | undefined }) =>
+    query.state.data === undefined && query.meta?.['ahead'] !== true,
+};
 
 function Frame({ signedInAs, children }: { signedInAs: string | null; children: ReactNode }) {
   usePanelsAhead();
