@@ -20,8 +20,7 @@ import { goBack, isMessageKey, panelEntry, setParams, useHere, useParam } from '
 import { useStarted } from '@/system/started.ts';
 import { useHidden } from '@/lib/action.ts';
 import { ahead, plural } from '@/lib/format.ts';
-import { useOutbox } from '@/lib/outbox.ts';
-import { useOutboxFailures } from '@/components/mail.tsx';
+import { useOutbox, useOutboxFailures } from '@/lib/waiting.ts';
 import { subscription } from '@/lib/prices.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
 import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, rowHolding, useGoing } from '@/system';
@@ -213,14 +212,17 @@ function useStartsOn(inbox: boolean | null) {
   }, [inbox, start, path, router]);
 }
 
+/** The copy, and the outbox, which sends what a closed tab left once the copy has read the device. */
+const startCopy = () => Promise.all([import('@/lib/copy.ts').then((copy) => copy.conversations()), import('@/lib/outbox.ts')]);
+
 // Where this browser last found Inbox on, its copy starts reading the disk as the page's code loads, while React is
 // still starting: on a phone that is a few hundred milliseconds off the first rows.
-if (typeof window !== 'undefined' && startsOnInbox()) void import('@/lib/copy.ts').then((copy) => copy.conversations());
+if (typeof window !== 'undefined' && startsOnInbox()) void startCopy();
 
 /** While Inbox is on, the copy of it starts as the page does, so it is there before Inbox is opened (docs/sync.md). */
 function useCopy(on: boolean) {
   useEffect(() => {
-    if (on) void import('@/lib/copy.ts').then((copy) => copy.conversations());
+    if (on) void startCopy();
   }, [on]);
 }
 

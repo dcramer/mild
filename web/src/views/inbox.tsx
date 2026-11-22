@@ -12,7 +12,7 @@ import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { Thinks, WhoWrote, type Writer, useMailPress } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, readAheadOnRest, useLoaded, usePages } from '@/lib/api.ts';
 import { type Copied, conversations, copiedKey, useWhole } from '@/lib/copy.ts';
-import { useOutbox } from '@/lib/outbox.ts';
+import { useOutbox } from '@/lib/waiting.ts';
 import { useShown } from '@/lib/telemetry.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';

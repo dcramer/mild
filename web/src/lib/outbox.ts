@@ -1,10 +1,10 @@
 import { onlineManager } from '@tanstack/react-query';
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
-import { useSyncExternalStore } from 'react';
 import { api, failure, queryClientFor } from './api.ts';
 import { changeCopied, copied, copiedKey, opened } from './copy.ts';
 import { type Sealed, device, seal, unseal } from './device.ts';
 import { reportError } from './telemetry.ts';
+import { type Change, tellFailed, tellWaiting } from './waiting.ts';
 
 /**
  * Inbox's presses on the way to Gmail (docs/sync.md): kept on the device before anything is shown, so a press is never
@@ -15,7 +15,6 @@ import { reportError } from './telemetry.ts';
  * in the order they were made. Sending one twice is safe: Mild reads the message's labels first and skips what is done.
  */
 
-export type Change = 'archive' | 'spam' | 'read' | 'unread';
 /** One conversation's part of a press: unread is sent for its newest message alone, as Gmail marks it. */
 export interface Pressed {
   accountId: string;
@@ -36,12 +35,6 @@ interface Entry extends Press {
   sending: boolean;
   tries: number;
   keys: string[];
-}
-/** Why a press came back: Mild refused it, or Gmail did not take all of it. */
-export interface Failed {
-  change: Change;
-  count: number;
-  why: string;
 }
 
 interface Kept extends DBSchema {
@@ -64,14 +57,11 @@ if (TAB && 'locks' in navigator) void navigator.locks.request(tabLock(TAB), () =
 const entries = new Map<string, Entry>();
 const outcomes = new Map<string, { sent: () => void; refused: (error: Error) => void }>();
 const listeners = new Set<() => void>();
-let snapshot: { waiting: number; hidden: ReadonlySet<string> } = { waiting: 0, hidden: new Set() };
 function told() {
   const hidden = new Set([...entries.values()].filter((e) => e.change === 'archive' || e.change === 'spam').flatMap((e) => e.keys));
-  snapshot = { waiting: entries.size, hidden };
+  tellWaiting({ waiting: entries.size, hidden });
   for (const listener of listeners) listener();
 }
-const failedListeners = new Set<(failed: Failed) => void>();
-const said = (failed: Failed) => failedListeners.forEach((listener) => listener(failed));
 
 let disk: Promise<{ db: IDBPDatabase<Kept>; key: CryptoKey } | null> | null = null;
 /** Where presses are kept, or null where the browser cannot encrypt or keep anything: then only this tab holds them. */
@@ -132,7 +122,7 @@ channel?.addEventListener('message', ({ data }: MessageEvent<Heard>) => {
 
 /**
  * Shows a press until it settles: in the copy where it holds every conversation (`changeCopied`, which then waits for the
- * copy to hold what Mild did), and in `useOutbox().hidden` for a list that is not the copy's.
+ * copy to hold what Mild did), and in `useOutbox().hidden` (`web/src/lib/waiting.ts`) for a list that is not the copy's.
  */
 function show(entry: Entry) {
   const done = new Promise<void>((sent, refused) => outcomes.set(entry.id, { sent, refused }));
@@ -217,7 +207,7 @@ async function send(entry: Entry) {
     settle(entry.id, null);
     // What Gmail took stays as it is; what it did not, the copy shows once it has what Mild did.
     if (replies.some((reply) => reply.missed > 0))
-      said({
+      tellFailed({
         change: entry.change,
         count: entry.conversations.length,
         why: `Gmail did not take ${entry.conversations.length === 1 ? 'it' : 'all of them'}. Try again.`,
@@ -235,7 +225,7 @@ async function send(entry: Entry) {
     await drop(entry.id).catch(reportError);
     tell({ settled: entry.id, refused: words });
     settle(entry.id, words);
-    said({ change: entry.change, count: entry.conversations.length, why: words });
+    tellFailed({ change: entry.change, count: entry.conversations.length, why: words });
   }
 }
 
@@ -303,20 +293,4 @@ export async function sendAll(ms: number): Promise<void> {
     setTimeout(() => (listeners.delete(check), done()), ms);
     check();
   });
-}
-
-/** How many presses wait to reach Mild, and the conversations they take out of the inbox. */
-export function useOutbox(): { waiting: number; hidden: ReadonlySet<string> } {
-  return useSyncExternalStore(
-    (listener) => (listeners.add(listener), () => void listeners.delete(listener)),
-    () => snapshot,
-    () => EMPTY,
-  );
-}
-const EMPTY = { waiting: 0, hidden: new Set<string>() };
-
-/** Told of each press that came back, wherever it was made. */
-export function onFailed(listener: (failed: Failed) => void): () => void {
-  failedListeners.add(listener);
-  return () => void failedListeners.delete(listener);
 }
