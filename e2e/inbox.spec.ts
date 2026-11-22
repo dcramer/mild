@@ -133,7 +133,10 @@ test.describe('Inbox', () => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
     await expect(inboxRows(page).first()).toContainText('This week in widgets');
+    // What Mild thinks is on the row's bar, drawn once the row is pointed at.
+    await pointAt(inboxRows(page).first());
     await expect(inboxRows(page).first()).toContainText('Newsletters');
+    await pointAt(inboxRow(page, 'Your March bill'));
     await expect(inboxRow(page, 'Your March bill')).toContainText('Utility3');
 
     await page.getByRole('radio', { name: 'Sorted' }).click();

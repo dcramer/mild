@@ -300,11 +300,28 @@ const TRAY = '[background:linear-gradient(var(--fill),var(--fill)),linear-gradie
  * (`LabelPick`), so it can be changed without being covered. `mark` sits before what the cell says, in a slot of its own
  * at the cell's start so a column of them lines up; pass null on a row without one. On a touch screen, where nothing is
  * pointed at, it only says what it says, and the row opens to the same presses. Dropped on a phone.
+ *
+ * The presses are drawn the first time the row is pointed at or the keys reach it, and kept: a list's first screen draws
+ * a label menu and three tooltips for every row otherwise, which on a phone's processor held it most of a second.
  */
 export function RowPresses({ lead, mark, presses, children }: { lead?: ReactNode; mark?: ReactNode; presses: ReactNode; children: ReactNode }) {
   const touch = useTouch();
+  const cell = useRef<HTMLTableCellElement>(null);
+  const [wanted, setWanted] = useState(false);
+  useEffect(() => {
+    const row = cell.current?.closest('tr');
+    if (touch || wanted || !row) return;
+    const want = () => setWanted(true);
+    row.addEventListener('pointerenter', want);
+    row.addEventListener('focusin', want);
+    return () => {
+      row.removeEventListener('pointerenter', want);
+      row.removeEventListener('focusin', want);
+    };
+  }, [touch, wanted]);
   return (
     <td
+      ref={cell}
       className={cn('w-px py-1 pl-3 align-middle whitespace-nowrap text-muted-foreground', PHONE.hide, EDGES)}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
@@ -314,7 +331,7 @@ export function RowPresses({ lead, mark, presses, children }: { lead?: ReactNode
           {mark === undefined ? null : <span className="flex w-3.5 justify-center">{mark}</span>}
           <span className="ml-auto">{children}</span>
         </span>
-        {touch ? null : (
+        {touch || !wanted ? null : (
           <span className={cn('absolute top-1/2 right-0 hidden -translate-y-1/2 items-center gap-1.5 rounded-[2px]', TRAY, ON_ROW)}>
             {lead === undefined ? null : (
               <>
