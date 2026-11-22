@@ -94,6 +94,7 @@ test.describe('Inbox', () => {
   test('opened again from the device, with more in it than a screen, on a phone’s processor, goes from loading to its rows without saying it is empty', async ({
     page,
   }) => {
+    test.slow();
     // Three hundred older conversations, so the copy on the device is more than its first part.
     await patchJson(
       page,
@@ -125,7 +126,9 @@ test.describe('Inbox', () => {
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     await page.reload();
-    await expect(inboxRows(page).first()).toBeVisible();
+    // What this checks is the order, not the speed (Sentry's "Inbox rows" times it): slowed four times on CI's runner,
+    // beside three other workers, the rows come at 6 to 10 s where they come at 2 s on a quiet machine.
+    await expect(inboxRows(page).first()).toBeVisible({ timeout: 20_000 });
     expect(await page.evaluate<boolean>("'saidEmpty' in window")).toBe(false);
   });
 
