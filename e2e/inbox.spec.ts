@@ -11,6 +11,7 @@ import {
   inboxSearch,
   mailWindow,
   param,
+  patchJson,
   path,
   pointAt,
   reader,
@@ -85,6 +86,30 @@ test.describe('Inbox', () => {
     await expect(inboxRow(page, 'This week in widgets')).toHaveCount(0);
     await inboxSearch(page).fill('utility');
     await expect(inboxRows(page)).toHaveCount(1);
+  });
+
+  test('draws a large inbox a hundred conversations at a time, the next as the end of the list comes near', async ({ page }) => {
+    // The whole copy's first page, with 230 more conversations as old as the oldest.
+    await patchJson(page, '**/api/sync*', (feed) => {
+      if (!feed.reset) return feed;
+      const { conversation } = feed.conversations.at(-1);
+      const more = Array.from({ length: 230 }, (_, i) => {
+        const threadId = `many-${i}`;
+        const messages = conversation.messages.map((m: { receivedAt: number }) => ({
+          ...m,
+          messageId: `${threadId}-m`,
+          receivedAt: m.receivedAt - (i + 1) * 60_000,
+        }));
+        return { accountId: conversation.accountId, threadId, conversation: { ...conversation, threadId, messages } };
+      });
+      return { ...feed, conversations: [...feed.conversations, ...more] };
+    });
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(100);
+    await inboxRows(page).last().scrollIntoViewIfNeeded();
+    await expect(inboxRows(page)).toHaveCount(200);
+    await inboxRows(page).last().scrollIntoViewIfNeeded();
+    await expect(inboxRows(page)).toHaveCount(249);
   });
 
   test('a row’s label is changed in place: saved at once, the conversation left in the inbox, and picked again to undo', async ({ page, sift }) => {

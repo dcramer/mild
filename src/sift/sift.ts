@@ -131,6 +131,7 @@ export async function createSift(host: Host): Promise<Sift> {
   };
   const { begin } = host;
   const tick = async (who?: readonly number[]) => {
+    if (!who) await store.analyze();
     for (const piece of await dueWork(store, options, who)) {
       // What is not begun is due again at the next tick.
       const beginning = await begin(piece, runKey(piece)).catch((error: unknown) => {

@@ -18,6 +18,7 @@
     "coverage": "vitest run --coverage",
     "e2e": "playwright test",
     "measure": "node --disable-warning=ExperimentalWarning e2e/measure.ts",
+    "scale": "node --disable-warning=ExperimentalWarning e2e/scale.ts",
     "startup-images": "node --disable-warning=ExperimentalWarning e2e/startup-images.ts",
     "knip": "knip",
     "check:fast": "pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check",

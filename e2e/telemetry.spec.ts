@@ -1,4 +1,4 @@
-import { SENTRY_DSN, expect, openMessage, path, senderPage, test } from './sift.ts';
+import { SENTRY_DSN, expect, openMessage, path, senderPage, settingsFromMenu, test } from './sift.ts';
 
 test.describe('What the page sends Sentry', () => {
   test.use({ sentry: true });
@@ -30,5 +30,26 @@ test.describe('What the page sends Sentry', () => {
     const all = sent.join('\n');
     for (const named of ['ada@example.org', 'ada%40example.org', 'me@example.org', 'me%40example.org', 'Lunch on Thursday', '?message=', '?id=', 'account='])
       expect(all, named).not.toContain(named);
+  });
+
+  test('Settings opened over a screen is a navigation of its own, named for it, with what it asked for in its trace', async ({ page }) => {
+    const sent: string[] = [];
+    await page.route(`${new URL(SENTRY_DSN).origin}/**`, async (route) => {
+      sent.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 200, body: '{}' });
+    });
+    const traces = new Map<string, string>();
+    page.on('request', (request) => {
+      const trace = request.headers()['sentry-trace'];
+      if (trace) traces.set(new URL(request.url()).pathname, trace.split('-')[0]!);
+    });
+
+    await page.goto('/');
+    // Only once the page's load has gone is there a client to start the panel's under.
+    await expect.poll(() => sent.some((envelope) => envelope.includes('"pageload"'))).toBe(true);
+    await settingsFromMenu(page);
+    // The models offered are asked for by Settings alone.
+    await expect.poll(() => traces.get('/api/models')).toBeDefined();
+    await expect.poll(() => sent.some((envelope) => envelope.includes('"transaction":"Settings"') && envelope.includes(traces.get('/api/models')!))).toBe(true);
   });
 });

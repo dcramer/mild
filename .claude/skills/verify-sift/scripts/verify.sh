@@ -3,7 +3,7 @@
 #   home/       the sift home (seeded, synthetic)     removed by `down`
 #   evidence/   screenshots, snapshots, query output   kept by `down`
 #   pid port cookie dashboard.log google.json (the fake Google, tests/google.ts: every mailbox, its mail, labels and filters, and what was sent)
-# Usage: verify.sh up <dir> [--bare | --on | --chatgpt | --inbox] [--listing] | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
+# Usage: verify.sh up <dir> [--bare | --on | --chatgpt | --inbox] [--listing] [--scale <n>] | doctor <dir> | ab <dir> <agent-browser args...> | sql <dir> <query> | down <dir>
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
@@ -37,15 +37,19 @@ case "$cmd" in
   up)
     [ ! -e "$dir/home" ] || { echo "up: $dir/home exists. Use a new directory per run." >&2; exit 1; }
     mkdir -p "$dir/evidence"
-    variant='' listing=''
-    for flag in "${@:3}"; do
+    variant='' listing='' scale=''
+    set -- "${@:3}"
+    while [ $# -gt 0 ]; do
+      flag="$1"
+      shift
       case "$flag" in
         --listing) listing=--listing ;;
+        --scale) scale="--scale $1"; shift ;;
         --bare | --on | --chatgpt | --inbox) variant="$flag" ;;
         *) echo "up: unknown option $flag" >&2; exit 2 ;;
       esac
     done
-    node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" "$dir/google.json" $variant > "$dir/cookie"
+    node --disable-warning=ExperimentalWarning "$ROOT/.claude/skills/verify-sift/scripts/seed.ts" "$dir/home" "$dir/google.json" $variant $scale > "$dir/cookie"
     port="$(node -e 'const s=require("node:net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})')"
     echo "$port" > "$dir/port"
     # The real app on this home, as `sift run` starts it, with the fake Google and a stand-in model (stand-ins.ts says

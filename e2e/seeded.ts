@@ -15,17 +15,15 @@ const freePort = () =>
 
 /**
  * verify-sift's seed served by its `serve.ts` from `root`'s production build, for a script that drives the page outside
- * the browser tests. `cookie` is the seeded person's session.
+ * the browser tests, seeded with `flags` (seed.ts's). `cookie` is the seeded person's session.
  */
-export async function serveSeed(root: string): Promise<{ url: string; cookie: string; stop: () => Promise<void> }> {
+export async function serveSeed(root: string, flags: string[] = []): Promise<{ url: string; cookie: string; stop: () => Promise<void> }> {
   const SCRIPTS = join(root, '.claude/skills/verify-sift/scripts');
   const dir = mkdtempSync(join(tmpdir(), 'sift-measure-'));
   const { stdout } = await promisify(execFile)(
     'node',
-    ['--disable-warning=ExperimentalWarning', join(SCRIPTS, 'seed.ts'), join(dir, 'home'), join(dir, 'google.json')],
-    {
-      cwd: root,
-    },
+    ['--disable-warning=ExperimentalWarning', join(SCRIPTS, 'seed.ts'), join(dir, 'home'), join(dir, 'google.json'), ...flags],
+    { cwd: root },
   );
   const port = await freePort();
   const child: ChildProcess = spawn(

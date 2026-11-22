@@ -2,7 +2,7 @@
 /**
  * Verification scaffolding: fills an empty sift home with synthetic mail and prints a session cookie for it.
  *
- *   node .claude/skills/verify-sift/scripts/seed.ts <home> <google.json> [--bare | --on | --chatgpt | --inbox]
+ *   node .claude/skills/verify-sift/scripts/seed.ts <home> <google.json> [--bare | --on | --chatgpt | --inbox] [--scale <n>]
  *
  * The mail is put in the fake Google the unit tests use (tests/google.ts), signed in to with the fake's OAuth client, and
  * goes through the real pass (with sift off) and Sift's own Gmail client, so decisions, labels, suggestion bodies and
@@ -16,6 +16,8 @@
  * `--inbox` has Inbox on before the passes, so they keep the text of the inbox's mail, and its copy of the last year
  * part-way, its first ten listed, until a pass is begun. Google lets Sift send from me@example.org, as itself or as
  * `me+lists@example.org`, and not from the work mailbox.
+ * `--scale <n>` also gives me@example.org n more messages over the last 120 days, from about n/25 senders, a third of them
+ * replies in a conversation, and 20 other people n/10 each, before the passes, so every table holds many people's rows.
  */
 import { createHmac, randomBytes } from 'node:crypto';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -51,8 +53,12 @@ const ACCOUNT = 'me@example.org';
 const WORK = 'me@work.example.org';
 const OTHER = 'bravo@example.net';
 
-const [home, googleFile, variant] = process.argv.slice(2);
-if (!home || !googleFile) throw new Error('usage: seed.ts <home> <google.json> [--bare | --on | --chatgpt | --inbox]');
+const [home, googleFile, ...flags] = process.argv.slice(2);
+if (!home || !googleFile) throw new Error('usage: seed.ts <home> <google.json> [--bare | --on | --chatgpt | --inbox] [--scale <n>]');
+const scaleAt = flags.indexOf('--scale');
+const scale = scaleAt === -1 ? 0 : Number(flags.splice(scaleAt, 2)[1]);
+if (!Number.isInteger(scale) || scale < 0) throw new Error('--scale takes a number of messages');
+const variant = flags[0];
 process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
@@ -205,6 +211,38 @@ gmail.deliver(
 if (variant === '--inbox') gmail.sendAs = [{ email: 'me+lists@example.org' }];
 for (const m of inbox) gmail.deliver(m);
 
+/** Mail at scale, the same every run: oldest first, as Gmail's history has it. */
+function deliverMany(to: FakeGmail, address: string, count: number, seed: number) {
+  let state = seed;
+  const random = () => (state = (state * 1_103_515_245 + 12_345) % 2_147_483_648) / 2_147_483_648;
+  const senders = Math.max(20, Math.round(count / 25));
+  const threads = new Map<number, { threadId: string; subject: string }>();
+  for (let i = count; i > 0; i--) {
+    const s = Math.floor(random() ** 2 * senders);
+    const domain = `d${s % Math.ceil(senders / 4)}.example.com`;
+    const listed = s % 5 < 3;
+    const earlier = threads.get(s);
+    const reply = earlier && random() < 0.33;
+    const subject = reply ? `Re: ${earlier.subject}` : `${listed ? 'Issue' : 'Note'} ${Math.floor(random() * 10_000)} from sender ${s}`;
+    const at = now - DAY - Math.floor((i / count) * 120 * DAY);
+    const id = to.deliver(
+      {
+        from: `Sender ${s} <s${s}@${domain}>`,
+        to: `Me <${address}>`,
+        subject,
+        text: `${subject}. A message of the kind sender ${s} sends, written out to about the length of a short email.`,
+        labelIds: [...(random() < 0.4 ? ['INBOX'] : []), ...(random() < 0.3 ? ['UNREAD'] : [])],
+        at,
+        headers: { 'Authentication-Results': `mx.google.com; dmarc=pass header.from=${domain}`, ...(listed ? list(domain) : {}) },
+        ...(reply ? { threadId: earlier.threadId } : {}),
+      },
+      { quietly: false },
+    );
+    if (!reply) threads.set(s, { threadId: id, subject });
+  }
+}
+if (scale > 0) deliverMany(gmail, ACCOUNT, scale, 1);
+
 // A stand-in model that calls no provider. It is sure the Store's sale is Marketing, answers unusably about
 // the Ops alerts every time (a provider error would be taken for an outage and not count), and can place nothing else, so what no rule covers is left Unlabelled: with
 // no model at all it would wait, undecided, and never be asked about.
@@ -222,6 +260,8 @@ const standIn = async () => ({
           : { label: 'unsure', reason: 'synthetic: cannot tell', confidence: 0.3 },
 });
 const ephemeral = memoryEphemeral();
+// The fake Gmail has no quota to keep under, and at scale the pace would take an hour.
+if (scale > 0) ephemeral.reserve = async () => 0;
 const options: RunOptions = { ephemeral, model: standIn, connect: async (db, account) => await gmailFor(config, ephemeral, db, account.email), log: () => {} };
 /** One pass of whatever is due, as the tick begins it. */
 const pass = async (people?: readonly number[]) => {
@@ -231,6 +271,16 @@ const pass = async (people?: readonly number[]) => {
   }
 };
 if (variant === '--inbox') await setMail(db, true);
+for (let p = 1; p <= (scale > 0 ? 20 : 0); p++) {
+  const address = `person${p}@scale.example.net`;
+  const theirs = google.mailbox(address);
+  const person = await connectAccount(store, address, cursor(theirs), now - 130 * DAY);
+  const their = await store.user(person);
+  await signIn(their, address);
+  await withSampleLabels(their);
+  await setModel(their, 'anthropic/claude-haiku-4-5');
+  deliverMany(theirs, address, Math.round(scale / 10), p + 1);
+}
 // Four passes: three use up the Ops alerts' tries with the model, and the fourth leaves them to the user.
 for (let i = 0; i < 4; i++) await pass();
 if (gmail.asked('users.messages.modify').length > 0) throw new Error('seed pass changed Gmail while sift was off');
@@ -311,6 +361,8 @@ if (variant === '--chatgpt') {
   await saveApiKey({ ...(await credentials(db, 'model')), exclusive: (work) => work() }, 'anthropic', 'sk-ant-synthetic-seed');
   await setModel(db, 'anthropic/claude-haiku-4-5');
 }
+// As the first timed tick of a running Sift would: serve.ts has none.
+await store.analyze();
 await store.close();
 server.close();
 writeFileSync(googleFile, JSON.stringify(google.save()));

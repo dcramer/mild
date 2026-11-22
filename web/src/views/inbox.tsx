@@ -53,6 +53,11 @@ const VIEWS = [
 
 /** How long a narrowing of the list is kept once nothing shows it: longer than a conversation is read for. */
 const LIST_KEPT_MS = 30 * 60_000;
+/**
+ * Conversations of the copy drawn at first, and added each time the end of the list comes near. Drawn whole, an inbox of
+ * thousands froze the page for seconds at every change the copy took in.
+ */
+const COPY_PAGE = 100;
 
 /** A conversation as a row lists it: who wrote, named already. */
 type Listed = Omit<MailThread, 'who'> & { who: string };
@@ -325,6 +330,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
     server ? api.mailThreads(query, before, signal) : Promise.resolve({ threads: [], next: null }),
   );
   const mailbox = useContext(Mailbox);
+  const [reach, setReach] = useState(COPY_PAGE);
   const copy = useLiveQuery({
     query: (from) => {
       if (!local) return undefined;
@@ -334,7 +340,8 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
       if (label) rows = rows.where(({ c }) => eq(c.labelId, label));
       if (view === 'needs') rows = rows.where(({ c }) => or(isNull(c.disposition), inArray(c.disposition, ['keep', 'review'])));
       if (view === 'sorted') rows = rows.where(({ c }) => inArray(c.disposition, ['archive', 'spam', 'block', 'digest']));
-      return rows.orderBy(({ c }) => c.newestAt, 'desc');
+      // One past the rows drawn, to know there are more.
+      return rows.orderBy(({ c }) => c.newestAt, 'desc').limit(reach + 1);
     },
     // Kept while the reader hides the list, so going back draws it as it was, the row last shown still there to take the focus.
     gcTime: LIST_KEPT_MS,
@@ -344,8 +351,9 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const labels = manage.data?.labels ?? [];
   const names = new Map(labels.map((l) => [l.id, l.name] as const));
   const mine = new Set((manage.data?.accounts ?? []).map((a) => a.email));
+  const more = local ? (copy.data?.length ?? 0) > reach : pages.more;
   const listed: Listed[] = local
-    ? (copy.data ?? []).map((row) => listedOf(row, mine, names))
+    ? (copy.data ?? []).slice(0, reach).map((row) => listedOf(row, mine, names))
     : pages.pages.flatMap((page) => page.threads).map((t) => ({ ...t, who: whoWrote(reveal(t.who)) }));
   const threads = listed.filter((t) => !hidden.has(threadKey(t)));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -460,7 +468,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
               </tbody>
             ))}
           </Table>
-          {!local && pages.more ? <More onReach={pages.next} /> : null}
+          {more ? <More onReach={local ? () => setReach((r) => r + COPY_PAGE) : pages.next} /> : null}
         </>
       )}
     </ListView>

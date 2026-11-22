@@ -19,7 +19,7 @@ import {
   sql,
 } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
-import { newestOfGroup, openNewest } from '../../store/content.ts';
+import { openNewest } from '../../store/content.ts';
 import { outOfTries } from '../../store/runs.ts';
 import { noDecision } from '../../store/messages.ts';
 import { accuracy } from '../../learn/feedback.ts';
@@ -37,6 +37,54 @@ export const localDay = (ms: number) => {
   const d = new Date(ms);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+
+/** What the model cost since `since`, every call counted, the failed ones too, and how many messages it was asked about. */
+export async function modelSpend(db: Sql, scope: Scope, since: number): Promise<{ costUsd: number; judged: number }> {
+  const [row] = await db
+    .select({
+      costUsd: sql<number>`coalesce(sum(${modelRuns.costUsd}), 0)`.mapWith(Number),
+      judged: countDistinct(sql`(${modelRuns.accountId}, ${modelRuns.messageId})`),
+    })
+    .from(modelRuns)
+    .where(and(gte(modelRuns.startedAt, since), within(scope, modelRuns.accountId)));
+  return row ?? { costUsd: 0, judged: 0 };
+}
+
+/**
+ * The ten senders with the most mail since `since`, each with its newest message and what Sift last did with its mail.
+ * Counted first, then looked up for those ten alone: gathering every sender's messages to keep one each took seconds.
+ */
+async function topSenders(db: Sql, scope: Scope, since: number) {
+  const inWindow = and(gte(messages.receivedAt, since), within(scope, messages.accountId));
+  const busiest = db
+    .select({ senderHash: messages.senderHash, n: count().as('n') })
+    .from(messages)
+    .where(inWindow)
+    .groupBy(messages.senderHash)
+    .orderBy(desc(count()), asc(messages.senderHash))
+    .limit(10)
+    .as('busiest');
+  const sent = alias(messages, 'sent');
+  return await db
+    .select({
+      n: busiest.n,
+      newest: sql<[string, string, string]>`(${db
+        .select({ newest: sql`json_build_array(${messages.accountId}, ${messages.id}, ${messages.headers})` })
+        .from(messages)
+        .where(and(inWindow, eq(messages.senderHash, busiest.senderHash)))
+        .orderBy(desc(messages.receivedAt))
+        .limit(1)})`.mapWith((v: unknown) => (typeof v === 'string' ? JSON.parse(v) : v)),
+      last: sql<string | null>`(${db
+        .select({ disposition: decisions.disposition })
+        .from(decisions)
+        .innerJoin(sent, and(eq(sent.accountId, decisions.accountId), eq(sent.id, decisions.messageId)))
+        .where(and(eq(sent.senderHash, busiest.senderHash), within(scope, decisions.accountId)))
+        .orderBy(desc(decisions.id))
+        .limit(1)})`,
+    })
+    .from(busiest)
+    .orderBy(desc(busiest.n), asc(busiest.senderHash));
+}
 
 /** Everything the dashboard shows, for the last `days` days; with `label`, how much of each day's mail was that label. Read-only. */
 export async function summarize(db: Sql, scope: Scope, days: number, now: number = Date.now(), label?: string): Promise<Summary> {
@@ -68,13 +116,11 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     })
     .from(decisions)
     .where(triagedSince)) as [{ n: number; free: number | null }];
-  // Every call costs, the ones that failed included, so cost is summed over runs rather than decisions.
-  const ranSince = and(gte(modelRuns.startedAt, since), within(scope, modelRuns.accountId));
-  const runs = await db.select({ startedAt: modelRuns.startedAt, costUsd: modelRuns.costUsd }).from(modelRuns).where(ranSince);
-  const [asked] = (await db
-    .select({ n: countDistinct(sql`(${modelRuns.accountId}, ${modelRuns.messageId})`) })
+  const runs = await db
+    .select({ startedAt: modelRuns.startedAt, costUsd: modelRuns.costUsd })
     .from(modelRuns)
-    .where(ranSince)) as [{ n: number }];
+    .where(and(gte(modelRuns.startedAt, since), within(scope, modelRuns.accountId)));
+  const spent = await modelSpend(db, scope, since);
 
   const stageRows = await db
     .select({
@@ -155,7 +201,6 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     .map(([labelId, rows]) => ({ labelId, labelName: labelId === null ? null : (names.get(labelId) ?? labelId), messages: net(rows) }))
     .filter((row) => row.messages > 0)
     .toSorted((a, b) => b.messages - a.messages);
-  const sent = alias(messages, 'sent');
 
   return {
     days,
@@ -169,8 +214,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
       )[0]!.n,
       decided: triaged.n,
       withoutInference: triaged.free ?? 0,
-      judged: asked.n,
-      costUsd: runs.reduce((sum, run) => sum + run.costUsd, 0),
+      ...spent,
       awaitingTriage: (
         await db
           .select({ n: count() })
@@ -188,25 +232,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
         .orderBy(desc(count()))
     ).map((r) => ({ disposition: r.disposition, decisions: r.n })),
     daily: [...dailyByDay].map(([day, rest]) => ({ day, ...rest })),
-    topSenders: (
-      await db
-        .select({
-          newest: newestOfGroup(),
-          n: count(),
-          last: sql<string | null>`${db
-            .select({ disposition: decisions.disposition })
-            .from(decisions)
-            .innerJoin(sent, and(eq(sent.accountId, decisions.accountId), eq(sent.id, decisions.messageId)))
-            .where(and(eq(sent.senderHash, messages.senderHash), within(scope, decisions.accountId)))
-            .orderBy(desc(decisions.id))
-            .limit(1)}`,
-        })
-        .from(messages)
-        .where(and(gte(messages.receivedAt, since), within(scope, messages.accountId)))
-        .groupBy(messages.senderHash)
-        .orderBy(desc(count()), asc(messages.senderHash))
-        .limit(10)
-    ).map((r) => ({ address: openNewest(db, r.newest).fromAddress, messages: r.n, lastDisposition: r.last })),
+    topSenders: (await topSenders(db, scope, since)).map((r) => ({ address: openNewest(db, r.newest).fromAddress, messages: r.n, lastDisposition: r.last })),
     recent: (await listDecisions(db, scope, { days, limit: 10 }, now)).rows,
     saved: {
       ...saved(kept.reduce((sum, row) => sum + row.messages, 0)),

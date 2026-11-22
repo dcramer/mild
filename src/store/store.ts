@@ -18,6 +18,8 @@ export interface Store {
   nobody: Sql;
   /** For whoever runs sift, said when it starts: the database role it runs as is not held by row-level security. */
   warning?: string;
+  /** Keep the planner's statistics up to date, as the timed tick asks (`Driver.analyze`). */
+  analyze(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -58,6 +60,7 @@ export function storeOn(driver: Driver, keys: Keyring): Store {
     forget: (id) => void opened.delete(id),
     nobody: handle(driver, 0, keys),
     ...(driver.warning ? { warning: driver.warning } : {}),
+    analyze: async () => await driver.analyze?.(),
     close: () => driver.close(),
   };
 }

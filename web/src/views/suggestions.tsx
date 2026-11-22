@@ -21,6 +21,7 @@ import {
   FilterGroup,
   ListView,
   Meter,
+  More,
   OnPhone,
   RowActions,
   Reserve,
@@ -38,6 +39,9 @@ import { fold } from '@/lib/fold.ts';
 import { proposalStart } from '@/lib/rule-start.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
+
+/** Rows drawn at first, and added as the end of the list comes near: all of them at once took seconds to draw. */
+const ROWS = 100;
 
 const UNSURE = '-';
 
@@ -230,10 +234,11 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
   // Nothing at all is waiting: there is nothing to search or narrow.
   const nothing = data !== null && !loading && items.length === 0 && proposals.length === 0 && !data.importing && !narrowed;
   const rows = fold(shown);
+  const [reach, setReach] = useState(ROWS);
   // Newest first, under the part of the past each falls in.
   const now = useNow();
   const periods: { title: string | null; rows: typeof rows }[] = [];
-  for (const row of rows) {
+  for (const row of rows.slice(0, reach)) {
     const title = now === null ? null : period(row.item.receivedAt, now);
     const last = periods.at(-1);
     if (last?.title === title) last.rows.push(row);
@@ -362,6 +367,7 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
           ))}
         </Table>
       )}
+      {rows.length > reach ? <More onReach={() => setReach((r) => r + ROWS)} /> : null}
     </ListView>
   );
 }

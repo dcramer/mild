@@ -883,6 +883,8 @@ export const ManageState = z.object({
   inbox: InboxProgress,
   /** The hour of the viewer's day a label's digest arrives, and the zone it is read in: null when their browser never said, which is UTC. */
   digest: z.object({ hour: z.number(), timeZone: z.string().nullable() }),
+  /** What the model cost over the last 30 days, and how many messages it was asked about. */
+  spent: z.object({ costUsd: z.number(), judged: z.number() }),
 });
 export type ManageState = z.infer<typeof ManageState>;
 

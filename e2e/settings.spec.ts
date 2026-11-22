@@ -44,8 +44,16 @@ test.describe('Settings', () => {
 
     test('through a ChatGPT plan, prices are said to be API prices the plan covers', async ({ page }) => {
       await throughChatGPT(page);
-      await patchJson(page, '**/api/summary?days=30*', (summary) => ({ ...summary, totals: { ...summary.totals, costUsd: 4.2, judged: 1234 } }));
+      await patchJson(page, '**/api/manage*', (manage) => ({ ...manage, spent: { costUsd: 4.2, judged: 1234 } }));
+      // The month's spend comes with the rest of Settings, not from Activity's whole summary.
+      const summaries: string[] = [];
+      page.on('request', (request) => void (new URL(request.url()).pathname === '/api/summary' && summaries.push(request.url())));
+      await page.clock.install();
       await page.goto('/?settings=1');
+      await expect(settings(page)).toBeVisible();
+      // The page came drawn with the server's own spend; a minute on it asks again, and gets the reply above.
+      await page.clock.runFor(60_000);
+      await page.clock.resume();
       await expect(
         settings(page).getByText(
           'Classifies what no rule covers. $4.20 at API prices in the last 30 days, for 1,234 messages, which your ChatGPT plan covers.',
@@ -53,6 +61,7 @@ test.describe('Settings', () => {
       ).toBeVisible();
       await expect(settings(page).getByText('About $0.40 per 1,000 messages at API prices, which your ChatGPT plan covers.')).toBeVisible();
       await expect(settingsActive(page).getByText('21 messages. About $0.01 at API prices, which your ChatGPT plan covers.')).toBeVisible();
+      expect(summaries).toEqual([]);
       await settingsActive(page).getByRole('button', { name: 'Go through…' }).click();
       await expect(goThrough(page).getByText('on gpt-5.6-luna, at API prices')).toBeVisible();
       await goThrough(page).getByRole('button', { name: 'Not now' }).click();

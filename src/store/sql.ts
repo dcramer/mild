@@ -31,6 +31,8 @@ export interface Driver {
   /** `opening` (statements without parameters) runs first, sent with `BEGIN` where the database is across a network. */
   transaction<T>(opening: string, work: (connection: Connection) => Promise<T>): Promise<T>;
   close(): Promise<void>;
+  /** Bring the planner's statistics up to date, where nothing else does: PGlite has no autovacuum. */
+  analyze?(): Promise<void>;
   /** For whoever runs sift: the role it connects as is not held by row-level security (`openDatabase`). */
   readonly warning?: string;
 }
