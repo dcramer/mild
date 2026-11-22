@@ -178,6 +178,47 @@ test.describe('Inbox', () => {
     await expect(inboxRows(page)).toHaveCount(249);
   });
 
+  test('opened again, what the feed changes is not undone by the older rows read from the device after it', async ({ page }) => {
+    let gone = false;
+    await patchJson(page, '**/api/sync*', (feed) => {
+      const { conversation } = (feed.conversations.at(-1) ?? {}) as { conversation?: { accountId: string; messages: { receivedAt: number }[] } };
+      if (feed.reset && conversation) {
+        const more = Array.from({ length: 230 }, (_, i) => {
+          const threadId = `many-${i}`;
+          const messages = conversation.messages.map((m) => ({ ...m, messageId: `${threadId}-m`, receivedAt: m.receivedAt - (i + 1) * 60_000 }));
+          return { accountId: conversation.accountId, threadId, conversation: { ...conversation, threadId, messages } };
+        });
+        return { ...feed, conversations: [...feed.conversations, ...more] };
+      }
+      // Opened again: one of the oldest, which the device holds past its first part, is gone.
+      if (!feed.reset && gone) return feed;
+      gone = true;
+      return { ...feed, conversations: [...feed.conversations, { accountId: 'me@example.org', threadId: 'many-200', conversation: null }] };
+    });
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(100);
+    await expect.poll(() => page.evaluate<number>(copied)).toBe(249);
+    gone = false;
+    // Its row on the device is not deleted, as when the page closes before the write lands: what the device's rest still
+    // holds of it must not be put back over the feed's word. On a phone's processor the feed answers before that is read.
+    await page.addInitScript(`{
+      const remove = IDBObjectStore.prototype.delete;
+      IDBObjectStore.prototype.delete = function (key) {
+        return String(key).endsWith('/many-200') ? this.get(key) : remove.call(this, key);
+      };
+    }`);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    const asked = page.waitForResponse('**/api/sync*');
+    await page.reload();
+    await asked;
+    await expect(inboxRows(page)).toHaveCount(100);
+    await inboxRows(page).last().scrollIntoViewIfNeeded();
+    await expect(inboxRows(page)).toHaveCount(200);
+    await inboxRows(page).last().scrollIntoViewIfNeeded();
+    await expect(inboxRows(page)).toHaveCount(248);
+  });
+
   test('a row’s label does what the label does: one that keeps is saved in place, one that archives takes the conversation out of the inbox once its toast goes', async ({
     page,
     sift,

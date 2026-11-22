@@ -113,12 +113,24 @@ const PART = 500;
 let applying = Promise.resolve();
 
 /**
- * Write changes into the collection, a part at a time, newest first so the top of the inbox fills first, and each
- * after the last so a part read from the disk never lands over a newer change. Told once the last part is in.
+ * What the feed has changed since the copy began reading the disk, by key, so the rest read from the disk after it does not
+ * put back what it replaced; null once the feed began the copy again, which leaves the rest nothing to add.
  */
-function apply({ reset, changes, mailboxes, seq }: Pick<Changes, 'reset' | 'changes' | 'mailboxes' | 'seq'>): Promise<void> {
-  const ordered = changes.toSorted((a, b) => (b.value?.newestAt ?? Infinity) - (a.value?.newestAt ?? Infinity));
+let fresher: Set<string> | null = new Set();
+
+/**
+ * Write changes into the collection, a part at a time, newest first so the top of the inbox fills first, and each after
+ * the last. What was read from the disk (`disk`) leaves out what the feed has changed meanwhile. Told once the last part is in.
+ */
+function apply({ reset, changes, mailboxes, seq }: Pick<Changes, 'reset' | 'changes' | 'mailboxes' | 'seq'>, disk = false): Promise<void> {
+  if (!disk) {
+    if (reset) fresher = null;
+    else for (const { key } of changes) fresher?.add(key);
+  }
   const done = applying.then(async () => {
+    // The disk's first part, read before anything was asked, is the copy's start, and taken whole.
+    const kept = disk && !reset ? (fresher ? changes.filter(({ key }) => !fresher!.has(key)) : []) : changes;
+    const ordered = kept.toSorted((a, b) => (b.value?.newestAt ?? Infinity) - (a.value?.newestAt ?? Infinity));
     for (let at = 0; at === 0 || at < ordered.length; at += PART) {
       if (at > 0) await new Promise((next) => setTimeout(next));
       writePart({ reset: reset && at === 0, changes: ordered.slice(at, at + PART), mailboxes });
@@ -201,7 +213,7 @@ async function load(markReady: () => void) {
   const opened = async (part: typeof first) =>
     await Promise.all(part.map(async (r) => ({ key: r.key, value: copiedOf(await unseal<SyncedConversation>(key, r.key, r.sealed)) })));
   start = performance.now();
-  await apply({ reset: true, changes: await opened(first), mailboxes: standing.mailboxes, seq: standing.seq });
+  await apply({ reset: true, changes: await opened(first), mailboxes: standing.mailboxes, seq: standing.seq }, true);
   timed("Copy's first screen", 'mild.copy', start, { rows: first.length });
   markReady();
   // The rest once the first screen is drawn, which would otherwise wait on it.
@@ -210,7 +222,7 @@ async function load(markReady: () => void) {
   const read = new Set(first.map((r) => r.key));
   const all = db.transaction('conversations');
   const rest = (await Promise.all([all.store.index('at').getAll(), all.done]))[0].filter((r) => !read.has(r.key)).toReversed();
-  await apply({ reset: false, changes: await opened(rest), mailboxes: standing.mailboxes, seq: standing.seq });
+  await apply({ reset: false, changes: await opened(rest), mailboxes: standing.mailboxes, seq: standing.seq }, true);
   timed("Copy's rest", 'mild.copy', start, { rows: rest.length });
   whole = true;
   told();
@@ -319,19 +331,30 @@ export function conversations(): Collection<Copied, string> {
           ready = true;
           params.markReady();
         };
-        void load(markReady)
+        // Asked as soon as the first screen is drawn from the disk, not once the rest is read: that waits on the page being
+        // idle, and a reopened page would show nothing new until then.
+        let begun = false;
+        const begin = () => {
+          if (begun) return;
+          begun = true;
+          // One tab asks for all of them; another takes over when it closes.
+          const lead = () => {
+            leading = true;
+            ask();
+          };
+          if ('locks' in navigator) void navigator.locks.request(DATABASE, () => (lead(), new Promise<never>(() => {})));
+          else lead();
+          const first = () => (whole ? markReady() : undefined);
+          listeners.add(first);
+        };
+        void load(() => {
+          markReady();
+          begin();
+        })
           .catch(() => {})
           .finally(() => {
             loaded();
-            // One tab asks for all of them; another takes over when it closes.
-            const lead = () => {
-              leading = true;
-              ask();
-            };
-            if ('locks' in navigator) void navigator.locks.request(DATABASE, () => (lead(), new Promise<never>(() => {})));
-            else lead();
-            const first = () => (whole ? markReady() : undefined);
-            listeners.add(first);
+            begin();
           });
         const timer = setInterval(() => document.visibilityState === 'visible' && ask(), ASK_MS);
         const shown = () => document.visibilityState === 'visible' && ask();
