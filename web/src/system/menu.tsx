@@ -13,6 +13,12 @@ export interface MenuItem {
   on?: boolean;
 }
 
+/** Items that belong together under a name of their own, set apart from the rest by a rule. */
+export interface MenuGroup {
+  group: string;
+  items: readonly MenuItem[];
+}
+
 /** Who someone is, as the initial of their address. Never a picture: the page loads nothing from another origin. */
 export function Avatar({ name }: { name: string }) {
   return (
@@ -25,7 +31,8 @@ export function Avatar({ name }: { name: string }) {
 /**
  * A few things to do, kept behind one button until wanted. `trigger` is what the button shows (an
  * `Avatar`, an icon) and `label` names it; `heading` says what the menu is about. Opens under the
- * button, lined up with its `align` edge, and stays inside the screen. Choosing one value from several is a `Select`, not a menu.
+ * button, lined up with its `align` edge, and stays inside the screen. Choosing one value from several is a `Select`, not a
+ * menu, unless the choice sits among the menu's own (the mailbox, in the account menu): then it is a `MenuGroup` of `on` items.
  */
 export function Menu({
   label,
@@ -37,7 +44,7 @@ export function Menu({
   label: string;
   trigger: ReactNode;
   heading?: ReactNode;
-  items: readonly MenuItem[];
+  items: readonly (MenuItem | MenuGroup)[];
   align?: 'start' | 'end';
 }) {
   return (
@@ -52,24 +59,38 @@ export function Menu({
         <Base.Positioner sideOffset={6} align={align} className="z-50">
           <Base.Popup className="sheet max-w-[calc(100vw-2rem)] min-w-52 bg-popover p-1 text-sm text-foreground outline-none">
             {heading ? <div className="row mb-1 px-2 pt-1.5 pb-2.5">{heading}</div> : null}
-            {items.map((item) => (
-              <Base.Item
-                key={item.label}
-                disabled={item.disabled ?? false}
-                onClick={item.onSelect}
-                {...(item.on === undefined ? {} : { role: 'menuitemradio', 'aria-checked': item.on })}
-                className="flex cursor-pointer data-disabled:cursor-default flex-col justify-center px-2 py-1.5 outline-none select-none data-disabled:text-muted-foreground data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11"
-              >
-                <span className="flex items-center gap-3 font-medium">
-                  <span className="flex-1">{item.label}</span>
-                  {item.on ? <CheckIcon aria-hidden className="size-3.5" /> : null}
-                </span>
-                {item.note ? <span className="text-muted-foreground">{item.note}</span> : null}
-              </Base.Item>
-            ))}
+            {items.map((item) =>
+              'group' in item ? (
+                <Base.Group key={item.group} className="row mb-1 pb-1">
+                  <Base.GroupLabel className="slug px-2 pt-1.5 pb-1 text-muted-foreground">{item.group}</Base.GroupLabel>
+                  {item.items.map((each) => (
+                    <Item key={each.label} item={each} />
+                  ))}
+                </Base.Group>
+              ) : (
+                <Item key={item.label} item={item} />
+              ),
+            )}
           </Base.Popup>
         </Base.Positioner>
       </Base.Portal>
     </Base.Root>
+  );
+}
+
+function Item({ item }: { item: MenuItem }) {
+  return (
+    <Base.Item
+      disabled={item.disabled ?? false}
+      onClick={item.onSelect}
+      {...(item.on === undefined ? {} : { role: 'menuitemradio', 'aria-checked': item.on })}
+      className="flex cursor-pointer data-disabled:cursor-default flex-col justify-center px-2 py-1.5 outline-none select-none data-disabled:text-muted-foreground data-highlighted:bg-(--fill-strong) pointer-coarse:min-h-11"
+    >
+      <span className="flex items-center gap-3 font-medium">
+        <span className="min-w-0 flex-1 break-all">{item.label}</span>
+        {item.on ? <CheckIcon aria-hidden className="size-3.5 shrink-0" /> : null}
+      </span>
+      {item.note ? <span className="text-muted-foreground">{item.note}</span> : null}
+    </Base.Item>
   );
 }

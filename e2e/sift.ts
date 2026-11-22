@@ -363,13 +363,14 @@ export async function throughChatGPT(page: Page) {
 /** The seed's second mailbox, which holds no mail. */
 export const WORK = 'me@work.example.org';
 
-/** The mailbox switch showing: the rail's on a desktop, the menu's on a phone once it is open. Named by what it shows. */
-export const mailboxSwitch = (page: Page) => page.getByRole('combobox', { name: /^Mailbox, / }).filter({ visible: true });
+/** `mailbox`, or All mailboxes, among the account menu's choices once it is open, on a desktop. */
+export const mailboxChoice = (page: Page, mailbox: string) => page.getByRole('menu').getByRole('menuitemradio', { name: mailbox, exact: true });
 
-/** Shows `mailbox`, or All mailboxes, with the switch showing. */
+/** Shows `mailbox`, or All mailboxes, from the account menu, on a desktop. */
 export async function switchMailbox(page: Page, mailbox: string) {
-  await mailboxSwitch(page).click();
-  await page.getByRole('option', { name: mailbox, exact: true }).click();
+  await page.getByRole('button', { name: /^Account, / }).click();
+  await mailboxChoice(page, mailbox).click();
+  await expect(page.getByRole('menu')).toHaveCount(0);
 }
 
 /** The mailbox each read of `path` asked for, null for all of them, in the order asked. */
