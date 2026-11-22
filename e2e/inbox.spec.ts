@@ -16,6 +16,9 @@ import {
   path,
   pointAt,
   reader,
+  readerHeading,
+  senderCard,
+  senderPage,
   settings,
   settingsInbox,
   test,
@@ -203,6 +206,18 @@ test.describe('Inbox', () => {
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page.getByRole('button', { name: /^Account, / })).toHaveCount(0);
     await expect.poll(() => page.evaluate<string[]>(databases)).not.toContain('sift-copy');
+  });
+
+  test('a name in a row opens their card on hover, and a press on it opens the conversation', async ({ page }) => {
+    await page.goto('/inbox');
+    const lunch = inboxRow(page, 'Lunch on Thursday?');
+    await pointAt(lunch.getByText('Ada Lovelace').filter({ visible: true }));
+    const card = senderCard(page, 'Ada Lovelace');
+    await expect(card).toContainText('ada@example.org');
+    await expect(card.getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', senderPage('ada@example.org'));
+
+    await lunch.getByText('Ada Lovelace').filter({ visible: true }).click();
+    await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
   });
 
   test('is the section For review was: / opens it, and its icon carries what waits on the reader', async ({ page }) => {

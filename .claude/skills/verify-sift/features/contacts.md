@@ -23,9 +23,10 @@ Preconditions: a fresh `up "$RUN"` (add `--inbox` for `contact-write`).
 - **Filters.** `Filters`, `You write to them`: Ada alone. `Blocked`: `Nothing matches.` until a standing is given.
 - **A contact.** Press Ada's row (not her name, which is a link too): `/sender/ada%40example.org`, `Contacts` underlined in the sections, `You have written to them` once, under her name. `Block`: toast `Mail from ada@example.org: send it to spam`; back on `Contacts`, her row says `Spam` and `Blocked`.
 - **Write to them.** With `--inbox`, `ab find role button click --name "Write to them"`: `New message` with To `ada@example.org`.
+- **Their card.** Rest the pointer on Dependabot's name: a card with `notifications@code.example.com`, how much it sent, `Mostly Notifications`, and `Also writes as` the other names that address uses. The name in the card links to their page. Inbox's names (with `--inbox`) open the same card, and a press on one opens the conversation.
 - **Phone.** `ab set viewport 390 844`: each row is the name, the address and what Mild does; nothing scrolls sideways.
 
 ## Gotchas
 
-- What a row says Mild does is what the sender's page says under `Their next mail`; the two come from the same place on the server, so check one against the other.
+- A sender's page no longer says what their next mail gets: it lists the rules that name them, and only when there are some. What a row says Mild does is the list's alone.
 - People only written to, who never wrote, are not listed: Mild does not keep who the person writes to.

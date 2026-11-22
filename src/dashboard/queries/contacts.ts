@@ -49,9 +49,6 @@ export const forExactly = (rule: Rule, who: { address: string } | { domain: stri
   return one !== null && ('address' in who ? 'from' in one && one.from === who.address : 'fromDomain' in one && one.fromDomain === who.domain);
 };
 
-/** The rule that decides their next message, of those `about` them: one for exactly them wins over one for their domain. */
-export const decidingRule = (about: readonly Rule[], exactly: (rule: Rule) => boolean): Rule | null => about.find(exactly) ?? about.find(forAll) ?? null;
-
 const STANDS: Record<string, Given> = { keep: 'trusted', archive: 'unwanted', spam: 'blocked', block: 'blocked' };
 
 /**
@@ -92,7 +89,7 @@ const later = alias(decisions, 'later');
  * Each sender's (or domain's, by `column`) mail by what its current decision says, or the reader's answer to it, which
  * beats the decision, for the hashes given. A label since removed is left out: their history has it, but no mail is given it again.
  */
-export async function kindsOf(
+async function kindsOf(
   db: Sql,
   scope: Scope,
   column: typeof messages.senderHash | typeof messages.domainHash,

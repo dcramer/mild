@@ -1,6 +1,23 @@
 import type { Page } from '@playwright/test';
 import { standing } from './rule.ts';
-import { PHONE, boxOf, composer, domainPage, expect, reader, param, path, row, section, senderPage, sideScroll, test, toast } from './sift.ts';
+import {
+  PHONE,
+  boxOf,
+  composer,
+  domainPage,
+  expect,
+  pointAt,
+  reader,
+  param,
+  path,
+  row,
+  section,
+  senderCard,
+  senderPage,
+  sideScroll,
+  test,
+  toast,
+} from './sift.ts';
 
 /** The directory's rows, not its column heads. */
 const contacts = (page: Page) =>
@@ -29,6 +46,37 @@ test.describe('Contacts', () => {
     await expect(contact(page, 'Dependabot')).toContainText('Usually Archive as Notifications');
     // Mail the person wrote is theirs, not a contact's.
     await expect(contacts(page).filter({ hasText: 'me@example.org' })).toHaveCount(0);
+  });
+
+  test("a name's card says who it is: the address, how much they send, and the other names the address writes under", async ({ page }) => {
+    await page.goto('/contacts');
+    await pointAt(contact(page, 'Dependabot').getByRole('link', { name: 'Dependabot', exact: true }));
+    const card = senderCard(page, 'Dependabot');
+    await expect(card).toContainText('notifications@code.example.com');
+    await expect(card).toContainText('Mostly Notifications');
+    await expect(card).toContainText(/Also writes as .*github-actions\[bot\]/);
+    await expect(card).not.toContainText('Next');
+    await card.getByRole('link', { name: 'Dependabot' }).click();
+    await path(page).toBe(senderPage('notifications@code.example.com'));
+  });
+
+  test("a sender's card lists the rules that name them, each a link to it", async ({ page }) => {
+    await page.goto('/contacts');
+    await pointAt(contact(page, 'Weekly Digest').getByRole('link', { name: 'Weekly Digest', exact: true }));
+    const rule = senderCard(page, 'Weekly Digest').getByRole('link', { name: /Newsletters/ });
+    await expect(rule).toBeVisible();
+    await rule.click();
+    await path(page).toMatch(/^\/rules\//);
+  });
+
+  test("a sender's page lists the rules that name them, and says nothing of rules where there are none", async ({ page }) => {
+    await page.goto(senderPage('digest@news.example.com'));
+    await expect(page.getByRole('main').getByText('Rule', { exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Newsletters/ })).toBeVisible();
+    await expect(page.getByText('Their next mail')).toHaveCount(0);
+    await page.goto(senderPage('grace@example.net'));
+    await expect(page.getByRole('heading', { name: 'Their mail' })).toBeVisible();
+    await expect(page.getByRole('main').getByText(/^Rules?$/)).toHaveCount(0);
   });
 
   test('search narrows by name or address, and is kept in the address', async ({ page }) => {
@@ -141,9 +189,9 @@ test.describe('Contacts', () => {
       await path(page).toBe(senderPage('ada@example.org'));
     });
 
-    test("a contact's page is one column: what Mild does with their mail, then their mail", async ({ page }) => {
+    test("a contact's page is one column: where they stand, then their mail", async ({ page }) => {
       await page.goto(senderPage('ada@example.org'));
-      const next = await boxOf(page.getByText('Their next mail', { exact: true }));
+      const next = await boxOf(page.getByRole('group', { name: /^Where .* stands$/ }));
       const mail = await boxOf(page.getByRole('heading', { name: 'Their mail' }));
       expect(mail.y).toBeGreaterThan(next.y);
       expect(Math.abs(mail.x - next.x)).toBeLessThan(2);

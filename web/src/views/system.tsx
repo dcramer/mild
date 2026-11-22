@@ -1060,6 +1060,27 @@ export function SystemView() {
                 </HoverCard>
               </p>
               <p>
+                <HoverCard
+                  card={
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <TextLink href="/system" className="name block">
+                          Example News
+                        </TextLink>
+                        <p className="text-muted-foreground">news@example.com</p>
+                      </div>
+                      <ul className="flex flex-col gap-1">
+                        <li>42 messages since Mar 3, 2026</li>
+                        <li>Mostly Newsletters</li>
+                      </ul>
+                    </div>
+                  }
+                >
+                  Example News
+                </HoverCard>
+                , in a row that opens something else
+              </p>
+              <p>
                 Synced{' '}
                 <Tooltip says="Nov 13, 2026, 3:21 PM" className="text-muted-foreground">
                   11 h ago

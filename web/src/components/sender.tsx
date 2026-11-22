@@ -2,8 +2,24 @@
 import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 import { type Contact, type RuleMatch, type SenderProfile, api, useLoaded } from '@/lib/api.ts';
-import { CONTACT_SAYS, INBOX, MATCH_WORDS, type Said, count, doesName, factAnswers, factWords, outcomeName, plural, saidOf, shortDate } from '@/lib/format.ts';
-import { Ago, Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td } from '@/system';
+import {
+  CONTACT_SAYS,
+  INBOX,
+  MATCH_WORDS,
+  type Said,
+  count,
+  describeMatch,
+  doesName,
+  duration,
+  factAnswers,
+  factWords,
+  outcomeName,
+  plural,
+  saidOf,
+  shortDate,
+} from '@/lib/format.ts';
+import { rulePath } from '@/lib/params.ts';
+import { Ago, Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td, TextLink } from '@/system';
 import { reveal } from '@/lib/reveal.ts';
 import { cn } from '@/lib/utils';
 
@@ -51,13 +67,14 @@ function Rules({ rules }: { rules: SenderProfile['rules'] }) {
 
 /**
  * What Mild knows about a sender or a domain, as facts: how much they send and what it is, whether the owner writes to
- * them, their domain and the rules about them. A preview (`card`) leaves out the rules and the domain; their own page
- * (`page`) says those, and how they know each other, elsewhere, and how much they sent lately here.
+ * them, their domain and the rules about them. Their own `page` says the rules, the domain and how they know each other
+ * elsewhere, and here how much they sent lately, how much Mild kept out of the inbox and how often it was right.
  */
-export function SenderFacts({ profile, on }: { profile: SenderProfile; on?: 'card' | 'page' }) {
+export function SenderFacts({ profile, page = false }: { profile: SenderProfile; page?: boolean }) {
   const [top, ...others] = profile.labels;
+  const { right, wrong } = profile.answers;
   // Their page says how the reader knows them under their name.
-  const writtenSaid = on === 'page' && (profile.contact === 'mutual' || profile.contact === 'one-way');
+  const writtenSaid = page && (profile.contact === 'mutual' || profile.contact === 'one-way');
   return (
     <Facts>
       <Fact term="Mail">
@@ -68,7 +85,7 @@ export function SenderFacts({ profile, on }: { profile: SenderProfile; on?: 'car
             }`}
       </Fact>
       {/* Said only where it is not all of their mail, which the line above says. */}
-      {on === 'page' && profile.lastSeenAt !== null && profile.recent < profile.messages ? (
+      {page && profile.lastSeenAt !== null && profile.recent < profile.messages ? (
         <Fact term="Last 30 days">
           {count(profile.recent)}, latest <Ago at={profile.lastSeenAt} />
         </Fact>
@@ -90,7 +107,13 @@ export function SenderFacts({ profile, on }: { profile: SenderProfile; on?: 'car
       {profile.userHasWritten === null || writtenSaid ? null : (
         <Fact term="You wrote">{profile.userHasWritten ? 'Yes, you have written to them' : 'Never'}</Fact>
       )}
-      {on === undefined && profile.domain ? (
+      {page && profile.saved.messages > 0 ? (
+        <Fact term="Kept out">
+          {count(profile.saved.messages)} from your inbox, about {duration(profile.saved.seconds)}
+        </Fact>
+      ) : null}
+      {page && right + wrong > 0 ? <Fact term="Mild was right">{`${count(right)} of ${plural(right + wrong, 'time')} you checked`}</Fact> : null}
+      {!page && profile.domain ? (
         <Fact term="Domain">
           <span className="inline-flex items-center gap-2">
             <DomainLink domain={reveal(profile.domain.name)} />
@@ -98,7 +121,7 @@ export function SenderFacts({ profile, on }: { profile: SenderProfile; on?: 'car
           </span>
         </Fact>
       ) : null}
-      {on === undefined && profile.rules.length > 0 ? (
+      {!page && profile.rules.length > 0 ? (
         <Fact term={profile.rules.length === 1 ? 'Rule' : 'Rules'}>
           <Rules rules={profile.rules} />
         </Fact>
@@ -109,7 +132,25 @@ export function SenderFacts({ profile, on }: { profile: SenderProfile; on?: 'car
 
 type Who = { address: string } | { domain: string };
 
-function Preview({ who }: { who: Who }) {
+type Rule = SenderProfile['rules'][number];
+
+/** A rule in a line of words, as a link to it would say it. */
+export const ruleWords = (rule: Rule) =>
+  `${reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`}${
+    rule.kind === 'action' || rule.labelId === INBOX
+      ? `: ${rule.disposition || rule.labelId === INBOX ? doesName(rule.labelId, rule.disposition ?? 'keep') : 'nothing'}`
+      : `${rule.kind === 'when-label' ? ', when it is ' : ' is '}${rule.labelName ?? ''}`
+  }`;
+
+/** How many names past the one shown a card lists before saying how many more. */
+const NAMES_SHOWN = 3;
+
+/**
+ * Who a sender or domain is, for a name that says too little: their address, how much they send and what, how you know
+ * each other, the other names their address writes under, and the rules that name them. `name` is the one shown where
+ * the pointer is.
+ */
+function Preview({ who, name }: { who: Who; name?: string | null }) {
   const key = 'address' in who ? who.address : who.domain;
   const { data, error } = useLoaded(
     `${'address' in who ? 'sender' : 'domain'}-${key}`,
@@ -119,16 +160,54 @@ function Preview({ who }: { who: Who }) {
   // A domain anyone can get an address at has no page of its own, and the refusal says so.
   if (error) return 'domain' in who ? <p className="text-muted-foreground">{error}</p> : <Failure>{error}</Failure>;
   if (!data) return <p className="text-muted-foreground">Loading…</p>;
+  const { profile } = data;
+  const shown = name ?? reveal(data.name);
+  const [top] = profile.labels;
+  const others = data.names.flatMap((n) => (n.name === null || reveal(n.name) === shown ? [] : [reveal(n.name)]));
+  const href = 'address' in who ? senderHref(who.address) : domainHref(who.domain);
   return (
-    <div className="flex flex-col gap-3">
+    <div role="group" aria-label={`About ${shown ?? key}`} className="flex flex-col gap-3">
       <div>
-        <p className="flex items-center gap-2">
-          <span className="name truncate">{reveal(data.name) ?? key}</span>
-          <ContactHint contact={data.profile.contact} />
-        </p>
-        {data.name ? <p className="truncate text-muted-foreground">{key}</p> : null}
+        <TextLink href={href} className="name block truncate">
+          {shown ?? key}
+        </TextLink>
+        {shown ? <p className="truncate text-muted-foreground">{key}</p> : null}
       </div>
-      <SenderFacts profile={data.profile} on="card" />
+      <ul className="flex flex-col gap-1">
+        <li>
+          {profile.messages === 0 ? (
+            'No mail recorded'
+          ) : (
+            <>
+              {plural(profile.messages, 'message')}
+              {profile.firstSeenAt ? ` since ${shortDate(profile.firstSeenAt)}` : ''}
+              {profile.recent < profile.messages ? <span className="text-muted-foreground">, {count(profile.recent)} in 30 days</span> : null}
+            </>
+          )}
+        </li>
+        {profile.senders > 1 ? <li className="text-muted-foreground">From {plural(profile.senders, 'address', 'addresses')}</li> : null}
+        {profile.contact ? (
+          <li className="text-muted-foreground">
+            <ContactHint contact={profile.contact} said />
+          </li>
+        ) : null}
+        {top ? <li>Mostly {top.name}</li> : null}
+        {others.length > 0 ? (
+          <li className="text-muted-foreground">
+            Also writes as {others.slice(0, NAMES_SHOWN).join(', ')}
+            {others.length > NAMES_SHOWN ? ` and ${count(others.length - NAMES_SHOWN)} more` : ''}
+          </li>
+        ) : null}
+      </ul>
+      {profile.rules.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {profile.rules.map((rule) => (
+            <li key={rule.id}>
+              <TextLink href={rulePath(rule.id)}>{ruleWords(rule)}</TextLink>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -139,10 +218,15 @@ function Preview({ who }: { who: Who }) {
  */
 export function SenderLink({ address, name, children, className }: { address: string; name?: string | null; children?: ReactNode; className?: string }) {
   return (
-    <HoverCard href={senderHref(address, name)} card={<Preview who={{ address }} />} {...(className ? { className } : {})}>
+    <HoverCard href={senderHref(address, name)} card={<Preview who={{ address }} name={name ?? null} />} {...(className ? { className } : {})}>
       {children ?? name ?? address}
     </HoverCard>
   );
+}
+
+/** A sender named inside something pressed for another reason (a row of Inbox, which opens the conversation): their card on hover, and no link. */
+export function SenderName({ address, name, children }: { address: string; name: string | null; children: ReactNode }) {
+  return <HoverCard card={<Preview who={{ address }} name={name} />}>{children}</HoverCard>;
 }
 
 /** A domain, wherever one is named: a link to its page. */

@@ -8,11 +8,14 @@ import { useTouch } from './touch.ts';
 /**
  * A link that shows a little about where it goes when the pointer rests on it or it takes focus. The
  * card is a preview only: everything in it is also on the page the link opens, since a touch screen
- * never shows it. `card` is rendered only while open, so it may load what it shows.
+ * never shows it. `card` is rendered only while open, so it may load what it shows. Without `href` it is
+ * plain text inside something that is itself pressed (a row of Inbox), and the card is for the pointer alone.
  */
-export function HoverCard({ href, children, card, className }: { href: string; children: ReactNode; card: ReactNode; className?: string }) {
+export function HoverCard({ href, children, card, className }: { href?: string; children: ReactNode; card: ReactNode; className?: string }) {
   if (useTouch())
-    return (
+    return href === undefined ? (
+      <span {...(className ? { className } : {})}>{children}</span>
+    ) : (
       <Anchor href={href} {...(className ? { className } : {})}>
         {children}
       </Anchor>
@@ -20,10 +23,9 @@ export function HoverCard({ href, children, card, className }: { href: string; c
   return (
     <Base.Root>
       <Base.Trigger
-        href={href}
         delay={350}
-        render={<Anchor href={href} />}
-        className={cn('underline-offset-4 hover:underline focus-visible:underline', className)}
+        render={href === undefined ? <span /> : <Anchor href={href} />}
+        className={cn(href !== undefined && 'underline-offset-4 hover:underline focus-visible:underline', className)}
       >
         {children}
       </Base.Trigger>

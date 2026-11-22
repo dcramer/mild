@@ -208,13 +208,18 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
     threads: shown.map((r): MailThread => {
       const all = inThreads.get(`${r.accountId}\n${r.threadId}`) ?? [];
       const newest = all.at(-1)!;
-      const who = [...new Set(all.map((m) => (mine.has(plain(m.fromAddress)) ? 'me' : plain(m.fromName ?? m.fromAddress))))];
+      const who = new Map<string, { name: string; address: string | null }>();
+      for (const m of all) {
+        const address = plain(m.fromAddress);
+        if (mine.has(address)) who.set('', { name: 'me', address: null });
+        else if (!who.has(address)) who.set(address, { name: plain(m.fromName) ?? address, address });
+      }
       return {
         accountId: r.accountId,
         threadId: r.threadId,
         subject: newest.subject,
         from: newest.fromAddress,
-        who: seal(who),
+        who: seal([...who.values()]),
         messageIds: all.map((m) => m.messageId),
         unread: r.unread,
         newestAt: r.newestAt,

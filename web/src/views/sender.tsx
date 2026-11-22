@@ -3,10 +3,10 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, StatusWord, Verdict } from '@/components/bits.tsx';
-import { ContactHint, DomainLink, NameCell, SenderCell, SenderFacts, senderHref } from '@/components/sender.tsx';
+import { ContactHint, DomainLink, NameCell, SenderCell, SenderFacts, ruleWords, senderHref } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api, useLoaded } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
-import { INBOX, STANDINGS, count, dateTime, describeMatch, doesName, duration, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
+import { STANDINGS, count, dateTime, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { useCompose } from '@/lib/compose.ts';
 import { messageKey, rulePath, useGo, useOpenRule, useParam } from '@/lib/params.ts';
@@ -51,43 +51,17 @@ function byMessage(rows: readonly ListedDecision[]): ListedDecision[] {
 /** Mail no rule placed that Mild has not carried out and the reader has not answered. */
 const isWaiting = (row: ListedDecision) => !row.byUser && !row.carryOut && row.outcome === null && row.stage !== 'rules';
 
-const ruleWords = (rule: Rule) =>
-  `${reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`}${
-    rule.kind === 'action' || rule.labelId === INBOX
-      ? `: ${rule.disposition || rule.labelId === INBOX ? doesName(rule.labelId, rule.disposition ?? 'keep') : 'nothing'}`
-      : `${rule.kind === 'when-label' ? ', when it is ' : ' is '}${rule.labelName ?? ''}`
-  }`;
-
-/** What happens to their next message, and what says so: the rule that decides it, or their mail, with how often Mild has been right. */
-function NextMail({ data }: { data: SenderPage }) {
-  const { next } = data;
-  const rule = data.profile.rules.find((r) => r.id === next.ruleId);
-  const { right, wrong } = data.profile.answers;
-  const others = data.profile.rules.filter((r) => r !== rule);
+/** The rules that name them, each a link to itself. */
+function Rules({ rules }: { rules: readonly Rule[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="slug text-muted-foreground">Their next mail</p>
-      <p className="heading">
-        {next.usually ? <span className="text-muted-foreground">Usually </span> : null}
-        <Verdict labelId={next.labelId} labelName={next.labelName} disposition={next.disposition} />
-      </p>
-      <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
-        {[...(rule ? [rule] : []), ...others].map((r) => (
+      <p className="slug text-muted-foreground">{rules.length === 1 ? 'Rule' : 'Rules'}</p>
+      <ul className="flex flex-col gap-1">
+        {rules.map((r) => (
           <li key={r.id}>
             <TextLink href={rulePath(r.id)}>{ruleWords(r)}</TextLink>
           </li>
         ))}
-        {rule ? null : (
-          <li>
-            {data.profile.rules.length > 0 ? 'Otherwise the model decides each one' : 'The model decides each one'}
-            {right + wrong > 0 ? `; right ${count(right)} of ${count(right + wrong)} times you checked` : ''}
-          </li>
-        )}
-        {data.profile.saved.messages > 0 ? (
-          <li>
-            {count(data.profile.saved.messages)} kept out of your inbox, about {duration(data.profile.saved.seconds)}
-          </li>
-        ) : null}
       </ul>
     </div>
   );
@@ -429,7 +403,7 @@ function SenderView({ who }: { who: Who }) {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-12 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
         <div className="flex flex-col gap-8">
           <div className="flex flex-col gap-5">
-            <NextMail data={data} />
+            {profile.rules.length > 0 ? <Rules rules={profile.rules} /> : null}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <ChoiceGroup
                 label={`Where ${title ?? key} stands`}
@@ -445,7 +419,7 @@ function SenderView({ who }: { who: Who }) {
             </div>
             <Failure>{give.error}</Failure>
           </div>
-          <SenderFacts profile={profile} on="page" />
+          <SenderFacts profile={profile} page />
           {charted ? <Volume rows={mail} firstSeenAt={profile.firstSeenAt} now={now} /> : null}
         </div>
 

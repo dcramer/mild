@@ -1,6 +1,7 @@
 'use client';
 import { type Confidential, type Given, type MailThread, api } from '@/lib/api.ts';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import { SenderName } from '@/components/sender.tsx';
 import { useAction } from '@/lib/action.ts';
 import { caughtUp, copied, copiedKey, markCopied } from '@/lib/copy.ts';
 import { outcomeName, sureness } from '@/lib/format.ts';
@@ -116,10 +117,27 @@ export function useMailPress(): {
   };
 }
 
-/** Who wrote in a conversation, as a mail app lists them: one name whole, several by first name. */
-export function whoWrote(names: readonly string[]): string {
-  if (names.length === 1) return names[0];
-  return names.map((name) => (name.includes('@') ? name.split('@')[0] : name.split(/\s+/)[0])).join(', ');
+/** One who wrote in a conversation: their name, or their address; the reader as "me", with no address. */
+export type Writer = { name: string; address: string | null };
+
+/**
+ * Who wrote in a conversation, as a mail app lists them: one name whole, several by first name. Each but the reader
+ * opens their card on hover, since a name alone could be anyone.
+ */
+export function WhoWrote({ writers }: { writers: readonly Writer[] }) {
+  const short = (name: string) => (writers.length === 1 ? name : name.includes('@') ? name.split('@')[0] : name.split(/\s+/)[0]);
+  return writers.map((w, index) => (
+    <Fragment key={w.address ?? ''}>
+      {index > 0 ? ', ' : null}
+      {w.address === null ? (
+        short(w.name)
+      ) : (
+        <SenderName address={w.address} name={w.name === w.address ? null : w.name}>
+          {short(w.name)}
+        </SenderName>
+      )}
+    </Fragment>
+  ));
 }
 
 /** The label Mild gave a message, with how sure it is; nothing for mail it never decided or could not place, which is most of an inbox. */
