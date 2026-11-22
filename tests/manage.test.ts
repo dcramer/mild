@@ -90,6 +90,7 @@ const controls: Controls = {
   ),
   revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), true),
   send: async () => ({ id: 's', threadId: 's' }),
+  attachments: async () => [],
   checkNow: async () => void calls.push('check'),
   activity: async () => ({ running: true, lastPassAt: 5, problems: [], expired: [ACCOUNT] }),
 };

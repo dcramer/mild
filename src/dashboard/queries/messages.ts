@@ -1,4 +1,5 @@
 import { actions, and, asc, decisions, eq, examples, feedback, mailBodies, messages, modelRuns, sql, readBodies } from '../../store/query.ts';
+import { keptAttachments } from '../../store/kept.ts';
 import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt, openPayload } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
@@ -17,7 +18,7 @@ import type { Confidential } from '../../confidential.ts';
  * are each one mailbox's own, so two of a person's could in principle hold the same one: then the request must name
  * the mailbox (`?mailbox=`).
  */
-async function mailboxOf(db: Sql, scope: Scope, messageId: string): Promise<string | null> {
+export async function mailboxOf(db: Sql, scope: Scope, messageId: string): Promise<string | null> {
   const found = await db
     .select({ accountId: messages.accountId })
     .from(messages)
@@ -77,6 +78,7 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
     .orderBy(asc(actions.id));
 
   const body = await storedBody(db, accountId, messageId);
+  const files = facts.hasAttachments === false ? [] : await keptAttachments(db, accountId, messageId);
   return {
     accountId,
     messageId,
@@ -89,6 +91,7 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
     headers: m.headers,
     body: body?.text ?? null,
     hasHtml: body?.html != null,
+    attachments: files === null ? null : (files ?? []).map(({ part, name, type, size }) => ({ part, size, ...seal({ name, type }) })),
     facts: { ...facts, listId: seal(facts.listId) },
     unsubscribe: await canUnsubscribe(db, accountId, plain(m.fromAddress), plain(m.headers)),
     sender: (await senderProfile(db, scope, plain(m.fromAddress)))!,

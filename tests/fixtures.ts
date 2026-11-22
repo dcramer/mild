@@ -319,6 +319,8 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
     [`INSERT INTO mail_asks (account_id, started_at, model, words) VALUES (?, 0, 'p/m', 'w')`, account],
     [`INSERT INTO inbox_runs (account_id, started_at, acts, most) VALUES (?, 0, false, 10)`, account],
     [`INSERT INTO mail_copies (account_id, before, started_at) VALUES (?, 0, 0)`, account],
+    [`INSERT INTO uploads (id, about, size, pieces, created_at) VALUES (?, 'x', 1, 1, 0)`, `up-${account}`],
+    [`INSERT INTO upload_pieces (upload_id, piece, data) VALUES (?, 0, '\\x00')`, `up-${account}`],
     [
       `INSERT INTO digests (label_id, account_id, since, until, message_id, count, created_at) VALUES ('newsletter', ?, 0, 1, ?, 1, 0)`,
       account,

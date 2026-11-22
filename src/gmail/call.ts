@@ -10,6 +10,7 @@ const ROUTES = {
   'users.messages.modify': ['POST', '/users/me/messages/{id}/modify'],
   'users.messages.insert': ['POST', '/users/me/messages'],
   'users.messages.send': ['POST', '/users/me/messages/send'],
+  'users.messages.attachments.get': ['GET', '/users/me/messages/{messageId}/attachments/{id}'],
   'users.threads.get': ['GET', '/users/me/threads/{id}'],
   'users.labels.list': ['GET', '/users/me/labels'],
   'users.labels.get': ['GET', '/users/me/labels/{id}'],
@@ -27,6 +28,12 @@ export type Call = <T>(method: keyof typeof ROUTES, units: number, request: () =
 export const isNotFound = (error: unknown) => {
   const e = error as { status?: unknown; code?: unknown };
   return e?.status === 404 || e?.code === 404 || e?.code === '404';
+};
+
+/** Gmail's answer to an id it cannot read, as an attachment's id from an older read may be. */
+export const isInvalid = (error: unknown) => {
+  const e = error as { status?: unknown; code?: unknown };
+  return e?.status === 400 || e?.code === 400 || e?.code === '400';
 };
 
 export const isConflict = (error: unknown) => {

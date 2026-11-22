@@ -22,7 +22,7 @@ export interface ActionPayload extends LabelChange {
   /** For `digest` actions, which put a message Mild wrote into the mailbox: the digest. */
   digest?: number;
   /** For `send` actions, which change no message: the mail sent, by its Message-ID, and to whom. */
-  send?: { messageId: string; to: string[]; cc: string[]; subject: string };
+  send?: { messageId: string; to: string[]; cc: string[]; bcc?: string[]; subject: string };
 }
 
 export interface ActionRecord {

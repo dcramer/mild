@@ -445,6 +445,19 @@ export const proposedRule = (page: Page, words: string) =>
 export const composer = (page: Page, title: 'New message' | 'Reply' | 'Reply to all' | 'Forward') =>
   page.getByRole(title === 'New message' ? 'dialog' : 'region', { name: title, exact: true });
 
+/**
+ * A draft's To, Cc or Bcc: the box typed in, and its chips, each named as its address is written
+ * (`Ada Lovelace <ada@example.org>`).
+ */
+export function recipients(writing: Locator, line: 'To' | 'Cc' | 'Bcc') {
+  const held = writing.getByRole('group', { name: line, exact: true }).first();
+  return {
+    input: writing.getByRole('combobox', { name: line, exact: true }),
+    chip: (name: string) => held.getByLabel(name, { exact: true }),
+    chips: held.getByRole('button', { name: /^Remove / }),
+  };
+}
+
 /** A message Gmail was asked to send, its headers unfolded by name and its text decoded. */
 export function readSent(raw: string): { headers: Record<string, string>; text: string } {
   const split = raw.indexOf('\r\n\r\n');

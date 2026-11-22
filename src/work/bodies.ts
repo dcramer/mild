@@ -11,6 +11,7 @@ const PER_PASS = 50;
 export const textOf = (content: MessageContent | null): Text => ({
   text: content?.whole ?? content?.text ?? '',
   html: content?.html ?? null,
+  ...(content?.attachments ? { attachments: content.attachments } : content ? {} : { attachments: [] }),
   read: content?.facts ?? { hasAttachments: false },
 });
 

@@ -31,6 +31,11 @@ import mailThreadsRead from './routes/mail/threads/get.ts';
 import syncRead from './routes/sync/get.ts';
 
 import mailSendWrite from './routes/mail/send/post.ts';
+import mailAddressesRead from './routes/mail/addresses/get.ts';
+import mailAttachmentsWrite from './routes/mail/attachments/post.ts';
+import mailUploadWrite from './routes/mail/upload/post.ts';
+import mailUploadPieceWrite from './routes/mail/upload/piece/post.ts';
+import mailUploadRemoveWrite from './routes/mail/upload/remove/post.ts';
 import mailboxIconsRead from './routes/mailbox/icons/get.ts';
 import mailboxPrimaryWrite from './routes/mailbox/primary/post.ts';
 import mailboxRemoveWrite from './routes/mailbox/remove/post.ts';
@@ -78,6 +83,7 @@ export const READS: readonly Read[] = [
   inboxRead,
   labelsProposalRead,
   mailReachRead,
+  mailAddressesRead,
   mailboxIconsRead,
   mailThreadRead,
   mailThreadsRead,
@@ -115,6 +121,10 @@ export const WRITES: readonly Write[] = [
   mailChangeWrite,
   mailOnWrite,
   mailSendWrite,
+  mailAttachmentsWrite,
+  mailUploadWrite,
+  mailUploadPieceWrite,
+  mailUploadRemoveWrite,
 
   mailboxPrimaryWrite,
   mailboxRemoveWrite,

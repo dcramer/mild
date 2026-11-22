@@ -4,6 +4,11 @@ export interface Party {
   name?: string;
 }
 
+/** A recipient as the composer holds one: an address, or (`wrong`) what was typed that is not one, until it is put right. */
+export interface Recipient extends Party {
+  wrong?: true;
+}
+
 /** What `buildMessage` (src/actions/send.ts) will send to: plain ASCII, a dot-atom and a domain of labels. The server checks again. */
 const ADDRESS = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 
@@ -51,6 +56,13 @@ export function readAddresses(typed: string, typing = false): { parties: Party[]
   });
   return { parties, wrong };
 }
+
+/** Every entry typed, an address or not, in order. */
+export const readRecipients = (text: string): Recipient[] =>
+  entries(text).flatMap((entry) => (entry === '' ? [] : [party(entry) ?? { address: entry, wrong: true as const }]));
+
+/** The same address, whatever its case. */
+export const sameAddress = (a: Party, b: Party) => a.address.toLowerCase() === b.address.toLowerCase();
 
 /** What is wrong with addresses typed, in a sentence, or null. */
 export function wrongAddresses(wrong: readonly string[]): string | null {

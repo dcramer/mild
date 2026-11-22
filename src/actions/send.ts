@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { canSend, mailboxAliases } from '../store/accounts.ts';
 import { finishAction, insertPendingAction, openTries } from '../store/actions.ts';
 import { preferences } from '../store/preferences.ts';
@@ -12,11 +13,20 @@ interface Party {
   name?: string;
 }
 
+/** A file to go with it, whole. */
+export interface Attached {
+  name: string;
+  type: string;
+  data: Buffer;
+}
+
 /** What the person wrote: plain text. `inReplyTo` and `references` are Message-IDs, for a reply. */
 export interface Outgoing {
   from: Party;
   to: Party[];
   cc: Party[];
+  /** Gmail sends to them and takes the header off what everyone receives, keeping it on the Sent copy. */
+  bcc: Party[];
   subject: string;
   text: string;
   inReplyTo?: string;
@@ -74,27 +84,48 @@ const party = ({ name, address: value }: Party) => (name ? `${phrase(headerText(
 const dated = (at: number) => new Date(at).toUTCString().replace('GMT', '+0000');
 
 /**
- * The message as RFC 2822 text: plain text in UTF-8, every address checked and every header value refused if it could break
+ * The message as RFC 2822 text: plain text in UTF-8 and the files after it, every address checked and every header value refused if it could break
  * a line, names and a subject outside ASCII encoded (RFC 2047). `id` is its Message-ID, made by the page once for the press of Send.
  */
-export function buildMessage(mail: Outgoing, id: string, at: number): string {
-  if (mail.to.length + mail.cc.length === 0) throw new Refusal('Say who the mail is to.');
+export function buildMessage(mail: Outgoing, id: string, at: number, attached: readonly Attached[] = []): string {
+  if (mail.to.length + mail.cc.length + mail.bcc.length === 0) throw new Refusal('Say who the mail is to.');
   const subject = headerText(mail.subject, 'subject');
   const headers = [
     `From: ${party(mail.from)}`,
     ...(mail.to.length > 0 ? [`To: ${mail.to.map(party).join(',\r\n ')}`] : []),
     ...(mail.cc.length > 0 ? [`Cc: ${mail.cc.map(party).join(',\r\n ')}`] : []),
+    ...(mail.bcc.length > 0 ? [`Bcc: ${mail.bcc.map(party).join(',\r\n ')}`] : []),
     `Subject: ${PRINTABLE.test(subject) && subject.length <= LONGEST ? subject : encoded(subject)}`,
     `Date: ${dated(at)}`,
     `Message-ID: ${messageId(id)}`,
     ...(mail.inReplyTo ? [`In-Reply-To: ${messageId(mail.inReplyTo)}`] : []),
     ...(mail.references?.length ? [`References: ${mail.references.map(messageId).join('\r\n ')}`] : []),
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
   ];
-  const body = Buffer.from(mail.text.replaceAll(/\r\n?/g, '\n').replaceAll('\n', '\r\n')).toString('base64');
-  return `${headers.join('\r\n')}\r\n\r\n${body.replaceAll(/.{1,76}/g, '$&\r\n')}`;
+  const text = leaf(['Content-Type: text/plain; charset=UTF-8'], Buffer.from(mail.text.replaceAll(/\r\n?/g, '\n').replaceAll('\n', '\r\n')));
+  if (attached.length === 0) return `${headers.join('\r\n')}\r\n${text}`;
+  const boundary = `mild-${randomBytes(12).toString('hex')}`;
+  const parts = [text, ...attached.map((file) => leaf(fileHeaders(file), file.data))];
+  return `${headers.join('\r\n')}\r\nContent-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n${parts.map((p) => `--${boundary}\r\n${p}`).join('')}--${boundary}--\r\n`;
+}
+
+/** A part's headers and its bytes as base64, in lines of 76. */
+const leaf = (head: string[], data: Buffer) =>
+  `${[...head, 'Content-Transfer-Encoding: base64'].join('\r\n')}\r\n\r\n${data.toString('base64').replaceAll(/.{1,76}/g, '$&\r\n')}`;
+
+/** A media type as RFC 2045 writes one; anything else goes as plain bytes. */
+const MEDIA_TYPE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
+
+/**
+ * A file's headers: its type, and its name twice, as a quoted ASCII stand-in for any reader and in RFC 2231's encoding,
+ * which keeps every character, for those that read it.
+ */
+function fileHeaders(file: Attached): string[] {
+  const name = headerText(file.name, 'file name');
+  const ascii = name.replaceAll(/[^\x20-\x7e]/g, '_').replaceAll(/["\\]/g, '\\$&');
+  const encoded = encodeURIComponent(name).replaceAll(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const type = MEDIA_TYPE.test(file.type) ? file.type : 'application/octet-stream';
+  return [`Content-Type: ${type}; name="${ascii}"`, `Content-Disposition: attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`];
 }
 
 /**
@@ -112,6 +143,7 @@ function sentHeaders(mail: Outgoing, id: string, at: number): Record<string, str
     from: recorded(mail.from),
     ...(mail.to.length > 0 ? { to: mail.to.map(recorded).join(', ') } : {}),
     ...(mail.cc.length > 0 ? { cc: mail.cc.map(recorded).join(', ') } : {}),
+    ...(mail.bcc.length > 0 ? { bcc: mail.bcc.map(recorded).join(', ') } : {}),
     subject: mail.subject,
     date: dated(at),
     'message-id': id,
@@ -130,7 +162,7 @@ type SendDeps = { db: Sql; mailbox: Mailbox; now?: () => number };
  */
 export async function sendMail(
   deps: SendDeps,
-  sending: { accountId: string; id: string; threadId?: string; mail: Outgoing },
+  sending: { accountId: string; id: string; threadId?: string; mail: Outgoing; attach?: () => Promise<Attached[]> },
 ): Promise<{ id: string; threadId: string }> {
   const { db, mailbox } = deps;
   const now = deps.now ?? Date.now;
@@ -140,10 +172,14 @@ export async function sendMail(
   const own = [accountId, ...(await mailboxAliases(db, accountId))];
   if (!own.includes(mail.from.address.toLowerCase())) throw new Refusal(`${mail.from.address} is not an address of ${accountId}.`);
   const at = now();
-  const raw = buildMessage(mail, id, at);
+  // Checked before anything else is: what is wrong with the mail is said whether or not an earlier try went.
+  buildMessage(mail, id, at);
   // It went: a record that could not be written is not a failure the person should answer by sending again. Sync records it.
+  let attached: Attached[] = [];
   const keep = async (sent: { id: string; threadId: string; labelIds: readonly string[] }) => {
-    await recordSent(db, accountId, { ...sent, headers: sentHeaders(mail, id, at), text: mail.text, at }).catch(reportError);
+    await recordSent(db, accountId, { ...sent, headers: sentHeaders(mail, id, at), text: mail.text, hasAttachments: attached.length > 0, at }).catch(
+      reportError,
+    );
     return { id: sent.id, threadId: sent.threadId };
   };
 
@@ -155,13 +191,26 @@ export async function sendMail(
     for (const action of earlier) await finishAction(db, action.id, found ? 'done' : 'failed', null, found ? null : 'not in Gmail', now());
     if (found) return await keep({ ...found, labelIds: ['SENT'] });
   }
+  // Only for mail that is about to go: a try that went has nothing more to fetch, and its uploads may be gone.
+  attached = (await sending.attach?.()) ?? [];
+  const raw = buildMessage(mail, id, at, attached);
   const actionId = await insertPendingAction(
     db,
     {
       accountId,
       messageId: null,
       type: 'send',
-      payload: { add: [], remove: [], send: { messageId: id, to: mail.to.map((p) => p.address), cc: mail.cc.map((p) => p.address), subject: mail.subject } },
+      payload: {
+        add: [],
+        remove: [],
+        send: {
+          messageId: id,
+          to: mail.to.map((p) => p.address),
+          cc: mail.cc.map((p) => p.address),
+          bcc: mail.bcc.map((p) => p.address),
+          subject: mail.subject,
+        },
+      },
       originalLabels: [],
     },
     now(),

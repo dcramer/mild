@@ -43,6 +43,8 @@ export type {
 } from '../../../src/dashboard/types.ts';
 export type { Confidential } from '../../../src/confidential.ts';
 import type {
+  AddressSuggestion,
+  MessageAttachment,
   ContactPage,
   DecisionPage,
   InboxEstimate,
@@ -288,6 +290,14 @@ export const api = {
   setActive: (active: boolean) => post('/api/active', { active }),
   /** Mail the person wrote, sent as them. */
   send: (mail: SendRequest) => post<{ id: string; threadId: string }>('/api/mail/send', mail),
+  /** Whom to suggest as an address is typed in the composer. */
+  addresses: (q: string, signal: AbortSignal) => get<{ addresses: AddressSuggestion[] }>('/api/mail/addresses', { q }, signal),
+  /** A message's files, read from Gmail once where Mild has not kept them. */
+  attachments: (accountId: string, messageId: string) => post<{ attachments: MessageAttachment[] }>('/api/mail/attachments', { accountId, messageId }),
+  /** Begin a file to attach; its bytes follow in pieces of at most `piece`. */
+  startUpload: (file: { name: string; type: string; size: number }) => post<{ id: string; piece: number }>('/api/mail/upload', file),
+  uploadPiece: (id: string, piece: number, data: string) => post('/api/mail/upload/piece', { id, piece, data }),
+  removeUpload: (id: string) => post('/api/mail/upload/remove', { id }),
   /** The reader's own model, `provider/model-id`, or null for none. */
   setModel: (model: string | null) => post('/api/model', { model }),
   setReasoning: (reasoning: ManageState['model']['reasoning']) => post('/api/model/reasoning', { reasoning }),

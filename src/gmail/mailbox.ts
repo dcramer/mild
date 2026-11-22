@@ -117,7 +117,8 @@ export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {
 
     async send({ raw, threadId }) {
       const data = await call('users.messages.send', 100, () =>
-        client.users.messages.send({ userId, requestBody: { raw: Buffer.from(raw).toString('base64url'), ...(threadId ? { threadId } : {}) } }),
+        // Through the upload address, which takes mail up to 35 MB; `raw` in the JSON body is refused past a few.
+        client.users.messages.send({ userId, requestBody: threadId ? { threadId } : {}, media: { mimeType: 'message/rfc822', body: raw } }),
       );
       if (!data.id || !data.threadId) throw new Error('Gmail did not return an id for the sent message');
       return { id: data.id, threadId: data.threadId, labelIds: data.labelIds ?? [] };

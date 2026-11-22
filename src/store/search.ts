@@ -32,9 +32,11 @@ function hashesOf(db: Sql, term: string): number[] {
   return Array.from({ length: HASHES }, (_, i) => hash.readUInt32BE(i * 4));
 }
 
-/** The index of one message, as `mail_bodies.search` holds it. Bit n is bit n % 8 of byte n / 8, as Postgres's `get_bit` reads it. */
-export function searchIndex(db: Sql, message: Searched): Uint8Array {
-  const terms = indexTerms(searchedWords(message));
+/** The index of one message, as `mail_bodies.search` holds it. */
+export const searchIndex = (db: Sql, message: Searched): Uint8Array => bloomOf(db, indexTerms(searchedWords(message)));
+
+/** A filter holding `terms`. Bit n is bit n % 8 of byte n / 8, as Postgres's `get_bit` reads it. */
+export function bloomOf(db: Sql, terms: ReadonlySet<string>): Uint8Array {
   let bits = MIN_BITS;
   while (bits < terms.size * BITS_PER_TERM && bits < MAX_BITS) bits *= 2;
   const index = new Uint8Array(bits / 8);
@@ -47,10 +49,11 @@ export function searchIndex(db: Sql, message: Searched): Uint8Array {
 }
 
 /** True of every message whose index `column` says may match `search`, and of some that do not; false of a null one. */
-export function mayMatch(db: Sql, column: AnyColumn, search: Search): SQL {
+export const mayMatch = (db: Sql, column: AnyColumn, search: Search): SQL => mayHold(db, column, searchTerms(search));
+
+/** True of every filter in `column` that holds all of `terms`, and of some that do not; false of a null one. */
+export function mayHold(db: Sql, column: AnyColumn, terms: readonly string[]): SQL {
   return and(
-    ...searchTerms(search).flatMap((term) =>
-      hashesOf(db, term).map((hash) => sql`get_bit(${column}, (${hash}::bigint & (octet_length(${column}) * 8 - 1))::integer) = 1`),
-    ),
+    ...terms.flatMap((term) => hashesOf(db, term).map((hash) => sql`get_bit(${column}, (${hash}::bigint & (octet_length(${column}) * 8 - 1))::integer) = 1`)),
   )!;
 }

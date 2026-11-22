@@ -24,6 +24,7 @@ const mail = (more: Partial<Outgoing> = {}): Outgoing => ({
   from: { address: ACCOUNT, name: 'Me' },
   to: [{ address: 'ada@example.com', name: 'Ada' }],
   cc: [],
+  bcc: [],
   subject: 'Lunch',
   text: 'See you at noon.\nBring the plans.',
   ...more,
@@ -69,6 +70,21 @@ describe('building a message', () => {
   it('names the message it answers, and the thread before it', () => {
     const raw = buildMessage(mail({ subject: 'Re: Lunch', inReplyTo: '<x2@example.com>', references: ['<x1@example.com>', '<x2@example.com>'] }), ID, AT);
     expect(headersOf(raw)).toMatchObject({ 'In-Reply-To': '<x2@example.com>', References: '<x1@example.com> <x2@example.com>' });
+  });
+
+  it('puts files after the text, each named in plain ASCII and whole in RFC 2231, with a type it can trust', () => {
+    const raw = buildMessage(mail({ bcc: [{ address: 'bo@example.com' }] }), ID, AT, [
+      { name: 'Café "menu".pdf', type: 'application/pdf', data: Buffer.from('%PDF') },
+      { name: 'x', type: 'text/html\r\nBcc: eve@example.net', data: Buffer.from('<b>') },
+    ]);
+    expect(headersOf(raw)).toMatchObject({ Bcc: 'bo@example.com' });
+    const boundary = /boundary="([^"]+)"/.exec(raw)![1]!;
+    const parts = raw.split(`--${boundary}`).slice(1, -1);
+    expect(parts).toHaveLength(3);
+    expect(parts[1]).toContain(`Content-Disposition: attachment; filename="Caf_ \\"menu\\".pdf"; filename*=UTF-8''Caf%C3%A9%20%22menu%22.pdf`);
+    expect(parts[2]).toContain('Content-Type: application/octet-stream; name="x"');
+    expect(raw).not.toContain('eve@example.net');
+    expect(() => buildMessage(mail(), ID, AT, [{ name: 'a\r\nBcc: eve@example.net', type: 'text/plain', data: Buffer.from('') }])).toThrow();
   });
 
   it('refuses anything that could add a header or a recipient', () => {
@@ -246,7 +262,7 @@ describe('from the dashboard', () => {
   let store: Store;
   let mailbox: Mailbox;
   let gmail: FakeGmail;
-  const NEW = { accountId: ACCOUNT, id: ID, from: { address: ACCOUNT }, to: [{ address: 'ada@example.com' }], cc: [], text: 'Hello' };
+  const NEW = { accountId: ACCOUNT, id: ID, from: { address: ACCOUNT }, to: [{ address: 'ada@example.com' }], cc: [], bcc: [], text: 'Hello', uploads: [] };
 
   beforeEach(async () => {
     ({ store, db } = await onePerson(ACCOUNT));

@@ -17,6 +17,7 @@ import {
   sideScroll,
   test,
   toast,
+  recipients,
 } from './sift.ts';
 
 /** The directory's rows, not its column heads. */
@@ -162,7 +163,7 @@ test.describe('Contacts', () => {
       await page.goto(senderPage('ada@example.org'));
       await page.getByRole('button', { name: 'Write to them' }).click();
       const writing = composer(page, 'New message');
-      await expect(writing.getByRole('textbox', { name: 'To' })).toHaveValue('ada@example.org');
+      await expect(recipients(writing, 'To').chip('ada@example.org')).toBeVisible();
       await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
       await param(page, 'to').toBe('ada@example.org');
       await page.goBack();

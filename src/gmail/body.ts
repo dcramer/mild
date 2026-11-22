@@ -4,11 +4,21 @@ import { htmlFacts } from '../triage/html.ts';
 
 /** The shape of a Gmail message payload that body extraction needs. */
 interface BodyPart {
+  partId?: string | null;
   mimeType?: string | null;
   filename?: string | null;
   headers?: { name?: string | null; value?: string | null }[] | null;
-  body?: { data?: string | null } | null;
+  body?: { data?: string | null; attachmentId?: string | null; size?: number | null } | null;
   parts?: BodyPart[] | null;
+}
+
+/** A file a message carries, as Mild keeps it to list it and to forward it. `gmailId` is what Gmail gives its bytes by. */
+export interface Attachment {
+  part: string;
+  name: string;
+  type: string;
+  size: number;
+  gmailId: string;
 }
 
 /** Long enough to judge what a message is; short enough to keep a classification cheap. */
@@ -67,9 +77,22 @@ const shortened = (text: string) => cut(text, MAX_BODY_CHARS);
 
 const header = (part: BodyPart, name: string) => part.headers?.find((h) => h.name?.toLowerCase() === name)?.value ?? '';
 
+/** A file the message carries, not a picture drawn inside its HTML. */
+const attached = (part: BodyPart) => Boolean(part.filename) && !/^\s*inline/i.test(header(part, 'content-disposition'));
+
 function hasAttachment(part: BodyPart): boolean {
-  if (part.filename && !/^\s*inline/i.test(header(part, 'content-disposition'))) return true;
-  return (part.parts ?? []).some(hasAttachment);
+  return attached(part) || (part.parts ?? []).some(hasAttachment);
+}
+
+/** Its files, in the order they are in it. One Gmail gives no id for cannot be fetched, and is left out. */
+function attachmentsOf(part: BodyPart | null | undefined): Attachment[] {
+  if (!part) return [];
+  const id = part.body?.attachmentId;
+  const own: Attachment[] =
+    attached(part) && id
+      ? [{ part: part.partId ?? '', name: part.filename!, type: part.mimeType || 'application/octet-stream', size: part.body?.size ?? 0, gmailId: id }]
+      : [];
+  return [...own, ...(part.parts ?? []).flatMap(attachmentsOf)];
 }
 
 /** What Mild takes from a whole message: its readable text, its HTML part, and facts about the rest. */
@@ -79,6 +102,8 @@ export interface MessageContent {
   whole?: string;
   /** The HTML part as the message carries it, uncleaned. Null when it has none. */
   html: string | null;
+  /** Absent for content Mild kept before it kept these. */
+  attachments?: Attachment[];
   facts: ContentFacts;
 }
 
@@ -90,6 +115,7 @@ export function readContent(payload: BodyPart | null | undefined): MessageConten
     text: shortened(whole),
     ...(whole.length > MAX_BODY_CHARS ? { whole: cut(whole, MAX_MAIL_CHARS) } : {}),
     html,
+    attachments: attachmentsOf(payload),
     facts: {
       hasAttachments: payload ? hasAttachment(payload) : false,
       words: whole === '' ? 0 : whole.split(/\s+/).length,

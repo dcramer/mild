@@ -307,6 +307,20 @@ function searchOf(query: string, gmail: FakeGmail): (m: Stored) => boolean {
   return group(null);
 }
 
+/** A file the message carries, as Gmail tells one from a picture drawn in its HTML. */
+const isFile = (part: Part) =>
+  Boolean(part.filename) && !/^\s*inline/i.test(part.headers?.find((h) => h.name?.toLowerCase() === 'content-disposition')?.value ?? '');
+
+/** A payload as a full read gives it: a file's bytes left out for an id that `attachments.get` takes, good until `renewAttachmentIds`. */
+function withAttachmentIds(part: Part, epoch: number): Part {
+  if (part.parts) return { ...part, parts: part.parts.map((p) => withAttachmentIds(p, epoch)) };
+  if (!isFile(part)) return part;
+  return { ...part, body: { size: part.body?.size ?? 0, attachmentId: `${part.partId}~${epoch}` } };
+}
+
+const partAt = (part: Part, partId: string): Part | null =>
+  part.partId === partId ? part : (part.parts ?? []).reduce<Part | null>((found, p) => found ?? partAt(p, partId), null);
+
 /** Gmail's answer to a request it refuses. */
 const refused = (status: number, message: string, reason = 'failedPrecondition') =>
   HttpResponse.json({ error: { code: status, message, status: reason.toUpperCase(), errors: [{ message, domain: 'global', reason }] } }, { status });
@@ -329,6 +343,7 @@ export class FakeGmail {
   now: () => number = () => Date.now();
 
   private readonly messages = new Map<string, Stored>();
+  private attachmentEpoch = 0;
   private readonly history: HistoryRecord[] = [];
   private historyId = 1000;
   private oldestHistory = 1000;
@@ -535,7 +550,12 @@ export class FakeGmail {
       const headers = (m.payload.headers ?? []).filter((h) => wanted.size === 0 || wanted.has(h.name!.toLowerCase()));
       return { ...this.minimal(m), payload: { mimeType: m.payload.mimeType, headers } };
     }
-    return { ...this.minimal(m), payload: m.payload };
+    return { ...this.minimal(m), payload: withAttachmentIds(m.payload, this.attachmentEpoch) };
+  }
+
+  /** Every attachment id a read gave before now stops working, as Gmail's may between reads. */
+  renewAttachmentIds(): void {
+    this.attachmentEpoch++;
   }
 
   private validLabels(ids: readonly string[]): string | null {
@@ -665,6 +685,14 @@ export class FakeGmail {
         if (this.lagSearch) this.unindexed.add(newId);
         return HttpResponse.json({ id: stored.id, threadId: stored.threadId, labelIds: stored.labelIds });
       }
+      case 'users.messages.attachments.get': {
+        const m = this.messages.get(params['messageId']!);
+        const [partId, epoch] = (id ?? '').split('~');
+        const part = m && Number(epoch) === this.attachmentEpoch ? partAt(m.payload, partId!) : null;
+        if (!m) return refused(404, 'Requested entity was not found.', 'notFound');
+        if (!part || !isFile(part)) return refused(400, 'Invalid attachment token', 'invalidArgument');
+        return HttpResponse.json({ size: part.body?.size ?? 0, data: part.body?.data ?? '' });
+      }
       case 'users.threads.get': {
         const messages = this.newest()
           .filter((m) => m.threadId === id)
@@ -733,6 +761,7 @@ const ROUTES: [method: string, verb: 'get' | 'post' | 'patch' | 'delete', path: 
   ['users.messages.send', 'post', '/messages/send'],
   ['users.messages.insert', 'post', '/messages'],
   ['users.messages.get', 'get', '/messages/:id'],
+  ['users.messages.attachments.get', 'get', '/messages/:messageId/attachments/:id'],
   ['users.messages.modify', 'post', '/messages/:id/modify'],
   ['users.threads.get', 'get', '/threads/:id'],
   ['users.labels.list', 'get', '/labels'],
@@ -746,6 +775,7 @@ const ROUTES: [method: string, verb: 'get' | 'post' | 'patch' | 'delete', path: 
 ];
 
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/:user';
+const GMAIL_UPLOAD = 'https://gmail.googleapis.com/upload/gmail/v1/users/:user';
 const TOKEN = 'https://oauth2.googleapis.com/token';
 const REVOKE = 'https://oauth2.googleapis.com/revoke';
 
@@ -867,6 +897,7 @@ export class FakeGoogle {
           if (!mailbox) return refused(401, 'Request had invalid authentication credentials.', 'unauthenticated');
           const q = new URL(request.url).searchParams;
           const id = typeof params['id'] === 'string' ? params['id'] : undefined;
+          const messageId = typeof params['messageId'] === 'string' ? params['messageId'] : undefined;
           const body = verb === 'post' || verb === 'patch' ? ((await request.json().catch(() => ({}))) as Record<string, unknown>) : {};
           const answered = await mailbox.answer(
             method,
@@ -877,12 +908,32 @@ export class FakeGoogle {
               ...(q.get('pageToken') ? { pageToken: q.get('pageToken')! } : {}),
               ...(q.getAll('labelIds').length > 0 ? { labelIds: q.getAll('labelIds') } : {}),
             },
-            () => mailbox.respond(method, request, id ? { id } : {}, body),
+            () => mailbox.respond(method, request, { ...(id ? { id } : {}), ...(messageId ? { messageId } : {}) }, body),
           );
           if (verb !== 'get') this.onChange();
           return answered;
         }),
       ),
+      // Mail sent through the upload address, as Mild sends it: the JSON and the message, as parts of one body.
+      http.post(`${GMAIL_UPLOAD}/messages/send`, async ({ request }) => {
+        const mailbox = this.mailboxOf(request);
+        if (!mailbox) return refused(401, 'Request had invalid authentication credentials.', 'unauthenticated');
+        const boundary = param(request.headers.get('content-type') ?? '', 'boundary');
+        const text = await request.text();
+        const parts = boundary ? text.split(`--${boundary}`).slice(1, -1) : [];
+        const bodyOf = (part: string) =>
+          part
+            .slice(part.search(/\r?\n\r?\n/))
+            .replace(/^\r?\n\r?\n/, '')
+            .replace(/\r?\n$/, '');
+        const json = parts[0] ? (JSON.parse(bodyOf(parts[0]) || '{}') as Record<string, unknown>) : {};
+        const raw = parts[1] ? bodyOf(parts[1]) : '';
+        const answered = await mailbox.answer('users.messages.send', {}, () =>
+          mailbox.respond('users.messages.send', request, {}, { ...json, raw: Buffer.from(raw).toString('base64url') }),
+        );
+        this.onChange();
+        return answered;
+      }),
     ];
   }
 }

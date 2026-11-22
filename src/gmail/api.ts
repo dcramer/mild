@@ -1,7 +1,7 @@
 import { gmail, type gmail_v1 } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
 import { type MessageContent, readContent } from './body.ts';
-import { calls, isNotFound } from './call.ts';
+import { calls, isInvalid, isNotFound } from './call.ts';
 import type { Pace } from './quota.ts';
 
 /** Headers fetched for triage, and all a message read whole (`getMessage`) keeps of its own. */
@@ -104,6 +104,11 @@ export interface GmailApi {
   listLabels(): Promise<{ id: string; name: string }[]>;
   /** The message's readable text (truncated), its HTML part, and the facts only the whole message shows (attachments, tracking); null when the message no longer exists. Does not mark it read. */
   getContent(messageId: string): Promise<MessageContent | null>;
+  /**
+   * The bytes of one of a message's files, by the id a read of it gave (`Attachment.gmailId`). Null when Gmail no longer
+   * knows that id or the message: a read of it again gives the ids it has now.
+   */
+  getAttachment(messageId: string, gmailId: string): Promise<Buffer | null>;
   /** One read of the whole message (60 units, as `getContent`), for its headers and labels as `getMetadata` gives them and its content. Null when it no longer exists. */
   getMessage(messageId: string): Promise<{ raw: RawMessage; content: MessageContent } | null>;
   /** A thread's messages, oldest first, with their labels and nothing else. Null when the thread no longer exists. */
@@ -258,6 +263,16 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
         return readContent(data.payload);
       } catch (error) {
         if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+
+    async getAttachment(messageId, gmailId) {
+      try {
+        const data = await call('users.messages.attachments.get', 20, () => client.users.messages.attachments.get({ userId, messageId, id: gmailId }));
+        return data.data ? Buffer.from(data.data, 'base64url') : null;
+      } catch (error) {
+        if (isNotFound(error) || isInvalid(error)) return null;
         throw error;
       }
     },

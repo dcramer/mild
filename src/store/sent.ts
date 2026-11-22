@@ -10,7 +10,7 @@ import { envelopeOf } from '../triage/features.ts';
 export async function recordSent(
   db: Sql,
   accountId: string,
-  sent: { id: string; threadId: string; labelIds: readonly string[]; headers: Record<string, string>; text: string; at: number },
+  sent: { id: string; threadId: string; labelIds: readonly string[]; headers: Record<string, string>; text: string; hasAttachments: boolean; at: number },
 ): Promise<void> {
   const envelope = envelopeOf(sent.headers);
   if (!envelope) throw new Error('A sent message has no usable From');
@@ -24,5 +24,5 @@ export async function recordSent(
     receivedAt: sent.at,
   };
   const words = sent.text.trim() === '' ? 0 : sent.text.trim().split(/\s+/).length;
-  await recordKept(db, accountId, { facts, text: { text: sent.text, html: null, read: { hasAttachments: false, words } } }, sent.at);
+  await recordKept(db, accountId, { facts, text: { text: sent.text, html: null, read: { hasAttachments: sent.hasAttachments, words } } }, sent.at);
 }

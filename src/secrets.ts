@@ -86,6 +86,38 @@ function decrypt(keys: Keyring, name: string, stored: string): string | null {
   }
 }
 
+/**
+ * Bytes as `encrypt` seals text, without the base64 a line would need: `sift-secret:v1:<key id>:`, the nonce, then the
+ * ciphertext and tag. Only with a key; without one the caller marks them plain.
+ */
+export function sealBytes(name: string, bytes: Uint8Array, keys: Keyring): Buffer {
+  const key = keys.current;
+  if (!key) throw new Error('Bytes are sealed only with a key.');
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key.key, nonce);
+  cipher.setAAD(Buffer.from(name));
+  return Buffer.concat([Buffer.from(`${PREFIX}${key.id}:`), nonce, cipher.update(bytes), cipher.final(), cipher.getAuthTag()]);
+}
+
+/** Bytes `sealBytes` sealed, or null when they are not sealed. Throws, naming `name`, when they do not open. */
+export function openBytes(name: string, stored: Uint8Array, keys: Keyring): Buffer | null {
+  const data = Buffer.from(stored);
+  if (!data.subarray(0, PREFIX.length).equals(Buffer.from(PREFIX))) return null;
+  const head = data.indexOf(':', PREFIX.length);
+  const id = data.subarray(PREFIX.length, head).toString();
+  const key = [keys.current, ...keys.old].find((k) => k?.id === id);
+  if (!key) throw lost([name]);
+  const body = data.subarray(head + 1);
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', key.key, body.subarray(0, 12));
+    decipher.setAAD(Buffer.from(name));
+    decipher.setAuthTag(body.subarray(-16));
+    return Buffer.concat([decipher.update(body.subarray(12, -16)), decipher.final()]);
+  } catch {
+    throw lost([name]);
+  }
+}
+
 /** A secret as stored: encrypted for `name` when there is a key, plain otherwise. */
 export function sealSecret(name: string, text: string, keys: Keyring): string {
   return keys.current ? encrypt(keys.current, name, text) : text;

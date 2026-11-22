@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import { type Recipient, readRecipients } from './addresses.ts';
 import { goBack, panelEntry, paramNow, setParams } from './params.ts';
 
 /**
@@ -54,15 +55,37 @@ export const useCompose = () => useContext(ComposeContext);
 export interface Draft {
   /** The address it is from; empty for the one it starts on. */
   from: string;
-  to: string;
-  cc: string;
+  to: Recipient[];
+  cc: Recipient[];
+  bcc: Recipient[];
   /** Cc was asked for, or has something in it. */
   showCc: boolean;
+  showBcc: boolean;
   subject: string;
   text: string;
+  /** Files uploaded for it, which Mild keeps a day. */
+  files: { id: string; name: string; size: number }[];
+  /** A forward's files taken off it, by their parts; every other file of the message forwarded goes with it. */
+  dropped: string[];
   /** Its Message-ID, made at the first press of Send and kept until it has gone, so trying again cannot send it twice. */
   id: string | null;
 }
+
+/** A draft with nothing in it yet but where it is from and to whom. */
+export const emptyDraft = (from: string, more: Partial<Draft> = {}): Draft => ({
+  from,
+  to: [],
+  cc: [],
+  bcc: [],
+  showCc: false,
+  showBcc: false,
+  subject: '',
+  text: '',
+  files: [],
+  dropped: [],
+  id: null,
+  ...more,
+});
 
 const DRAFT = 'sift:draft:';
 
@@ -70,12 +93,13 @@ const DRAFT = 'sift:draft:';
 const draftKey = (who: string, what: Writing) =>
   `${DRAFT}${who}:${what.kind === 'new' ? `new${what.to ? `/${what.to}` : ''}` : `${what.kind === 'forward' ? 'forward/' : ''}${what.messageId}`}`;
 
-/** The unsent draft `who` kept for this, if any; a new message to someone starts as one to them. */
+/** The unsent draft `who` kept for this, if any; a new message to someone starts as one to them. One kept as the composer once kept them, with its addresses as text, is not. */
 export function keptDraft(who: string, what: Writing): Draft | null {
-  const started = what.kind === 'new' && what.to ? { from: '', to: what.to, cc: '', showCc: false, subject: '', text: '', id: null } : null;
+  const started = what.kind === 'new' && what.to ? emptyDraft('', { to: readRecipients(what.to) }) : null;
   try {
     const stored = window.localStorage.getItem(draftKey(who, what));
-    return stored === null ? started : (JSON.parse(stored) as Draft);
+    const kept = stored === null ? null : (JSON.parse(stored) as Partial<Draft>);
+    return kept && Array.isArray(kept.to) && Array.isArray(kept.files) ? (kept as Draft) : started;
   } catch {
     return started;
   }
