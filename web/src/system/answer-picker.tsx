@@ -18,7 +18,7 @@ export interface Pick {
 /**
  * Saying what something is: a dropdown that starts on Mild's answer, and a check that agrees with it.
  * Picking from the list is the answer, so agreeing is one press and a change is two. `groups` run most
- * likely first; `empty` is what shows, in quiet ink, when there is no answer yet, and the check is off.
+ * likely first; `empty` is what shows, in quiet ink (down a list, the row's until it is the row the reader is on), when there is no answer yet, and the check is off.
  */
 export function AnswerPicker({
   label,
@@ -72,7 +72,7 @@ export function AnswerPicker({
                 <span className="truncate">{current.label}</span>
               </>
             ) : (
-              <span className="truncate text-muted-foreground">{empty}</span>
+              <span className="truncate text-muted-foreground group-hover/row:text-supporting group-focus-within/row:text-supporting">{empty}</span>
             )}
           </span>
           <ChevronDownIcon aria-hidden className="ml-auto size-3.5 shrink-0 text-muted-foreground" />

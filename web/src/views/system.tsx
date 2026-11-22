@@ -200,10 +200,12 @@ const INKS = [
   ['bg-background', 'background', 'The page.'],
   ['bg-popover', 'popover', 'What floats: a dialog, a menu, a failed toast.'],
   ['bg-foreground', 'foreground', 'Ink: text, the main action, and a toast.'],
-  ['bg-muted-foreground', 'muted-foreground', 'Secondary text.'],
+  ['bg-supporting', 'supporting', 'What supports the text: a preview, a hint, Mild’s label.'],
+  ['bg-faint', 'faint', 'What only places a row: when, an address, a count. A row’s quiet ink.'],
   ['bg-(--frame)', '--frame', 'A sheet’s edge.'],
   ['bg-(--rule)', '--rule', 'Lines between rows, dashed.'],
   ['bg-(--fill)', '--fill', 'What a control is filled with.'],
+  ['bg-(--row-strong)', '--row', 'The row you are on: quieter than any control on it.'],
   ['bg-highlight', 'highlight', 'Look here. Nothing else is yellow.'],
   ['bg-destructive', 'destructive', 'A failure. Nothing else is red.'],
 ] as const;

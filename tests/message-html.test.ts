@@ -115,7 +115,7 @@ describe('cleaning a message for the frame', () => {
   it('draws a letter in the colours the dashboard has', () => {
     const css = readFileSync(new URL('../web/src/index.css', import.meta.url), 'utf8');
     const token = (name: string) => new RegExp(`\\s--${name}:\\s*([^;]+);`).exec(css)?.[1];
-    expect({ foreground: token('foreground'), muted: token('muted-foreground'), border: token('border') }).toEqual(INK);
+    expect({ foreground: token('foreground'), muted: token('supporting'), border: token('border') }).toEqual(INK);
   });
 
   it("reads a message's text and its HTML part, each as it is", () => {

@@ -117,7 +117,7 @@ export function Masthead({
     <header
       ref={measure}
       className={cn(
-        'sticky top-0 z-20 -mx-4 bg-background px-4 pt-[calc(0.5rem+var(--safe-top))] pb-2 transition-[translate] duration-200 motion-reduce:transition-none md:hidden',
+        'sticky top-0 z-20 -mx-4 bg-background px-4 pt-[calc(1rem+var(--safe-top))] pb-2 transition-[translate] duration-200 motion-reduce:transition-none md:hidden',
         away && '-translate-y-full',
       )}
     >
@@ -143,11 +143,11 @@ export function Masthead({
                       <Anchor
                         href={`/${item.to}`}
                         aria-current={item.to === current ? 'page' : undefined}
-                        className="statement flex min-h-12 items-center gap-3 text-muted-foreground"
+                        className="statement flex min-h-12 items-center gap-3 text-muted-foreground aria-[current=page]:text-foreground"
                         replace
                         onClick={leave}
                       >
-                        <span className={item.to === current ? 'hl mx-0 px-2' : undefined}>{item.label}</span>
+                        <span>{item.label}</span>
                         {item.count ? <span className="text-base font-medium tabular-nums">{item.count}</span> : null}
                       </Anchor>
                     </li>

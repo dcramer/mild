@@ -1,6 +1,7 @@
 'use client';
 import { PlusIcon, WorkflowIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { SenderCell } from '@/components/sender.tsx';
@@ -157,7 +158,8 @@ function SuggestionRow({
           </span>
           <span className="flex w-full items-baseline gap-3">
             <span className="min-w-0 flex-1 truncate">{folded ? subjects : item.preview ? reveal(item.preview) : null}</span>
-            <span className="inline-flex shrink-0 items-baseline gap-2">
+            {/* A label reads as Mild's answer; Unlabelled stays in the row's quiet ink. */}
+            <span className={cn('inline-flex shrink-0 items-baseline gap-2', item.labelId !== null && 'text-supporting')}>
               {item.labelId !== null ? (
                 <>
                   <Meter level={sureness(item)} />

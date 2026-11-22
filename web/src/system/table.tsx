@@ -55,13 +55,14 @@ export function Table({ keys = false, dense = false, children }: { keys?: boolea
       {/* The bar below sits outside the sideways scroll, which would otherwise hold it in place instead of the screen. */}
       {/* A table in days is clipped rather than scrolled on a phone, where it keeps one column: a scroll here would hold a day's sticky heading to the table. */}
       <div className="overflow-x-auto phone:has-[th[scope=colgroup]]:overflow-x-clip">
-        <table className={cn('group/table w-full text-left', dense && 'dense md:text-sm')}>
+        {/* In a row, the quiet ink is the third strength: what places the row (when, an address, a count) under what it says. */}
+        <table className={cn('group/table w-full text-left [&_tbody_td]:[--muted-foreground:var(--faint)]', dense && 'dense md:text-sm')}>
           <Stops value={stop}>{children}</Stops>
         </table>
       </div>
       {onPage && (down || up) ? (
         // The page's controls, held at the bottom of the screen while the table is on it.
-        <ControlBar className="rule-above sticky bottom-0 z-10 mt-3 hidden bg-background px-(--bleed) py-1.5 md:flex">
+        <ControlBar className="rule-above sticky bottom-0 z-10 mt-3 hidden bg-background px-(--bleed) py-1.5 [--muted-foreground:var(--faint)] md:flex">
           <Control keys={['j', 'k', 'ArrowDown', 'ArrowUp']} label="Move" />
           <Control keys={['Enter']} label="Open" />
           <Control keys={['?']} label="Every key" />
@@ -96,15 +97,15 @@ export function Tr({
   const stop = useContext(Stops);
   const opens = onOpen !== undefined;
   useEffect(() => (opens ? stop() : undefined), [opens, stop]);
-  if (!onOpen) return <tr className={cn('row group/row', selected && 'bg-(--fill)', className)} {...props} />;
+  if (!onOpen) return <tr className={cn('row group/row', selected && 'bg-(--row)', className)} {...props} />;
   return (
     <RowActive value={active}>
       <tr
         tabIndex={0}
         data-holds={holds?.join(' ')}
         className={cn(
-          'row group/row cursor-pointer hover:bg-(--fill) focus-visible:bg-(--fill-strong) focus-within:bg-(--fill) has-[[data-popup-open]]:bg-(--fill) active:bg-(--fill-strong)',
-          selected && 'bg-(--fill)',
+          'row group/row cursor-pointer hover:bg-(--row) focus-visible:bg-(--row-strong) focus-within:bg-(--row) has-[[data-popup-open]]:bg-(--row) active:bg-(--row-strong)',
+          selected && 'bg-(--row)',
           className,
         )}
         onPointerDown={(event) => {
@@ -240,7 +241,7 @@ export function TrGroup({ title, span }: { title: string; span: number }) {
         scope="colgroup"
         className={cn(
           // A small, quiet line, so the rows under it read as one run.
-          'pt-6 pb-1.5 text-left text-sm font-semibold text-muted-foreground [tbody:first-of-type_&]:pt-1',
+          'pt-6 pb-1.5 text-left text-sm font-semibold text-faint [tbody:first-of-type_&]:pt-1',
           // On a phone it stays under the top bar while its rows pass, so the day is always said.
           'phone:sticky phone:top-(--bar) phone:z-[5] phone:bg-background phone:pt-2 phone:font-normal phone:[tbody:first-of-type_&]:pt-2',
           EDGES,

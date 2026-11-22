@@ -203,8 +203,8 @@ export function cleanHtml(html: string, images: boolean): string {
   return out;
 }
 
-/** The dashboard's colours (`--foreground`, `--muted-foreground`, `--border` in web/src/index.css), which the frame cannot read from the page. */
-export const INK = { foreground: '#f0eee8', muted: '#b5b3aa', border: '#2b2b27' };
+/** The dashboard's colours (`--foreground`, `--supporting`, `--border` in web/src/index.css), which the frame cannot read from the page. */
+export const INK = { foreground: '#f0eee8', muted: '#a3a198', border: '#2b2b27' };
 
 /** Laid out as tall as what it holds, so the frame can be as tall as that: a template's `height: 100%` would be the frame's. */
 const OWN_HEIGHT = 'html,body{height:auto!important;min-height:0!important}';
