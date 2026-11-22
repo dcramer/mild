@@ -121,6 +121,17 @@ class Refused extends Error {
 /** No answer at all: the network is down or Mild is not running. */
 class Unreachable extends Error {}
 
+/**
+ * What a failed write means for trying it again: Mild not reached, so again once it is; Mild busy or failing for now
+ * (408, 429, a 5xx), so again later; nobody signed in any more; or refused, which asking again will not change.
+ */
+export function failure(error: unknown): 'unreachable' | 'busy' | 'signed out' | 'refused' {
+  if (error instanceof Unreachable) return 'unreachable';
+  if (!(error instanceof Refused)) return 'refused';
+  if (error.status === 401) return 'signed out';
+  return error.status === 408 || error.status === 429 || error.status >= 500 ? 'busy' : 'refused';
+}
+
 let probing = false;
 
 /**
@@ -216,7 +227,8 @@ export const onWrite = (heard: (seq: number) => void) => void (wrote = heard);
 
 /**
  * A change. The headers mark it as coming from this page, which the server requires of every write.
- * Refused outright while Mild is unreachable: a change is never queued to happen later, unseen.
+ * Refused outright while Mild is unreachable: a change is never queued to happen later, unseen. Inbox's presses are, in
+ * the outbox (`web/src/lib/outbox.ts`), which shows each and counts those waiting.
  */
 /** `keepalive`: sent even as the page closes, for a write held back until then. */
 async function post<T = unknown>(path: string, body: unknown, keepalive = false): Promise<T> {
@@ -374,7 +386,7 @@ export const api = {
   mailThread: (thread: string, signal: AbortSignal, mailbox = '') =>
     get<MailConversation>('/api/mail/thread', mailbox ? { thread, mailbox } : { thread }, signal),
   /** The reader's own press on mail in their inbox. `actions`: what landed, for Undo. */
-  changeMail: (change: MailChange) => post<{ actions: number[]; missed: number }>('/api/mail/change', change),
+  changeMail: (change: MailChange) => post<{ actions: number[]; missed: number }>('/api/mail/change', change, true),
   /** Whether Mild keeps a copy of the person's mail, for Inbox, and how far back. */
   setMail: (on: boolean, window?: ManageState['mailWindow']) => post('/api/mail/on', window ? { on, window } : { on }),
   /** What copying the mail for each window would take, from Gmail's counts. */

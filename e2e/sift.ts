@@ -308,6 +308,12 @@ export const toasts = (page: Page) => page.getByRole('region', { name: 'Notifica
 /** A toast, named by what it is about: a rule's by the rule, a label's by the label. */
 export const toast = (page: Page, name: string) => toasts(page).getByRole('dialog', { name, exact: true });
 
+/** Closes a toast without Undo, which sends what it held. */
+export const dismiss = async (page: Page, name: string) => {
+  await toast(page, name).getByRole('button', { name: 'Dismiss' }).click();
+  await expect(toast(page, name)).toHaveCount(0);
+};
+
 /** A failure's toast, as it is announced: Base UI hides the toast itself from assistive technology and says it as an alert. */
 export const failureToast = (page: Page, title: string) => page.getByRole('alert').filter({ hasText: title });
 

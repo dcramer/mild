@@ -4,6 +4,7 @@ import {
   back,
   boxOf,
   choose,
+  dismiss,
   expect,
   forReviewLink,
   proposedRule,
@@ -28,6 +29,14 @@ import {
   toast,
   tooltip,
 } from './sift.ts';
+import type { Page } from '@playwright/test';
+
+/** How many mail changes the page has sent. */
+function changesSent(page: Page): () => number {
+  let sent = 0;
+  page.on('request', (request) => void (new URL(request.url()).pathname === '/api/mail/change' && sent++));
+  return () => sent;
+}
 
 // Run in the page, which e2e is typed without: as text.
 const OPEN_COPY = `new Promise((done) => (indexedDB.open('sift-copy').onsuccess = (event) => done(event.target.result)))`;
@@ -265,6 +274,7 @@ test.describe('Inbox', () => {
     await pointAt(inboxRow(page, 'This week in widgets'));
     await inboxRow(page, 'This week in widgets').getByRole('button', { name: 'Archive' }).click();
     await expect(inboxRows(page)).toHaveCount(18);
+    await dismiss(page, 'This week in widgets');
     await expect.poll(() => page.evaluate<number>(copied)).toBe(18);
     await page.reload();
     await expect(inboxRows(page)).toHaveCount(18);
@@ -319,20 +329,141 @@ test.describe('Inbox', () => {
     await expect(page.getByRole('dialog', { name: /rule/i })).toBeVisible();
   });
 
-  test('Spam marks the conversation spam in Gmail, and Undo puts it back', async ({ page, sift }) => {
+  test('Spam is sent to Gmail once its toast goes, and Undo before then sends nothing', async ({ page, sift }) => {
+    const changes = changesSent(page);
     await page.goto('/inbox');
     const deal = inboxRow(page, '48 hours only: 30% off');
     const id = (await deal.getAttribute('data-holds'))!.split('/')[1]!;
     await pointAt(deal);
     await deal.getByRole('button', { name: 'Spam' }).click();
     await expect(deal).toHaveCount(0);
-    await expect(toast(page, '48 hours only: 30% off')).toBeVisible();
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
-    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
-
     await toast(page, '48 hours only: 30% off').getByRole('button', { name: /^Undo/ }).click();
     await expect(deal).toBeVisible();
+    expect(changes()).toBe(0);
     expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
+
+    await pointAt(deal);
+    await deal.getByRole('button', { name: 'Spam' }).click();
+    await dismiss(page, '48 hours only: 30% off');
+    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
+    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+    await expect(deal).toHaveCount(0);
+  });
+
+  test('an archive is said at once, whatever Gmail, the copy or a press on another conversation is waiting on', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(19);
+    await page.route('**/api/sync**', () => {});
+    await page.route('**/api/mail/change', () => {});
+    for (const subject of ['This week in widgets', 'Widgets, part two']) {
+      await pointAt(inboxRow(page, subject));
+      await inboxRow(page, subject).getByRole('button', { name: 'Archive' }).click();
+      await expect(toast(page, subject)).toBeVisible();
+      await expect(inboxRow(page, subject)).toHaveCount(0);
+    }
+  });
+
+  test.describe('refused', () => {
+    test.use({ allow: ['status of 400'] });
+
+    test('an archive Mild refuses puts the conversation back and says so', async ({ page }) => {
+      await page.route('**/api/mail/change', (route) => route.fulfill({ status: 400, json: { error: 'That mailbox is not yours.' } }));
+      await page.goto('/inbox');
+      const widgets = inboxRow(page, 'This week in widgets');
+      await pointAt(widgets);
+      await widgets.getByRole('button', { name: 'Archive' }).click();
+      await expect(widgets).toHaveCount(0);
+      await dismiss(page, 'This week in widgets');
+      await expect(failureToast(page, 'Could not archive it')).toContainText('That mailbox is not yours.');
+      await expect(widgets).toBeVisible();
+    });
+  });
+
+  test.describe('busy', () => {
+    test.use({ allow: ['status of 503'] });
+
+    test('an archive Mild could not take for now is sent again, and the conversation stays archived', async ({ page, sift }) => {
+      let refused = 0;
+      await page.route('**/api/mail/change', async (route) => {
+        if (refused++ === 0) return await route.fulfill({ status: 503, json: { error: 'Busy.' } });
+        await route.continue();
+      });
+      await page.goto('/inbox');
+      const widgets = inboxRow(page, 'This week in widgets');
+      const id = (await widgets.getAttribute('data-holds'))!.split('/')[1]!;
+      await pointAt(widgets);
+      await widgets.getByRole('button', { name: 'Archive' }).click();
+      await dismiss(page, 'This week in widgets');
+      await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+      expect(refused).toBe(2);
+      await expect(widgets).toHaveCount(0);
+      await expect(failureToast(page, 'Could not archive it')).toHaveCount(0);
+    });
+  });
+
+  test.describe('without a network', () => {
+    test.use({ allow: ['ERR_INTERNET_DISCONNECTED', 'net::ERR_FAILED'] });
+
+    test('an archive made offline is shown, counted as waiting, and sent once the network is back', async ({ page, context, sift }) => {
+      await page.goto('/inbox');
+      const widgets = inboxRow(page, 'This week in widgets');
+      const id = (await widgets.getAttribute('data-holds'))!.split('/')[1]!;
+      await context.setOffline(true);
+      await pointAt(widgets);
+      await widgets.getByRole('button', { name: 'Archive' }).click();
+      await dismiss(page, 'This week in widgets');
+      await expect(page.getByRole('status').filter({ hasText: 'Mild cannot be reached: 1 change will go once it is back' })).toBeVisible();
+      await expect(widgets).toHaveCount(0);
+      expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
+
+      await context.setOffline(false);
+      await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+      await expect(widgets).toHaveCount(0);
+      await expect(failureToast(page, 'Could not archive it')).toHaveCount(0);
+    });
+
+    test('an archive that could not reach Mild is sent the next time the page opens', async ({ page, sift }) => {
+      await page.goto('/inbox');
+      const widgets = inboxRow(page, 'This week in widgets');
+      const id = (await widgets.getAttribute('data-holds'))!.split('/')[1]!;
+      await page.route('**/api/mail/change', (route) => route.abort('failed'));
+      await pointAt(widgets);
+      await widgets.getByRole('button', { name: 'Archive' }).click();
+      await dismiss(page, 'This week in widgets');
+      await expect(page.getByRole('status').filter({ hasText: '1 change will go once it is back' })).toBeVisible();
+
+      await page.unrouteAll();
+      await page.reload();
+      await expect(inboxRows(page).first()).toBeVisible();
+      await expect(widgets).toHaveCount(0);
+      await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+    });
+  });
+
+  test('a press in one tab shows in another at once, and its Undo there too', async ({ page, context }) => {
+    await page.goto('/inbox');
+    const other = await context.newPage();
+    await other.goto('/inbox');
+    await expect(inboxRow(other, 'This week in widgets')).toBeVisible();
+    const widgets = inboxRow(page, 'This week in widgets');
+    await pointAt(widgets);
+    await widgets.getByRole('button', { name: 'Archive' }).click();
+    await expect(inboxRow(other, 'This week in widgets')).toHaveCount(0);
+    await toast(page, 'This week in widgets').getByRole('button', { name: /^Undo/ }).click();
+    await expect(widgets).toBeVisible();
+    await expect(inboxRow(other, 'This week in widgets')).toBeVisible();
+    await other.close();
+  });
+
+  test('an archive still held when the page is left is sent', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    const widgets = inboxRow(page, 'Widgets, part two');
+    const id = (await widgets.getAttribute('data-holds'))!.split('/')[1]!;
+    await pointAt(widgets);
+    await widgets.getByRole('button', { name: 'Archive' }).click();
+    await expect(toast(page, 'Widgets, part two')).toBeVisible();
+    await page.goto('/inbox?unread=1');
+    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
   });
 
   test('Block sender gives them Blocked and marks their conversation spam, with one Undo', async ({ page, sift }) => {
@@ -344,12 +475,19 @@ test.describe('Inbox', () => {
     await expect(sale).toHaveCount(0);
     const blocked = toast(page, 'Blocked sale@store.example.com');
     await expect(blocked).toBeVisible();
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
-
     await blocked.getByRole('button', { name: /^Undo/ }).click();
     await expect(sale).toBeVisible();
+    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('SPAM');
     await page.goto('/sender/sale%40store.example.com');
-    await expect(page.getByRole('radio', { name: 'Blocked', checked: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Block', pressed: true })).toHaveCount(0);
+
+    await page.goto('/inbox');
+    await pointAt(sale);
+    await sale.getByRole('button', { name: 'Block sender' }).click();
+    await dismiss(page, 'Blocked sale@store.example.com');
+    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
+    await page.goto('/sender/sale%40store.example.com');
+    await expect(page.getByRole('button', { name: 'Block', pressed: true })).toBeVisible();
   });
 
   test('J and K move, O opens a conversation with its unread open, and opening it marks it read', async ({ page }) => {
@@ -439,6 +577,7 @@ test.describe('Inbox', () => {
     await expect(toast(page, 'Widgets, part two')).toBeVisible();
     await expect(row).toHaveCount(0);
     await expect(inboxRows(page)).toHaveCount(18);
+    await dismiss(page, 'Widgets, part two');
 
     // Read and unread are for what is selected.
     const read = page.waitForResponse('**/api/mail/change');
@@ -484,7 +623,7 @@ test.describe('Inbox', () => {
     await expect(inboxRow(page, 'This week in widgets')).toBeVisible();
   });
 
-  test('when Gmail takes only some of what is selected, what it took can still be undone, and the page says the rest failed', async ({ page }) => {
+  test('when Gmail takes only some of what is selected, the page says the rest failed once it is sent', async ({ page }) => {
     await page.route('**/api/mail/change', async (route) => {
       const reply = (await (await route.fetch()).json()) as { actions: number[] };
       await route.fulfill({ json: { actions: reply.actions.slice(1), missed: 1 } });
@@ -498,7 +637,7 @@ test.describe('Inbox', () => {
     await page.keyboard.press('j');
     await page.keyboard.press('x');
     await page.keyboard.press('e');
-    await expect(toast(page, '2 conversations').getByRole('button', { name: /^Undo/ })).toBeVisible();
+    await dismiss(page, '2 conversations');
     await expect(failureToast(page, 'Could not archive them')).toContainText('Gmail did not take all of them. Try again.');
   });
 
@@ -521,7 +660,7 @@ test.describe('Inbox', () => {
     await reader(page)
       .getByRole('button', { name: /^Archive/ })
       .click();
-    await expect(toast(page, 'Your order has shipped')).toBeVisible();
+    await dismiss(page, 'Your order has shipped');
     await page.keyboard.press('Escape');
     await expect(inboxRows(page)).toHaveCount(18);
 

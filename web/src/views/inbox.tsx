@@ -11,7 +11,8 @@ import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { Thinks, WhoWrote, type Writer, useMailPress } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, readAheadOnRest, useLoaded, usePages } from '@/lib/api.ts';
-import { type Copied, conversations, useWhole } from '@/lib/copy.ts';
+import { type Copied, conversations, copiedKey, useWhole } from '@/lib/copy.ts';
+import { useOutbox } from '@/lib/outbox.ts';
 import { useShown } from '@/lib/telemetry.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';
@@ -405,10 +406,11 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   }, [some, drawing]);
   const more = local ? (copied?.length ?? 0) > reached && drawing > reached : pages.more;
   const listed: Listed[] = local ? (copied ?? []).slice(0, Math.min(reached, drawing)).map(rowOf) : pages.pages.flatMap((page) => page.threads).map(rowOf);
-  const threads = listed.filter((t) => !hidden.has(threadKey(t)));
+  const pressed = useOutbox().hidden;
+  const threads = listed.filter((t) => !hidden.has(threadKey(t)) && !pressed.has(copiedKey(t.accountId, t.threadId)));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const chosen = threads.filter((t) => selected.has(threadKey(t)));
-  const { press, block, ruling, stopRuling, error } = useMailPress();
+  const { press, block, ruling, stopRuling } = useMailPress();
   const act = (what: 'archive' | 'spam' | 'read' | 'unread') => press(chosen, what, () => setSelected(new Set()));
   const proposals = (suggestions.data?.proposals ?? []).filter((p) => !hidden.has(proposalKey(p)));
   const now = useNow();
@@ -507,7 +509,6 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
     >
       {ruling ? <RuleDialog labels={labels} start={standingStart({ address: ruling }, 'blocked')} onClose={stopRuling} /> : null}
       {pages.error ? <ErrorNote message={pages.error} /> : null}
-      {error ? <ErrorNote message={error} /> : null}
       <Failure>{ask.error}</Failure>
       {ask.said ? (
         <Note>

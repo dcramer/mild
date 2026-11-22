@@ -1,4 +1,4 @@
-import { TOUCH, boxOf, expect, hold, path, reader, swipe, test, toast } from './sift.ts';
+import { TOUCH, boxOf, dismiss, expect, hold, path, reader, swipe, test, toast } from './sift.ts';
 import type { Page } from '@playwright/test';
 
 /** A conversation's row in Inbox on a phone, where it has no check to find it by. */
@@ -8,17 +8,19 @@ const idOf = async (page: Page, subject: string) => (await row(page, subject).ge
 test.describe('Inbox by touch, on a phone', () => {
   test.use({ variant: 'inbox', ...TOUCH });
 
-  test('a row swiped left to the edge is archived, and Undo puts it back', async ({ page, sift }) => {
+  test('a row swiped left to the edge is archived once its toast goes, and Undo before then puts it back', async ({ page, sift }) => {
     await page.goto('/inbox');
     const id = await idOf(page, 'Your order has shipped');
     await swipe(row(page, 'Your order has shipped'), -380);
     await expect(row(page, 'Your order has shipped')).toHaveCount(0);
-    await expect(toast(page, 'Your order has shipped')).toBeVisible();
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
-
     await toast(page, 'Your order has shipped').getByRole('button', { name: /^Undo/ }).tap();
     await expect(row(page, 'Your order has shipped')).toBeVisible();
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
+    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
+
+    await swipe(row(page, 'Your order has shipped'), -380);
+    await dismiss(page, 'Your order has shipped');
+    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+    await expect(row(page, 'Your order has shipped')).toHaveCount(0);
   });
 
   test('a short swipe stops with its press showing; a press on the row then closes it and opens nothing, and the press archives', async ({ page }) => {
