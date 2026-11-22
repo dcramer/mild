@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { panelEntry, paramNow, setParams } from './params.ts';
+import { goBack, panelEntry, paramNow, setParams } from './params.ts';
 
 /**
  * What the composer writes: a new message, to someone already (`to`, from their page) or to be said; a reply to one, to
@@ -31,7 +31,7 @@ export const closeReply = () => setParams({ compose: '', answering: '' });
 
 /** Closes the panel a new message is written in. */
 export function closeComposer() {
-  if (panelEntry()) window.history.back();
+  if (panelEntry()) goBack();
   else setParams({ compose: '', to: '' });
 }
 

@@ -2,6 +2,7 @@
 import { Dialog as Base } from '@base-ui/react/dialog';
 import { XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { whenSettled } from '@/lib/params.ts';
 import { cn } from '@/lib/utils';
 
 // What a Panel and a Dialog share, so the two read as one kind of thing: the same dimming behind, the
@@ -61,9 +62,10 @@ export function useLayerOpen(open: boolean, onClose: () => void, onClosing?: () 
     },
     onOpenChangeComplete: (next: boolean) => {
       if (next || !leaving) return;
-      // Still drawn after `onClose`, it is still wanted (Back went to another message): open again.
-      setLeaving(false);
       onClose();
+      // Still drawn once the page has followed `onClose`, it is still wanted (Back went to an entry that has it too): open
+      // again. Not before: a close that goes Back is followed a moment later, and would slide in again until then.
+      whenSettled(() => setLeaving(false));
     },
   };
 }

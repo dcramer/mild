@@ -15,7 +15,7 @@ import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
-import { isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
+import { goBack, isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
 import { useStarted } from '@/system/started.ts';
 import { useHidden } from '@/lib/action.ts';
 import { ahead } from '@/lib/format.ts';
@@ -70,7 +70,7 @@ const SECTIONS = [
 /** Settings opens over whatever is showing, setting up included, so nothing has to be finished to reach it. */
 const openSettings = () => setParams({ settings: '1' }, { state: { panel: true } });
 // A failed sign-in said in Settings (`signin`) goes with it.
-const closeSettings = () => (panelEntry() ? window.history.back() : setParams({ settings: '', signin: '' }));
+const closeSettings = () => (panelEntry() ? goBack() : setParams({ settings: '', signin: '' }));
 
 /**
  * The dashboard around `children`, the screen the address names, for whoever the server read the session as (`drawn`,
@@ -344,9 +344,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
                 <main className="pb-16">
                   {/* Kept while the reader is open, as it was, and deaf: its keys and effects stop until it shows again. */}
                   <Activity mode={open || proposal ? 'hidden' : 'visible'}>{children}</Activity>
-                  {proposal && !open ? (
-                    <ProposalReader id={proposal} onBack={() => (panelEntry() ? window.history.back() : setParams({ proposal: '' }))} />
-                  ) : null}
+                  {proposal && !open ? <ProposalReader id={proposal} onBack={() => (panelEntry() ? goBack() : setParams({ proposal: '' }))} /> : null}
                   {open ? (
                     <MessageReader
                       key={opened}
@@ -357,7 +355,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
                       onShown={shown}
                       // Opened from a list here, the entry before this one is that list: go back to it, so Back here and the browser's agree.
                       onBack={() => {
-                        if (panelEntry()) window.history.back();
+                        if (panelEntry()) goBack();
                         else show(undefined);
                       }}
                     />

@@ -49,6 +49,8 @@ const subscribe = (listener: () => void) => {
 };
 /** The query of a layer's entry being taken off, for the entry under it (`leaveLayer`). */
 let carrying: string | null = null;
+/** What waits on a Back this page asked for (`goBack`), which the browser takes only after the press that asked has drawn. */
+let afterBack: (() => void)[] | null = null;
 // Registered as this module loads, so it runs before Next.js and the page follow the address: what a layer's entry
 // was given reaches the entry under it before anything draws from that entry's own, which may name the layer again.
 if (typeof window !== 'undefined')
@@ -57,7 +59,23 @@ if (typeof window !== 'undefined')
     const query = carrying;
     carrying = null;
     if (query !== null && query !== window.location.search) goToQuery(query.slice(1));
+    const waiting = afterBack;
+    afterBack = null;
+    // After every other listener, so the page has drawn the entry it went back to.
+    if (waiting) setTimeout(() => waiting.forEach((then) => then()));
   });
+
+/** Back to the entry under this one, for a press that closes what Back would. */
+export function goBack() {
+  afterBack ??= [];
+  window.history.back();
+}
+
+/** Runs `then` once the page has followed a Back it asked for (`goBack`), or now when none is on its way. */
+export function whenSettled(then: () => void) {
+  if (afterBack) afterBack.push(then);
+  else then();
+}
 
 /**
  * Go to `query` on this path, through the History API, which Next.js follows (`useSearchParams`) without asking the
@@ -171,7 +189,7 @@ export function useBackCloses(open: boolean, close: () => void) {
  */
 function leaveLayer() {
   carrying = window.location.search;
-  window.history.back();
+  goBack();
 }
 
 /**
