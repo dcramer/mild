@@ -12,6 +12,7 @@ import {
   listOpenActions,
   setActionStatus,
 } from '../store/actions.ts';
+import { recordLabels } from '../store/messages.ts';
 import type { Mailbox } from './mailbox.ts';
 import { Refusal } from '../refusal.ts';
 import { traced } from '../telemetry.ts';
@@ -48,6 +49,16 @@ export interface ActionDeps {
 const clock = (deps: ActionDeps) => (deps.now ?? Date.now)();
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const applied = (labels: string[], change: LabelChange) => change.add.every((l) => labels.includes(l)) && !change.remove.some((l) => labels.includes(l));
+
+/**
+ * The message's labels as Gmail gives them now, written to the record as they are read. Sync begins no pass for Mild's own
+ * changes, so without this Inbox would list mail Mild archived until other mail arrived.
+ */
+async function labelsNow(deps: ActionDeps, accountId: string, messageId: string): Promise<string[] | null> {
+  const labels = await deps.mailbox.getLabelIds(messageId);
+  if (labels) await recordLabels(deps.db, accountId, messageId, labels);
+  return labels;
+}
 
 type Target = { accountId: string; messageId: string; type: ActionType; undoOf?: number; decisionId?: number };
 
@@ -95,6 +106,7 @@ async function changeLabels(deps: ActionDeps, target: Target, current: string[],
     return { status: 'unknown', actionId, reason: message(error) };
   }
 
+  await recordLabels(deps.db, target.accountId, target.messageId, finalLabels);
   if (applied(finalLabels, change)) {
     await finishAction(deps.db, actionId, 'done', finalLabels, null, clock(deps));
     return { status: 'done', actionId, finalLabels };
@@ -126,7 +138,7 @@ export async function reconcile(deps: ActionDeps, scope?: { accountId: string; m
       settled++;
       continue;
     }
-    const labels = await deps.mailbox.getLabelIds(action.messageId);
+    const labels = await labelsNow(deps, action.accountId, action.messageId);
     if (labels === null) await finishAction(deps.db, action.id, 'failed', null, 'message no longer exists', clock(deps));
     else if (applied(labels, action.payload)) await finishAction(deps.db, action.id, 'done', labels, null, clock(deps));
     else await finishAction(deps.db, action.id, 'failed', labels, action.error ?? 'change was not applied', clock(deps));
@@ -142,7 +154,7 @@ export async function reconcile(deps: ActionDeps, scope?: { accountId: string; m
 export async function execute(deps: ActionDeps, accountId: string, messageId: string, action: MessageAction, decisionId?: number): Promise<Outcome> {
   await reconcile(deps, { accountId, messageId });
 
-  const current = await deps.mailbox.getLabelIds(messageId);
+  const current = await labelsNow(deps, accountId, messageId);
   if (current === null) return { status: 'skipped', reason: 'message no longer exists' };
   if (!current.includes('INBOX')) return { status: 'skipped', reason: 'message is not in the inbox' };
 
@@ -171,17 +183,15 @@ export type Press = keyof typeof PRESSES;
 
 /**
  * The person's own press on one message, carried out whether Mild is on or not, as an answer is. Only a message in the
- * inbox now is changed; nothing is added for what Mild did, since Mild did not decide it. With the outcome, the
- * message's labels as Gmail last said them, for the record; null when it no longer exists.
+ * inbox now is changed; nothing is added for what Mild did, since Mild did not decide it.
  */
-export async function press(deps: ActionDeps, accountId: string, messageId: string, what: Press): Promise<{ outcome: Outcome; labels: string[] | null }> {
+export async function press(deps: ActionDeps, accountId: string, messageId: string, what: Press): Promise<Outcome> {
   await reconcile(deps, { accountId, messageId });
-  const current = await deps.mailbox.getLabelIds(messageId);
-  if (current === null) return { outcome: { status: 'skipped', reason: 'message no longer exists' }, labels: null };
-  if (!current.includes('INBOX')) return { outcome: { status: 'skipped', reason: 'message is not in the inbox' }, labels: current };
+  const current = await labelsNow(deps, accountId, messageId);
+  if (current === null) return { status: 'skipped', reason: 'message no longer exists' };
+  if (!current.includes('INBOX')) return { status: 'skipped', reason: 'message is not in the inbox' };
   const { add, remove } = PRESSES[what];
-  const outcome = await applyChange(deps, { accountId, messageId, type: what }, current, { add: [...add], remove: [...remove] });
-  return { outcome, labels: outcome.status === 'done' ? outcome.finalLabels : current };
+  return await applyChange(deps, { accountId, messageId, type: what }, current, { add: [...add], remove: [...remove] });
 }
 
 /** Spam is the costliest mistake, so every doubt refuses: unknown sender, failed lookup, or any prior correspondence. */
@@ -220,7 +230,7 @@ export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome>
   if (action.type === 'unsubscribe') throw new Refusal('An unsubscribe cannot be undone from here. Subscribe again with the sender.');
   if (action.status !== 'done') throw new Refusal(`Change #${actionId} is ${action.status}; only completed changes can be undone.`);
 
-  const current = await deps.mailbox.getLabelIds(action.messageId);
+  const current = await labelsNow(deps, action.accountId, action.messageId);
   if (current === null) throw new Refusal('The message no longer exists.');
   if (current.includes('TRASH')) throw new Refusal('The message is in the trash; restore it in Gmail first.');
 
