@@ -29,10 +29,18 @@ export async function attachmentsOf(db: Sql, api: Reader, accountId: string, mes
 }
 
 /**
- * The files of a message being forwarded, by their parts, fetched from Gmail (20 units each), which Mild never keeps. An id
- * Gmail no longer knows is read again with the message once (`relist`), in case its ids changed since it was kept.
+ * A message's files, by their parts, fetched from Gmail (20 units each), which Mild never keeps. An id Gmail no longer
+ * knows is read again with the message once (`relist`), in case its ids changed since it was kept; a file still not
+ * there is refused in the words `gone` gives.
  */
-export async function forwardedFiles(db: Sql, api: Reader, accountId: string, messageId: string, parts: readonly string[]): Promise<Attached[]> {
+async function filesOf(
+  db: Sql,
+  api: Reader,
+  accountId: string,
+  messageId: string,
+  parts: readonly string[],
+  gone: (name: string) => string,
+): Promise<Attached[]> {
   if (parts.length === 0) return [];
   let list = await attachmentsOf(db, api, accountId, messageId);
   let fresh = false;
@@ -45,10 +53,18 @@ export async function forwardedFiles(db: Sql, api: Reader, accountId: string, me
         files.push({ name: file.name, type: file.type, data });
         break;
       }
-      if (fresh) throw new Refusal(`${file?.name ?? 'A file'} is no longer in the message you are forwarding. Remove it to send.`);
+      if (fresh) throw new Refusal(gone(file?.name ?? 'A file'));
       list = await relist(db, api, accountId, messageId);
       fresh = true;
     }
   }
   return files;
 }
+
+/** The files of a message being forwarded, by their parts (`filesOf`). */
+export const forwardedFiles = (db: Sql, api: Reader, accountId: string, messageId: string, parts: readonly string[]) =>
+  filesOf(db, api, accountId, messageId, parts, (name) => `${name} is no longer in the message you are forwarding. Remove it to send.`);
+
+/** One file of a message, to save (`filesOf`). */
+export const fileOf = async (db: Sql, api: Reader, accountId: string, messageId: string, part: string) =>
+  (await filesOf(db, api, accountId, messageId, [part], (name) => `${name} is no longer in this message in Gmail.`))[0]!;

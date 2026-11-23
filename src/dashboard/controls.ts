@@ -106,6 +106,8 @@ export interface Controls {
   dropDraft(db: Sql, draft: { id: string; accountId: string; gmailId: string }): Promise<void>;
   /** A message's files, read from Gmail once for mail Inbox kept before it kept these. */
   attachments(db: Sql, message: { accountId: string; messageId: string }): Promise<{ part: string; name: Confidential; type: Confidential; size: number }[]>;
+  /** One of a message's files, by its part, fetched from Gmail. */
+  file(db: Sql, message: { accountId: string; messageId: string; part: string }): Promise<{ name: string; type: string; data: Buffer }>;
   /** Pass this person's mailboxes now instead of at the next tick. */
   checkNow(db: Sql): Promise<void>;
   /** How the last passes over these mailboxes went. */

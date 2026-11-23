@@ -1,9 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { FRAMES, READS, WRITES } from '../../src/dashboard/api/index.ts';
+import { DOWNLOADS, FRAMES, READS, WRITES } from '../../src/dashboard/api/index.ts';
 import { AREAS } from './areas.ts';
 
-const registered = [...READS.map((r) => `GET ${r.path}`), ...FRAMES.map((r) => `GET ${r.path}`), ...WRITES.map((r) => `POST ${r.path}`)];
+const registered = [
+  ...READS.map((r) => `GET ${r.path}`),
+  ...FRAMES.map((r) => `GET ${r.path}`),
+  ...DOWNLOADS.map((r) => `GET ${r.path}`),
+  ...WRITES.map((r) => `POST ${r.path}`),
+];
 const tested: string[] = Object.values(AREAS).flat();
 
 describe('the API integration tests', () => {

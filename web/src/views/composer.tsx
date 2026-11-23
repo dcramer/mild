@@ -8,6 +8,7 @@ import { api, useLoaded } from '@/lib/api.ts';
 import { dateTime } from '@/lib/format.ts';
 import { type Draft, type Writing, draftId, emptyDraft, keepDraft, keptDraft, newMessageId, useCompose } from '@/lib/compose.ts';
 import { uploadFile } from '@/lib/upload.ts';
+import { useFiles } from '@/lib/attachments.ts';
 import { useChosenMailbox } from '@/lib/mailbox.ts';
 import { useHere } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -35,7 +36,7 @@ import {
   useNow,
   useToast,
 } from '@/system';
-import type { ManageState, MessageAttachment, MessageDetail } from '../../../src/dashboard/types.ts';
+import type { ManageState, MessageDetail } from '../../../src/dashboard/types.ts';
 
 /** An address mail can be from: a mailbox's own, or one of its aliases, and whether Google lets Mild send from that mailbox. */
 interface From {
@@ -223,25 +224,6 @@ interface Uploading {
   abort: AbortController;
 }
 
-/** The forwarded message's files, as the record has them; read from Gmail once where it does not. */
-function useForwarded(message: MessageDetail | undefined): MessageAttachment[] {
-  const [read, setRead] = useState<MessageAttachment[] | null>(null);
-  const kept = message?.attachments ?? null;
-  const unknown = message !== undefined && kept === null;
-  useEffect(() => {
-    if (!unknown) return;
-    let current = true;
-    api.attachments(message.accountId, message.messageId).then(
-      (r) => current && setRead(r.attachments),
-      () => current && setRead([]),
-    );
-    return () => {
-      current = false;
-    };
-  }, [unknown, message?.accountId, message?.messageId]);
-  return kept ?? read ?? [];
-}
-
 /** The composer's fields, text and presses: in a panel of their own for new mail, in place under the conversation (`inline`) for a reply or a forward. */
 function Writer({
   what,
@@ -325,7 +307,7 @@ function Writer({
   const [uploading, setUploading] = useState<Uploading[]>([]);
   // What is typed in each line that is not a chip yet.
   const [typing, setTyping] = useState({ to: '', cc: '', bcc: '' });
-  const files = useForwarded(what.kind === 'forward' || draft.withFiles ? answered : undefined);
+  const files = useFiles(what.kind === 'forward' || draft.withFiles ? answered : undefined);
   const carried = files.filter((f) => !draft.dropped.includes(f.part));
   const toField = useRef<HTMLInputElement>(null);
   const [toInput] = useState(() => (input: HTMLInputElement | null) => {

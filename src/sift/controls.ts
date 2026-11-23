@@ -1,7 +1,7 @@
 import { press, undo } from '../actions/executor.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import { sendMail } from '../actions/send.ts';
-import { attachmentsOf, forwardedFiles } from '../work/attachments.ts';
+import { attachmentsOf, fileOf, forwardedFiles } from '../work/attachments.ts';
 import { dropGmailDraft } from '../actions/drafts.ts';
 import { removeUploads, uploaded } from '../store/uploads.ts';
 import type { Config } from '../config.ts';
@@ -331,6 +331,7 @@ export async function buildControls(
         size,
         ...seal({ name, type }),
       })),
+    file: async (db, { accountId, messageId, part }) => await fileOf(db, (await gmail(db, accountId)).api, accountId, messageId, part),
     mailboxIcons: async (domains) =>
       Object.fromEntries(
         await Promise.all(

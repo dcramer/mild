@@ -281,6 +281,13 @@ export const api = {
   /** A message by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
   message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
   /** Where a frame loads a message as the HTML Mild holds for it; `images` once the reader asked for its images. */
+  /** One of a message's files, fetched from Gmail through Mild, to save. */
+  file: async (accountId: string, messageId: string, part: string): Promise<Blob> => {
+    const query = new URLSearchParams({ id: messageId, part, mailbox: accountId });
+    const response = await send(`/api/message/file?${query}`, { headers: traceHeaders() }, 'Mild cannot be reached.');
+    if (!response.ok) throw new Refused(response.status, await reason(response));
+    return await response.blob();
+  },
   messageHtml: (id: string, mailbox: string, images: boolean) =>
     `/api/message/html?${new URLSearchParams(images ? { id, mailbox, images: '1' } : { id, mailbox })}`,
   /** Everyone the person has mail from, newest first, a page at a time. */

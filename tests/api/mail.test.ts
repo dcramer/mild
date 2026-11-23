@@ -137,6 +137,35 @@ describe('reading mail', () => {
     expect((await me.call('GET', `/api/message/html?id=${reply}`)).status).toBe(404);
   });
 
+  it('gives a message’s file to save, fetched from Gmail as it is asked for, never shown at Mild’s address', async () => {
+    const { sift, box, me } = await withInbox();
+    const id = box.deliver({
+      from: 'Ada <ada@example.com>',
+      subject: 'Plans',
+      attachments: [{ filename: 'Dachplan für Ada.html', mimeType: 'text/html', data: '<script>alert(1)</script>' }],
+    });
+    await arrives(sift, me);
+    const [file] = ((await me.call('GET', `/api/message?id=${id}`)).body as { attachments: { part: string }[] }).attachments;
+    const reads = box.asked('users.messages.get').filter((r) => r.id === id).length;
+
+    const saved = await me.call('GET', `/api/message/file?id=${id}&part=${file!.part}`);
+    expect(saved.status).toBe(200);
+    expect(saved.body['text']).toBe('<script>alert(1)</script>');
+    expect(Object.fromEntries(saved.headers)).toMatchObject({
+      'content-type': 'text/html',
+      'content-disposition': `attachment; filename="Dachplan f_r Ada.html"; filename*=UTF-8''Dachplan%20f%C3%BCr%20Ada.html`,
+      'content-security-policy': "default-src 'none'; sandbox",
+      'x-content-type-options': 'nosniff',
+    });
+    expect(box.asked('users.messages.get').filter((r) => r.id === id)).toHaveLength(reads);
+    expect((await me.call('GET', `/api/message/file?id=${id}&part=9`)).status).toBe(404);
+
+    // Gone from the message in Gmail since: it is read again once, for the ids it has now, and then refused.
+    box.renewAttachmentIds();
+    expect((await me.call('GET', `/api/message/file?id=${id}&part=${file!.part}`)).body['text']).toBe('<script>alert(1)</script>');
+    expect(box.asked('users.messages.get').filter((r) => r.id === id)).toHaveLength(reads + 1);
+  });
+
   it('shows someone else none of it', async () => {
     const { sift, box, me } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com', subject: 'Lunch?', html: '<p>Lunch</p>' });
@@ -146,6 +175,7 @@ describe('reading mail', () => {
     expect((await other.call('GET', `/api/mail/thread?thread=${id}`)).status).toBe(404);
     expect((await other.call('GET', `/api/message?id=${id}`)).status).toBe(404);
     expect((await other.call('GET', `/api/message/html?id=${id}`)).status).toBe(404);
+    expect((await other.call('GET', `/api/message/file?id=${id}&part=1`)).status).toBe(404);
     expect((await other.call('GET', `/api/mail/threads?mailbox=${ME}`)).status).toBe(404);
   });
 });

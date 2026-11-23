@@ -4,7 +4,7 @@ import { credentials } from '../store/credentials.ts';
 import { headOf } from '../store/sync.ts';
 import type { z } from 'zod';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
-import { FRAMES, READS, WRITES } from './api/index.ts';
+import { DOWNLOADS, FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import { frameNote } from './mail-html.ts';
 import { Refusal } from '../refusal.ts';
@@ -23,6 +23,43 @@ const frameHeaders = (images: boolean) => ({
   'content-type': 'text/html; charset=utf-8',
   'cache-control': 'no-store',
 });
+
+const MEDIA_TYPE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
+
+/**
+ * A file from the person's mail (`DOWNLOADS`), whose name and type its sender chose: always saved, never shown at this
+ * address, where an HTML or SVG file would run as the page, and with no origin of its own if a browser shows it anyway.
+ * The name twice, as a quoted ASCII stand-in and in RFC 6266's encoding, which keeps every character.
+ */
+const fileHeaders = (name: string, type: string) => {
+  // No control character, which could end the header.
+  const clean = name
+    .split('')
+    .filter((c) => c >= ' ' && c !== '\u007f')
+    .join('');
+  const ascii = clean.replaceAll(/[^\x20-\x7e]/g, '_').replaceAll(/["\\]/g, '\\$&');
+  const encoded = encodeURIComponent(clean).replaceAll(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return {
+    'content-type': MEDIA_TYPE.test(type) ? type : 'application/octet-stream',
+    'content-disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`,
+    'content-security-policy': "default-src 'none'; sandbox",
+    ...NOSNIFF,
+    'referrer-policy': 'no-referrer',
+    'cache-control': 'no-store',
+  };
+};
+
+/** Streamed, since Vercel answers at most 4.5 MB in one body that is not, and a file may be 25 MB. */
+const STREAM_PIECE = 256 * 1024;
+const streamed = (data: Buffer) => {
+  let at = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(stream) {
+      if (at >= data.length) return stream.close();
+      stream.enqueue(data.subarray(at, (at += STREAM_PIECE)));
+    },
+  });
+};
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 /** Answered here rather than by a route module. */
@@ -224,6 +261,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   };
   const reads = new Map(READS.map((route) => [route.path, route]));
   const frames = new Map(FRAMES.map((route) => [route.path, route]));
+  const downloads = new Map(DOWNLOADS.map((route) => [route.path, route]));
   const writes = new Map(WRITES.map((route) => [route.path, route]));
   /** Why this person may not make this write, or null if they may. Someone else's data is reported as not there. */
   const refusal = async (route: Write, ctx: Context, body: unknown, scope: Scope, someone: boolean): Promise<{ status: number; error: string } | null> => {
@@ -234,7 +272,8 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
   };
 
   /** Named by its route, never by a path a stranger chose. */
-  const routeOf = (path: string) => (reads.has(path) || writes.has(path) || frames.has(path) || SIGN_IN_PATHS.has(path) ? path : 'other');
+  const routeOf = (path: string) =>
+    reads.has(path) || writes.has(path) || frames.has(path) || downloads.has(path) || SIGN_IN_PATHS.has(path) ? path : 'other';
 
   const handle = async (request: Request): Promise<Response> => {
     // The Host header, not the URL: a `node:http` adapter cannot always build a URL from it.
@@ -429,6 +468,22 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
               return { status, html: frameNote(note) };
             });
       return new Response(reply.html, { status: reply.status, headers: frameHeaders(reply.images === true) });
+    }
+    const saved = downloads.get(url.pathname);
+    if (saved) {
+      const mailbox = query.get('mailbox');
+      const scope = mailbox ? narrow(whole, mailbox) : whole;
+      if (!scope) return json(404, { error: 'No such mailbox' });
+      const params = saved.query.safeParse(Object.fromEntries(query));
+      if (!params.success) return json(400, { error: refusedBy(params.error) });
+      try {
+        const file = await saved.run(ctx, scope, params.data);
+        if (!file) return json(404, { error: 'There is no such file here.' });
+        return new Response(streamed(file.data), { status: 200, headers: fileHeaders(file.name, file.type) });
+      } catch (error) {
+        const { status, ...body } = failed(request, error);
+        return json(status, body);
+      }
     }
     if (url.pathname.startsWith('/api/')) {
       const route = reads.get(url.pathname);

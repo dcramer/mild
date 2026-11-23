@@ -11,6 +11,7 @@ import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { useMailboxIcon } from '@/components/mailbox-icon.tsx';
 import { useAction } from '@/lib/action.ts';
+import { saveFile, useFiles } from '@/lib/attachments.ts';
 import { type Confidential, type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, readAhead, useLoaded } from '@/lib/api.ts';
 import { conversationOf, conversations, copied, copiedKey } from '@/lib/copy.ts';
 import { type Writing, closeReply, useCompose, writing } from '@/lib/compose.ts';
@@ -54,6 +55,7 @@ import {
   TimelineEvent,
   Tr,
   useToast,
+  MessageFiles,
 } from '@/system';
 
 type Decision = MessageDetail['decisions'][number];
@@ -275,9 +277,41 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
             }
           : {})}
       />
-      {detail.digest ? <DigestBody digest={detail.digest} /> : <MessageBody key={id} detail={detail} html={html} />}
+      {detail.digest ? (
+        <DigestBody digest={detail.digest} />
+      ) : (
+        <>
+          <MessageBody key={id} detail={detail} html={html} />
+          <Files detail={detail} />
+        </>
+      )}
     </>
   );
+}
+
+/** The message's files, each fetched from Gmail as it is pressed. */
+function Files({ detail }: { detail: MessageDetail }) {
+  const files = useFiles(detail);
+  const [saving, setSaving] = useState<ReadonlySet<string>>(new Set());
+  const toast = useToast();
+  const save = (part: string) => {
+    const file = files.find((f) => f.part === part)!;
+    const name = reveal(file.name);
+    setSaving((now) => new Set(now).add(part));
+    saveFile(detail, part, name)
+      .then(
+        () => {},
+        (error: unknown) => toast(`Could not download ${name}`, { tone: 'failure', description: error instanceof Error ? error.message : String(error) }),
+      )
+      .finally(() =>
+        setSaving((now) => {
+          const left = new Set(now);
+          left.delete(part);
+          return left;
+        }),
+      );
+  };
+  return <MessageFiles files={files.map((f) => ({ key: f.part, name: reveal(f.name), size: f.size, saving: saving.has(f.part) }))} onSave={save} />;
 }
 
 /** A message of the conversation: the reader's own as it was loaded, any other read as it is first wanted and kept. */
