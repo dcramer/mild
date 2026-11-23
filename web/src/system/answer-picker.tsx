@@ -93,20 +93,26 @@ export function AnswerPicker({
 }
 
 /**
- * What a row's mail is, changed in place from the block its presses sit on when the row is pointed at (`RowPresses`'
- * `lead`): the meter and the label, or Unlabelled, and a chevron. Picking saves it at once, with no check, since there is
- * nothing to agree to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back.
+ * What a message is, changed in place where it is read: on the block a row's presses sit on when the row is pointed at
+ * (`RowPresses`' `lead`), or in the reader's toolbar (`ReaderBar`'s `label`, `size="toolbar"`, as tall as its icons). The
+ * meter and the label, or Unlabelled, and a chevron. Picking saves it at once, with no check, since there is nothing to
+ * agree to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back. `extra`
+ * is last in the list, set apart, as `AnswerPicker`'s is.
  */
 export function LabelPick({
   label,
   value,
   groups,
   onSubmit,
+  size = 'row',
+  extra,
 }: {
   label: string;
   value: string | null;
   groups: readonly (readonly Pick[])[];
   onSubmit: (id: string) => Promise<unknown>;
+  size?: 'row' | 'toolbar';
+  extra?: { label: string; lead?: ReactNode; onSelect: () => void };
 }) {
   const [chosen, setChosen] = useState<string | null>(value);
   // A new value from Mild is followed in place: drawing the picker again would shut a list the reader has open.
@@ -122,6 +128,7 @@ export function LabelPick({
       items={all.map((p) => ({ value: p.id, label: p.label }))}
       value={chosen}
       onValueChange={(next, { reason }) => {
+        if (next === EXTRA) return extra?.onSelect();
         if (next === null || reason !== 'item-press' || next === chosen) return;
         const was = chosen;
         setChosen(next);
@@ -130,14 +137,19 @@ export function LabelPick({
     >
       <Base.Trigger
         aria-label={label}
-        className="press inline-flex h-7 cursor-pointer items-center gap-2 px-2 text-sm whitespace-nowrap text-foreground/75 select-none hover:bg-(--fill-strong) hover:text-foreground data-popup-open:bg-(--fill-strong) data-popup-open:text-foreground"
+        className={cn(
+          'press inline-flex min-w-0 cursor-pointer items-center gap-2 text-sm',
+          size === 'toolbar' ? 'h-(--control) px-3' : 'h-7 px-2',
+          size === 'toolbar' ? 'hover:bg-(--fill) data-popup-open:bg-(--fill)' : 'hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)',
+          'whitespace-nowrap text-foreground/75 select-none hover:text-foreground data-popup-open:text-foreground',
+        )}
       >
         {/* The meter stands on the label's baseline, and both sit a pixel down, as a button's words do. */}
-        <span className="relative top-px flex items-baseline gap-2">
+        <span className="relative top-px flex min-w-0 items-baseline gap-2">
           {current ? (
             <>
               {current.lead}
-              {current.label}
+              <span className="truncate">{current.label}</span>
             </>
           ) : (
             'Unlabelled'
@@ -145,7 +157,7 @@ export function LabelPick({
         </span>
         <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       </Base.Trigger>
-      <Choices groups={groups} />
+      <Choices groups={groups} extra={extra} />
     </Base.Root>
   );
 }

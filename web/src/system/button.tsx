@@ -47,7 +47,7 @@ interface Own {
   /** Waiting on something this press started. Stops further presses. */
   busy?: boolean;
   /**
-   * The key that presses this, drawn beside its label. A string when the button's label is plain text;
+   * The key that presses this, drawn beside its label (not beside an icon alone, whose `Tooltip` says it). A string when the button's label is plain text;
    * otherwise the key with a few words for the list of all keys. Inside a table row it is live, and
    * shown, only on the row the reader is on.
    */
@@ -77,7 +77,7 @@ export function Button({ variant = 'plain', size = 'md', busy = false, shortcut,
   const content = (
     <>
       {children}
-      {hint}
+      {size === 'icon' ? null : hint}
       {busy ? <span aria-hidden className="busy-dots" /> : null}
     </>
   );

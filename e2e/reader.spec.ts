@@ -10,6 +10,7 @@ import {
   forReviewLink,
   inboxRow,
   openMessage,
+  pointAt,
   query,
   reader,
   readerHeading,
@@ -18,6 +19,7 @@ import {
   sideScroll,
   test,
   toast,
+  tooltip,
 } from './sift.ts';
 
 test.describe('The reader, from For review', () => {
@@ -84,6 +86,16 @@ test.describe('The reader, from Inbox', () => {
     await expect(readerHeading(page, 'Your order has shipped')).toBeVisible();
     // Mail to the one mailbox left, and to no one else, says nothing of whom it went to.
     await expect(reader(page).getByRole('term')).toHaveCount(0);
+  });
+
+  test('the bar is icons, each saying what it does and its key when pointed at', async ({ page }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
+    await expect(readerHeading(page, 'Your March bill')).toBeVisible();
+    await pointAt(reader(page).getByRole('button', { name: 'Archive', exact: true }));
+    await expect(tooltip(page)).toHaveText('ArchiveE');
+    await pointAt(reader(page).getByRole('button', { name: 'Back to Inbox' }));
+    await expect(tooltip(page)).toHaveText('Back to Inboxesc');
   });
 
   test('J and K step through the conversations, with where it is, and Escape returns to the row last shown', async ({ page }) => {
@@ -198,26 +210,25 @@ test.describe('The reader, from Inbox', () => {
   test.describe('on a phone', () => {
     test.use({ viewport: PHONE });
 
-    test('reads top to bottom: the title, Mild’s row, the conversation; nothing wraps or scrolls sideways', async ({ page }) => {
+    test('reads top to bottom: the bar with what the message is, the title, the conversation; nothing wraps or scrolls sideways', async ({ page }) => {
       await page.goto('/inbox');
       await page.getByRole('row').filter({ hasText: 'Your March bill' }).click();
       const open = reader(page);
       // An open message's text arrives after the conversation, and is shorter than the rows standing in for it. The
-      // reader is found by Mild's row, which comes with the conversation: before that, no rows are found because no reader is.
+      // reader is found by what the message is, which comes with the conversation: before that, no rows are found because no reader is.
       await expect(readerHeading(page, 'Your March bill')).toBeVisible();
       await expect(open.getByLabel('Loading')).toHaveCount(0);
       const title = await boxOf(readerHeading(page, 'Your March bill'));
       const answer = await boxOf(open.getByRole('combobox', { name: 'What this message is' }));
       const first = await boxOf(open.getByRole('article').first());
-      expect(title.y).toBeLessThan(answer.y);
-      expect(answer.y).toBeLessThan(first.y);
+      expect(answer.y).toBeLessThan(title.y);
+      expect(title.y).toBeLessThan(first.y);
 
-      // Mild's row, the bar and each message's head each keep to one line.
-      const rule = await boxOf(open.getByRole('button', { name: 'Make a rule…' }));
-      expect(rule.y + rule.height / 2).toBeCloseTo(answer.y + answer.height / 2, 0);
+      // The bar, with what the message is in it, and each message's head each keep to one line.
       const backTo = await boxOf(open.getByRole('button', { name: 'Back to Inbox' }));
+      const rule = await boxOf(open.getByRole('button', { name: 'Make a rule…' }));
       const next = await boxOf(open.getByRole('button', { name: 'Next' }));
-      expect(next.y + next.height / 2).toBeCloseTo(backTo.y + backTo.height / 2, 0);
+      for (const one of [answer, rule, next]) expect(one.y + one.height / 2).toBeCloseTo(backTo.y + backTo.height / 2, 0);
       const head = open.getByRole('article').first();
       const sender = await boxOf(head.getByRole('link', { name: 'Utility', exact: true }));
       const more = await boxOf(head.getByRole('button', { name: 'Reply all, forward and more' }));
@@ -228,6 +239,20 @@ test.describe('The reader, from Inbox', () => {
       await head.getByRole('button', { name: 'Reply to Utility' }).click();
       await expect(composer(page, 'Reply').getByText(/^Replying to Utility, /)).toBeVisible();
       await sideScroll(page).toBe(0);
+    });
+
+    test('Why opens a sheet up from the bottom of the screen, which Escape puts away', async ({ page }) => {
+      await page.goto('/inbox');
+      await page.getByRole('row').filter({ hasText: 'Your March bill' }).click();
+      await reader(page).getByRole('button', { name: 'Why' }).click();
+      const sheet = page.getByRole('dialog', { name: 'Why' });
+      await expect(sheet).toContainText('Mild said');
+      const box = await boxOf(sheet);
+      expect(box.y + box.height).toBeCloseTo(PHONE.height, 0);
+      expect(box.width).toBe(PHONE.width);
+      await page.keyboard.press('Escape');
+      await expect(sheet).toHaveCount(0);
+      await expect(readerHeading(page, 'Your March bill')).toBeVisible();
     });
 
     test('has its presses along the bottom of the screen, put away while the reply box is open', async ({ page }) => {

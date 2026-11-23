@@ -45,6 +45,8 @@ import {
   type Thumb,
   Section,
   SomeOf,
+  Popover,
+  LabelPick,
   Table,
   Td,
   TextLink,
@@ -375,7 +377,7 @@ function Arriving({ conversation, subject, bar, thumbs }: { conversation: MailCo
   const messages = stacked(conversation);
   const open = new Set([messages.at(-1)!.id, ...conversation.messages.filter((m) => m.unread).map((m) => m.messageId)]);
   return (
-    <Reader bar={bar} thumbs={thumbs} title={reveal(subject) || '(no subject)'} answer={<Blank className="h-(--control) w-60 py-0" />}>
+    <Reader bar={bar} thumbs={thumbs} title={reveal(subject) || '(no subject)'}>
       <MessageStack messages={messages} open={open} onToggle={() => {}}>
         {(id) => {
           const m = conversation.messages.find((one) => one.messageId === id)!;
@@ -422,8 +424,9 @@ function Answering({ what, newest, onClose }: { what: Answer; newest: MessageDet
 }
 
 /**
- * Everything about one message once it has loaded. Mild's row under the title: the answer, which starts on the reader's
- * own where they gave one, Why (Mild's reason, and in Inbox the history) and Rule…; answering moves on to the next item.
+ * Everything about one message once it has loaded. What the message is, which starts on the reader's own answer where
+ * they gave one, Why (Mild's reason, and in Inbox the history) and Rule…: in Inbox in the bar, as a mail app's toolbar
+ * holds a label, with Why a `Popover`; elsewhere on Mild's row under the title, where answering moves on to the next item.
  * Then the conversation, and what answers it. Opened from anywhere but Inbox, a side column has what Mild saw, the
  * sender, what else of theirs waits, and the history.
  */
@@ -439,7 +442,8 @@ function OpenedMessage({
 }: {
   detail: MessageDetail;
   conversation: MailConversation | null;
-  bar: ReactNode;
+  /** The bar, given what the message is where Inbox puts it there. */
+  bar: (label?: ReactNode) => ReactNode;
   /** The presses at the bottom of a phone's screen, put away while the reply box is open. */
   thumbs: readonly Thumb[];
   /** Show another message from the same sender here. */
@@ -552,11 +556,32 @@ function OpenedMessage({
   return (
     <Reader
       ref={root}
-      bar={bar}
+      bar={bar(
+        inInbox && !detail.digest ? (
+          <>
+            <LabelPick
+              key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
+              size="toolbar"
+              label="What this message is"
+              value={shownLabel}
+              groups={choices(target, current ? sureness(current) : 1, alternatives)}
+              // The reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
+              onSubmit={async (id) => {
+                await record(target, id);
+              }}
+              extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
+            />
+            {why ? <Popover label="Why">{why}</Popover> : null}
+            <Button variant="quiet" aria-label="Make a rule…" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
+              Rule…
+            </Button>
+          </>
+        ) : undefined,
+      )}
       thumbs={written && written.kind !== 'new' ? [] : thumbs}
       title={reveal(detail.subject) || '(no subject)'}
       answer={
-        detail.digest ? undefined : (
+        inInbox || detail.digest ? undefined : (
           <AnswerRow
             key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
             picker={{
@@ -564,12 +589,11 @@ function OpenedMessage({
               value: shownLabel,
               groups: choices(target, current ? sureness(current) : 1, alternatives),
               empty: outcomeName('review'),
-              // In Inbox the reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
-              onSubmit: (id) => (inInbox ? record(target, id) : answer(target, id)),
+              onSubmit: (id) => answer(target, id),
               extra: { label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) },
             }}
             why={why}
-            whyOpen={!inInbox}
+            whyOpen
           >
             <Button variant="quiet" aria-label="Make a rule…" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
               Rule…
@@ -754,15 +778,16 @@ export function MessageReader({
           : []),
       ]
     : [];
-  const bar = (
+  const bar = (label?: ReactNode) => (
     <ReaderBar
+      label={label}
       back={back}
       onBack={onBack}
       presses={
         threadId
           ? [
-              { label: 'Archive', key: 'e', disabled: !pressed, onPress: archive },
-              { label: 'Mark unread', key: 'Shift+u', quiet: true, disabled: !pressed, onPress: unread },
+              { label: 'Archive', key: 'e', disabled: !pressed, onPress: archive, icon: <ArchiveIcon aria-hidden /> },
+              { label: 'Mark unread', key: 'Shift+u', disabled: !pressed, onPress: unread, icon: <MailIcon aria-hidden /> },
             ]
           : []
       }
@@ -771,16 +796,17 @@ export function MessageReader({
       onNext={index < items.length - 1 ? () => go(index + 1) : undefined}
     />
   );
-  if (loading && fromCopy && conversation) return <Arriving conversation={conversation} subject={subject!} bar={bar} thumbs={thumbs} />;
+  if (loading && fromCopy && conversation)
+    return <Arriving conversation={conversation} subject={subject!} bar={bar(<Blank className="h-(--control) w-40 py-0" />)} thumbs={thumbs} />;
   if (loading || (threadId && !conversation && thread.loading))
     return (
-      <Reader bar={bar} thumbs={thumbs} title={<Blank />}>
+      <Reader bar={bar()} thumbs={thumbs} title={<Blank />}>
         <Loading rows={6} />
       </Reader>
     );
   if (!data)
     return (
-      <Reader bar={bar} thumbs={thumbs} title={reveal(item.subject) || '(no subject)'}>
+      <Reader bar={bar()} thumbs={thumbs} title={reveal(item.subject) || '(no subject)'}>
         <Note tone="failure" title="Could not load this message">
           <p>{error}</p>
         </Note>
