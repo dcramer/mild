@@ -32,6 +32,8 @@ import {
   Heads,
   Blank,
   Does,
+  LabelChip,
+  LabelName,
   AnswerPicker,
   LabelPick,
   ActionIcon,
@@ -365,6 +367,19 @@ export function SystemView() {
               <Does action="archive" struck>
                 Archived
               </Does>
+            </Row>
+            <Row label="label" note="A label named in words: its tag, then its name, in the weight of the words around it. Everywhere a label is named.">
+              <LabelName>Notifications</LabelName>
+              <span className="font-medium">
+                <LabelName>Receipts</LabelName>
+              </span>
+              <span className="text-muted-foreground">
+                Mostly <LabelName>Newsletters</LabelName>
+              </span>
+            </Row>
+            <Row label="label chip" note="A label as a thing of its own, where several sit in a row: what a press gave, what a change added or took off.">
+              <LabelChip>Build results</LabelChip>
+              <LabelChip>mild/newsletters</LabelChip>
             </Row>
             <Row label="verdict" note="What Mild says mail is and does: the action, then the label. At any size; a sender's next mail is a heading.">
               <Verdict labelId="newsletters" labelName="Newsletters" disposition="archive" />

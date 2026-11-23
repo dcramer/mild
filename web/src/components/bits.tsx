@@ -1,6 +1,12 @@
+import type { ReactNode } from 'react';
 import type { DecisionRow } from '@/lib/api.ts';
-import { INBOX_NAME, type Status, STATUS_NAMES, doesName, outcomeName, status } from '@/lib/format.ts';
-import { Does, Note, Sub, Tooltip } from '@/system';
+import { INBOX, INBOX_NAME, type Status, STATUS_NAMES, doesName, outcomeName, status } from '@/lib/format.ts';
+import { Does, LabelName, Note, Sub, Tooltip } from '@/system';
+
+/** A label named by its id: with its tag, but for Leave in inbox, which is not a label and is its words alone. */
+export function NamedLabel({ id, children }: { id: string | null; children: ReactNode }) {
+  return id === INBOX ? children : <LabelName>{children}</LabelName>;
+}
 
 /**
  * What Mild says mail is and does with it, the same words everywhere: "Archive as Marketing", or "Leave in
@@ -26,13 +32,22 @@ export function Verdict({
     return (
       <>
         {does}
-        {label ? <Sub>{label}</Sub> : null}
+        {label ? (
+          <Sub>
+            <LabelName>{label}</LabelName>
+          </Sub>
+        ) : null}
       </>
     );
   return (
     <span>
       {does}
-      {label ? <span className="text-muted-foreground"> as {label}</span> : null}
+      {label ? (
+        <span className="text-muted-foreground">
+          {' as '}
+          <LabelName>{label}</LabelName>
+        </span>
+      ) : null}
     </span>
   );
 }

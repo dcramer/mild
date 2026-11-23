@@ -1,7 +1,7 @@
 'use client';
 import { PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { ErrorNote } from '@/components/bits.tsx';
+import { ErrorNote, NamedLabel } from '@/components/bits.tsx';
 import { type LabelSummary, api, useLoaded } from '@/lib/api.ts';
 import { useOpened } from '@/lib/params.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
@@ -104,7 +104,9 @@ export function LabelsView({ loading: loadingRows }: { loading: ReactNode }) {
                     {group.rows.map((label) => (
                       <Tr key={label.id} onOpen={() => setOpen(label.id)}>
                         <Td className="max-w-0">
-                          <span className="name">{label.name}</span>
+                          <span className="name">
+                            <NamedLabel id={label.id}>{label.name}</NamedLabel>
+                          </span>
                           {label.id === INBOX ? <span className="text-muted-foreground"> (Default)</span> : null}
                           {/* On a phone what the label is matters more than the room: two lines, not one. */}
                           <Sub className="phone:line-clamp-2 phone:whitespace-normal">{about(label)}</Sub>

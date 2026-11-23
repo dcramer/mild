@@ -1,7 +1,7 @@
 'use client';
 import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { ErrorNote } from '@/components/bits.tsx';
+import { ErrorNote, NamedLabel } from '@/components/bits.tsx';
 import { type RuleSummary, api, useLoaded } from '@/lib/api.ts';
 import { useOpened, useParam } from '@/lib/params.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
@@ -42,7 +42,7 @@ function Result({ rule }: { rule: RuleSummary }) {
   const action = rule.labelId === INBOX ? undefined : own(rule);
   return (
     <>
-      {rule.kind === 'label' ? <span>{rule.labelName}</span> : null}
+      {rule.kind === 'label' ? <NamedLabel id={rule.labelId}>{rule.labelName}</NamedLabel> : null}
       {rule.kind === 'label' && action ? <span className="text-muted-foreground"> · </span> : null}
       {action ? <Does action={action}>{rule.kind === 'label' ? outcomeName(action) : doesName(null, action)}</Does> : null}
     </>
