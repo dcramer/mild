@@ -9,7 +9,6 @@ import { DigestBody } from '@/components/digest.tsx';
 import { useMailPress } from '@/components/mail.tsx';
 import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
-import { useMailboxIcon } from '@/components/mailbox-icon.tsx';
 import { useAction } from '@/lib/action.ts';
 import { saveFile, useFiles } from '@/lib/attachments.ts';
 import { type Confidential, type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, readAhead, useLoaded } from '@/lib/api.ts';
@@ -37,7 +36,6 @@ import {
   Heads,
   Heard,
   Loading,
-  MailboxIcon,
   MessageHead,
   MessageStack,
   Note,
@@ -190,49 +188,20 @@ const historyCount = (detail: MessageDetail) => detail.decisions.length + detail
 /** Each address, the account's own as "me", as a mail app says it. */
 const people = (list: MessageDetail['to'], account: string) => list.map((p) => (reveal(p.address) === account ? 'me' : reveal(p.address)));
 
-/**
- * Who a message went to, unless that was the account alone, which says nothing. A long list folds. Someone with
- * several mailboxes is always told which of them it came to, first, in full, after its domain's icon.
- */
+/** Who a message went to, unless that was the account alone, which says nothing. A long list folds. */
 function AddressedTo({ detail }: { detail: MessageDetail }) {
-  const iconOf = useMailboxIcon();
-  const own = detail.accountId;
-  if (!iconOf) {
-    if (detail.cc.length === 0 && detail.to.every((p) => reveal(p.address) === own)) return null;
-    return (
-      <>
-        {detail.to.length > 0 ? (
-          <>
-            To <SomeOf items={people(detail.to, own)} />
-          </>
-        ) : null}
-        {detail.cc.length > 0 ? (
-          <>
-            {detail.to.length > 0 ? ', cc ' : 'Cc '}
-            <SomeOf items={people(detail.cc, own)} />
-          </>
-        ) : null}
-      </>
-    );
-  }
-  const others = (list: MessageDetail['to']) => list.map((p) => reveal(p.address)).filter((address) => address !== own);
-  const to = others(detail.to);
-  const cc = others(detail.cc);
+  if (detail.cc.length === 0 && detail.to.every((p) => reveal(p.address) === detail.accountId)) return null;
   return (
     <>
-      To{' '}
-      <span className="inline-flex align-[-3px]">
-        <MailboxIcon address={own} icon={iconOf(own)} />
-      </span>{' '}
-      <span className="text-foreground/85">{own}</span>
-      {to.length > 0 ? (
+      {detail.to.length > 0 ? (
         <>
-          , <SomeOf items={to} />
+          To <SomeOf items={people(detail.to, detail.accountId)} />
         </>
       ) : null}
-      {cc.length > 0 ? (
+      {detail.cc.length > 0 ? (
         <>
-          , cc <SomeOf items={cc} />
+          {detail.to.length > 0 ? ', cc ' : 'Cc '}
+          <SomeOf items={people(detail.cc, detail.accountId)} />
         </>
       ) : null}
     </>

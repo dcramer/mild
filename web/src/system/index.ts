@@ -19,7 +19,7 @@ export { setShortcutsOn, useShortcutsOn } from './keys.tsx';
 export { FilterGroup, ListView, Pager } from './list-view.tsx';
 export { MailFrame } from './mail-frame.tsx';
 export { Quoted } from './quoted.tsx';
-export { MailboxIcon, MailboxSwitch } from './mailbox.tsx';
+export { MailboxSwitch } from './mailbox.tsx';
 export { Avatar, Menu } from './menu.tsx';
 export { Meter } from './meter.tsx';
 export { BarSlot, Masthead } from './nav.tsx';

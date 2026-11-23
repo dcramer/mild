@@ -60,7 +60,6 @@ Decided 2026-11-16: mail is not sealed to a key only the person's browser holds 
 ## What follows from it
 
 - What is stored encrypted is never drawn into HTML on the server. It is `Confidential` from `src/store/content.ts` to the page, which draws it only in the browser (`reveal`, `web/src/lib/reveal.ts`); the type checker, `next build` and the linter refuse anything else (docs/architecture.md, "The page").
-- Mild's server asks another site for something in two places only: a sender's one-click unsubscribe address, where the person's label or rule says to (`src/actions/unsubscribe.ts`), and the icon of each of the person's mailboxes' domains, from that domain's own site with no service between (`src/icons.ts`). Both go only over plain HTTPS to an address on the public internet, checked again at each redirect an icon follows. The site learns that a Mild server asked, not for whom. An icon is taken by its bytes' own type, and reaches the page as a `data:` address.
 - The server's own logs may name a mailbox, never a sender.
 - Nobody running Mild reads a person's mail, and no tool is built that would show it (Google's Limited Use).
 - Deleting a person is one statement that takes every row of theirs, and removing a mailbox one more after its token is deleted, by cascading keys a test holds every table to; their Gmail access is revoked at Google first. Backups keep them no longer than the stated retention.

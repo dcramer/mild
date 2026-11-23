@@ -18,7 +18,6 @@ export type {
   MailAsk,
   MailConversation,
   MailReach,
-  MailboxIcons,
   MailThread,
   MailView,
   ManageState,
@@ -51,7 +50,6 @@ import type {
   DecisionPage,
   InboxEstimate,
   MailReach,
-  MailboxIcons,
   FactFilter,
   FeedbackReply,
   FeedbackRequest,
@@ -414,7 +412,6 @@ export const api = {
   setMail: (on: boolean, window?: ManageState['mailWindow']) => post('/api/mail/on', window ? { on, window } : { on }),
   /** What copying the mail for each window would take, from Gmail's counts. */
   mailReach: (signal: AbortSignal) => get<MailReach>('/api/mail/reach', {}, signal),
-  mailboxIcons: (signal: AbortSignal) => get<MailboxIcons>('/api/mailbox/icons', {}, signal),
   inboxEstimate: (reach: 'inbox' | 'recent', signal: AbortSignal) => get<InboxEstimate>('/api/inbox', { reach }, signal),
   startInbox: (reach: 'inbox' | 'recent') => post('/api/inbox/start', { reach }),
   /** Stop going through the inbox, or with `rule`, stop applying it. */

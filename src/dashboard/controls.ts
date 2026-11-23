@@ -80,11 +80,6 @@ export interface Controls {
    */
   revokeGmail(db: Sql, email: string): Promise<boolean>;
   /**
-   * The icon each domain's own site gives itself, as a `data:` address, or null where it has none Mild can use. Kept a
-   * while, so the page asking again asks no site.
-   */
-  mailboxIcons(domains: readonly string[]): Promise<Record<string, string | null>>;
-  /**
    * Send what the person wrote, as them, from one of their mailboxes, into `threadId` when it answers a message there
    * (`sendMail`, src/actions/send.ts). Resolves with Gmail's id for it and its conversation; rejects with a sentence for
    * them when they may not send or Gmail refused.

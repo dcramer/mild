@@ -179,8 +179,6 @@ beforeEach(async () => {
     draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), seal({ match: { from: ['x@example.com'] }, disposition: 'archive' as const })),
     askMail: async (_db, { accountId }) => (calls.push(`ask ${accountId}`), seal({ cannot: 'No.' })),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
-    // An icon for whichever domains it is given: only the route's scope keeps them to the asker's mailboxes.
-    mailboxIcons: async (domains) => Object.fromEntries(domains.map((domain) => [domain, `data:image/png;base64,${domain}`])),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     send: async (_db, { accountId, threadId }) => (calls.push(`send ${accountId} ${threadId}`), { id: 's', threadId: threadId ?? 's' }),
     attachments: async (_db, { accountId }) => (calls.push(`attachments ${accountId}`), []),
@@ -236,7 +234,6 @@ const READS = (account: string, mark: string) => [
   `/api/mail/threads?from=sender@${mark}.example.com&domain=${mark}.example.com&since=0`,
   `/api/mail/thread?thread=t1&mailbox=${encodeURIComponent(account)}`,
   '/api/sync',
-  '/api/mailbox/icons',
 ];
 
 describe('users and their mailboxes', () => {
@@ -518,13 +515,6 @@ describe("nobody sees or changes another person's mail", () => {
     expect((await call('POST', '/api/standing/clear', BRAVO, { address: sender })).status).toBe(200);
     expect(await raw(await dbOf(BRAVO)).all('SELECT id FROM rules')).toEqual([{ id: ids[BRAVO]!.rule }]);
     expect(await rules()).toBe(before);
-  });
-
-  it("gives icons for the asker's own mailboxes' domains alone", async () => {
-    const icons = async (who: string, path = '/api/mailbox/icons') => Object.keys(JSON.parse((await call('GET', path, who)).text).icons as object);
-    expect(await icons(ALPHA_WORK)).toEqual(['example.org', 'work.example.com']);
-    expect(await icons(BRAVO)).toEqual(['example.net']);
-    expect((await call('GET', `/api/mailbox/icons?mailbox=${encodeURIComponent(BRAVO)}`, ALPHA)).status).toBe(404);
   });
 
   it("goes through only the asker's own inboxes, and stops only theirs", async () => {
