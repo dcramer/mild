@@ -309,6 +309,22 @@ test.describe('Inbox', () => {
     for (const go of waiting) go();
   });
 
+  test('Archive on a row says it is what its label says, and does what the label does', async ({ page, sift }) => {
+    const gmail = () => sift.google().mailbox('me@example.org');
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    await pointAt(row);
+    await expect(row.getByRole('combobox', { name: 'What Your order has shipped is' })).toContainText('Receipts');
+    await row.getByRole('button', { name: 'Archive' }).click();
+    await expect(row).toHaveCount(0);
+    await dismiss(page, 'Your order has shipped');
+    await expect.poll(() => gmail().message('m3')!.labelIds).not.toContain('INBOX');
+    expect(gmail().message('m3')!.labelIds).toContain(gmail().labelId('mild/receipts'));
+    await page.reload();
+    await expect(inboxRows(page)).toHaveCount(18);
+    await expect(row).toHaveCount(0);
+  });
+
   test('a row’s label menu stays under its label while the pointer moves into it', async ({ page }) => {
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');
