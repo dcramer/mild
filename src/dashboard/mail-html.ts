@@ -52,6 +52,14 @@ const IMAGE_ATTRIBUTES = new Set(['src', 'srcset', 'background', 'poster', 'lows
 /** Never kept: they act, fetch, or would undo what is set here. */
 const NEVER = new Set(['formaction', 'action', 'ping', 'srcdoc', 'target', 'rel', 'http-equiv', 'download', 'xmlns', 'nonce', 'integrity']);
 
+/**
+ * A frame's `prefers-color-scheme` is the reader's system's, whatever the frame or the page around it declares, so mail
+ * with dark styles of its own (Google Calendar's invitations) would draw them on the white paper. Gmail shows mail as
+ * written for light, and so does Mild: `grid` is 0 on every screen, so `(grid:1)` never matches and `(grid:0)` always does.
+ */
+const COLOR_SCHEME = /prefers-color-scheme\s*:\s*(dark|light)\b/gi;
+const asLight = (css: string) => css.replace(COLOR_SCHEME, (_, scheme: string) => (scheme.toLowerCase() === 'dark' ? 'grid:1' : 'grid:0'));
+
 /** Comments, doctypes, `<?…>` and closing tags. None of these can nest or backtrack. */
 const OTHER = /<!--[\s\S]*?(?:-->|$)|<![^>]*>|<\?[^>]*>|<\/([a-zA-Z][\w:-]*)[^>]*>/y;
 const SPACE = /[\t\n\f\r ]/;
@@ -134,7 +142,7 @@ function writeTag({ name, attributes, selfClosing }: Tag, images: boolean): stri
       remote ||= !images && value !== null && REMOTE.test(value);
       continue;
     }
-    kept.push(value === null ? key : `${key}=${quote(value)}`);
+    kept.push(value === null ? key : `${key}=${quote(key === 'media' ? asLight(value) : value)}`);
   }
   if (link) kept.push('target="_blank"', 'rel="noopener noreferrer"');
   if (remote) kept.push('data-sift-remote');
@@ -188,7 +196,7 @@ export function cleanHtml(html: string, images: boolean): string {
       const end = html.slice(at).search(new RegExp(`</${tag.name}[\\t\\n\\f\\r />]`, 'i'));
       const content = end === -1 ? html.slice(at) : html.slice(at, at + end);
       // A style element is text to the browser up to its closing tag, which `content` cannot hold.
-      if (tag.name === 'style') out += `${writeTag(tag, images)}${content}</style>`;
+      if (tag.name === 'style') out += `${writeTag(tag, images)}${asLight(content)}</style>`;
       const close = end === -1 ? -1 : html.indexOf('>', at + end);
       at = close === -1 ? html.length : close + 1;
       continue;

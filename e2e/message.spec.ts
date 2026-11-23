@@ -204,6 +204,21 @@ const replyAs = (page: Page, html: string) =>
 const ASKED = 'Shall we meet at the lake?';
 const REPLIED = 'Works for me.';
 
+test.describe('Designed mail on a system set to dark', () => {
+  test.use({ colorScheme: 'dark' });
+
+  test('is drawn as written for light, not with its own dark styles on the paper', async ({ page }) => {
+    await replyAs(
+      page,
+      '<style>p{color:#3c4043}@media (prefers-color-scheme: dark){p{color:#e8eaed}}</style><table width="600"><tr><td><p>When</p></td></tr></table>',
+    );
+    await page.goto(RELEASE);
+    const frame = mailFrame(page, RELEASE_SUBJECT);
+    await expect(frame.locator('html')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(frame.getByText('When')).toHaveCSS('color', 'rgb(60, 64, 67)');
+  });
+});
+
 test.describe('The history a reply quotes, as each mail program writes it', () => {
   const folded = {
     'Outlook on the web': `<div>${REPLIED}</div><div id="appendonsend"></div><hr style="display:inline-block;width:98%"><div id="divRplyFwdMsg"><b>From:</b> Ada<br><b>Sent:</b> Monday</div><div>${ASKED}</div>`,
