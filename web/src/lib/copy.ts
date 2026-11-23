@@ -195,10 +195,9 @@ async function load(markReady: () => void) {
   const stands = db.transaction('standing');
   const [sealed] = await Promise.all([stands.store.get('standing'), stands.done]);
   standing = sealed ? await unseal<Standing>(key, 'standing', sealed).catch(() => null) : null;
-  if (!standing) {
-    await db.clear('conversations');
-    return;
-  }
+  // A copy under another key, from someone signed in before. With nothing kept yet, another tab may be writing the first.
+  if (sealed && !standing) await db.clear('conversations');
+  if (!standing) return;
   // The newest first: reading all of them first is most of the wait at thousands. A cursor stepping through them is a
   // trip to the database each, so it goes once to the oldest of the first, and they are read from there in one.
   const tx = db.transaction('conversations');
@@ -252,7 +251,7 @@ let asking: Promise<void> | null = null;
 let again = false;
 
 /** Everything that changed since the copy last asked, every page of it, kept and handed to the other tabs. */
-async function askOnce() {
+async function askOnce(mine = true) {
   const start = performance.now();
   const pages: SyncPage[] = [];
   let since = standing?.cursor ?? null;
@@ -278,6 +277,8 @@ async function askOnce() {
   if (changes.reset) whole = true;
   await apply(changes);
   timed('Copy asked Mild', 'mild.copy', start, { pages: pages.length, changes: changes.changes.length, reset: changes.reset });
+  // Only the tab that asks for them all keeps and hands on what it was told.
+  if (!mine) return;
   channel?.postMessage(changes);
   await keep(changes).catch(() => {});
 }
@@ -342,7 +343,17 @@ export function conversations(): Collection<Copied, string> {
             leading = true;
             ask();
           };
-          if ('locks' in navigator) void navigator.locks.request(DATABASE, () => (lead(), new Promise<never>(() => {})));
+          const hold = () => (lead(), new Promise<never>(() => {}));
+          if ('locks' in navigator)
+            void navigator.locks.request(DATABASE, { ifAvailable: true }, (lock) => {
+              if (lock) return hold();
+              // Another tab asks, and hands on only what changed since then. This one asks once for itself as it opens, from
+              // where its own copy stands, so it is up to date without waiting on that tab (which, on a reload, is the page
+              // going away): the whole copy where the disk holds none yet, as that tab may still be writing it.
+              void askOnce(false).catch((error: unknown) => sync?.reportError(error));
+              void navigator.locks.request(DATABASE, hold);
+              return undefined;
+            });
           else lead();
           const first = () => (whole ? markReady() : undefined);
           listeners.add(first);

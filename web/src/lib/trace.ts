@@ -42,7 +42,13 @@ export function timed(name: string, op: string, start: number | null, attributes
   else if (early.length < MOST_EARLY) early.push(timing);
 }
 
-/** A call to the API made before the SDK was up, which records every one after. */
+/**
+ * Whether a call to the API starting now is one the SDK does not see, since it is not up yet: the page times it itself
+ * (`called`), as it is when it answers, which may be after the SDK is up.
+ */
+export const unseen = (): boolean => !record && opening !== '';
+
+/** A call to the API the SDK did not see begin, as a span under the page load. */
 export function called(method: string, path: string, start: number, status: number | null): void {
-  if (!record && opening) timed(`${method} ${path.split('?')[0]}`, 'http.client', start, status === null ? {} : { 'http.response.status_code': status });
+  timed(`${method} ${path.split('?')[0]}`, 'http.client', start, status === null ? {} : { 'http.response.status_code': status });
 }

@@ -113,11 +113,17 @@ async function claim(id: string, from: string): Promise<boolean> {
 }
 
 const channel = TAB && typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
-type Heard = { added: true } | { settled: string; refused: string | null };
+/** What one tab tells the others: a press made, shown there at once, which only the tab that made it sends; or how one settled. */
+type Heard = { added: Press & { id: string; tab: string; at: number } } | { settled: string; refused: string | null };
 const tell = (heard: Heard) => channel?.postMessage(heard);
 channel?.addEventListener('message', ({ data }: MessageEvent<Heard>) => {
-  if ('added' in data) void look();
-  else settle(data.settled, data.refused);
+  if ('settled' in data) return settle(data.settled, data.refused);
+  const { added } = data;
+  if (entries.has(added.id)) return;
+  const entry: Entry = { ...added, held: false, sending: false, tries: 0, keys: keysOf(added.conversations) };
+  entries.set(entry.id, entry);
+  show(entry);
+  told();
 });
 
 /**
@@ -248,7 +254,7 @@ export function press(change: Change, conversations: readonly Pressed[], held: b
     tab: TAB,
     at: Date.now(),
     change,
-    conversations: [...conversations],
+    conversations: conversations.map(({ accountId, threadId, messageIds }) => ({ accountId, threadId, messageIds: [...messageIds] })),
     held,
     sending: false,
     tries: 0,
@@ -257,11 +263,9 @@ export function press(change: Change, conversations: readonly Pressed[], held: b
   entries.set(entry.id, entry);
   show(entry);
   told();
+  tell({ added: { id: entry.id, tab: TAB, at: entry.at, change, conversations: entry.conversations } });
   // On the disk before it can be sent, so a press sent and then lost with its tab is still there to send again.
-  const kept = keep(entry).then(
-    () => tell({ added: true }),
-    (error: unknown) => reportError(error),
-  );
+  const kept = keep(entry).catch(reportError);
   const go = () => {
     entry.held = false;
     void kept.then(pump);
