@@ -2,9 +2,9 @@
 import { api } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import { copiedKey, leftInbox } from '@/lib/copy.ts';
-import { INBOX, MOVES_OUT, outcomeName, plural } from '@/lib/format.ts';
+import { INBOX, MOVES_OUT, labelDid, outcomeName, plural } from '@/lib/format.ts';
 import { messageKey, threadKey } from '@/lib/params.ts';
-import { Meter, type Pick, useToast } from '@/system';
+import { type Did, Meter, type Pick, useToast } from '@/system';
 
 /** A message whose label the user can say, as the list and the panel both hold it. */
 export interface Answerable {
@@ -38,7 +38,7 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: readonly Answ
   /** Takes `targets` off the page, holds them while their toast shows, and then sends them. */
   const send = (targets: readonly Answerable[], labelId: string, title: string, action?: { label: string; onPress: () => void }) =>
     hide(targets.map(messageKey), 'Could not save your answer', async () => {
-      if (!(await held(toast, title, action))) return;
+      if (!(await held(toast, title, didOf(labels, labelId), action))) return;
       const replies = await Promise.all(targets.map((t) => api.feedback(feedbackOf(t, labelId))));
       // The answer is saved; what Mild itself did to the message could not be taken back in Gmail.
       const notFixed = replies.find((r) => r.notFixed !== null)?.notFixed;
@@ -83,16 +83,22 @@ const feedbackOf = (target: Answerable, labelId: string) => ({
   label: labelId,
 });
 
-/** The answer, as every list says it: "Archive as Marketing", or "Left in your inbox". */
+/** The answer in words, for a screen reader: "Archive as Marketing", or "Left in your inbox". */
 function said(labels: readonly AnswerLabel[], labelId: string) {
   if (labelId === INBOX) return 'Left in your inbox';
   const label = labels.find((l) => l.id === labelId);
   return label ? `${outcomeName(label.disposition)} as ${label.name}` : 'Answered';
 }
 
+/** The answer as its toast draws it: what is done to the mail, and the label it is given. */
+function didOf(labels: readonly AnswerLabel[], labelId: string): [Did, ...Did[]] {
+  const label = labels.find((l) => l.id === labelId);
+  return labelId === INBOX || !label ? [{ action: 'keep', word: 'Left in your inbox' }] : labelDid(label.disposition, label.name);
+}
+
 /** Says it with Undo, and resolves with whether to send it: false when Undo was pressed. */
-const held = (toast: ReturnType<typeof useToast>, title: string, action?: { label: string; onPress: () => void }) =>
-  new Promise<boolean>((done) => toast(title, { ...(action ? { action } : {}), undo: () => done(false), onGone: () => done(true) }));
+const held = (toast: ReturnType<typeof useToast>, title: string, did: readonly [Did, ...Did[]], action?: { label: string; onPress: () => void }) =>
+  new Promise<boolean>((done) => toast(title, { did, ...(action ? { action } : {}), undo: () => done(false), onGone: () => done(true) }));
 
 /** A label the sender's other mail has had, and what share of it. */
 interface Alternative {
@@ -162,7 +168,7 @@ export function useListAnswer(labels: readonly AnswerLabel[]): (target: Answerab
     const label = labels.find((l) => l.id === labelId);
     if (!label || !MOVES_OUT.includes(label.disposition)) return await record(target, labelId);
     hide([threadKey(target)], 'Could not save your answer', async () => {
-      if (!(await held(toast, said(labels, labelId)))) return;
+      if (!(await held(toast, said(labels, labelId), didOf(labels, labelId)))) return;
       const reply = await api.feedback(feedbackOf(target, labelId));
       // The answer is saved; Mild's own label on the message could not be taken back in Gmail.
       if (reply.notFixed !== null) toast('Could not put the message back in Gmail', { tone: 'failure', description: reply.notFixed });

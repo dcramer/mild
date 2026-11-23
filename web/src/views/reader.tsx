@@ -750,9 +750,19 @@ export function MessageReader({
   const conversation = threadId ? (fromCopy ? conversationOf(fromCopy) : thread.data) : null;
   // The copy has all a press needs before the message has loaded.
   const subject = data?.subject ?? fromCopy?.conversation.messages.at(-1)?.subject;
+  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  // What the message is, as its row shows it, which Archive gives it where the label archives too.
+  const current = data?.decisions.at(-1);
+  const label = manage.data?.labels.find((l) => l.id === (current?.answer ? current.answer.labelId : current?.labelId));
   const pressed =
     conversation && subject
-      ? { accountId: conversation.accountId, threadId: conversation.threadId, messageIds: conversation.messages.map((m) => m.messageId), subject }
+      ? {
+          accountId: conversation.accountId,
+          threadId: conversation.threadId,
+          messageIds: conversation.messages.map((m) => m.messageId),
+          subject,
+          thinks: label ? { labelName: label.name, disposition: label.disposition } : null,
+        }
       : null;
   const listed = data && !picked ? messageKey(data) : null;
   useEffect(() => {

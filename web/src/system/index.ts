@@ -49,7 +49,7 @@ export { Blank, Empty, Loading, More } from './state.tsx';
 export { LoadingBar, useGoing } from './loading-bar.tsx';
 export { Heads, OnPhone, RowActions, RowCheck, RowPresses, Sub, Table, Td, Th, Tr, TrGroup, rowHolding } from './table.tsx';
 export { Timeline, TimelineEvent } from './timeline.tsx';
-export { Toaster, useToast } from './toast.tsx';
+export { type Did, Toaster, useToast } from './toast.tsx';
 export { Tooltip } from './tooltip.tsx';
 export { Code, Emblem, Highlight, Hint, Kbd, Look, Marked, TextLink, TextPress, Wordmark } from './type.tsx';
 export { Swipe, type SwipePress } from './swipe.tsx';
