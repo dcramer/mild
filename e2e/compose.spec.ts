@@ -346,6 +346,87 @@ test.describe('with Inbox on', () => {
     await expect(page.getByText('No drafts.')).toBeVisible();
   });
 
+  test.describe('with Mild slow to say which drafts it has', () => {
+    // A service worker's fetch is out of reach of page.route, which holds the drafts back here.
+    test.use({ serviceWorkers: 'block' });
+
+    /** Holds Mild's answer for the person's drafts until `answer()`. */
+    async function holdDrafts(page: Page) {
+      let answer = () => {};
+      const answered = new Promise<void>((done) => {
+        answer = done;
+      });
+      await page.route(
+        (url) => url.pathname === '/api/mail/drafts',
+        async (route) => {
+          await answered;
+          await route.continue();
+        },
+      );
+      return answer;
+    }
+
+    /** Each composer drawn (`drawn`), and each of its properties that moved as it was (`slid`). */
+    const watchComposer = (page: Page) =>
+      page.addInitScript(`
+        window.composer = { drawn: 0, slid: [] };
+        const seen = new WeakSet();
+        document.addEventListener('transitionrun', (event) => {
+          if (event.target.getAttribute?.('role') === 'dialog') composer.slid.push(event.propertyName);
+        });
+        new MutationObserver((changes) => {
+          for (const change of changes)
+            for (const node of change.addedNodes) {
+              if (node.nodeType !== 1) continue;
+              const dialogs = [...(node.matches('[role="dialog"]') ? [node] : []), ...node.querySelectorAll('[role="dialog"]')];
+              for (const dialog of dialogs)
+                if (!seen.has(dialog) && dialog.textContent.includes('New message')) {
+                  seen.add(dialog);
+                  composer.drawn += 1;
+                }
+            }
+        }).observe(document, { subtree: true, childList: true });
+      `);
+
+    test('Compose opens the composer at once, and once, sliding in', async ({ page }) => {
+      await watchComposer(page);
+      await page.goto('/inbox');
+      await expect(inboxRows(page).first()).toBeVisible();
+      const answer = await holdDrafts(page);
+      await compose(page).click();
+      const writing = composer(page, 'New message');
+      await expect(recipients(writing, 'To').input).toBeFocused();
+      answer();
+      await expect.poll(() => page.evaluate('composer.slid')).toContain('translate');
+      await boxOf(writing);
+      expect(await page.evaluate('composer.drawn')).toBe(1);
+    });
+
+    test('opened from its address, a draft is drawn in place, and Mild’s newer copy is taken as it comes', async ({ page }) => {
+      await page.goto('/inbox?compose=new&draft=roof');
+      const writing = composer(page, 'New message');
+      await writing.getByRole('textbox', { name: 'Subject' }).fill('Roof');
+      await writing.getByRole('textbox', { name: 'Message' }).fill('Written on the phone');
+      await writing.getByRole('button', { name: 'Close' }).click();
+      await expect(writing).toHaveCount(0);
+      await page.getByRole('radio', { name: 'Drafts' }).click();
+      await expect(page.getByRole('row').filter({ hasText: 'Roof' })).toBeVisible();
+
+      // Another device has none of this browser's copy.
+      await page.evaluate('localStorage.clear()');
+      await watchComposer(page);
+      const answer = await holdDrafts(page);
+      await page.goto('/inbox?compose=new&draft=roof');
+      await expect(recipients(writing, 'To').input).toBeFocused();
+      await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+      answer();
+      await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Written on the phone');
+      await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveValue('Roof');
+      await boxOf(writing);
+      expect(await page.evaluate('composer')).toEqual({ drawn: 1, slid: [] });
+    });
+  });
+
   test('a press outside slides the composer away once, without it coming back while Back is followed', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page).first()).toBeVisible();
