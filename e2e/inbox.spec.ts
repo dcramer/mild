@@ -292,6 +292,22 @@ test.describe('Inbox', () => {
     await expect(row).toHaveCount(0);
   });
 
+  test('opened again, draws the rule Mild proposes with its rows, from the device, so no row moves when Mild answers', async ({ page }) => {
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    const proposed = proposedRule(page, 'Keep Receipts from billing@utility.example.net?');
+    await expect(proposed).toBeVisible();
+    const where = await boxOf(row);
+    const waiting: (() => void)[] = [];
+    await page.route('**/api/suggestions*', (route) => void waiting.push(() => void route.continue()));
+    await page.reload();
+    await expect(row).toBeVisible();
+    await expect(proposed).toBeVisible();
+    expect((await boxOf(row)).y).toBe(where.y);
+    await expect.poll(() => waiting.length).toBeGreaterThan(0);
+    for (const go of waiting) go();
+  });
+
   test('a row’s label menu stays under its label while the pointer moves into it', async ({ page }) => {
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');

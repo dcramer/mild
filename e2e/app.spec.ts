@@ -36,7 +36,7 @@ const kept = `new Promise((done) => {
     reading.oncomplete = () => (db.close(), done({ key: key.result, frame: frame.result }));
   };
 })`;
-const keptAll = { key: 1, frame: ['manage', 'session', 'usage'] };
+const keptAll = { key: 1, frame: ['manage', 'session', 'suggestions-false', 'usage'] };
 
 test("the page is drawn to the screen's edges, under a status bar in its own colour, with a picture of its opening for each iPhone", async ({ page }) => {
   await page.goto('/');
@@ -353,6 +353,8 @@ test.describe('A reload', () => {
   test('comes back to where the list was', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('row').nth(8)).toBeVisible();
+    // The last of the page to come, above the list: scrolled before it, the browser moves the page down when it comes.
+    await expect(page.getByText(/it would have kept/)).toBeVisible();
     await page.evaluate('scrollTo(0, 600)');
     await page.reload();
     // The list is fetched after the page loads: the browser's own restoring finds the page too short.
