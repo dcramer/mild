@@ -188,24 +188,27 @@ const historyCount = (detail: MessageDetail) => detail.decisions.length + detail
 /** Each address, the account's own as "me", as a mail app says it. */
 const people = (list: MessageDetail['to'], account: string) => list.map((p) => (reveal(p.address) === account ? 'me' : reveal(p.address)));
 
-/** Who a message went to, unless that was the account alone, which says nothing. A long list folds. */
-function AddressedTo({ detail }: { detail: MessageDetail }) {
-  if (detail.cc.length === 0 && detail.to.every((p) => reveal(p.address) === detail.accountId)) return null;
-  return (
-    <>
-      {detail.to.length > 0 ? (
-        <>
-          To <SomeOf items={people(detail.to, detail.accountId)} />
-        </>
-      ) : null}
-      {detail.cc.length > 0 ? (
-        <>
-          {detail.to.length > 0 ? ', cc ' : 'Cc '}
-          <SomeOf items={people(detail.cc, detail.accountId)} />
-        </>
-      ) : null}
-    </>
-  );
+/**
+ * Who a message went to, as To and Cc rows, a long list folded. To the account alone says nothing, unless the person
+ * has more than one mailbox: then To always names the one it came to, in full, first where it was not addressed.
+ */
+function useAddressedTo(detail: MessageDetail): { label: 'To' | 'Cc'; who: ReactNode }[] {
+  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const own = detail.accountId;
+  const to = detail.to.map((p) => reveal(p.address));
+  const cc = detail.cc.map((p) => reveal(p.address));
+  if ((manage.data?.accounts.length ?? 0) > 1) {
+    const named = to.includes(own) || cc.includes(own);
+    return [
+      { label: 'To' as const, who: <SomeOf items={named ? to : [own, ...to]} /> },
+      ...(cc.length > 0 ? [{ label: 'Cc' as const, who: <SomeOf items={cc} /> }] : []),
+    ];
+  }
+  if (cc.length === 0 && to.every((address) => address === own)) return [];
+  return [
+    ...(to.length > 0 ? [{ label: 'To' as const, who: <SomeOf items={people(detail.to, own)} /> }] : []),
+    ...(cc.length > 0 ? [{ label: 'Cc' as const, who: <SomeOf items={people(detail.cc, own)} /> }] : []),
+  ];
 }
 
 type Answer = Exclude<Writing, { kind: 'new' }>;
@@ -216,6 +219,7 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
   const name = reveal(detail.fromName);
   const id = detail.messageId;
   const mine = address === detail.accountId;
+  const addressedTo = useAddressedTo(detail);
   const { html, more } = useMessageView(detail);
   return (
     <>
@@ -235,7 +239,7 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
         }
         {...(name && !mine ? { address: <SenderLink address={address} /> } : {})}
         at={<Heard at={detail.receivedAt} />}
-        to={<AddressedTo detail={detail} />}
+        to={addressedTo}
         {...(onAnswer
           ? {
               answers: {

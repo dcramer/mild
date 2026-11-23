@@ -256,6 +256,12 @@ export const reader = (page: Page) => page.getByRole('region').filter({ has: pag
 
 /** The reader's heading: the subject of what it shows. */
 export const readerHeading = (page: Page, subject: string) => reader(page).getByRole('heading', { name: subject, level: 1 });
+/** Whom an open message went to, under its head: its To or Cc row. */
+export const addressed = (scope: Locator, label: 'To' | 'Cc') =>
+  scope
+    .getByRole('term')
+    .filter({ hasText: new RegExp(`^${label}$`) })
+    .locator('xpath=following-sibling::dd[1]');
 
 /** The reader's Back, to the list it was opened from. */
 export const back = (page: Page) => reader(page).getByRole('button', { name: /^Back to / });

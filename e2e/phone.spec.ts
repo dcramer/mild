@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { PHONE, boxOf, expect, forward, param, patchJson, reader, sideScroll, test, toast } from './sift.ts';
+import { PHONE, addressed, boxOf, expect, forward, param, patchJson, reader, sideScroll, test, toast } from './sift.ts';
 
 /** The phone's top bar. */
 const bar = (page: Page) => page.getByRole('banner');
@@ -122,7 +122,7 @@ test.describe('On a phone', () => {
     await expect(bar(page)).toHaveCount(0);
     // Each head says when, short: no year this year.
     await expect(open.locator('header time').first()).toHaveText(/^([A-Z][a-z]{2} \d{1,2}, )?\d{1,2}:\d\d [AP]M$/);
-    await expect(open.getByText('To me, grace@example.net').first()).toBeVisible();
+    await expect(addressed(open, 'To').first()).toHaveText('me@example.org, grace@example.net');
 
     // Measured once the conversation is drawn: the text of its first message.
     const text = open.getByRole('article').first().getByText('Your bill is ready.');

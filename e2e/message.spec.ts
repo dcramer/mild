@@ -9,6 +9,7 @@ import {
   expect,
   forReviewLink,
   messageQuery,
+  addressed,
   openMessage,
   back,
   reader,
@@ -256,14 +257,14 @@ test.describe('Who a message went to', () => {
     await page.setViewportSize(PHONE);
     await page.goto('/');
     const open = await openMessage(page, 'Notes from the review');
-    await expect(open.getByText(/cc reviewer1@example\.net, reviewer2@example\.net, reviewer3@example\.net and 9 more$/)).toBeVisible();
+    await expect(addressed(open, 'Cc')).toHaveText('reviewer1@example.net, reviewer2@example.net, reviewer3@example.net and 9 more');
     await expect(open.getByText(/reviewer12@example\.net/)).toHaveCount(0);
     await expect(open.getByText('Attached are my notes.')).toBeInViewport();
 
     await open.getByRole('button', { name: '9 more' }).click();
     const fewer = open.getByRole('button', { name: 'Fewer' });
     await expect(fewer).toHaveAttribute('aria-expanded', 'true');
-    await expect(open.getByText(/reviewer12@example\.net Fewer$/)).toBeVisible();
+    await expect(addressed(open, 'Cc')).toHaveText(/reviewer12@example\.net Fewer$/);
 
     // The page scrolls as one, so however long the list is, what is under it can be read.
     const last = open.getByText(/^History · /);
