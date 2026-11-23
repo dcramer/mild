@@ -1,4 +1,4 @@
-import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull, labels, messages } from './query.ts';
+import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull, labels, messages, ne } from './query.ts';
 import type { Sql } from './sql.ts';
 import { openPart, sealPart } from './content.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
@@ -45,6 +45,20 @@ export async function recordDecision(
       byUser: options.byUser ?? false,
     })
     .returning({ id: decisions.id });
+  // An earlier decision still waiting to be carried out is replaced, never carried out after: an answer of Leave in inbox
+  // given while Mild's archive waited on a retry would otherwise see the mail archived by the next pass.
+  await db
+    .update(decisions)
+    .set({ outcome: 'skipped', outcomeDetail: 'replaced by a later decision' })
+    .where(
+      and(
+        eq(decisions.accountId, accountId),
+        eq(decisions.messageId, messageId),
+        eq(decisions.carryOut, true),
+        isNull(decisions.outcome),
+        ne(decisions.id, row!.id),
+      ),
+    );
   await db
     .update(messages)
     .set({ decided: true })

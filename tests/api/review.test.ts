@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Browser, fakeGoogle, startSift } from '../fixtures.ts';
+import { recordDecision } from '../../src/store/decisions.ts';
 import { everyRouteAnswered } from './areas.ts';
 
 const fake = fakeGoogle();
@@ -95,6 +96,23 @@ describe('an answer', () => {
     }
     expect(await itemsOf(me)).toEqual([]);
     expect((await rowsOf(me))[0]).toMatchObject({ messageId: receipt, labelId: 'everything_else', byUser: true, carryOut: false, actionId: null });
+  });
+
+  it('of Leave in inbox keeps mail that Mild had decided to move but not yet moved', async () => {
+    const { sift, box, me, receipt } = await waiting();
+    await me.call('POST', '/api/active', { active: true });
+    // Gmail failed Mild's archive, so it waits for the next pass to try again.
+    const mild = await recordDecision(
+      await sift.db(ME),
+      ME,
+      receipt,
+      { stage: 'model', disposition: 'archive', labelId: 'receipts', subscription: 'preserve', reason: 'The model read it as Receipts.', confidence: 0.9 },
+      { carryOut: true },
+    );
+    expect((await me.call('POST', '/api/feedback', { accountId: ME, sender: SHOP, label: 'everything_else', messageId: receipt })).status).toBe(200);
+    await sift.work();
+    expect(box.message(receipt)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    expect((await rowsOf(me)).find((r) => r.id === mild)).toMatchObject({ actionId: null });
   });
 
   it('that corrects what Mild did takes its change back in Gmail', async () => {

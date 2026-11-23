@@ -490,7 +490,8 @@ describe('correcting a decision that is not waiting', () => {
     const result = await applyFeedback(db, { accountId: ACCOUNT, sender: 'bids@example.com', label: 'personal', messageId: id, carryOut: true }, 50);
     expect(result).toEqual({ carrying: 1, asked: [], corrected: id });
     expect(await decisionsFor(id)).toEqual([
-      { stage: 'model', disposition: 'archive', label_id: 'marketing', carry_out: true, outcome: null, reason: 'r' },
+      // Replaced, so a pass never carries it out after the answer.
+      { stage: 'model', disposition: 'archive', label_id: 'marketing', carry_out: true, outcome: 'skipped', reason: 'r' },
       // Waiting to be carried out, which the next pass does once the earlier change has been taken back.
       { stage: 'rules', disposition: 'keep', label_id: 'personal', carry_out: true, outcome: null, reason: 'you said this is Personal' },
     ]);
