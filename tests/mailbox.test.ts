@@ -17,8 +17,8 @@ describe('ensureLabel', () => {
   it('uses a label made since it read the list', async () => {
     const { mailbox, gmail } = connectGmail(fake.google);
     expect(await mailbox.ensureLabel('mild/other')).toBe(gmail.labelId('mild/other'));
-    const made = gmail.label('mild/did/archived');
-    expect(await mailbox.ensureLabel('mild/did/archived')).toBe(made);
+    const made = gmail.label('mild/newsletters');
+    expect(await mailbox.ensureLabel('mild/newsletters')).toBe(made);
     expect(labelCalls(gmail)).toEqual(['users.labels.list', 'users.labels.create', 'users.labels.create', 'users.labels.list']);
   });
 });

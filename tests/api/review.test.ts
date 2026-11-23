@@ -69,7 +69,7 @@ describe('an answer', () => {
     const answered = await me.call('POST', '/api/feedback', { accountId: ME, sender: SHOP, label: 'receipts', decisionId: decision, messageId: receipt });
     expect(answered).toMatchObject({ status: 200, body: { notFixed: null } });
     await sift.work();
-    expect(box.message(receipt)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts'), box.labelId('mild/did/archived')]);
+    expect(box.message(receipt)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
     expect(await itemsOf(me)).toEqual([]);
     expect((await rowsOf(me))[0]).toMatchObject({ messageId: receipt, byUser: true, carryOut: true, actionStatus: 'done' });
     expect((await me.call('GET', '/api/examples')).body).toMatchObject({

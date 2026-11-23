@@ -142,9 +142,9 @@ export const nothing = z.strictObject({});
 
 /**
  * After a rule or label changed: waiting suggestions they now decide differently get a new decision. No model is
- * called. `learnedGone` is a rule Mild made that was just removed. Mail Mild marked for review that a rule of the
- * user's now settles has the mark taken back in Gmail and is carried out now; a mark that could not be taken back
- * is reported, and the decision stands.
+ * called. `learnedGone` is a rule Mild made that was just removed. Mail Mild left for review while on that a rule of
+ * the user's now settles has the label Mild guessed for it taken back in Gmail and is carried out now; a label that
+ * could not be taken back is reported, and the decision stands.
  */
 export async function redecide({ db, now, controls, said }: Pick<Context, 'db' | 'now' | 'controls' | 'said'>, learnedGone?: string): Promise<number> {
   let recorded = 0;

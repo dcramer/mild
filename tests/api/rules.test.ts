@@ -172,8 +172,7 @@ describe('applying a rule to the inbox', () => {
     expect(await me.call('POST', '/api/rules/apply', { id })).toMatchObject({ status: 409, body: { error: 'Mild is already applying this rule.' } });
     await sift.work();
     await sift.tick();
-    for (const message of [before, after])
-      expect(box.message(message)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts'), box.labelId('mild/did/archived')]);
+    for (const message of [before, after]) expect(box.message(message)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
   });
 
   it('changes nothing in Gmail once stopped', async () => {

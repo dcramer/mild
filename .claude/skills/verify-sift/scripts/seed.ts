@@ -36,6 +36,7 @@ import { listLabels, removeLabel } from '../../../../src/store/labels.ts';
 import { setActive, setMail, setModel } from '../../../../src/store/preferences.ts';
 import { advanceCopy, countCopy, goingCopy, startCopies } from '../../../../src/store/copies.ts';
 import { lastStandingChange } from '../../../../src/store/actions.ts';
+import { currentDecision } from '../../../../src/store/decisions.ts';
 import { undo } from '../../../../src/actions/executor.ts';
 import { listProposals } from '../../../../src/store/proposals.ts';
 import type { Sql } from '../../../../src/store/sql.ts';
@@ -312,8 +313,8 @@ if (variant === '--on') {
   // As Check now begins it: the timed tick, moments after the last pass, would wait out the gap between looks.
   await pass([user]);
   const [lin, sale, news] = later.map((m) => m.id!);
-  const review = [...gmail.labels.values()].find((l) => l.name.toLowerCase().endsWith('mild/review'));
-  if (!review || !gmail.message(lin!)?.labelIds.includes(review.id)) throw new Error('the pass with sift on did not leave Lin for the user');
+  if ((await currentDecision(db, ACCOUNT, lin!))?.decision.disposition !== 'review' || !gmail.message(lin!)?.labelIds.includes('INBOX'))
+    throw new Error('the pass with Mild on did not leave Lin for the user');
   const archived = await lastStandingChange(db, ACCOUNT, sale!);
   if (archived?.type !== 'archive') throw new Error('the pass with sift on did not archive the sale');
   await undo({ db, mailbox }, archived.id);
