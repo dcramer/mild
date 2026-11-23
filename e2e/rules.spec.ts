@@ -18,6 +18,19 @@ import {
 } from './sift.ts';
 
 test.describe('Rules', () => {
+  test('a label is named with its tag, on Rules, Labels and a sender’s page, and Leave in inbox, which is not one, without', async ({ page }) => {
+    const tagged = (where: ReturnType<typeof page.locator>, name: string) =>
+      where.getByText(name, { exact: true }).locator('xpath=..').locator('svg.lucide-tag');
+    await page.goto('/rules');
+    await expect(tagged(ruleRows(page).filter({ hasText: 'orders@shop.example.com' }), 'Receipts')).toBeVisible();
+    await page.goto('/labels');
+    await expect(tagged(page.getByRole('main'), 'Personal')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Leave in inbox', { exact: true })).toBeVisible();
+    await expect(tagged(page.getByRole('main'), 'Leave in inbox')).toHaveCount(0);
+    await page.goto('/sender/orders%40shop.example.com');
+    await expect(tagged(page.getByRole('link', { name: 'Mail from orders@shop.example.com is Receipts' }), 'Receipts')).toBeVisible();
+  });
+
   test('a rule written by hand opens on its panel, and takes the mail it covers off For review', async ({ page }) => {
     await page.goto('/rules');
     await page.getByRole('button', { name: 'Add a rule' }).click();

@@ -43,6 +43,7 @@ export { Spark } from './spark.tsx';
 export { SettingRow, SettingsGroup, Sheet } from './sheet.tsx';
 export { Splash } from './splash.tsx';
 export { ActionIcon, Does } from './does.tsx';
+export { LabelChip, LabelName } from './label.tsx';
 export { Entry } from './entry.tsx';
 export { Onboarding } from './onboarding.tsx';
 export { Blank, Empty, Loading, More } from './state.tsx';

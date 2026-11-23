@@ -1,5 +1,6 @@
 'use client';
 import { MatchWords } from '@/components/sender.tsx';
+import { NamedLabel } from '@/components/bits.tsx';
 import type { Suggestions } from '@/lib/api.ts';
 import { count, outcomeName } from '@/lib/format.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -25,7 +26,8 @@ const LABEL_DOES: Record<string, string> = {
 export function ProposalWords({ proposal }: { proposal: Proposal }) {
   return (
     <>
-      {outcomeName(proposal.disposition)} {proposal.labelName} <MatchWords match={reveal(proposal.match)} />?
+      {outcomeName(proposal.disposition)} {proposal.labelName ? <NamedLabel id={proposal.labelId}>{proposal.labelName}</NamedLabel> : null}{' '}
+      <MatchWords match={reveal(proposal.match)} />?
     </>
   );
 }

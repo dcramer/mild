@@ -1,5 +1,6 @@
 'use client';
 import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
+import { NamedLabel } from '@/components/bits.tsx';
 import { Fragment, type ReactNode } from 'react';
 import { type Contact, type RuleMatch, type SenderProfile, api, useLoaded } from '@/lib/api.ts';
 import {
@@ -19,7 +20,7 @@ import {
   shortDate,
 } from '@/lib/format.ts';
 import { rulePath } from '@/lib/params.ts';
-import { Ago, Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td, TextLink } from '@/system';
+import { Ago, Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td, TextLink, LabelName } from '@/system';
 import { reveal } from '@/lib/reveal.ts';
 import { cn } from '@/lib/utils';
 
@@ -71,7 +72,9 @@ function Rules({ rules }: { rules: SenderProfile['rules'] }) {
           ) : (
             <>
               {rule.kind === 'when-label' ? ', when it is ' : ' is '}
-              <span className="font-medium">{rule.labelName}</span>
+              <span className="font-medium">
+                <LabelName>{rule.labelName}</LabelName>
+              </span>
               {rule.when ? `, when it is ${rule.when}` : ''}
               {rule.disposition ? ` (${outcomeName(rule.disposition)})` : ''}
             </>
@@ -109,14 +112,16 @@ export function SenderFacts({ profile, page = false }: { profile: SenderProfile;
       ) : null}
       {top ? (
         <Fact term="Mostly">
-          {top.name}
+          <NamedLabel id={top.id}>{top.name}</NamedLabel>
           {others.length > 0 ? (
             <span className="text-muted-foreground">
               ; also{' '}
-              {others
-                .slice(0, 2)
-                .map((l) => l.name)
-                .join(', ')}
+              {others.slice(0, 2).map((l, i) => (
+                <Fragment key={l.name}>
+                  {i > 0 ? ', ' : null}
+                  <NamedLabel id={l.id}>{l.name}</NamedLabel>
+                </Fragment>
+              ))}
             </span>
           ) : null}
         </Fact>
@@ -149,12 +154,18 @@ type Who = { address: string } | { domain: string };
 type Rule = SenderProfile['rules'][number];
 
 /** A rule in a line of words, as a link to it would say it. */
-export const ruleWords = (rule: Rule) =>
-  `${reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`}${
-    rule.kind === 'action' || rule.labelId === INBOX
-      ? `: ${rule.disposition || rule.labelId === INBOX ? doesName(rule.labelId, rule.disposition ?? 'keep') : 'nothing'}`
-      : `${rule.kind === 'when-label' ? ', when it is ' : ' is '}${rule.labelName ?? ''}`
-  }`;
+export function RuleWords({ rule }: { rule: Rule }) {
+  const what = reveal(rule.name) ?? `Mail ${describeMatch(reveal(rule.match))}`;
+  if (rule.kind === 'action' || rule.labelId === INBOX)
+    return `${what}: ${rule.disposition || rule.labelId === INBOX ? doesName(rule.labelId, rule.disposition ?? 'keep') : 'nothing'}`;
+  return (
+    <>
+      {what}
+      {rule.kind === 'when-label' ? ', when it is ' : ' is '}
+      {rule.labelName ? <LabelName>{rule.labelName}</LabelName> : null}
+    </>
+  );
+}
 
 /** How many names past the one shown a card lists before saying how many more. */
 const NAMES_SHOWN = 3;
@@ -205,7 +216,11 @@ function Preview({ who, name }: { who: Who; name?: string | null }) {
             <ContactHint contact={profile.contact} said />
           </li>
         ) : null}
-        {top ? <li>Mostly {top.name}</li> : null}
+        {top ? (
+          <li>
+            Mostly <NamedLabel id={top.id}>{top.name}</NamedLabel>
+          </li>
+        ) : null}
         {others.length > 0 ? (
           <li className="text-muted-foreground">
             Also writes as {others.slice(0, NAMES_SHOWN).join(', ')}
@@ -217,7 +232,9 @@ function Preview({ who, name }: { who: Who; name?: string | null }) {
         <ul className="flex flex-col gap-1">
           {profile.rules.map((rule) => (
             <li key={rule.id}>
-              <TextLink href={rulePath(rule.id)}>{ruleWords(rule)}</TextLink>
+              <TextLink href={rulePath(rule.id)}>
+                <RuleWords rule={rule} />
+              </TextLink>
             </li>
           ))}
         </ul>

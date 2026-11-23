@@ -22,7 +22,7 @@ import {
   shortDay,
   willBe,
 } from '@/lib/format.ts';
-import { Verdict } from '@/components/bits.tsx';
+import { NamedLabel, Verdict } from '@/components/bits.tsx';
 import { messageKey, useParam } from '@/lib/params.ts';
 import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/lib/open-messages.ts';
@@ -126,7 +126,12 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
       title="Apply to your inbox"
       subtitle={
         <>
-          {ruleTitle(rule)} → {rule.labelName ? `${rule.labelName} · ` : ''}
+          {ruleTitle(rule)} →{' '}
+          {rule.labelName ? (
+            <>
+              <NamedLabel id={rule.labelId}>{rule.labelName}</NamedLabel> ·{' '}
+            </>
+          ) : null}
           {rule.disposition ? <Does action={rule.disposition}>{outcomeName(rule.disposition)}</Does> : null}
         </>
       }
@@ -395,7 +400,11 @@ export function RulePanel({
               <Who match={reveal(rule.match)} />
             </Fact>
           ) : null}
-          {rule.kind === 'when-label' ? <Fact term="When it is">{rule.labelName}</Fact> : null}
+          {rule.kind === 'when-label' && rule.labelName ? (
+            <Fact term="When it is">
+              <NamedLabel id={rule.labelId}>{rule.labelName}</NamedLabel>
+            </Fact>
+          ) : null}
           {rule.when ? <Fact term="Only when it is">{rule.when}</Fact> : null}
           {rule.except.length > 0 ? (
             <Fact term="Unless">

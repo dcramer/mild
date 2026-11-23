@@ -1,5 +1,6 @@
 'use client';
 import { PlusIcon, XIcon } from 'lucide-react';
+import { NamedLabel } from '@/components/bits.tsx';
 import { useState } from 'react';
 import { useOpenRule, useOpened } from '@/lib/params.ts';
 import { type LabelSummary, type RuleBody, type RuleDraft, type RuleFilter, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
@@ -405,7 +406,7 @@ export function RuleDialog({
           {replaces && !twin ? (
             <Field inline label="Replaces">
               <span className="flex min-h-(--control) items-center gap-1">
-                {replaces.labelName ? <span>{replaces.labelName}</span> : null}
+                {replaces.labelName ? <NamedLabel id={replaces.labelId}>{replaces.labelName}</NamedLabel> : null}
                 {replaces.labelName && replacing ? <span className="text-muted-foreground">·</span> : null}
                 {replacing ? <Does action={replacing}>{replaces?.kind === 'label' ? outcomeName(replacing) : doesName(null, replacing)}</Does> : null}
               </span>

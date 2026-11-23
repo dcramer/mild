@@ -30,7 +30,6 @@ import {
   Arrived,
   Blank,
   Button,
-  Code,
   Disclosure,
   Failure,
   Heads,
@@ -56,6 +55,7 @@ import {
   Tr,
   useToast,
   MessageFiles,
+  LabelChip,
 } from '@/system';
 
 type Decision = MessageDetail['decisions'][number];
@@ -118,7 +118,7 @@ function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => v
       <p className="flex flex-wrap items-baseline gap-1.5">
         {title}
         {list.map((label) => (
-          <Code key={label}>{label}</Code>
+          <LabelChip key={label}>{label}</LabelChip>
         ))}
       </p>
     );

@@ -1,10 +1,11 @@
 'use client';
 import { Toast as Base } from '@base-ui/react/toast';
-import { TagIcon, XIcon } from 'lucide-react';
+import { XIcon } from 'lucide-react';
 import { type FocusEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useShortcut } from './keys.tsx';
 import { ActionIcon } from './does.tsx';
+import { LabelChip } from './label.tsx';
 
 /** How long a receipt stays: alone, and with a press in it. A failure stays until dismissed. */
 const TIMEOUT = [5000, 8000] as const;
@@ -26,23 +27,13 @@ export interface Did {
   word: string;
 }
 
-/** A label given, as a thing of its own: its tag and its name. */
-function LabelChip({ name }: { name: string }) {
-  return (
-    <span className="inline-flex h-5 shrink-0 items-center gap-1 bg-(--fill-strong) px-1.5 text-label font-semibold whitespace-nowrap text-foreground">
-      <TagIcon aria-hidden className="size-3" />
-      {name}
-    </span>
-  );
-}
-
 /** The labels a press gave, as chips, and anything else it did beside them in its word. */
 function Given({ did }: { did: readonly Did[] }) {
   return (
     <>
       {did.map((d) =>
         d.action === 'label' ? (
-          <LabelChip key={`label:${d.word}`} name={d.word} />
+          <LabelChip key={`label:${d.word}`}>{d.word}</LabelChip>
         ) : (
           <span key={d.action} className="inline-flex shrink-0 items-center gap-1 text-label whitespace-nowrap text-muted-foreground">
             <ActionIcon action={d.action} />

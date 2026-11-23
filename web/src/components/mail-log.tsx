@@ -3,7 +3,7 @@ import { messageKey } from '@/lib/params.ts';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import type { DecisionRow, ListedDecision } from '@/lib/api.ts';
 import { INBOX, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
-import { Heads, Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup } from '@/system';
+import { Heads, Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup, LabelName } from '@/system';
 import type { OpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
 
@@ -17,9 +17,14 @@ function Happened({ row, stacked, labelled }: { row: DecisionRow; stacked?: bool
   const label =
     row.labelName && row.labelId !== INBOX && !labelled ? (
       stacked ? (
-        <Sub>{row.labelName}</Sub>
+        <Sub>
+          <LabelName>{row.labelName}</LabelName>
+        </Sub>
       ) : (
-        <span className="text-muted-foreground"> · {row.labelName}</span>
+        <span className="text-muted-foreground">
+          {' · '}
+          <LabelName>{row.labelName}</LabelName>
+        </span>
       )
     ) : null;
   const what = (
