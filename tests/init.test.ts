@@ -340,6 +340,10 @@ describe('settings', () => {
     expect(() => readSettings({ SIFT_CLOUD: 'yes' })).toThrow('SIFT_CLOUD must be true or false.');
     expect(readSettings({ SIFT_CLOUD: 'true' }).cloud).toBe(true);
     expect(readSettings({ SIFT_CLOUD: 'false' }).cloud).toBe(false);
+    for (const topic of ['sift-gmail', 'projects/sift-test/subscriptions/sift-gmail', 'projects/Sift/topics/sift-gmail']) {
+      expect(() => readSettings({ SIFT_GMAIL_TOPIC: topic })).toThrow('SIFT_GMAIL_TOPIC must be a Pub/Sub topic, projects/<project id>/topics/<name>.');
+    }
+    expect(readSettings({ SIFT_GMAIL_TOPIC: 'projects/sift-test/topics/sift-gmail' }).gmailTopic).toBe('projects/sift-test/topics/sift-gmail');
   });
 
   it('installs a pasted Web application client, or one given as a path, and refuses a Desktop one', () => {

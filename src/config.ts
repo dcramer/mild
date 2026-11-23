@@ -44,6 +44,12 @@ export interface Settings {
    * would speak to its own owner.
    */
   cloud?: boolean;
+  /**
+   * The Pub/Sub topic Gmail tells of each change to a watched mailbox (`projects/<id>/topics/<name>`), in the project of the
+   * Google client. Set only where Pub/Sub can reach the dashboard, a public HTTPS address (docs/hosted.md); unset, Sift
+   * only looks.
+   */
+  gmailTopic?: string;
 }
 
 /** Each setting's variable, and what its text must be. Hosts that run sift for you (Vercel) configure it only this way. */
@@ -56,6 +62,7 @@ const ENVIRONMENT = {
   SIFT_CHATGPT_SIGN_IN: 'chatgptSignIn',
   SENTRY_DSN: 'sentryDsn',
   SIFT_CLOUD: 'cloud',
+  SIFT_GMAIL_TOPIC: 'gmailTopic',
 } as const satisfies Record<string, keyof Settings>;
 export type Variable = keyof typeof ENVIRONMENT;
 
@@ -184,6 +191,11 @@ export function readSettings(env: Env): Settings {
       case 'SIFT_CLOUD':
         if (!/^(true|false|1|0)$/i.test(text)) throw bad(variable, 'true or false');
         settings.cloud = /^(true|1)$/i.test(text);
+        break;
+      case 'SIFT_GMAIL_TOPIC':
+        if (!/^projects\/[a-z][a-z0-9-]{4,28}[a-z0-9]\/topics\/[A-Za-z][\w.~+%-]{2,254}$/.test(text))
+          throw bad(variable, 'a Pub/Sub topic, projects/<project id>/topics/<name>');
+        settings.gmailTopic = text;
         break;
     }
   }

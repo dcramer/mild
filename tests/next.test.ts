@@ -17,7 +17,7 @@ describe('Next.js answers nothing that skips the API', () => {
   it('hands every request under /api/ and /auth/ to Sift, with no route handler of its own beside the ones that do', () => {
     // Workflow writes its own routes into app/.well-known/workflow at build, which .gitignore leaves out of OWN.
     const handlers = OWN.filter((file) => file.startsWith('app/') && /\/route\.(ts|tsx|js)$/.test(file));
-    expect(handlers.toSorted()).toEqual(['app/api/[...path]/route.ts', 'app/api/cron/route.ts', 'app/auth/[...path]/route.ts']);
+    expect(handlers.toSorted()).toEqual(['app/api/[...path]/route.ts', 'app/api/cron/route.ts', 'app/api/gmail/route.ts', 'app/auth/[...path]/route.ts']);
   });
 });
 

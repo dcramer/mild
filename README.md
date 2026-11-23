@@ -35,7 +35,7 @@ pnpm sift run
 
 Open the address it prints and sign in with Google; that connects your Gmail account. The dashboard then walks you through the rest: connect a model (a ChatGPT subscription or an API key), say what you want, choose your labels, and have Sift go through recent mail for you to answer if you like. Sift reads nothing from Gmail until you have a label of your own, and from then on handles mail as it arrives.
 
-It also runs in a container ([docs/docker.md](docs/docker.md)) and on Vercel ([docs/vercel.md](docs/vercel.md)).
+It also runs in a container ([docs/docker.md](docs/docker.md)) and on Vercel ([docs/hosted.md](docs/hosted.md)).
 
 ## More
 

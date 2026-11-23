@@ -118,6 +118,15 @@ export async function cron(request: Request): Promise<Response> {
   return new Response(null, { status: 204 });
 }
 
+/** `/api/gmail`: Gmail's pushes through Pub/Sub, where `SIFT_GMAIL_TOPIC` is set (docs/hosted.md). */
+export async function push(request: Request): Promise<Response> {
+  try {
+    return await traced('sift.push', 'push', {}, async () => (await sift()).push(request));
+  } finally {
+    waitUntil(flushTelemetry());
+  }
+}
+
 /** A Workflow run's step: its piece, done by this process's Sift, and what it left for Sentry sent before the instance can be frozen. */
 export async function work(piece: Work): Promise<void> {
   try {

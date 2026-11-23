@@ -13,6 +13,7 @@ import { startEval } from '../src/learn/evals.ts';
 import { type RunOptions, type Work, dueWork } from '../src/work/run.ts';
 import { FILTER_CHECK_MINUTES } from '../src/work/filters.ts';
 import { passStatus, recordPassStatus } from '../src/work/status.ts';
+import { pushed, takePush } from '../src/work/watch.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { recordSync, signInEnds, signedIn } from '../src/store/accounts.ts';
 import type { FakeGmail } from './google.ts';
@@ -379,6 +380,75 @@ describe('the gap between looks at Gmail', () => {
     forget();
     expect((await dueWork(store, options(), [person])).filter((piece) => piece.kind === 'pass')).toHaveLength(1);
     expect(asked()).toEqual([]);
+  });
+});
+
+describe('when Gmail pushes the mailbox’s changes', () => {
+  const TOPIC = 'projects/sift-test/topics/sift-gmail';
+  const pushing = (more: Partial<RunOptions> = {}) => options({ topic: TOPIC, ...more });
+  const pass = async () => (await workDue(store, pushing(), Infinity, [person])).find((result) => result.email === ACCOUNT);
+
+  beforeEach(async () => {
+    ephemeral = memoryEphemeral(() => clock);
+    await pass();
+    forget();
+  });
+
+  it('a pass watches the mailbox, again a day on, and an hour after Gmail refused, the pass going on either way', async () => {
+    expect(gmail.watching).toBe(TOPIC);
+    await pass();
+    expect(asked()).not.toContain('users.watch');
+    clock += DAY;
+    await pass();
+    expect(asked()).toContain('users.watch');
+
+    clock += DAY;
+    gmail.fail('users.watch', { status: 403, reason: 'User not authorized to perform this action.' });
+    forget();
+    expect((await pass())?.error).toBeUndefined();
+    expect(asked()).toContain('users.history.list');
+    clock += 59 * MINUTE;
+    forget();
+    await pass();
+    expect(asked()).not.toContain('users.watch');
+    clock += 2 * MINUTE;
+    await pass();
+    expect(asked()).toContain('users.watch');
+  });
+
+  it('looks at a quiet mailbox every half hour', async () => {
+    clock += 10 * 60 * MINUTE;
+    expect(await timedTickPasses(pushing())).toBe(false);
+    let minutes = 0;
+    do {
+      forget();
+      minutes++;
+      await timedTickPasses(pushing());
+    } while (!asked().includes('users.history.list') && minutes < 60);
+    expect(minutes).toBe(30);
+  });
+
+  it('a push has the next look read Gmail whatever the gap, and pushes within ten seconds of it leave theirs to the tick', async () => {
+    clock += 10 * 60 * MINUTE;
+    expect(await timedTickPasses(pushing())).toBe(false);
+    arrive('ada', 'Ada <ada@example.org>');
+    expect(await timedTickPasses(pushing())).toBe(false);
+    expect(await pushed(ephemeral, ACCOUNT)).toBe(true);
+    expect(await pushed(ephemeral, ACCOUNT)).toBe(false);
+    expect(await timedTickPasses(pushing())).toBe(true);
+    clock += 10_000;
+    expect(await pushed(ephemeral, ACCOUNT)).toBe(true);
+  });
+
+  it('a push whose pass is not begun, while another holds its key, has the next look begin it again, until a pass reads Gmail', async () => {
+    clock += 10 * 60 * MINUTE;
+    expect(await timedTickPasses(pushing())).toBe(false);
+    arrive('ada', 'Ada <ada@example.org>');
+    await pushed(ephemeral, ACCOUNT);
+    expect(await timedTickPasses(pushing())).toBe(true);
+    expect(await timedTickPasses(pushing())).toBe(true);
+    await workDue(store, pushing(), Infinity);
+    expect(await takePush(ephemeral, ACCOUNT)).toBe(false);
   });
 });
 

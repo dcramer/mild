@@ -4,7 +4,9 @@ import type { Config } from '../config.ts';
 import { type PassResult, type RunOptions, type Work, describeWork, dueWork, runWork } from '../work/run.ts';
 import { createDashboard } from '../dashboard/server.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
-import { listAccounts, personOf } from '../store/accounts.ts';
+import { listAccounts, personOf, userOf } from '../store/accounts.ts';
+import { pushedMailbox } from '../gmail/push.ts';
+import { pushed } from '../work/watch.ts';
 import { people } from '../store/people.ts';
 import type { Sql } from '../store/sql.ts';
 import type { Store } from '../store/store.ts';
@@ -59,6 +61,8 @@ export interface Sift {
   work: (work: Work) => Promise<PassResult | null>;
   /** Begin a run for each piece due, for these people or everyone. */
   tick: (people?: readonly number[]) => Promise<void>;
+  /** A push from Gmail's Pub/Sub subscription: a look now at the mailbox it names. */
+  push: (request: Request) => Promise<Response>;
 }
 
 /**
@@ -109,6 +113,7 @@ export async function createSift(host: Host): Promise<Sift> {
     ephemeral,
     log,
     ...(host.url ? { dashboard: host.url } : {}),
+    ...(config.settings.gmailTopic ? { topic: config.settings.gmailTopic } : {}),
     ...(standIns
       ? {}
       : {
@@ -130,8 +135,8 @@ export async function createSift(host: Host): Promise<Sift> {
     connect: async (db, account) => await gmailFor(config, ephemeral, db, account.email),
   };
   const { begin } = host;
-  const tick = async (who?: readonly number[]) => {
-    for (const piece of await dueWork(store, options, who)) {
+  const tick = async (who?: readonly number[], looking?: number) => {
+    for (const piece of await dueWork(store, options, who, looking)) {
       // What is not begun is due again at the next tick.
       const beginning = await begin(piece, runKey(piece)).catch((error: unknown) => {
         reportError(error);
@@ -162,9 +167,20 @@ export async function createSift(host: Host): Promise<Sift> {
     ephemeral,
     log,
   });
+  const push = async (request: Request) => {
+    const topic = config.settings.gmailTopic;
+    if (!topic) return new Response(null, { status: 404 });
+    const address = await pushedMailbox(request, topic);
+    if (!address) return new Response(null, { status: 401 });
+    // A mailbox removed since it was watched: the watch lapses within 7 days. Anything but a 2xx, Pub/Sub sends again.
+    const user = await userOf(store.central, address);
+    if (user && (await pushed(ephemeral, address))) await tick(undefined, user.id);
+    return new Response(null, { status: 204 });
+  };
   return {
     respond: dashboard.handle,
     work: (piece) => runWork(store, piece, options, Date.now() + host.limitMs),
-    tick,
+    tick: (who) => tick(who),
+    push,
   };
 }

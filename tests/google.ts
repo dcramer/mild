@@ -9,6 +9,7 @@
  * `rfc822msgid:`, `after:`, `before:`, `newer_than:`, `is:`, `has:attachment`), `-`, `OR`, `{…}` and `(…)`, and bare words.
  * Any other operator is refused, as a query Gmail would read differently from the fake would be.
  */
+import { generateKeyPairSync, sign } from 'node:crypto';
 import type { gmail_v1 } from '@googleapis/gmail';
 import { http, HttpResponse } from 'msw/http';
 import { setupServer } from 'msw/node';
@@ -327,6 +328,8 @@ export class FakeGmail {
   /** When set, a search asked for any page after its first never answers: Gmail still listing a long search. */
   holdPages = false;
   now: () => number = () => Date.now();
+  /** The Pub/Sub topic the last watch named, which Gmail tells of each change to the mailbox. */
+  watching: string | null = null;
 
   private readonly messages = new Map<string, Stored>();
   private readonly history: HistoryRecord[] = [];
@@ -711,6 +714,9 @@ export class FakeGmail {
         this.filters = this.filters.filter((f) => f.id !== id);
         return new HttpResponse(null, { status: 204 });
       }
+      case 'users.watch':
+        this.watching = body['topicName'] as string;
+        return HttpResponse.json({ historyId: String(this.historyId), expiration: String(this.now() + 7 * 86_400_000) });
       default:
         throw new Error(`The fake Gmail does not answer ${method}`);
     }
@@ -734,11 +740,48 @@ const ROUTES: [method: string, verb: 'get' | 'post' | 'delete', path: string][] 
   ['users.settings.filters.list', 'get', '/settings/filters'],
   ['users.settings.filters.create', 'post', '/settings/filters'],
   ['users.settings.filters.delete', 'delete', '/settings/filters/:id'],
+  ['users.watch', 'post', '/watch'],
 ];
 
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/:user';
 const TOKEN = 'https://oauth2.googleapis.com/token';
 const REVOKE = 'https://oauth2.googleapis.com/revoke';
+/** Where Google's keys for the tokens it signs are read, as PEM. */
+const CERTS = 'https://www.googleapis.com/oauth2/v1/certs';
+
+/** The key Google signs tokens with here: made once, when a test first needs it. */
+let signing: { kid: string; key: { publicKey: string; privateKey: string } } | undefined;
+const signingKey = () =>
+  (signing ??= {
+    kid: 'fake-google-1',
+    key: generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    }),
+  });
+const base64url = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+
+/** A token Google signed, as Pub/Sub sends with each push: for `audience`, as the service account `email`. */
+export function signedToken(audience: string, email: string): string {
+  const { kid, key } = signingKey();
+  const now = Math.floor(Date.now() / 1000);
+  const unsigned = `${base64url({ alg: 'RS256', kid, typ: 'JWT' })}.${base64url({ iss: 'https://accounts.google.com', aud: audience, azp: '1', sub: '1', email, email_verified: true, iat: now, exp: now + 3600 })}`;
+  return `${unsigned}.${sign('RSA-SHA256', Buffer.from(unsigned), key.privateKey).toString('base64url')}`;
+}
+
+/** Pub/Sub's push to `url` of Gmail's word that `address` changed, signed as `account`. */
+export function gmailPush(url: string, address: string, account: string, token = signedToken(url, account)): Request {
+  const data = Buffer.from(JSON.stringify({ emailAddress: address, historyId: '1' })).toString('base64');
+  return new Request(url, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      message: { data, messageId: '1', publishTime: new Date(0).toISOString() },
+      subscription: 'projects/sift-test/subscriptions/sift-gmail-push',
+    }),
+  });
+}
 
 /** What `gmail.modify`, `gmail.settings.basic` and, given, `gmail.send` grant: the scopes Sift asks for. */
 const SCOPES = { read: [...GMAIL_SCOPES], send: [...GMAIL_SCOPES, SEND_SCOPE] };
@@ -844,6 +887,7 @@ export class FakeGoogle {
         }
         return HttpResponse.json({ error: 'unsupported_grant_type' }, { status: 400 });
       }),
+      http.get(CERTS, () => HttpResponse.json({ [signingKey().kid]: signingKey().key.publicKey }, { headers: { 'cache-control': 'public, max-age=3600' } })),
       http.post(REVOKE, async ({ request }) => {
         const token = new URL(request.url).searchParams.get('token') ?? (await form(request)).get('token') ?? '';
         const refresh = this.grants.has(token) ? token : this.access.get(token);

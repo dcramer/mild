@@ -28,6 +28,7 @@ import { goingInboxRun, goingInboxRuns } from '../store/inbox.ts';
 import { checkFiltersWhenDue, filtersDue } from './filters.ts';
 import { type PassStatus, lastPass, recordPassStatus } from './status.ts';
 import { TICK_MS, lookGap } from './gap.ts';
+import { keepPush, keepWatching, takePush, watched } from './watch.ts';
 import { type SyncReport, syncAccount, syncWants } from './sync.ts';
 import { CHANGE_TRIES, type TriageReport, triageAccount } from './triage.ts';
 import { digestsWanted, sendDigests } from './digest.ts';
@@ -44,6 +45,8 @@ export interface RunOptions {
   log: (line: string) => void;
   /** Where the dashboard is reached from the person's own devices, for links in what Sift puts in their Gmail. */
   dashboard?: string;
+  /** The Pub/Sub topic Gmail pushes each mailbox's changes to, when one is set up: each pass keeps its mailbox watched. */
+  topic?: string;
   now?: () => number;
 }
 
@@ -103,13 +106,15 @@ export type Work =
 /**
  * What is due, found in the record and the ephemeral store, so a tick needs nothing remembered from the last, and
  * work a tick left unfinished is simply due again. `people`: those who just asked, whose passes are begun
- * without looking. Without it, the timed tick: everyone, each mailbox's pass only when `passWanted`.
+ * without looking. Without it, the timed tick: everyone, or only `looking` (a push for one of their mailboxes),
+ * each mailbox's pass only when `passWanted`.
  */
-export async function dueWork(store: Store, options: RunOptions, people?: readonly number[]): Promise<Work[]> {
+export async function dueWork(store: Store, options: RunOptions, people?: readonly number[], looking?: number): Promise<Work[]> {
   const day = today(options);
   const due: Work[] = [];
   for (const { id: person } of await listUsers(store.central)) {
     if (people && !people.includes(person)) continue;
+    if (looking !== undefined && person !== looking) continue;
     const db = await store.user(person);
     if ((await options.ephemeral.get(upkeepKey(person, day))) === null) due.push({ kind: 'upkeep', person });
     const runs = await goingInboxRuns(db);
@@ -289,6 +294,13 @@ async function passMailbox(db: Sql, account: Account, options: RunOptions, until
  * What it cannot tell is a yes. A no is kept as a pass that found nothing would keep it, so "Last checked" stays true.
  */
 async function passWanted(db: Sql, account: Account, options: RunOptions): Promise<boolean> {
+  const push = options.topic !== undefined && (await takePush(options.ephemeral, account.id));
+  const wanted = await looked(db, account, options, push);
+  if (wanted && push) await keepPush(options.ephemeral, account.id);
+  return wanted;
+}
+
+async function looked(db: Sql, account: Account, options: RunOptions, push: boolean): Promise<boolean> {
   const now = (options.now ?? Date.now)();
   const last = await lastPass(options.ephemeral, account.id);
   try {
@@ -296,7 +308,8 @@ async function passWanted(db: Sql, account: Account, options: RunOptions): Promi
     if (!last?.expired && (await recordWants(db, account, options, now, last))) return true;
     // Looked at once the next tick would be past the gap, so a minute's gap is every tick however long the last pass took.
     const arrived = await latestArrival(db, account.id, now);
-    if (last && now - last.at <= lookGap(arrived === null ? null : now - arrived) - TICK_MS) return false;
+    const gap = lookGap(arrived === null ? null : now - arrived, options.topic !== undefined && (await watched(options.ephemeral, account.id)));
+    if (!push && last && now - last.at <= gap - TICK_MS) return false;
     const { api } = await options.connect(db, account);
     const wanted = await syncWants(db, api, account);
     await signInHeld(db, account.id, now);
@@ -345,6 +358,11 @@ async function runMailbox(db: Sql, account: Account, options: RunOptions, until:
   const result: PassResult = { email: account.email };
   try {
     const { api: gmail, mailbox } = await options.connect(db, account);
+    if (options.topic) {
+      // Before history is read: a push after this is for something this pass may not see.
+      await takePush(options.ephemeral, account.id);
+      await keepWatching(gmail, account.id, options.topic, options.ephemeral, options.log);
+    }
     // Every read of a message's text in the pass goes through this, so each is read from Gmail once and kept.
     const api = { ...gmail, ...readingOnce(db, account.id, gmail, options.now) };
     const deps = { db, mailbox, ...(options.now ? { now: options.now } : {}) };

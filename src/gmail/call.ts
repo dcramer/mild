@@ -18,6 +18,7 @@ const ROUTES = {
   'users.settings.filters.list': ['GET', '/users/me/settings/filters'],
   'users.settings.filters.create': ['POST', '/users/me/settings/filters'],
   'users.settings.filters.delete': ['DELETE', '/users/me/settings/filters/{id}'],
+  'users.watch': ['POST', '/users/me/watch'],
 } as const;
 
 /** One Gmail request, by the API's name for its method and what it costs of the quota. */

@@ -1,6 +1,6 @@
-# Vercel
+# Hosted
 
-Sift on Vercel instead of a machine of your own. How it runs there is [runtime.md](runtime.md); this is how to set it up. It runs in production there; the Deploy Button is untried ([TODO.md](../TODO.md)).
+Sift on Vercel instead of a machine of your own, with the Google Cloud project its sign-in comes from, which can also tell it of new mail at once (step 5). How it runs there is [runtime.md](runtime.md); this is how to set it up. It runs in production there; the Deploy Button is untried ([TODO.md](../TODO.md)).
 
 What it needs: the **Pro** plan (Hobby runs crons once a day; Sift ticks each minute), a Postgres database (Neon) and a Redis database, both from the Vercel Marketplace, and a Google OAuth client of your own.
 
@@ -12,7 +12,7 @@ It copies this repository to your GitHub account, adds Neon and Upstash for Redi
 
 Upstash is expected to set `REDIS_URL`; if the site says it is missing, copy the store's `redis://`/`rediss://` address into it and deploy again.
 
-[deploy]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET&envDescription=Your%20Google%20OAuth%20client%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2Fvercel.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D
+[deploy]: https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift&project-name=sift&repository-name=sift&env=SIFT_GOOGLE_CLIENT_ID%2CSIFT_GOOGLE_CLIENT_SECRET%2CSIFT_KEY%2CSIFT_SESSION_SECRET%2CCRON_SECRET&envDescription=Your%20Google%20OAuth%20client%20and%20three%20secrets.&envLink=https%3A%2F%2Fgithub.com%2Fdcramer%2Fsift%2Fblob%2Fmain%2Fdocs%2Fhosted.md%23one-click&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22neon%22%2C%22integrationSlug%22%3A%22neon%22%7D%2C%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22productSlug%22%3A%22upstash-kv%22%2C%22integrationSlug%22%3A%22upstash%22%7D%5D
 
 ## 1. The project
 
@@ -54,6 +54,7 @@ In the project's Environment Variables, for Production:
 | `SIFT_CHATGPT_SIGN_IN` | Only to change how people sign in to ChatGPT ([cli.md](cli.md#models)). |
 | `SIFT_CLOUD` | `true` only when this Sift is a service for other people. It gives the site its terms, privacy policy and security page; Google asks for the first two before it publishes the app. They speak for you, so read them first (`web/src/views/legal.tsx`). |
 | `SENTRY_DSN` | Optional: a Sentry project's DSN, to send errors and traces there ([architecture.md](architecture.md#errors-and-traces)). Each deployment is tagged with its `VERCEL_ENV`. |
+| `SIFT_GMAIL_TOPIC` | Optional: the Pub/Sub topic of step 5. |
 
 Until every required one is set, the site lists those still missing; `CRON_SECRET` is among them, since without it nothing runs.
 
@@ -62,6 +63,38 @@ Until every required one is set, the site lists those still missing; `CRON_SECRE
 Redeploy production, so the build sees the variables: it migrates the database before the new functions serve anything. Open your address and sign in with Google (the first account becomes the owner); the page walks through connecting a model, saying what you want, choosing your labels and having Sift go through recent mail to teach it with. Until you turn Sift on, under Settings, Gmail changes only for mail you answer in the dashboard.
 
 Each minute Sift reads its record for work to do; Gmail is read only once a mailbox's gap has passed, a minute while mail keeps coming and up to 10 when it is quiet. Logs are the project's function logs.
+
+## 5. New mail at once (optional)
+
+Without this, the first mail after a quiet spell waits up to 10 minutes to be seen. With it, Gmail tells Sift of each change to a mailbox within seconds, through a Pub/Sub topic in the Google Cloud project of step 2 (Gmail refuses a topic in any other), and Sift looks at that mailbox then. A push can be lost, so Sift still looks every half hour.
+
+With the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) and an account that owns the project, once:
+
+```bash
+gcloud auth login
+gcloud config set project <project id>
+gcloud services enable pubsub.googleapis.com
+gcloud pubsub topics create sift-gmail
+gcloud pubsub topics add-iam-policy-binding sift-gmail --member=serviceAccount:gmail-api-push@system.gserviceaccount.com --role=roles/pubsub.publisher
+gcloud iam service-accounts create sift-push
+gcloud pubsub subscriptions create sift-gmail-push --topic=sift-gmail --push-endpoint=https://<your domain>/api/gmail --push-auth-service-account=sift-push@<project id>.iam.gserviceaccount.com --ack-deadline=60 --message-retention-duration=10m --expiration-period=never
+```
+
+Gmail publishes to the topic; Pub/Sub signs each push to Sift as `sift-push`, and Sift takes no push signed as any other account, for any other address, or in another project. Without `--expiration-period=never`, Google deletes a subscription that has pushed nothing for 31 days. A push not answered in 10 minutes is dropped, since the look has found its mail by then. A project made before 8 April 2021 also needs Pub/Sub allowed to sign, with the project's number from `gcloud projects describe <project id>`:
+
+```bash
+gcloud projects add-iam-policy-binding <project id> --member=serviceAccount:service-<project number>@gcp-sa-pubsub.iam.gserviceaccount.com --role=roles/iam.serviceAccountTokenCreator
+```
+
+Then set `SIFT_GMAIL_TOPIC` to `projects/<project id>/topics/sift-gmail` and deploy again. Each mailbox is watched at its next pass and again each day. A watch Gmail refuses, as it does a topic it may not publish to, is logged and sent to Sentry, and asked again an hour on; meanwhile the mailbox is looked at as without this step.
+
+When the domain changes:
+
+```bash
+gcloud pubsub subscriptions update sift-gmail-push --push-endpoint=https://<new domain>/api/gmail
+```
+
+To stop, unset `SIFT_GMAIL_TOPIC` and deploy again; the watches lapse within 7 days, and pushes meanwhile are answered and dropped. One Google project has one watch per mailbox, so a second Sift on the same Google client that sets this takes the pushes from the first.
 
 ## Previews
 

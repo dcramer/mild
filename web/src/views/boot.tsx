@@ -2,7 +2,7 @@
 import { useSyncExternalStore } from 'react';
 import { Blank, Copyable, Failure, Splash, Sub, TextLink } from '@/system';
 
-const GUIDE = 'https://github.com/dcramer/sift/blob/main/docs/vercel.md';
+const GUIDE = 'https://github.com/dcramer/sift/blob/main/docs/hosted.md';
 
 /** Whether this device has a network at all, which says whose the trouble is when Sift cannot be reached. */
 function useConnected(): boolean {

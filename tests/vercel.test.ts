@@ -98,7 +98,7 @@ describe('the Vercel host', () => {
   });
 
   it("names no dashboard route as one of Next.js's own, which would answer it instead", () => {
-    expect(ownRoutes.toSorted()).toEqual(['/api/[...path]', '/api/cron']);
+    expect(ownRoutes.toSorted()).toEqual(['/api/[...path]', '/api/cron', '/api/gmail']);
     for (const route of [...READS, ...WRITES]) expect(ownRoutes).not.toContain(route.path);
   });
 });

@@ -84,7 +84,7 @@ export class HistoryExpiredError extends Error {
   }
 }
 
-/** The read-only slice of Gmail that sync needs. Narrow so tests can fake it. */
+/** The slice of Gmail that sync needs, none of which changes mail. Narrow so tests can fake it. */
 export interface GmailApi {
   getProfile(): Promise<{ emailAddress: string; historyId: string }>;
   /** Throws HistoryExpiredError when `startHistoryId` is too old. */
@@ -110,6 +110,8 @@ export interface GmailApi {
   getThread(threadId: string): Promise<{ id: string; labelIds: string[] }[] | null>;
   /** The addresses the owner can send as, the account's own among them, lowercased. */
   listSendAs(): Promise<string[]>;
+  /** Has Gmail tell the Pub/Sub `topic` of every change to the mailbox, for the next 7 days. */
+  watch(topic: string): Promise<void>;
 }
 
 const ASKED = new Set(METADATA_HEADERS.map((name) => name.toLowerCase()));
@@ -244,6 +246,10 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
     async listLabels() {
       const data = await call('users.labels.list', 1, () => client.users.labels.list({ userId }));
       return (data.labels ?? []).flatMap((l) => (l.id && l.name ? [{ id: l.id, name: l.name }] : []));
+    },
+
+    async watch(topic) {
+      await call('users.watch', 100, () => client.users.watch({ userId, requestBody: { topicName: topic } }));
     },
 
     async listSendAs() {

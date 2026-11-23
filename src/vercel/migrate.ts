@@ -17,4 +17,4 @@ if (process.env['DATABASE_URL']) {
   } finally {
     await store.close();
   }
-} else process.stdout.write('No DATABASE_URL yet, so no database to migrate. Add one to the project (docs/vercel.md), then deploy again.\n');
+} else process.stdout.write('No DATABASE_URL yet, so no database to migrate. Add one to the project (docs/hosted.md), then deploy again.\n');
