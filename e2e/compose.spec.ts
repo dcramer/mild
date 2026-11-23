@@ -346,6 +346,37 @@ test.describe('with Inbox on', () => {
     await expect(page.getByText('No drafts.')).toBeVisible();
   });
 
+  test('a draft with nothing written in it is not kept, and one emptied goes without a word', async ({ page }) => {
+    await page.goto('/?message=m6&compose=all');
+    const reply = composer(page, 'Reply to all');
+    await expect(reply.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    await reply.getByRole('button', { name: 'Discard' }).click();
+    await expect(reply).toHaveCount(0);
+    await expect(toasts(page).getByRole('dialog')).toHaveCount(0);
+    // Written and taken back out is as good as never written.
+    await page.goto('/?message=m6&compose=all');
+    await reply.getByRole('textbox', { name: 'Message' }).fill('Thursday works.');
+    await reply.getByRole('textbox', { name: 'Message' }).fill('');
+    await reply.getByRole('button', { name: 'Discard' }).click();
+    await expect(reply).toHaveCount(0);
+    await expect(toasts(page).getByRole('dialog')).toHaveCount(0);
+
+    await page.goto('/inbox?view=drafts');
+    await expect(page.getByText('No drafts.')).toBeVisible();
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    const subject = writing.getByRole('textbox', { name: 'Subject' });
+    await subject.fill('Never mind');
+    await writing.getByRole('button', { name: 'Close' }).click();
+    const row = page.getByRole('row').filter({ hasText: 'Never mind' });
+    await row.click();
+    await subject.fill('');
+    await writing.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByText('No drafts.')).toBeVisible();
+    await page.reload();
+    await expect(page.getByText('No drafts.')).toBeVisible();
+  });
+
   test.describe('with Mild slow to say which drafts it has', () => {
     // A service worker's fetch is out of reach of page.route, which holds the drafts back here.
     test.use({ serviceWorkers: 'block' });

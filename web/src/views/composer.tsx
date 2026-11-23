@@ -213,6 +213,22 @@ function doubtsAbout(what: Writing, draft: Draft, files: number): string[] {
   ];
 }
 
+/**
+ * Nothing in it the person put there: no words of their own (a forward's quote is not), no files, and the subject and
+ * recipients it started with. Such a draft is neither kept nor saved, and one saved that comes to this is forgotten.
+ * `subject` is a reply's, which Edit subject starts on.
+ */
+function blank(draft: Draft, start: Draft, subject: string | undefined): boolean {
+  const own = draft.text.includes(QUOTE) ? draft.text.slice(0, draft.text.indexOf(QUOTE)) : draft.text;
+  const recipients = (d: Draft) => [d.to, d.cc, d.bcc].map((line) => line.map((r) => r.address.toLowerCase()).join(',')).join(';');
+  return (
+    own.trim() === '' &&
+    draft.files.length === 0 &&
+    draft.subject.trim() === (draft.editSubject ? (subject ?? '') : start.subject).trim() &&
+    recipients(draft) === recipients(start)
+  );
+}
+
 /** Files being uploaded, by a key of their own until Mild gives them an id. */
 interface Uploading {
   key: string;
@@ -264,14 +280,33 @@ function Writer({
   }
   // Said over the draft until it changes, which makes it a draft again, as in Gmail.
   const scheduled = saved !== null && draft.at <= saved.draft.at ? saved : null;
+  const empty = (d: Draft) => blank(d, start, subject);
   // Saved to Mild once the writing pauses, and as the composer closes; never once it is sent or discarded.
-  const saving = useRef<{ timer: ReturnType<typeof setTimeout> | null; latest: Draft | null; done: boolean }>({ timer: null, latest: null, done: false });
+  const saving = useRef<{ timer: ReturnType<typeof setTimeout> | null; latest: Draft | null; done: boolean; stored: boolean }>({
+    timer: null,
+    latest: null,
+    done: false,
+    stored: false,
+  });
+  /** Gone from Mild, and from Gmail's Drafts. */
+  const forget = () => {
+    saving.current.stored = false;
+    void api.removeDraft(draftId(what)).then(
+      () => client.invalidateQueries({ queryKey: ['drafts'] }),
+      () => {},
+    );
+  };
   const save = () => {
     const { latest, done } = saving.current;
     if (saving.current.timer) clearTimeout(saving.current.timer);
     saving.current.timer = null;
     saving.current.latest = null;
     if (!latest || done) return;
+    if (empty(latest)) {
+      if (saved || saving.current.stored) forget();
+      return;
+    }
+    saving.current.stored = true;
     const account = choices.find((c) => c.address === latest.from) ?? choices[0];
     void api
       .saveDraft({
@@ -291,14 +326,14 @@ function Writer({
   useEffect(() => () => flush.current(), []);
   const finished = () => {
     if (saving.current.timer) clearTimeout(saving.current.timer);
-    saving.current = { timer: null, latest: null, done: true };
+    saving.current = { ...saving.current, timer: null, latest: null, done: true };
   };
   const change = (next: Partial<Draft> | ((was: Draft) => Partial<Draft>)) => {
     setDraft((was) => {
       const asked = typeof next === 'function' ? next(was) : next;
       // A changed draft is mail of its own: a try before the change may have gone, and must not be found and called this one.
       const changed = { ...was, ...('id' in asked ? {} : { id: null }), ...asked, at: Date.now() };
-      keepDraft(who, what, changed);
+      keepDraft(who, what, empty(changed) ? null : changed);
       return changed;
     });
   };
@@ -510,10 +545,10 @@ function Writer({
     for (const u of uploading) u.abort.abort();
     finished();
     keepDraft(who, what, null);
-    void api.removeDraft(draftId(what)).then(
-      () => client.invalidateQueries({ queryKey: ['drafts'] }),
-      () => {},
-    );
+    const nothing = empty(draft) && uploading.length === 0;
+    if (!nothing || saved || saving.current.stored) forget();
+    onClose();
+    if (nothing) return;
     toast(said, {
       kind: 'Draft discarded',
       undo: () => {
@@ -521,7 +556,6 @@ function Writer({
         compose?.(what);
       },
     });
-    onClose();
   };
 
   /** Reply, Reply to all or Forward of the same message instead, with what was written carried over, as Gmail's does. */
@@ -531,11 +565,9 @@ function Writer({
     const own = draft.text.includes(QUOTE) ? draft.text.slice(0, draft.text.indexOf(QUOTE)).trimEnd() : draft.text;
     finished();
     keepDraft(who, what, null);
-    void api.removeDraft(draftId(what)).then(
-      () => client.invalidateQueries({ queryKey: ['drafts'] }),
-      () => {},
-    );
-    keepDraft(who, other, { ...started, text: other.kind === 'forward' ? `${own}${started.text}` : own, files: draft.files, at: Date.now() });
+    if (saved || saving.current.stored) forget();
+    const carried = { ...started, text: other.kind === 'forward' ? `${own}${started.text}` : own, files: draft.files, at: Date.now() };
+    keepDraft(who, other, blank(carried, started, subject) ? null : carried);
     compose?.(other);
   };
 
