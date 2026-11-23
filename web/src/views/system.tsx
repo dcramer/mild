@@ -15,6 +15,7 @@ import {
   Trash2Icon,
   WorkflowIcon,
   MailOpenIcon,
+  SquarePenIcon,
 } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
@@ -87,6 +88,8 @@ import {
   Marked,
   MailboxSwitch,
   Masthead,
+  TabBar,
+  FloatingPress,
   Menu,
   Meter,
   Note,
@@ -1212,7 +1215,10 @@ export function SystemView() {
           </Table>
         </Section>
 
-        <Section title="Navigation" meta="the rail on a desktop, the masthead on a phone; the mailbox switch in each, for someone with more than one">
+        <Section
+          title="Navigation"
+          meta="the rail on a desktop; on a phone the masthead, the tab bar and a screen's floating press; the mailbox switch in each, for someone with more than one"
+        >
           <div className="hidden gap-6 md:flex">
             <Sheet className="flex h-[38rem]">
               <Rail
@@ -1254,6 +1260,9 @@ export function SystemView() {
             <Sheet className="px-4">
               <Masthead current="" items={[]} />
             </Sheet>
+            {/* Both are fixed to the foot of the screen, as they are on every phone screen. */}
+            <TabBar current="system" items={NAV} />
+            <FloatingPress label="Compose" icon={<SquarePenIcon aria-hidden />} onPress={() => {}} />
           </div>
         </Section>
 

@@ -1,5 +1,5 @@
 'use client';
-import { ArchiveIcon, BanIcon, CircleHelpIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, WorkflowIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, CircleHelpIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, SquarePenIcon, WorkflowIcon } from 'lucide-react';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { proposalStart, standingStart } from '@/lib/rule-start.ts';
@@ -50,6 +50,7 @@ import {
   TrGroup,
   useNow,
   usePhone,
+  FloatingPress,
 } from '@/system';
 
 /** What Inbox shows: its conversations, narrowed or not, or the mail begun and not sent. */
@@ -344,11 +345,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
 /** Compose on a phone, which has no rail. Nothing while Inbox is off. */
 export function PhoneCompose() {
   const compose = useCompose();
-  return compose ? (
-    <Button className="md:hidden" onClick={() => compose()}>
-      Compose
-    </Button>
-  ) : null;
+  return compose ? <FloatingPress label="Compose" icon={<SquarePenIcon aria-hidden />} onPress={() => compose()} /> : null;
 }
 
 /** Inbox: the conversations in the inbox, as a mail app lists them, with what Mild thinks of each; a search looks through all the mail Mild keeps. */
@@ -538,7 +535,8 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
               <Th phone="hide">Received</Th>
             </Heads>
             {proposals.length > 0 ? (
-              <tbody>
+              // Not something the search found.
+              <tbody className="phone:[html:has([data-searching])_&]:hidden">
                 {proposals.map((p) => (
                   <ProposalRow key={p.id} proposal={p} labels={labels} />
                 ))}

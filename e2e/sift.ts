@@ -242,6 +242,15 @@ export async function swipe(target: Locator, dx: number) {
   await target.locator('[data-swipe]').evaluate((track, by) => (track as unknown as Scrolls).scrollBy({ left: -by, behavior: 'smooth' }), dx);
 }
 
+/** A finger drawn in from the screen's left edge at `y` and lifted, as a phone's mail app opens its menu. */
+export async function edgeSwipe(page: Page, y: number) {
+  const touch = await touches(page);
+  await touch('touchStart', { x: 4, y });
+  await touch('touchMove', { x: 30, y: y + 2 });
+  await touch('touchMove', { x: 90, y: y + 4 });
+  await touch('touchEnd');
+}
+
 /** A finger held on `target` until `then` shows, and lifted. */
 export async function hold(target: Locator, then: Locator) {
   const box = await boxOf(target);

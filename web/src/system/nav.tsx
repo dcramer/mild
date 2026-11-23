@@ -1,12 +1,13 @@
 'use client';
 import { Dialog } from '@base-ui/react/dialog';
 import { MenuIcon, XIcon } from 'lucide-react';
-import { type ReactNode, createContext, useContext, useEffect, useState } from 'react';
+import { type ReactNode, createContext, useContext, useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { handOver, useBackCloses } from '@/lib/params.ts';
 import { Anchor } from './anchor.tsx';
 import { Button } from './button.tsx';
 import { Cloud, FinePrint } from './fine-print.tsx';
+import { AboveToasts } from './toast.tsx';
 import { type MailboxChoice, MailboxSwitch } from './mailbox.tsx';
 import { Avatar, type MenuItem } from './menu.tsx';
 import type { NavItem } from './rail.tsx';
@@ -57,12 +58,61 @@ function useAway(): [boolean, (bar: HTMLElement | null) => void] {
   return [away, setBar];
 }
 
-const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center justify-center hover:bg-(--fill)';
+/** How far in from the left edge a swipe that opens the menu starts: nearer than a row's own swipe would. */
+const EDGE = 24;
 
 /**
- * The top of every screen on a phone, where `Rail` is not shown: one outlined field, the menu button at its start, then
- * a list's search (`ToBar`) or the name. `aside` (Mild's line) is in the menu, not the bar.
- * The sections and `account` move into a panel that covers the screen, the sections followed by `FinePrint` as a list,
+ * A swipe in from the left edge, as a phone's mail app opens its menu, while nothing else is open over the page. In a
+ * browser tab the system takes that edge for Back first, so the menu keeps a press of its own.
+ */
+function useEdgeSwipe(on: boolean, onSwipe: (open: true) => void) {
+  useEffect(() => {
+    if (!on) return;
+    let from: { x: number; y: number } | null = null;
+    const start = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      from =
+        event.touches.length === 1 && touch && touch.clientX <= EDGE && !document.querySelector('[role="dialog"]')
+          ? { x: touch.clientX, y: touch.clientY }
+          : null;
+    };
+    const move = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!from || !touch) return;
+      const across = touch.clientX - from.x;
+      if (Math.abs(touch.clientY - from.y) > across) {
+        from = null;
+        return;
+      }
+      // The row under the thumb would scroll sideways too.
+      event.preventDefault();
+      if (across > 40) {
+        from = null;
+        onSwipe(true);
+      }
+    };
+    const end = () => {
+      from = null;
+    };
+    window.addEventListener('touchstart', start, { passive: true });
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', end);
+    window.addEventListener('touchcancel', end);
+    return () => {
+      window.removeEventListener('touchstart', start);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', end);
+      window.removeEventListener('touchcancel', end);
+    };
+  }, [on, onSwipe]);
+}
+
+const ICON_PRESS = 'press flex size-11 shrink-0 cursor-pointer items-center justify-center';
+
+/**
+ * The top of every screen on a phone, where `Rail` is not shown: the menu button, then a list's search (`ToBar`), outlined,
+ * or the page's name; the sections themselves are the `TabBar`. `aside` (Mild's line) is in the menu, not the bar.
+ * The menu is a panel that covers the screen, opened by its button or a swipe in from the left edge: the sections followed by `FinePrint` as a list,
  * with `detail` (what `aside`'s hover card says, which a touch screen never shows) framed above the account, and the
  * `mailbox` the dashboard shows under whose they are. Back closes it; where a press in it goes takes its place in history.
  */
@@ -97,8 +147,8 @@ export function Masthead({
   }
   const cloud = useContext(Cloud);
   const [away, measure] = useAway();
+  useEdgeSwipe(items.length > 0, setOpen);
   const here = items.find((item) => item.to === current);
-  const waiting = items.reduce((sum, item) => sum + (item.count ?? 0), 0);
 
   // No sections: the page before it knows who is signed in, which may yet be the sign-in page, so the name alone.
   if (items.length === 0)
@@ -121,14 +171,15 @@ export function Masthead({
         away && '-translate-y-full',
       )}
     >
-      <div className="flex h-12 items-center rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45">
-        <Dialog.Root open={open} onOpenChange={setOpen}>
-          <Dialog.Trigger aria-label="Menu" className={`${ICON_PRESS} relative`}>
+      <Dialog.Root open={open} onOpenChange={setOpen}>
+        {/* Outlined only around a search: elsewhere it is the page's name. */}
+        <div className="flex h-12 items-center rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 has-[[data-bar-slot]:empty]:border-transparent">
+          <Dialog.Trigger aria-label="Menu" className={`${ICON_PRESS} [html:has([data-searching])_&]:hidden`}>
             <MenuIcon className="size-5" />
-            {waiting > 0 && here?.count === undefined ? <span aria-hidden className="absolute top-2 right-2 size-2 rounded-full bg-highlight" /> : null}
           </Dialog.Trigger>
           <Dialog.Portal>
-            <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background pt-[calc(1rem+var(--safe-top))] pr-[max(1rem,var(--safe-right))] pb-[calc(2rem+var(--safe-bottom))] pl-[max(1rem,var(--safe-left))] outline-none transition-opacity duration-150 data-ending-style:pointer-events-none data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none md:hidden">
+            {/* From the left, as the edge swipe that opens it. */}
+            <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background pt-[calc(1rem+var(--safe-top))] pr-[max(1rem,var(--safe-right))] pb-[calc(2rem+var(--safe-bottom))] pl-[max(1rem,var(--safe-left))] outline-none transition-transform duration-200 ease-out data-ending-style:pointer-events-none data-ending-style:-translate-x-full data-starting-style:-translate-x-full motion-reduce:transition-none md:hidden">
               <div className="flex items-center justify-between">
                 <Wordmark />
                 <Dialog.Title className="sr-only">Menu</Dialog.Title>
@@ -136,7 +187,7 @@ export function Masthead({
                   <XIcon className="size-5" />
                 </Dialog.Close>
               </div>
-              <nav aria-label="Sections" className="mt-14">
+              <nav aria-label="Sections" className="mt-6">
                 <ul className="flex flex-col gap-1">
                   {items.map((item) => (
                     <li key={item.to}>
@@ -200,12 +251,101 @@ export function Masthead({
               ) : null}
             </Dialog.Popup>
           </Dialog.Portal>
-        </Dialog.Root>
-        <div ref={slot} className="peer flex min-w-0 flex-1 items-center self-stretch empty:hidden" />
-        <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Mild" className="flex min-h-11 items-center peer-[:not(:empty)]:hidden">
-          <Wordmark />
-        </Anchor>
-      </div>
+          <div ref={slot} data-bar-slot className="peer flex min-w-0 flex-1 items-center self-stretch empty:hidden" />
+          {here ? (
+            <p aria-hidden className="name flex min-h-11 flex-1 items-center text-base peer-[:not(:empty)]:hidden">
+              {here.label}
+            </p>
+          ) : (
+            <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Mild" className="flex min-h-11 items-center peer-[:not(:empty)]:hidden">
+              <Wordmark />
+            </Anchor>
+          )}
+        </div>
+      </Dialog.Root>
     </header>
+  );
+}
+
+/**
+ * The sections along the bottom of a phone, where the thumb is: each its icon over its name, the current one's icon on a
+ * fill as the rail's is, and a count on the icon's corner. The menu (`Masthead`) still holds everything, the sections
+ * among it. It holds its own height at the end of the page, so nothing ends under it; a `ThumbBar` covers it while it shows.
+ */
+export function TabBar({ items, current }: { items: readonly NavItem[]; current: string }) {
+  if (items.length === 0) return null;
+  return (
+    <>
+      <div aria-hidden className="h-[calc(4rem+var(--safe-bottom))] md:hidden [html:has([data-searching])_&]:hidden" />
+      <AboveToasts className="fixed inset-x-0 bottom-0 z-20 border-t border-(--rule) bg-background pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) md:hidden [html:has([data-searching])_&]:hidden">
+        <nav aria-label="Sections" className="grid h-16 auto-cols-fr grid-flow-col">
+          {items.map(({ to, label, icon: Icon, count }) => (
+            <Anchor
+              key={to}
+              href={`/${to}`}
+              aria-current={to === current ? 'page' : undefined}
+              className="group flex flex-col items-center justify-center gap-1 text-label font-medium text-muted-foreground select-none aria-[current=page]:text-foreground"
+              replace
+            >
+              <span className="relative flex h-8 w-14 items-center justify-center rounded-[8px] group-aria-[current=page]:bg-(--fill-strong)">
+                <Icon aria-hidden className="size-5" strokeWidth={1.75} />
+                {count ? (
+                  <span
+                    aria-hidden
+                    className="absolute -top-1 right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-foreground px-1 text-label leading-none font-semibold text-background tabular-nums"
+                  >
+                    {count > 99 ? '99+' : count}
+                  </span>
+                ) : null}
+              </span>
+              <span>{label}</span>
+              {count ? <span className="sr-only">{count}</span> : null}
+            </Anchor>
+          ))}
+        </nav>
+      </AboveToasts>
+    </>
+  );
+}
+
+/**
+ * A screen's one way to begin something new, on a phone: an icon in a square that floats in the bottom right, over the
+ * list and clear of the `TabBar`, where the thumb rests. Wider, the screen has the same press where it puts it.
+ */
+export function FloatingPress({
+  label,
+  icon,
+  onPress,
+  disabled,
+  why,
+}: {
+  label: string;
+  icon: ReactNode;
+  onPress: () => void;
+  disabled?: boolean;
+  /** Why it cannot be pressed now, read with it: a touch screen shows no tooltip. */
+  why?: string | undefined;
+}) {
+  const reason = useId();
+  const explained = disabled && why !== undefined;
+  return (
+    // From the foot of the screen, so toasts rise above it as above the tab bar.
+    <AboveToasts className="pointer-events-none fixed right-[max(1rem,var(--safe-right))] bottom-0 z-20 pb-[calc(5rem+var(--safe-bottom))] md:hidden [html:has([data-searching])_&]:hidden">
+      <button
+        type="button"
+        aria-label={label}
+        disabled={disabled}
+        {...(explained ? { 'aria-describedby': reason } : {})}
+        onClick={onPress}
+        className="press sheet pointer-events-auto flex size-14 cursor-pointer items-center justify-center bg-popover text-foreground active:bg-(--fill-strong) disabled:opacity-35 [&_svg]:size-6"
+      >
+        {icon}
+      </button>
+      {explained ? (
+        <span id={reason} className="sr-only">
+          {why}
+        </span>
+      ) : null}
+    </AboveToasts>
   );
 }
