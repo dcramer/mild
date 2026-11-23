@@ -5,7 +5,7 @@ import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { proposalStart, standingStart } from '@/lib/rule-start.ts';
 import { eq, inArray, isNull, or, useLiveQuery } from '@tanstack/react-db';
 import { type ReactNode, memo, startTransition, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { type AnswerLabel, answerChoices, useListAnswer } from '@/components/answer.tsx';
+import { type AnswerLabel, answerChoices, useListAnswer, withDoes } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
@@ -19,7 +19,7 @@ import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
 import { useCompose } from '@/lib/compose.ts';
-import { ACTIONS, MOVES_OUT, count, inboxFirst, period, sureness } from '@/lib/format.ts';
+import { MOVES_OUT, count, inboxFirst, period, sureness } from '@/lib/format.ts';
 import { messageKey, proposalKey, setParams, threadKey, useParam } from '@/lib/params.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -32,7 +32,6 @@ import {
   Failure,
   FilterGroup,
   Heads,
-  Does,
   Hint,
   LabelPick,
   LabelSheet,
@@ -177,10 +176,6 @@ function LabelSheetFor({ thread, labels, onClose }: { thread: Listed; labels: re
     labelId: thinks?.labelId ?? null,
     ...(thinks ? { decisionId: thinks.decisionId } : {}),
   };
-  const does = (id: string) => {
-    const action = labels.find((l) => l.id === id)?.disposition ?? 'keep';
-    return <Does action={action}>{ACTIONS.find(([k]) => k === action)?.[1] ?? action}</Does>;
-  };
   return (
     <LabelSheet
       open
@@ -188,7 +183,7 @@ function LabelSheetFor({ thread, labels, onClose }: { thread: Listed; labels: re
       who={<WhoWrote writers={thread.who} />}
       subject={reveal(thread.subject) || '(no subject)'}
       value={thinks?.labelId ?? null}
-      groups={answerChoices(labels, target, thinks ? sureness(thinks) : 1, []).map((group) => group.map((p) => ({ ...p, does: does(p.id) })))}
+      groups={withDoes(labels, answerChoices(labels, target, thinks ? sureness(thinks) : 1, []))}
       onPick={(id) => void answer(target, id).catch(() => undefined)}
     />
   );

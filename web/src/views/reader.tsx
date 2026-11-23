@@ -1,8 +1,8 @@
 'use client';
 import { eq, useLiveQuery } from '@tanstack/react-db';
-import { ArchiveIcon, BanIcon, MailIcon, PlusIcon, ReplyIcon, ShieldAlertIcon, WorkflowIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, MailIcon, PlusIcon, ReplyIcon, ShieldAlertIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { useAnswer, useRecordAnswer } from '@/components/answer.tsx';
+import { useAnswer, useRecordAnswer, withDoes } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts, useMessageView } from '@/components/message-parts.tsx';
 import { DigestBody } from '@/components/digest.tsx';
@@ -34,6 +34,7 @@ import {
   Failure,
   Heads,
   Heard,
+  LabelSheet,
   Loading,
   MessageHead,
   MessageStack,
@@ -41,7 +42,6 @@ import {
   Presses,
   Reader,
   ReaderBar,
-  type Thumb,
   Section,
   SomeOf,
   Popover,
@@ -50,6 +50,7 @@ import {
   Td,
   TextLink,
   Th,
+  type Thumb,
   Timeline,
   TimelineEvent,
   Tr,
@@ -439,6 +440,8 @@ function OpenedMessage({
   onAnswered,
   onUndone,
   onRead,
+  labelling,
+  onLabelled,
 }: {
   detail: MessageDetail;
   conversation: MailConversation | null;
@@ -452,6 +455,9 @@ function OpenedMessage({
   onUndone: () => void;
   /** The conversation was marked read. */
   onRead: () => void;
+  /** Its phone press Label was pressed: what the message is, from a `LabelSheet`, until `onLabelled`. */
+  labelling: boolean;
+  onLabelled: () => void;
 }) {
   const waiting = useLoaded(`suggestion/${reveal(detail.fromAddress)}`, (signal) => api.suggestion(reveal(detail.fromAddress), signal), 120_000);
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
@@ -665,6 +671,17 @@ function OpenedMessage({
           />
         </div>
       ) : null}
+      {labelling && !detail.digest ? (
+        <LabelSheet
+          open
+          onClose={onLabelled}
+          who={reveal(detail.fromName) ?? reveal(detail.fromAddress)}
+          subject={reveal(detail.subject) || '(no subject)'}
+          value={shownLabel}
+          groups={withDoes(labels, choices(target, current ? sureness(current) : 1, alternatives))}
+          onPick={(id) => void Promise.resolve(inInbox ? record(target, id) : answer(target, id)).catch(() => undefined)}
+        />
+      ) : null}
       {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
       {ruling ? (
         <RuleDialog
@@ -775,11 +792,13 @@ export function MessageReader({
   const spam = () => pressed && press([pressed], 'spam', next);
   const blockSender = () => pressed && data && block([{ ...pressed, from: data.fromAddress }], next);
   const unread = () => pressed && press([pressed], 'unread', onBack);
-  // In Inbox, as the bar and the foot of the conversation have them. Reply answers the newest, once it has loaded; a digest has none.
+  const [labelling, setLabelling] = useState(false);
+  // In Inbox, as the bar and the foot of the conversation have them, but Label in Mark unread's place: the answer's
+  // dropdown as a sheet the thumb reaches. Label and Reply act on the newest, once it has loaded; a digest has neither.
   const thumbs: Thumb[] = threadId
     ? [
         { label: 'Archive', icon: <ArchiveIcon aria-hidden />, disabled: !pressed, onPress: archive },
-        { label: 'Unread', icon: <MailIcon aria-hidden />, disabled: !pressed, onPress: unread },
+        ...(data?.digest ? [] : [{ label: 'Label', icon: <TagIcon aria-hidden />, disabled: !data, onPress: () => setLabelling(true) }]),
         ...(compose && !data?.digest
           ? [
               {
@@ -848,6 +867,8 @@ export function MessageReader({
         onRead={() =>
           changeLoaded<MailConversation | null>(threadLoad, (read) => read && { ...read, messages: read.messages.map((m) => ({ ...m, unread: false })) })
         }
+        labelling={labelling}
+        onLabelled={() => setLabelling(false)}
       />
       {blocking ? <RuleDialog labels={manage.data?.labels ?? []} start={standingStart({ address: blocking }, 'blocked')} onClose={stopRuling} /> : null}
     </>

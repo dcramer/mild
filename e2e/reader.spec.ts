@@ -308,22 +308,42 @@ test.describe('The reader, from Inbox', () => {
       const open = reader(page);
       await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
       // One of each, and none at the top or under the conversation.
-      await expect(open.getByRole('button', { name: /^(Archive|Unread|Mark unread|Reply|Reply all|Forward)$/ })).toHaveText(['Archive', 'Unread', 'Reply']);
-      const [archive, unread, reply] = await Promise.all(['Archive', 'Unread', 'Reply'].map((name) => boxOf(open.getByRole('button', { name, exact: true }))));
-      for (const press of [archive!, unread!, reply!]) {
+      await expect(open.getByRole('button', { name: /^(Archive|Label|Unread|Mark unread|Reply|Reply all|Forward)$/ })).toHaveText([
+        'Archive',
+        'Label',
+        'Reply',
+      ]);
+      const [archive, label, reply] = await Promise.all(['Archive', 'Label', 'Reply'].map((name) => boxOf(open.getByRole('button', { name, exact: true }))));
+      for (const press of [archive!, label!, reply!]) {
         expect(press.y + press.height).toBeCloseTo(PHONE.height, 0);
         expect(press.height).toBeGreaterThanOrEqual(44);
       }
-      expect(archive!.x + archive!.width).toBeLessThanOrEqual(unread!.x);
-      expect(unread!.x + unread!.width).toBeLessThanOrEqual(reply!.x);
+      expect(archive!.x + archive!.width).toBeLessThanOrEqual(label!.x);
+      expect(label!.x + label!.width).toBeLessThanOrEqual(reply!.x);
 
       await open.getByRole('button', { name: 'Reply', exact: true }).click();
       await expect(composer(page, 'Reply')).toBeVisible();
       await expect(open.getByRole('button', { name: 'Archive', exact: true })).toBeHidden();
-      await expect(open.getByRole('button', { name: 'Unread', exact: true })).toBeHidden();
+      await expect(open.getByRole('button', { name: 'Label', exact: true })).toBeHidden();
 
       await composer(page, 'Reply').getByRole('button', { name: 'Discard' }).click();
       await expect(open.getByRole('button', { name: 'Archive', exact: true })).toBeVisible();
+    });
+
+    test('Label opens a sheet of every label; the pick is saved as the dropdown saves it, and the conversation stays', async ({ page }) => {
+      await page.goto('/inbox');
+      await page.getByRole('row').filter({ hasText: 'Lunch on Thursday?' }).click();
+      const open = reader(page);
+      await open.getByRole('button', { name: 'Label', exact: true }).click();
+      const sheet = page.getByRole('dialog', { name: 'Ada Lovelace' });
+      await sheet.getByRole('button', { name: 'Cancel' }).click();
+      await expect(sheet).toHaveCount(0);
+
+      await open.getByRole('button', { name: 'Label', exact: true }).click();
+      await sheet.getByRole('button', { name: /^Personal/ }).click();
+      await expect(sheet).toHaveCount(0);
+      await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Personal');
+      await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
     });
   });
 });

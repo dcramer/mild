@@ -2,9 +2,9 @@
 import { api } from '@/lib/api.ts';
 import { useAction } from '@/lib/action.ts';
 import { copiedKey, leftInbox } from '@/lib/copy.ts';
-import { INBOX, MOVES_OUT, labelDid, plural } from '@/lib/format.ts';
+import { ACTIONS, INBOX, MOVES_OUT, labelDid, plural } from '@/lib/format.ts';
 import { messageKey, threadKey } from '@/lib/params.ts';
-import { type Did, Meter, type Pick, useToast } from '@/system';
+import { type Did, Does, Meter, type Pick, useToast } from '@/system';
 
 /** A message whose label the user can say, as the list and the panel both hold it. */
 export interface Answerable {
@@ -125,6 +125,16 @@ export function answerChoices(
   const first = inbox ? [{ id: inbox.id, label: inbox.name, ...likely.find((p) => p.id === INBOX) }] : [];
   const rest = labels.filter((l) => l.id !== INBOX && !likely.some((p) => p.id === l.id)).map((l) => ({ id: l.id, label: l.name }));
   return [first, likely.filter((p) => p.id !== INBOX), rest];
+}
+
+/** The choices as a `LabelSheet` lists them: each with what its label does. */
+export function withDoes(labels: readonly AnswerLabel[], groups: readonly (readonly Pick[])[]) {
+  return groups.map((group) =>
+    group.map((p) => {
+      const action = labels.find((l) => l.id === p.id)?.disposition ?? 'keep';
+      return { ...p, does: <Does action={action}>{ACTIONS.find(([k]) => k === action)?.[1] ?? action}</Does> };
+    }),
+  );
 }
 
 /**
