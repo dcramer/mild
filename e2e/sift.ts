@@ -3,7 +3,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import { test as base, expect, type Locator, type Page, type Route } from '@playwright/test';
 import { FRAME_POLICY, IMAGES_FRAME_POLICY, PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import { FakeGoogle } from '../tests/google.ts';
 
@@ -393,10 +393,16 @@ export async function suggestLabels(page: Page, words: string) {
   await expect(page.getByRole('heading', { name: 'Your labels', level: 1 })).toBeVisible();
 }
 
+/**
+ * The server's reply to an intercepted request. Sent again once if the connection was reset: Playwright reuses a connection
+ * the server may be closing as the request goes out, after it sat idle the server's 5 s, which a browser also sends again.
+ */
+export const forward = (route: Route) => route.fetch({ maxRetries: 1 });
+
 /** Answers requests to `url` with the server's own reply, its JSON as `change` makes it. */
 export const patchJson = (page: Page, url: string, change: (json: any) => object) =>
   page.route(url, async (route) => {
-    const response = await route.fetch();
+    const response = await forward(route);
     await route.fulfill({ response, json: change(await response.json()) });
   });
 

@@ -7,6 +7,7 @@ import {
   composer,
   messageQuery,
   expect,
+  forward,
   PHONE,
   patchJson,
   path,
@@ -37,6 +38,16 @@ const kept = `new Promise((done) => {
   };
 })`;
 const keptAll = { key: 1, frame: ['manage', 'session', 'suggestions-false', 'usage'] };
+
+/** Drop what the device kept of the frame under `name`. */
+const forget = (name: string) => `new Promise((done) => {
+  indexedDB.open('sift-device').onsuccess = (event) => {
+    const db = event.target.result;
+    const removing = db.transaction('frame', 'readwrite');
+    removing.objectStore('frame').delete('${name}');
+    removing.oncomplete = () => (db.close(), done());
+  };
+})`;
 
 test("the page is drawn to the screen's edges, under a status bar in its own colour, with a picture of its opening for each iPhone", async ({ page }) => {
   await page.goto('/');
@@ -156,7 +167,7 @@ test.describe('After Mild is updated under an open page', () => {
   /** Mild answers as another build than the page's, as after a deploy. */
   const deployed = (page: Page) =>
     page.route('**/api/**', async (route) => {
-      const response = await route.fetch();
+      const response = await forward(route);
       await route.fulfill({ response, headers: { ...response.headers(), 'x-sift-build': 'a-newer-build' } });
     });
   /** Opened before the deploy and seen since, so it is past the seconds in which it would load itself again at once. */
@@ -356,9 +367,21 @@ test.describe('A reload', () => {
     // The last of the page to come, above the list: scrolled before it, the browser moves the page down when it comes.
     await expect(page.getByText(/it would have kept/)).toBeVisible();
     await page.evaluate('scrollTo(0, 600)');
+    // What Mild would have saved, which "Mild is off" says above the list, is not on the device yet, as when the page was
+    // left before it was kept or a deploy since dropped it, and Mild answers it only once the place is given back.
+    await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+    await page.evaluate(forget('usage'));
+    const { promise: answered, resolve: answer } = Promise.withResolvers<void>();
+    await page.route('**/api/usage*', async (route) => {
+      await answered;
+      await route.continue();
+    });
     await page.reload();
     // The list is fetched after the page loads: the browser's own restoring finds the page too short.
     await expect.poll(() => page.evaluate<number>('Math.round(scrollY)')).toBe(600);
+    answer();
+    await expect(page.getByText(/^On, it would have kept/)).toBeVisible();
+    expect(await page.evaluate<number>('Math.round(scrollY)')).toBe(600);
     await expect(page.getByRole('row').nth(8)).toBeVisible();
   });
 });

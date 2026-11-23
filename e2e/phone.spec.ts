@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { PHONE, boxOf, expect, param, patchJson, reader, sideScroll, test, toast } from './sift.ts';
+import { PHONE, boxOf, expect, forward, param, patchJson, reader, sideScroll, test, toast } from './sift.ts';
 
 /** The phone's top bar. */
 const bar = (page: Page) => page.getByRole('banner');
@@ -76,7 +76,7 @@ test.describe('On a phone', () => {
 
   test('no screen scrolls sideways, even with addresses and domains as long as a mailing list sends', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
-      const response = await route.fetch();
+      const response = await forward(route);
       if (!(response.headers()['content-type'] ?? '').includes('json')) return route.fulfill({ response });
       await route.fulfill({ response, json: lengthened(await response.json()) });
     });

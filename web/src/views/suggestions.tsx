@@ -216,7 +216,8 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
   // The server draws the page with this, so whether Mild is off is said before the list arrives.
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   // The masthead's, drawn on the server too.
-  const saved = useLoaded('usage', (signal) => api.usage(signal), 60_000).data?.saved;
+  const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
+  const saved = usage.data?.saved;
   const [search, setSearch] = useParam('q');
   const [does, setDoes] = useParam('does', DOES);
 
@@ -256,8 +257,9 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
     <ListView
       intro={
         <>
-          {/* Most people start off, so the room is held for it. */}
-          <Reserve id="home-off" ready={manage.data !== null} room="min-h-[449px] lg:min-h-[243px]">
+          {/* Most people start off, so the room is held for it. Drawn once usage is in too, as its line arriving after
+              would push the list down under a reader whose place a reload just gave back. */}
+          <Reserve id="home-off" ready={manage.data !== null && !usage.loading} room="min-h-[449px] lg:min-h-[243px]">
             {manage.data && !manage.data.active && !nothing ? (
               <Callout title="Mild is off" action={<Button href="?settings=1">Turn Mild on…</Button>}>
                 <p>
