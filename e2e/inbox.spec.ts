@@ -27,6 +27,7 @@ import {
   settingsInbox,
   test,
   failureToast,
+  forward,
   toast,
   tooltip,
 } from './sift.ts';
@@ -757,7 +758,7 @@ test.describe('Inbox', () => {
 
   test('when Gmail takes only some of what is selected, the page says the rest failed once it is sent', async ({ page }) => {
     await page.route('**/api/mail/change', async (route) => {
-      const reply = (await (await route.fetch()).json()) as { actions: number[] };
+      const reply = (await (await forward(route)).json()) as { actions: number[] };
       await route.fulfill({ json: { actions: reply.actions.slice(1), missed: 1 } });
     });
     await page.goto('/inbox');

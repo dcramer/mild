@@ -17,6 +17,7 @@ test('a browser test waits for what it checks, and never for a set time', () => 
     [/\.boundingBox\(/, 'a layer may still be sliding: boxOf(locator)'],
     [/\.hover\(/, 'what is under the pointer may still move: pointAt(locator)'],
     [/waitForTimeout|setTimeout/, 'wait for the state itself: a web-first assertion or expect.poll'],
+    [/route\.fetch\(/, 'forward(route), which sends it again when the server closed the connection under it'],
   ]);
   expect(found, found.join('\n')).toEqual([]);
 });
