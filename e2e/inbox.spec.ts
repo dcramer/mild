@@ -269,6 +269,25 @@ test.describe('Inbox', () => {
     await expect(row).toHaveCount(0);
   });
 
+  test('a row’s label menu stays open while what Mild thinks of the row changes, and takes the pick', async ({ page }) => {
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    await pointAt(row);
+    const label = row.getByRole('combobox', { name: 'What Your order has shipped is' });
+    await label.click();
+    await expect(page.getByRole('option', { name: 'Receipts', exact: true })).toBeVisible();
+    // Said in another tab: the feed brings it to this row while its menu is open.
+    await page.evaluate(
+      "fetch('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify({ accountId: 'me@example.org', sender: 'orders@shop.example.com', label: 'personal', messageId: 'm3', carryOut: false }) })",
+    );
+    // Coming back to the tab asks Mild what changed.
+    await putAway(page);
+    await expect(label).toContainText('Personal');
+    await page.getByRole('option', { name: 'Receipts', exact: true }).click();
+    await expect(toast(page, 'Archive as Receipts')).toBeVisible();
+    await expect(row).toHaveCount(0);
+  });
+
   test('a row’s label menu stays under its label while the pointer moves into it', async ({ page }) => {
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');

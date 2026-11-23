@@ -109,6 +109,12 @@ export function LabelPick({
   onSubmit: (id: string) => Promise<unknown>;
 }) {
   const [chosen, setChosen] = useState<string | null>(value);
+  // A new value from Mild is followed in place: drawing the picker again would shut a list the reader has open.
+  const [given, setGiven] = useState(value);
+  if (value !== given) {
+    setGiven(value);
+    setChosen(value);
+  }
   const all = groups.flat();
   const current = all.find((p) => p.id === chosen);
   return (
