@@ -7,14 +7,27 @@ import { press as outbox } from '@/lib/outbox.ts';
 import { outcomeName, sureness } from '@/lib/format.ts';
 import { threadKey } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
-import { Meter, useToast } from '@/system';
+import { type Did, Meter, useToast } from '@/system';
 
-/** A conversation as a press on it needs it. */
-export type Pressed = Pick<MailThread, 'accountId' | 'threadId' | 'messageIds' | 'subject'>;
+/** A conversation as a press on it needs it, and the label its row shows, which Archive and Spam give it (`src/work/press.ts`). */
+export type Pressed = Pick<MailThread, 'accountId' | 'threadId' | 'messageIds' | 'subject'> & { thinks?: Shown | null };
+type Shown = { labelName: string | null; disposition: string };
 type Press = 'archive' | 'spam' | 'read' | 'unread';
 
 /** What a press that takes conversations out of the inbox is said as. */
 const DONE = { archive: 'Archived', spam: 'Marked spam' } as const;
+/** The labels whose own action is the press, which the press carries out; any other is only recorded, so not shown. */
+const MATCHES = { archive: ['archive', 'digest'], spam: ['spam', 'block'] } as const;
+
+/** What a press did, for its toast: the press, the labels it gave, and the digest they go in. */
+function didOf(threads: readonly Pressed[], what: 'archive' | 'spam', first: Did = { action: what, word: DONE[what] }): [Did, ...Did[]] {
+  const given = threads.flatMap((t) => (t.thinks?.labelName && (MATCHES[what] as readonly string[]).includes(t.thinks.disposition) ? [t.thinks] : []));
+  return [
+    first,
+    ...[...new Set(given.map((t) => t.labelName!))].map((word) => ({ action: 'label', word })),
+    ...(given.some((t) => t.disposition === 'digest') ? [{ action: 'digest', word: 'In the digest' }] : []),
+  ];
+}
 
 /**
  * The reader's own presses on conversations in their inbox, Mild on or off, through the outbox (`web/src/lib/outbox.ts`):
@@ -35,10 +48,10 @@ export function useMailPress(): {
   const toast = useToast();
   const said = (threads: readonly Pressed[]) => (threads.length === 1 ? reveal(threads[0].subject) || '(no subject)' : `${threads.length} conversations`);
   /** Held while its toast shows: Undo takes it back, and anything else that closes the toast sends it. */
-  const held = (threads: readonly Pressed[], what: Press, title: string, kind: string, undone?: () => void) => {
+  const held = (threads: readonly Pressed[], what: Press, title: string, did: readonly [Did, ...Did[]], undone?: () => void) => {
     const pressed = outbox(what, threads, true);
     toast(title, {
-      kind,
+      did,
       undo: () => {
         if (pressed.cancel()) undone?.();
       },
@@ -61,7 +74,8 @@ export function useMailPress(): {
           }
           given.push({ address, was: reply.was });
         }
-        held(threads, 'spam', senders.length === 1 ? `Blocked ${senders[0]}` : `Blocked ${senders.length} senders`, 'Rule added', () =>
+        const blocked = senders.length === 1 ? `Blocked ${senders[0]}` : `Blocked ${senders.length} senders`;
+        held(threads, 'spam', blocked, didOf(threads, 'spam', { action: 'block', word: blocked }), () =>
           undo.hide([], 'Could not undo it', () =>
             Promise.all(given.map(({ address, was }) => (was ? api.giveStanding({ address }, was) : api.clearStanding({ address })))),
           ),
@@ -71,7 +85,7 @@ export function useMailPress(): {
     },
     press: (threads, what, then) => {
       if (threads.length === 0) return;
-      if (what === 'archive' || what === 'spam') held(threads, what, said(threads), DONE[what]);
+      if (what === 'archive' || what === 'spam') held(threads, what, said(threads), didOf(threads, what));
       else outbox(what, threads, false);
       then?.();
     },

@@ -317,6 +317,8 @@ test.describe('Inbox', () => {
     await expect(row.getByRole('combobox', { name: 'What Your order has shipped is' })).toContainText('Receipts');
     await row.getByRole('button', { name: 'Archive' }).click();
     await expect(row).toHaveCount(0);
+    // Its toast says so: archived, to the label.
+    await expect(toast(page, 'Your order has shipped')).toContainText(/Archived\s*to\s*Receipts/);
     await dismiss(page, 'Your order has shipped');
     await expect.poll(() => gmail().message('m3')!.labelIds).not.toContain('INBOX');
     expect(gmail().message('m3')!.labelIds).toContain(gmail().labelId('mild/receipts'));

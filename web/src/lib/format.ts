@@ -68,6 +68,19 @@ export const inboxFirst = (labels: Iterable<readonly [string, string]>): (readon
 export const doesName = (labelId: string | null, disposition: string) =>
   labelId === INBOX || (labelId === null && disposition === 'keep') ? INBOX_NAME : outcomeName(disposition);
 
+/** What mail given a label is done, as a toast says it: what happened to it, the label, and the digest it goes in. */
+export function labelDid(disposition: string, labelName: string): [{ action: string; word: string }, ...{ action: string; word: string }[]] {
+  const done =
+    disposition === 'spam'
+      ? { action: 'spam', word: 'Marked spam' }
+      : disposition === 'block'
+        ? { action: 'block', word: 'Blocked' }
+        : disposition === 'archive' || disposition === 'digest'
+          ? { action: 'archive', word: 'Archived' }
+          : { action: 'keep', word: 'Kept' };
+  return [done, { action: 'label', word: labelName }, ...(disposition === 'digest' ? [{ action: 'digest', word: 'In the digest' }] : [])];
+}
+
 /** `review`: no tier was sure which label, so Mild leaves the message alone and asks. Not a failure, so never drawn as one. */
 const OUTCOMES: Record<string, string> = { ...Object.fromEntries(ACTIONS), review: 'Unlabelled' };
 export const outcomeName = (key: string) => OUTCOMES[key] ?? key;

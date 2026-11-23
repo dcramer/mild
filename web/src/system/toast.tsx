@@ -1,9 +1,10 @@
 'use client';
 import { Toast as Base } from '@base-ui/react/toast';
-import { XIcon } from 'lucide-react';
+import { TagIcon, XIcon } from 'lucide-react';
 import { type FocusEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useShortcut } from './keys.tsx';
+import { ActionIcon } from './does.tsx';
 
 /** How long a receipt stays: alone, and with a press in it. A failure stays until dismissed. */
 const TIMEOUT = [5000, 8000] as const;
@@ -16,6 +17,41 @@ interface Own {
   kind?: boolean;
   undo?: () => void;
   action?: { label: string; onPress: () => void };
+  did?: readonly [Did, ...Did[]];
+}
+
+/** One thing a press did: an action's key (`Does`), or `label` for a label given, and its word or the label's name. */
+export interface Did {
+  action: string;
+  word: string;
+}
+
+/** A label given, as a thing of its own: its tag and its name. */
+function LabelChip({ name }: { name: string }) {
+  return (
+    <span className="inline-flex h-5 shrink-0 items-center gap-1 bg-(--fill-strong) px-1.5 text-label font-semibold whitespace-nowrap text-foreground">
+      <TagIcon aria-hidden className="size-3" />
+      {name}
+    </span>
+  );
+}
+
+/** The labels a press gave, as chips, and anything else it did beside them in its word. */
+function Given({ did }: { did: readonly Did[] }) {
+  return (
+    <>
+      {did.map((d) =>
+        d.action === 'label' ? (
+          <LabelChip key={`label:${d.word}`} name={d.word} />
+        ) : (
+          <span key={d.action} className="inline-flex shrink-0 items-center gap-1 text-label whitespace-nowrap text-muted-foreground">
+            <ActionIcon action={d.action} />
+            {d.word}
+          </span>
+        ),
+      )}
+    </>
+  );
 }
 
 /**
@@ -130,20 +166,70 @@ const PRESS = 'press inline-flex h-(--control) shrink-0 cursor-pointer items-cen
 const ON_RED = 'text-background/75 hover:bg-background/10 hover:text-background focus-visible:outline-background!';
 
 function Receipt({ toast, front, close }: { toast: Base.Root.ToastObject<Own>; front: boolean; close: (id: string) => void }) {
-  const { kind, undo, action } = toast.data ?? {};
+  const { kind, undo, action, did } = toast.data ?? {};
   const failed = toast.type === 'failure';
   const hold = useLifetime(toast, close);
   const key = useShortcut('z', 'Undo', () => undo?.(), { enabled: front && undo !== undefined, everywhere: true });
+  const dismiss = (
+    // Not Base UI's Close, which is hidden from assistive technology unless a pointer is over the toasts.
+    <button
+      type="button"
+      aria-label="Dismiss"
+      onClick={() => close(toast.id)}
+      className={cn(PRESS, 'w-(--control) justify-center px-0', failed ? ON_RED : 'text-muted-foreground hover:text-foreground')}
+    >
+      <XIcon className="size-4" />
+    </button>
+  );
+  const presses =
+    undo || action ? (
+      <>
+        {action ? (
+          <button type="button" className={cn(PRESS, 'text-foreground/75 hover:text-foreground')} onClick={action.onPress}>
+            {action.label}
+          </button>
+        ) : null}
+        {undo ? (
+          <button type="button" aria-keyshortcuts="z" className={cn(PRESS, 'text-highlight')} onClick={undo}>
+            Undo
+            {key}
+          </button>
+        ) : null}
+      </>
+    ) : null;
+  if (did) {
+    const [first, ...also] = did;
+    const labels = also.filter((d) => d.action === 'label');
+    // One row, as Gmail's: what was done, the labels it gave, and the presses. The row it was done to has just left the
+    // list, so what it was is said to a screen reader alone.
+    return (
+      <Base.Root toast={toast} swipeDirection={['down', 'right']} {...hold} className={ROOT}>
+        <div className="flex items-center gap-2 p-1.5 pl-4">
+          <span className="flex min-h-(--control) min-w-0 grow flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className="mr-0.5 inline-flex shrink-0 items-center gap-1.5 text-base font-semibold whitespace-nowrap">
+              <ActionIcon action={first.action} />
+              {first.word}
+            </span>
+            {labels.length > 0 ? <span className="text-sm text-muted-foreground">{first.action === 'keep' ? 'as' : 'to'}</span> : null}
+            <Given did={labels} />
+            <Given did={also.filter((d) => d.action !== 'label')} />
+            <Base.Title render={<span />} className="sr-only" />
+          </span>
+          {presses}
+          {dismiss}
+        </div>
+      </Base.Root>
+    );
+  }
   return (
     <Base.Root
       toast={toast}
       swipeDirection={['down', 'right']}
       {...hold}
       className={cn(
-        'sheet pointer-events-auto flex w-full flex-col bg-popover md:w-[26rem]',
+        ROOT,
         // On a phone a receipt is one line, its kind and then its words, with its presses at the end, so it covers as little of the list as it can.
         !failed && 'phone:flex-row phone:items-center',
-        'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none',
         failed && 'border-destructive bg-destructive text-background',
       )}
     >
@@ -161,38 +247,17 @@ function Receipt({ toast, front, close }: { toast: Base.Root.ToastObject<Own>; f
             className={cn('text-sm', kind && 'order-first', failed ? 'text-background/75' : 'text-muted-foreground phone:shrink-0')}
           />
         </div>
-        {/* Not Base UI's Close, which is hidden from assistive technology unless a pointer is over the toasts. */}
-        <button
-          type="button"
-          aria-label="Dismiss"
-          onClick={() => close(toast.id)}
-          className={cn(
-            PRESS,
-            'w-(--control) justify-center px-0',
-            failed ? ON_RED : 'text-muted-foreground hover:text-foreground phone:order-last phone:mr-1.5',
-          )}
-        >
-          <XIcon className="size-4" />
-        </button>
+        <span className={cn('flex', !failed && 'phone:order-last phone:mr-1.5')}>{dismiss}</span>
       </div>
-      {undo || action ? (
-        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-(--rule) p-1.5 phone:border-t-0 phone:pl-0">
-          {action ? (
-            <button type="button" className={cn(PRESS, 'text-foreground/75 hover:text-foreground')} onClick={action.onPress}>
-              {action.label}
-            </button>
-          ) : null}
-          {undo ? (
-            <button type="button" aria-keyshortcuts="z" className={cn(PRESS, 'text-highlight')} onClick={undo}>
-              Undo
-              {key}
-            </button>
-          ) : null}
-        </div>
+      {presses ? (
+        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-(--rule) p-1.5 phone:border-t-0 phone:pl-0">{presses}</div>
       ) : null}
     </Base.Root>
   );
 }
+
+const ROOT =
+  'sheet pointer-events-auto flex w-full flex-col bg-popover md:w-[26rem] transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none';
 
 interface ToastOptions {
   description?: string;
@@ -208,6 +273,11 @@ interface ToastOptions {
    * the page was closed or hidden. A press can wait for this before it is sent, so Undo has nothing to take back.
    */
   onGone?: () => void;
+  /**
+   * What the press did, each as its icon and word: the first ("Archived") is the title in place of a kind, and what came
+   * with it (the label it gave, `label`) is under it. The words are then the body: what it was done to.
+   */
+  did?: readonly [Did, ...Did[]];
 }
 
 const SAID = 'said';
@@ -218,7 +288,7 @@ let held: (() => void) | null = null;
 /** Say what a press did. */
 export function useToast(): (title: string, options?: ToastOptions) => void {
   const manager = Base.useToastManager();
-  return (title, { description, kind, tone, action, undo, onGone } = {}) => {
+  return (title, { description, kind, tone, action, undo, onGone, did } = {}) => {
     const failed = tone === 'failure';
     // What is said replaces what was said last; each failure keeps its own place until dismissed.
     const id = failed ? `failure-${++failures}` : SAID;
@@ -245,6 +315,7 @@ export function useToast(): (title: string, options?: ToastOptions) => void {
       data: {
         ...(failed ? {} : { lasts: TIMEOUT[undo || action ? 1 : 0] }),
         ...(kind ? { kind: true } : {}),
+        ...(did ? { did } : {}),
         ...(undo
           ? {
               undo: () => {
