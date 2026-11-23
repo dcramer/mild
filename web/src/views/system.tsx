@@ -97,6 +97,7 @@ import {
   PageFoot,
   PageHeader,
   Panel,
+  Popover,
   AnswerRow,
   MessageHead,
   MessageStack,
@@ -1050,8 +1051,12 @@ export function SystemView() {
               </Button>
             </div>
           </Section>
-          <Section title="Menu, notice and hover card">
+          <Section title="Menu, popover, notice and hover card">
             <div className="flex flex-wrap items-center gap-6">
+              <Popover label="Why">
+                <p>Your answer. Mild said: a bill from a utility you pay.</p>
+                <p>A card under the press on a desktop; a sheet up from the bottom on a phone.</p>
+              </Popover>
               <Menu
                 label="Account, ada@example.org"
                 trigger={<Avatar name="ada@example.org" />}
@@ -1426,6 +1431,11 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
   const [replying, setReplying] = useState<{ title: string; to: (typeof THREAD)[number] } | null>(null);
   const [sending, setSending] = useState<'allowed' | 'not yet'>('allowed');
   const inbox = from === 'inbox';
+  const groups = [
+    LABELS.slice(0, 1).map(([id, name]) => ({ id, label: name, lead: <Meter level={2} /> })),
+    LABELS.slice(1).map(([id, name]) => ({ id, label: name })),
+  ];
+  const said = <p>A reply in a thread you wrote in.</p>;
   const toggle = (id: string) => {
     const next = new Set(open);
     if (!next.delete(id)) next.add(id);
@@ -1460,10 +1470,28 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             presses={
               inbox
                 ? [
-                    { label: 'Archive', key: 'e', onPress: () => toast('Archived') },
-                    { label: 'Mark unread', key: 'Shift+u', quiet: true, onPress: () => toast('Marked unread') },
+                    { label: 'Archive', key: 'e', icon: <ArchiveIcon aria-hidden />, onPress: () => toast('Archived') },
+                    { label: 'Mark unread', key: 'Shift+u', icon: <MailIcon aria-hidden />, onPress: () => toast('Marked unread') },
                   ]
                 : []
+            }
+            label={
+              inbox ? (
+                <>
+                  <LabelPick
+                    size="toolbar"
+                    label="What this message is"
+                    value={INBOX}
+                    groups={groups}
+                    onSubmit={async (id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
+                    extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => toast('Opens adding a label') }}
+                  />
+                  <Popover label="Why">{said}</Popover>
+                  <Button variant="quiet" aria-label="Make a rule…" onClick={() => toast('Opens the rule dialog')}>
+                    Rule…
+                  </Button>
+                </>
+              ) : undefined
             }
             position="2 of 3"
             onPrevious={() => toast('The one before')}
@@ -1481,25 +1509,24 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
         }
         title="Lunch on Thursday?"
         answer={
-          <AnswerRow
-            key={from}
-            picker={{
-              label: 'What this message is',
-              value: INBOX,
-              groups: [
-                LABELS.slice(0, 1).map(([id, name]) => ({ id, label: name, lead: <Meter level={2} /> })),
-                LABELS.slice(1).map(([id, name]) => ({ id, label: name })),
-              ],
-              empty: outcomeName('review'),
-              onSubmit: (id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`),
-            }}
-            why={<p>A reply in a thread you wrote in.</p>}
-            whyOpen={!inbox}
-          >
-            <Button variant="quiet" aria-label="Make a rule…" onClick={() => toast('Opens the rule dialog')}>
-              Rule…
-            </Button>
-          </AnswerRow>
+          inbox ? undefined : (
+            <AnswerRow
+              key={from}
+              picker={{
+                label: 'What this message is',
+                value: INBOX,
+                groups,
+                empty: outcomeName('review'),
+                onSubmit: (id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`),
+              }}
+              why={said}
+              whyOpen
+            >
+              <Button variant="quiet" aria-label="Make a rule…" onClick={() => toast('Opens the rule dialog')}>
+                Rule…
+              </Button>
+            </AnswerRow>
+          )
         }
         side={
           inbox ? undefined : (

@@ -83,9 +83,10 @@ interface Press {
   onPress: () => void;
   disabled?: boolean;
   quiet?: boolean;
+  icon?: ReactNode;
 }
 
-/** Presses on what the reader shows, each with its key, on one line: Archive and Mark unread in its bar, Reply, Reply all and Forward under the conversation. */
+/** Presses on what the reader shows, each with its key, on one line: Reply, Reply all and Forward under the conversation. */
 export function Presses({ presses }: { presses: readonly Press[] }) {
   return (
     <span className="flex min-w-0 items-center gap-1.5">
@@ -99,14 +100,16 @@ export function Presses({ presses }: { presses: readonly Press[] }) {
 }
 
 /**
- * The top of the reader: back to the list by its name (Esc), the presses on what it shows, where it is in the list,
- * and previous and next (K and J, or ← and →). On a phone it is Back and the steps alone: the presses are the `Reader`'s
- * `thumbs`, at the bottom of the screen.
+ * The top of the reader, a mail app's toolbar of icons, each named with its key when pointed at: back to the list (Esc),
+ * the presses on what it shows, then after a rule what the message is (`label`: Mild's part of the reader, as the
+ * reader's own toolbar holds it), and at the end where it is in the list, and previous and next (K and J, or ← and →).
+ * On a phone the presses are the `Reader`'s `thumbs`, at the bottom of the screen, and `label` stays.
  */
 export function ReaderBar({
   back,
   onBack,
   presses = NO_PRESSES,
+  label,
   position,
   onPrevious,
   onNext,
@@ -114,7 +117,9 @@ export function ReaderBar({
   /** The list's name: "Inbox". */
   back: string;
   onBack: () => void;
+  /** With an `icon` a press is drawn as that alone; without one, in words with its key (a proposal's Make the rule…). */
   presses?: readonly Press[];
+  label?: ReactNode;
   /** "3 of 12". */
   position?: string | undefined;
   onPrevious?: (() => void) | undefined;
@@ -122,22 +127,42 @@ export function ReaderBar({
 }) {
   const stepping = onPrevious !== undefined || onNext !== undefined;
   return (
-    <div className="flex items-center gap-x-3 phone:gap-x-1.5">
-      <Button
-        variant="quiet"
-        className="-ml-3 phone:w-11 phone:justify-center phone:px-0"
-        aria-label={`Back to ${back}`}
-        shortcut={{ key: 'Escape', label: 'Back to the list' }}
-        onClick={onBack}
-      >
-        <ArrowLeftIcon aria-hidden />
-        <span className="phone:hidden">{back}</span>
-      </Button>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+    <div className="flex items-center gap-x-1">
+      <Named label={`Back to ${back}`} keys="Escape">
+        <Button
+          variant="quiet"
+          size="icon"
+          className="-ml-2.5"
+          aria-label={`Back to ${back}`}
+          shortcut={{ key: 'Escape', label: 'Back to the list' }}
+          onClick={onBack}
+        >
+          <ArrowLeftIcon aria-hidden />
+        </Button>
+      </Named>
+      <div className="flex min-w-0 flex-1 items-center gap-1">
         {presses.length > 0 ? (
-          <span className="contents phone:hidden">
-            <Presses presses={presses} />
+          <span className="flex items-center gap-1 phone:hidden">
+            {presses.map((p) =>
+              p.icon ? (
+                <Named key={p.label} label={p.label} keys={p.key}>
+                  <Button variant="quiet" size="icon" aria-label={p.label} shortcut={{ key: p.key, label: p.label }} disabled={p.disabled} onClick={p.onPress}>
+                    {p.icon}
+                  </Button>
+                </Named>
+              ) : (
+                <Button key={p.label} {...(p.quiet ? { variant: 'quiet' as const } : {})} shortcut={p.key} disabled={p.disabled} onClick={p.onPress}>
+                  {p.label}
+                </Button>
+              ),
+            )}
           </span>
+        ) : null}
+        {label ? (
+          <>
+            {presses.length > 0 ? <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-(--rule) phone:hidden" /> : null}
+            <span className="flex min-w-0 items-center gap-1">{label}</span>
+          </>
         ) : null}
         {position ? <span className="ml-auto px-2 text-sm whitespace-nowrap text-muted-foreground tabular-nums phone:hidden">{position}</span> : null}
         {stepping && !position ? <span className="ml-auto" /> : null}
@@ -153,14 +178,31 @@ export function ReaderBar({
   );
 }
 
-/** Previous or next in the list. Its keys work only while there is somewhere to go; the first is drawn. */
+/** Previous or next in the list. Its keys work only while there is somewhere to go; the first is said when pointed at. */
 function Step({ label, keys, onPress, icon }: { label: string; keys: readonly string[]; onPress: (() => void) | undefined; icon: ReactNode }) {
-  const hint = useShortcut(keys, label, () => onPress?.(), { enabled: onPress !== undefined });
+  void useShortcut(keys, label, () => onPress?.(), { enabled: onPress !== undefined });
   return (
-    <Button variant="quiet" aria-label={label} aria-keyshortcuts={keys.join(' ')} disabled={!onPress} onClick={() => onPress?.()} className="px-2">
-      {icon}
-      {hint ? <Kbd className="hidden md:inline-flex">{keyName(keys[0])}</Kbd> : null}
-    </Button>
+    <Named label={label} keys={keys[0]}>
+      <Button variant="quiet" size="icon" aria-label={label} aria-keyshortcuts={keys.join(' ')} disabled={!onPress} onClick={() => onPress?.()}>
+        {icon}
+      </Button>
+    </Named>
+  );
+}
+
+/** An icon in the toolbar, named with its key when pointed at. */
+function Named({ label, keys, children }: { label: string; keys: string; children: ReactNode }) {
+  return (
+    <Tooltip
+      says={
+        <span className="flex items-center gap-2">
+          {label}
+          <Kbd>{keyName(keys)}</Kbd>
+        </span>
+      }
+    >
+      {children}
+    </Tooltip>
   );
 }
 

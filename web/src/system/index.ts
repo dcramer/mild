@@ -28,6 +28,7 @@ export { Callout, CalloutKey } from './callout.tsx';
 export { Notice } from './notice.tsx';
 export { ListPage, PageHeader, Section } from './page.tsx';
 export { Panel } from './panel.tsx';
+export { Popover } from './popover.tsx';
 export { Rail } from './rail.tsx';
 export { AnswerRow, MessageHead, MessageStack, Presses, Reader, ReaderBar } from './reader.tsx';
 export type { Thumb } from './thumbs.tsx';
