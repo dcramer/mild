@@ -15,7 +15,6 @@ import {
   query,
   refused,
   row,
-  toasts,
   section,
   settingsActive,
   settled,
@@ -361,7 +360,7 @@ test.describe('Adding a label from an open message', () => {
     await expect(reader(page)).toBeVisible();
     await expect(page).toHaveURL(AT);
     await choose(reader(page), 'Field trips');
-    await expect(toasts(page)).toContainText('as Field trips');
+    await expect(toast(page, 'Lunch on Thursday?')).toContainText(/Archived\s*to\s*Field trips/);
   });
 
   test('a suggested label is a choice in the same panel', async ({ page }) => {

@@ -55,7 +55,7 @@ test.describe('The reader, from For review', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Winter sale starts now');
     await open.getByRole('button', { name: 'Agree: Marketing' }).click();
-    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(toast(page, 'Winter sale starts now')).toBeVisible();
     await expect(readerHeading(page, 'Disk 91% full on db-2')).toBeVisible();
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
 

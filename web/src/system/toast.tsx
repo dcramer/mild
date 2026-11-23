@@ -45,9 +45,26 @@ function Given({ did }: { did: readonly Did[] }) {
   );
 }
 
+/** What a press did, under what it was done to: its icon and word, then "as" or "to" the labels it gave, then the rest. */
+function Done({ did: [first, ...also] }: { did: readonly [Did, ...Did[]] }) {
+  const labels = also.filter((d) => d.action === 'label');
+  return (
+    <>
+      <span className="inline-flex shrink-0 items-center gap-1.5 font-medium whitespace-nowrap text-foreground">
+        <ActionIcon action={first.action} />
+        {first.word}
+      </span>
+      {labels.length > 0 ? <span>{first.action === 'keep' ? 'as' : 'to'}</span> : null}
+      <Given did={labels} />
+      <Given did={also.filter((d) => d.action !== 'label')} />
+    </>
+  );
+}
+
 /**
- * What a press did, said once, after the list it changed has moved on: "Archive as Marketing", or what was
- * made ("Mail from shop.example.com: archive it") under what kind of thing it is ("Rule added"). A slip: its
+ * What a press did, said once, after the list it changed has moved on: the mail it was done to over what was done
+ * ("Archived" to Marketing), or what was made ("Mail from shop.example.com: archive it") under what kind of thing it is
+ * ("Rule added"). A slip: its
  * words in a block of their own, wrapping freely, and its presses on a row under a rule, so neither crowds
  * the other however long the words. A new one replaces the last, so Undo (and Z, Gmail's key for it) always
  * takes back the latest. It floats as a menu does, framed with the one shadow, and Undo is in the
@@ -189,25 +206,20 @@ function Receipt({ toast, front, close }: { toast: Base.Root.ToastObject<Own>; f
       </>
     ) : null;
   if (did) {
-    const [first, ...also] = did;
-    const labels = also.filter((d) => d.action === 'label');
-    // One row, as Gmail's: what was done, the labels it gave, and the presses. The row it was done to has just left the
-    // list, so what it was is said to a screen reader alone.
+    // Two rows, on a phone as on a desktop: the mail with its close button, then what was done with its presses at the end
+    // of its first line, where they stay however it wraps.
     return (
       <Base.Root toast={toast} swipeDirection={['down', 'right']} {...hold} className={ROOT}>
-        <div className="flex items-center gap-2 p-1.5 pl-4">
-          <span className="flex min-h-(--control) min-w-0 grow flex-wrap items-center gap-x-1.5 gap-y-1">
-            <span className="mr-0.5 inline-flex shrink-0 items-center gap-1.5 text-base font-semibold whitespace-nowrap">
-              <ActionIcon action={first.action} />
-              {first.word}
-            </span>
-            {labels.length > 0 ? <span className="text-sm text-muted-foreground">{first.action === 'keep' ? 'as' : 'to'}</span> : null}
-            <Given did={labels} />
-            <Given did={also.filter((d) => d.action !== 'label')} />
-            <Base.Title render={<span />} className="sr-only" />
-          </span>
-          {presses}
+        <div className="flex items-center gap-2 pt-1.5 pr-1.5 pl-4">
+          <Base.Title render={<span />} className="min-w-0 grow truncate text-base leading-snug font-medium" />
           {dismiss}
+        </div>
+        <div className="flex items-start gap-2 pr-1.5 pb-1.5 pl-4">
+          {/* Padded to a press's height, so its first line is level with them. */}
+          <Base.Description render={<span />} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 py-1.5 text-sm text-muted-foreground">
+            <Done did={did} />
+          </Base.Description>
+          {presses ? <span className="flex shrink-0 items-center gap-1">{presses}</span> : null}
         </div>
       </Base.Root>
     );
@@ -264,10 +276,7 @@ interface ToastOptions {
    * the page was closed or hidden. A press can wait for this before it is sent, so Undo has nothing to take back.
    */
   onGone?: () => void;
-  /**
-   * What the press did, each as its icon and word: the first ("Archived") is the title in place of a kind, and what came
-   * with it (the label it gave, `label`) is under it. The words are then the body: what it was done to.
-   */
+  /** A press on mail: the title is what it was done to (the subject), and these, under it, what was done ("Archived" to the label it gave). */
   did?: readonly [Did, ...Did[]];
 }
 

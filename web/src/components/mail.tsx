@@ -75,7 +75,7 @@ export function useMailPress(): {
           given.push({ address, was: reply.was });
         }
         const blocked = senders.length === 1 ? `Blocked ${senders[0]}` : `Blocked ${senders.length} senders`;
-        held(threads, 'spam', blocked, didOf(threads, 'spam', { action: 'block', word: blocked }), () =>
+        held(threads, 'spam', said(threads), didOf(threads, 'spam', { action: 'block', word: blocked }), () =>
           undo.hide([], 'Could not undo it', () =>
             Promise.all(given.map(({ address, was }) => (was ? api.giveStanding({ address }, was) : api.clearStanding({ address })))),
           ),

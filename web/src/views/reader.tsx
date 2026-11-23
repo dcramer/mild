@@ -473,6 +473,7 @@ function OpenedMessage({
   const target = {
     accountId: detail.accountId,
     sender: reveal(detail.fromAddress),
+    subject: reveal(detail.subject),
     messageId: detail.messageId,
     labelId: current?.labelId ?? null,
     ...(current ? { decisionId: current.id } : {}),
@@ -482,6 +483,7 @@ function OpenedMessage({
     waitingNow.map((m) => ({
       accountId: m.accountId,
       sender: reveal(detail.fromAddress),
+      subject: reveal(m.subject),
       messageId: m.messageId,
       decisionId: m.decisionId,
       labelId: m.labelId,

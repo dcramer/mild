@@ -30,7 +30,7 @@ test.describe('Answering mail', () => {
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 12');
 
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
-    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(toast(page, 'Winter sale starts now')).toContainText(/Archived\s*to\s*Marketing/);
     await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
     await expect(reader(page)).toHaveCount(0);
@@ -44,7 +44,7 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const store = row(page, 'Winter sale starts now');
     await choose(store, 'Notifications');
-    await expect(toast(page, 'Archive as Notifications')).toBeVisible();
+    await expect(toast(page, 'Winter sale starts now')).toBeVisible();
     await expect(store).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
     await expect(reader(page)).toHaveCount(0);
@@ -53,7 +53,7 @@ test.describe('Answering mail', () => {
   test('picking Mild’s own label from the list answers it too', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Winter sale starts now'), 'Marketing');
-    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(toast(page, 'Winter sale starts now')).toBeVisible();
     await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
   });
 
@@ -62,7 +62,7 @@ test.describe('Answering mail', () => {
     const dependabot = row(page, '3 messages');
     await expect(dependabot.getByRole('cell', { name: 'Bump lodash from 4.17.20 to 4.17.21' })).toBeVisible();
     await dependabot.getByRole('button', { name: 'Agree: Notifications' }).click();
-    await expect(toast(page, 'Archive as Notifications: 3 messages')).toBeVisible();
+    await expect(toast(page, '3 messages')).toBeVisible();
     await expect(dependabot).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 9');
     await expect(row(page, '2 messages')).toBeVisible();
@@ -76,7 +76,7 @@ test.describe('Answering mail', () => {
     await expect(open.getByRole('button', { name: 'Choose what it is' })).toBeDisabled();
 
     await choose(open, 'Marketing');
-    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(toast(page, 'Lunch on Thursday?')).toBeVisible();
     await expect(open).toHaveCount(0);
     await param(page, 'message').toBeNull();
     await expect(page.getByText('Nothing waiting matches.')).toBeVisible();
@@ -88,7 +88,7 @@ test.describe('Answering mail', () => {
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
 
-    const said = toast(page, 'Archive as Notifications');
+    const said = toast(page, 'Disk 91% full on db-2');
     await expect(said.getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
     await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
@@ -106,8 +106,8 @@ test.describe('Answering mail', () => {
     await choose(open, 'Notifications');
     await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
 
-    await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
-    await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
+    await toast(page, 'Disk 91% full on db-2').getByRole('button', { name: 'Same for 1 more' }).click();
+    await expect(toast(page, 'Replica lag on db-3')).toBeVisible();
     await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
     await putAway(page);
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Notifications');
@@ -121,8 +121,8 @@ test.describe('Answering mail', () => {
     await open.getByRole('button', { name: 'Next' }).click();
     await expect(readerHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
 
-    await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
-    await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
+    await toast(page, 'Disk 91% full on db-2').getByRole('button', { name: 'Same for 1 more' }).click();
+    await expect(toast(page, 'Replica lag on db-3')).toBeVisible();
     await expect(readerHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
     await param(page, 'message').toBe('m14');
   });
@@ -134,8 +134,8 @@ test.describe('Answering mail', () => {
 
     await reviewSearch(page).fill('');
     await openMessage(page, 'Notes from the review');
-    await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
-    await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
+    await toast(page, 'Replica lag on db-3').getByRole('button', { name: 'Same for 1 more' }).click();
+    await expect(toast(page, 'Disk 91% full on db-2')).toBeVisible();
     await expect(readerHeading(page, 'Notes from the review')).toBeVisible();
     await param(page, 'message').toBe('m7');
   });
@@ -145,8 +145,8 @@ test.describe('Answering mail', () => {
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
     await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
-    await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
-    await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
+    await toast(page, 'Disk 91% full on db-2').getByRole('button', { name: 'Same for 1 more' }).click();
+    await expect(toast(page, 'Replica lag on db-3')).toBeVisible();
 
     await back(page).click();
     await expect(open).toHaveCount(0);
@@ -157,8 +157,8 @@ test.describe('Answering mail', () => {
   test('“Same for 1 more” answers the sender’s other waiting message', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Replica lag on db-3'), 'Notifications');
-    await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Same for 1 more' }).click();
-    await expect(toast(page, 'Archive as Notifications: 1 more')).toBeVisible();
+    await toast(page, 'Replica lag on db-3').getByRole('button', { name: 'Same for 1 more' }).click();
+    await expect(toast(page, 'Disk 91% full on db-2')).toBeVisible();
     await expect(row(page, 'Disk 91% full on db-2')).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 10');
     await expect(reader(page)).toHaveCount(0);
@@ -266,13 +266,13 @@ test.describe('An answer on its way', () => {
     const sent = answersSent(page);
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
-    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(toast(page, 'Winter sale starts now')).toBeVisible();
     await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
     expect(sent()).toBe(0);
 
     await putAway(page);
-    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+    await expect(toast(page, 'Winter sale starts now')).toHaveCount(0);
     await expect.poll(sent).toBe(1);
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
     await page.reload();
@@ -285,12 +285,12 @@ test.describe('An answer on its way', () => {
     await page.clock.install();
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
-    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(toast(page, 'Winter sale starts now')).toBeVisible();
     // The row is low on the screen, where the toast comes up, and a toast pointed at waits.
     await page.mouse.move(0, 0);
     await page.clock.runFor(8000);
     await page.clock.resume();
-    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+    await expect(toast(page, 'Winter sale starts now')).toHaveCount(0);
     await expect.poll(sent).toBe(1);
   });
 
@@ -299,22 +299,22 @@ test.describe('An answer on its way', () => {
     await page.clock.install();
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
-    await expect(toast(page, 'Archive as Marketing')).toBeVisible();
+    await expect(toast(page, 'Winter sale starts now')).toBeVisible();
     await page.mouse.move(0, 0);
     await page.evaluate("window.dispatchEvent(new FocusEvent('blur'))");
     await page.clock.runFor(8000);
     await page.clock.resume();
-    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+    await expect(toast(page, 'Winter sale starts now')).toHaveCount(0);
     await expect.poll(sent).toBe(1);
   });
 
   test("its toast's close button is level with its words, which take no more height than the presses under them", async ({ page }) => {
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
-    const said = toast(page, 'Archive as Marketing');
+    const said = toast(page, 'Winter sale starts now');
     await expect(said).toBeVisible();
     const box = await boxOf(said);
-    const words = await boxOf(said.getByText('Archive as Marketing', { exact: true }));
+    const words = await boxOf(said.getByText('Winter sale starts now', { exact: true }));
     const close = await boxOf(said.getByRole('button', { name: 'Dismiss' }));
     const undo = await boxOf(said.getByRole('button', { name: 'Undo' }));
     expect(Math.abs(close.y + close.height / 2 - (words.y + words.height / 2))).toBeLessThan(2);
@@ -325,8 +325,8 @@ test.describe('An answer on its way', () => {
     const sent = answersSent(page);
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
-    await toast(page, 'Archive as Marketing').getByRole('button', { name: 'Dismiss' }).click();
-    await expect(toast(page, 'Archive as Marketing')).toHaveCount(0);
+    await toast(page, 'Winter sale starts now').getByRole('button', { name: 'Dismiss' }).click();
+    await expect(toast(page, 'Winter sale starts now')).toHaveCount(0);
     await expect.poll(sent).toBe(1);
   });
 
@@ -339,7 +339,7 @@ test.describe('An answer on its way', () => {
       await page.goto('/');
       await (viewport ? page.getByRole('row').filter({ hasText: 'Winter sale starts now' }).click() : openMessage(page, 'Winter sale starts now'));
       await reader(page).getByRole('button', { name: 'Agree: Marketing' }).click();
-      const said = toast(page, 'Archive as Marketing');
+      const said = toast(page, 'Winter sale starts now');
       await expect(said).toBeVisible();
       const next = await boxOf(reader(page).getByRole('button', { name: 'Next' }));
       const box = await boxOf(said);
@@ -351,8 +351,8 @@ test.describe('An answer on its way', () => {
     const sent = answersSent(page);
     await page.goto('/');
     await choose(row(page, 'Winter sale starts now'), 'Notifications');
-    await toast(page, 'Archive as Notifications').getByRole('button', { name: 'Undo' }).click();
-    await expect(toast(page, 'Archive as Notifications')).toHaveCount(0);
+    await toast(page, 'Winter sale starts now').getByRole('button', { name: 'Undo' }).click();
+    await expect(toast(page, 'Winter sale starts now')).toHaveCount(0);
     await expect(row(page, 'Winter sale starts now')).toBeVisible();
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 12');
 
@@ -367,7 +367,7 @@ test.describe('An answer on its way', () => {
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
     await choose(row(page, 'Notes from the review'), 'Notifications');
-    await expect(toast(page, 'Archive as Notifications')).toBeVisible();
+    await expect(toast(page, 'Notes from the review')).toBeVisible();
     await expect.poll(sent).toBe(1);
 
     await page.keyboard.press('z');
@@ -381,7 +381,7 @@ test.describe('An answer on its way', () => {
     await page.goto('/');
     await row(page, '3 messages').getByRole('button', { name: 'Agree: Notifications' }).click();
     await expect(row(page, '3 messages')).toHaveCount(0);
-    await toast(page, 'Archive as Notifications: 3 messages').getByRole('button', { name: 'Undo' }).click();
+    await toast(page, '3 messages').getByRole('button', { name: 'Undo' }).click();
     await expect(row(page, '3 messages')).toBeVisible();
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 12');
   });

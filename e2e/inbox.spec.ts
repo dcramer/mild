@@ -254,9 +254,9 @@ test.describe('Inbox', () => {
 
     // Receipts archives: the row goes at once, and Undo puts it back with nothing sent.
     await pick('Receipts');
-    await expect(toast(page, 'Archive as Receipts')).toBeVisible();
+    await expect(toast(page, 'Your order has shipped')).toBeVisible();
     await expect(row).toHaveCount(0);
-    await toast(page, 'Archive as Receipts').getByRole('button', { name: 'Undo' }).click();
+    await toast(page, 'Your order has shipped').getByRole('button', { name: 'Undo' }).click();
     await expect(await label()).toContainText('Personal');
     expect(sent()).toBe(1);
 
@@ -289,7 +289,7 @@ test.describe('Inbox', () => {
     await putAway(page);
     await expect(label).toContainText('Personal');
     await page.getByRole('option', { name: 'Receipts', exact: true }).click();
-    await expect(toast(page, 'Archive as Receipts')).toBeVisible();
+    await expect(toast(page, 'Your order has shipped')).toBeVisible();
     await expect(row).toHaveCount(0);
   });
 
@@ -624,8 +624,8 @@ test.describe('Inbox', () => {
     await pointAt(sale);
     await sale.getByRole('button', { name: 'Block sender' }).click();
     await expect(sale).toHaveCount(0);
-    const blocked = toast(page, 'Blocked sale@store.example.com');
-    await expect(blocked).toBeVisible();
+    const blocked = toast(page, 'Winter sale starts now');
+    await expect(blocked).toContainText('Blocked sale@store.example.com');
     await blocked.getByRole('button', { name: /^Undo/ }).click();
     await expect(sale).toBeVisible();
     expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('SPAM');
@@ -635,7 +635,7 @@ test.describe('Inbox', () => {
     await page.goto('/inbox');
     await pointAt(sale);
     await sale.getByRole('button', { name: 'Block sender' }).click();
-    await dismiss(page, 'Blocked sale@store.example.com');
+    await dismiss(page, 'Winter sale starts now');
     await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
     await page.goto('/sender/sale%40store.example.com');
     await expect(page.getByRole('button', { name: 'Block', pressed: true })).toBeVisible();

@@ -168,7 +168,7 @@ test.describe('On a phone', () => {
     expect(box.y + box.height).toBeLessThan(PHONE.height / 2);
   });
 
-  test('archiving from the reader says so in one line, above the presses at the bottom', async ({ page }) => {
+  test('archiving from the reader says so in two rows, the subject over what was done and Undo, above the presses at the bottom', async ({ page }) => {
     await page.goto('/inbox');
     await conversations(page).filter({ hasText: 'Your March bill' }).click();
     const archive = reader(page).getByRole('button', { name: 'Archive', exact: true });
@@ -176,9 +176,11 @@ test.describe('On a phone', () => {
     const said = toast(page, 'Your March bill');
     await expect(said).toBeVisible();
     const box = await boxOf(said);
-    expect(box.height).toBeLessThan(64);
+    expect(box.height).toBeLessThan(88);
     expect(box.y + box.height).toBeLessThanOrEqual((await boxOf(archive)).y);
-    await expect(said.getByRole('button', { name: /^Undo/ })).toBeVisible();
+    const subject = await boxOf(said.getByText('Your March bill', { exact: true }));
+    const undo = await boxOf(said.getByRole('button', { name: /^Undo/ }));
+    expect(undo.y).toBeGreaterThanOrEqual(subject.y + subject.height);
   });
 });
 
