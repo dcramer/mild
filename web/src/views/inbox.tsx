@@ -153,7 +153,6 @@ function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabe
   };
   return (
     <LabelPick
-      key={`${thinks?.decisionId ?? 'undecided'}/${thinks?.labelId ?? ''}`}
       label={`What ${reveal(thread.subject) || '(no subject)'} is`}
       value={thinks?.labelId ?? null}
       groups={answerChoices(labels, target, thinks ? sureness(thinks) : 1, [])}
