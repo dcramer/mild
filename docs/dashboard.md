@@ -28,7 +28,7 @@ A sender's name anywhere is a link to their page: what Mild knows about them, th
 
 ## What Mild leaves in Gmail
 
-Mail Mild acts on gets its label (`mild/newsletters`) and, if Mild moved it, a second one for what Mild did (`mild/did/archived`, `mild/did/spam`). Mail it could not place gets `mild/review` and stays in the inbox. So everything Mild touched can be found in Gmail itself. Removing a mailbox from Mild leaves these labels, and the filters it wrote; delete the filters in Gmail's settings if you no longer want them.
+Mail Mild acts on gets the Gmail label of the label it is (`mild/newsletters`), and no label of Mild's own: what Mild did is in its log (Activity), not in Gmail. Mail it could not place stays in the inbox as it was, or with the label the model guessed. Removing a mailbox from Mild leaves these labels, and the filters it wrote; delete the filters in Gmail's settings if you no longer want them.
 
 ## Working on the page
 

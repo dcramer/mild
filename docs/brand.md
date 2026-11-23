@@ -13,12 +13,12 @@ Mild sounds like a friend who is good with email and a little smug about it. Cas
 - **Mild is "Mild", the reader is "you".** It doesn't say "I" or "we", and it doesn't have feelings about your inbox.
 - **Never:** exclamation marks, emoji, "Oops", "Uh oh", "Yay", "Hey there", "We're excited", "seamless", "effortless", "supercharge", "AI-powered", "magic", "inbox zero" as a promise.
 
-| Instead of | Say |
-| --- | --- |
-| You're all caught up! 🎉 | Nothing is waiting on you. |
-| Oops! Something went wrong. | Couldn't load your labels. (Then the error.) |
+| Instead of                                     | Say                                                         |
+| ---------------------------------------------- | ----------------------------------------------------------- |
+| You're all caught up! 🎉                       | Nothing is waiting on you.                                  |
+| Oops! Something went wrong.                    | Couldn't load your labels. (Then the error.)                |
 | Our AI-powered engine is analyzing your inbox… | Mild is going through your inbox. What it reads shows here. |
-| Unsubscribe successful! | Unsubscribed. |
+| Unsubscribe successful!                        | Unsubscribed.                                               |
 
 ## Drawings
 

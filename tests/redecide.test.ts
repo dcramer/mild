@@ -36,6 +36,8 @@ let db: Sql;
 let serial: number;
 
 const MARKETING = { disposition: 'archive', labelId: 'marketing', gmailLabel: 'mild/marketing', subscription: 'preserve' } as const;
+/** Left for review, with the label the model guessed. */
+const MARKETING_GUESS = { labelId: 'marketing', gmailLabel: 'mild/marketing' } as const;
 
 /** A message from `address` with the decision Mild suggested for it. Returns the message id. */
 async function decided(address: string, decision: Partial<Decision> = {}, at = ++serial): Promise<string> {
@@ -186,11 +188,11 @@ describe('when a rule changes', () => {
     expect(await current(underLearned)).toMatchObject({ stage: 'rules', disposition: 'keep' });
     expect(await waiting()).toEqual([sale, underLearned].toSorted());
   });
-  it("mail Mild marked for review while on is settled by a rule of the user's that decides it, and its mark taken back", async () => {
+  it("mail Mild left for review while on is settled by a rule of the user's that decides it, and the label it guessed taken back", async () => {
     const { mailbox, gmail } = connectGmail(fake.google);
     const labelsOf = (id: string) => gmail.message(id)!.labelIds;
     const asked = async (address: string) => {
-      const id = await decided(address);
+      const id = await decided(address, MARKETING_GUESS);
       await raw(db).run('UPDATE decisions SET carry_out = true WHERE message_id = ?', id);
       gmail.deliver({ id, from: address, labelIds: ['INBOX'] });
       return id;
@@ -200,7 +202,7 @@ describe('when a rule changes', () => {
     const ops = await asked('ops@example.com');
     const account = await firstAccount(db);
     await triageAccount({ db, mailbox }, account);
-    expect(labelsOf(sale)).toEqual(['INBOX', gmail.labelId('mild/review')]);
+    expect(labelsOf(sale)).toEqual(['INBOX', gmail.labelId('mild/marketing')]);
 
     await addRule(db, { match: { from: ['sales@example.com'] }, disposition: 'archive' }, 'user');
     // Not the user's, and one a model must check: neither takes mail from them.
@@ -213,8 +215,8 @@ describe('when a rule changes', () => {
 
     for (const mark of marks) await undo({ db, mailbox }, mark);
     await triageAccount({ db, mailbox }, account);
-    expect(labelsOf(sale)).toEqual([gmail.labelId('mild/did/archived')]);
-    expect(labelsOf(news)).toEqual(['INBOX', gmail.labelId('mild/review')]);
+    expect(labelsOf(sale)).toEqual([]);
+    expect(labelsOf(news)).toEqual(['INBOX', gmail.labelId('mild/marketing')]);
   });
 
   it('removing a rule Mild learned brings back what it decided, even mail it was the first to decide', async () => {

@@ -187,6 +187,7 @@ async function send(path: string, init: RequestInit, unreachable: string): Promi
     throw new Unreachable(unreachable);
   }
   onlineManager.setOnline(true);
+  heardBuild(response.headers.get('x-sift-build'));
   return response;
 }
 
@@ -223,6 +224,10 @@ async function reason(response: Response): Promise<Said> {
     return {};
   }
 }
+
+/** Told which build Mild is, as every reply says (`x-sift-build`): `web/src/lib/build.ts` listens. */
+let heardBuild: (build: string | null) => void = () => {};
+export const onBuild = (heard: (build: string | null) => void) => void (heardBuild = heard);
 
 /** Told the person's counter after each write Mild took (`x-sift-seq`): the page's copy holds the change once it has read that far (docs/sync.md). */
 let wrote: (seq: number) => void = () => {};

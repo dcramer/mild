@@ -328,7 +328,7 @@ describe('a press that says what the mail is', () => {
     const { box, me, id } = await placed('receipts');
     const { actions } = await archive(me, id);
     expect(actions).toHaveLength(1);
-    expect(box.message(id)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts'), box.labelId('mild/did/archived')]);
+    expect(box.message(id)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
     expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'receipts' }]);
     expect(((await me.call('GET', '/api/decisions')).body['rows'] as unknown[])[0]).toMatchObject({
       messageId: id,
@@ -348,7 +348,7 @@ describe('a press that says what the mail is', () => {
     expect(said.status).toBe(200);
     expect(box.message(id)!.labelIds).toContain('INBOX');
     await archive(me, id);
-    expect(box.message(id)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts'), box.labelId('mild/did/archived')]);
+    expect(box.message(id)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
   });
 
   it('only records the label when the press does something else, and the press goes ahead', async () => {

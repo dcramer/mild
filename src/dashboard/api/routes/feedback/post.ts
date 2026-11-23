@@ -10,7 +10,7 @@ export default write({
   run: async ({ db, controls, now, said }, answer) => {
     // An answer pressed here is carried out on its message whether or not they have Mild on, unless it says not to.
     const result = await applyFeedback(db, { ...answer, carryOut: answer.carryOut ?? true }, now());
-    // What Mild did to a message it now has a new answer for is taken back first: the review mark on mail
+    // What Mild did to a message it now has a new answer for is taken back first: the label it guessed for mail
     // it asked about while on, and its change to a corrected one. putBack starts the pass that carries the answer out.
     const back = [...result.asked, ...(result.corrected === null ? [] : [result.corrected])];
     if (back.length === 0 || !controls) {

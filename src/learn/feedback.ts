@@ -216,7 +216,7 @@ interface FeedbackResult {
   corrected: string | null;
   /** How many messages now have the answer waiting to be carried out in Gmail. */
   carrying: number;
-  /** Messages this answer settled that Mild had marked for review in Gmail, so the caller can take that mark back, carried out or not. */
+  /** Messages this answer settled that Mild had left for review while on, so the caller can take back a label it guessed, carried out or not. */
   asked: string[];
 }
 

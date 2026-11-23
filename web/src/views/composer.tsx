@@ -60,7 +60,10 @@ const TITLES = { new: 'New message', reply: 'Reply', all: 'Reply to all', forwar
  * on a press, a subject and the text. What is written is kept in this browser until it is sent or discarded, so closing
  * it, or a reload, loses nothing.
  */
-/** The person's drafts as Mild has them, which another device may have written: the composer waits for them to open one. */
+/**
+ * The person's drafts as Mild has them, which another device may have written. The composer opens without them, from
+ * what this browser kept, and takes Mild's copy as it comes if it is newer.
+ */
 const useSaved = () => useLoaded('drafts', (signal) => api.drafts(signal), 60_000, '');
 
 /** Mild's copy of the draft for `what`, as the composer holds one, and when it is scheduled to go or why it did not. */
@@ -80,12 +83,8 @@ export function Composer({ to, draft, onClose }: { to: string; draft: string; on
   // Every address that may send, and the one it starts on even if it may not yet, so the composer can say so.
   const start = accounts.find((a) => a.id === chosen) ?? accounts.find((a) => a.primary && a.canSend) ?? accounts.find((a) => a.canSend) ?? accounts[0];
   const what: Writing = { kind: 'new', ...(to ? { to } : {}), ...(draft ? { draft } : {}) };
-  if (!start || (!saved.data && !saved.error))
-    return (
-      <Panel narrow open onClose={onClose} title={TITLES.new}>
-        <Loading />
-      </Panel>
-    );
+  // Offered only once the mailboxes are known, so there is always one to start from.
+  if (!start) return null;
   return (
     <Writer
       what={what}
@@ -118,7 +117,7 @@ export function InlineComposer({
   const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000, '');
   const saved = useSaved();
   const account = manage.data?.accounts.find((a) => a.id === message.accountId);
-  if (!account || (!saved.data && !saved.error)) return <Loading rows={3} />;
+  if (!account) return <Loading rows={3} />;
   const choices = addressesOf(account);
   return (
     <Writer
@@ -257,6 +256,12 @@ function Writer({
   const who = useLoaded('session', (signal) => api.session(signal), 300_000, '').data?.email ?? '';
   const client = useQueryClient();
   const [draft, setDraft] = useState(() => keptDraft(who, what, saved?.draft ?? null) ?? start);
+  // Mild's copy, come since it opened: the newer is kept, as it was as it opened.
+  const [offered, setOffered] = useState(saved?.draft.at ?? 0);
+  if (saved && saved.draft.at !== offered) {
+    setOffered(saved.draft.at);
+    if (saved.draft.at > draft.at) setDraft(saved.draft);
+  }
   // Said over the draft until it changes, which makes it a draft again, as in Gmail.
   const scheduled = saved !== null && draft.at <= saved.draft.at ? saved : null;
   // Saved to Mild once the writing pauses, and as the composer closes; never once it is sent or discarded.

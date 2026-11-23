@@ -29,4 +29,3 @@ sh docker/smoke.sh
 ```
 
 builds the image, runs it as `compose.yaml` does (read-only, no capabilities, a fresh volume) and checks that it answers `/api/session` and stops cleanly. It is not part of `pnpm check`.
-

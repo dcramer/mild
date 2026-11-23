@@ -70,6 +70,15 @@ describe('cleaning a message for the frame', () => {
     expect(cleanHtml('<img src="javascript:alert(1)" onerror="alert(2)">', true)).toBe('<img>');
   });
 
+  it('reads mail as written for light, whatever the reader’s system is set to', () => {
+    expect(clean('<style>@media (prefers-color-scheme: dark){p{color:#e8eaed}}@media not (PREFERS-COLOR-SCHEME:light){a{color:#8ab4f8}}</style>')).toBe(
+      '<style>@media (grid:1){p{color:#e8eaed}}@media not (grid:0){a{color:#8ab4f8}}</style>',
+    );
+    expect(clean('<picture><source media="(prefers-color-scheme:dark)" srcset="data:image/png;base64,AAAA"></picture>')).toBe(
+      '<picture><source media="(grid:1)" srcset="data:image/png;base64,AAAA"></picture>',
+    );
+  });
+
   it('writes out only the tags it read, so a malformed one cannot slip past', () => {
     expect(clean('<scr<script>alert(1)</script>ipt>alert(2)</script>')).toBe('alert(1)ipt>alert(2)');
     expect(clean('<img src="x" alt="never closed')).toBe('&lt;img src="x" alt="never closed');

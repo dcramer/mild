@@ -1,4 +1,5 @@
 import { api } from './api.ts';
+import { holdReload } from './build.ts';
 
 /** A piece is sent again this many times before the file is said to have failed. */
 const TRIES = 3;
@@ -16,19 +17,24 @@ async function base64(blob: Blob): Promise<string> {
  * bytes have gone. Resolves with its id, which Send names; Mild keeps it a day, or until it is sent.
  */
 export async function uploadFile(file: File, sent: (bytes: number) => void, signal: AbortSignal): Promise<string> {
-  const { id, piece } = await api.startUpload({ name: file.name, type: file.type, size: file.size });
-  for (let at = 0, index = 0; at < file.size || index === 0; at += piece, index++) {
-    const data = await base64(file.slice(at, at + piece));
-    for (let tried = 1; ; tried++) {
-      if (signal.aborted) throw signal.reason;
-      try {
-        await api.uploadPiece(id, index, data);
-        break;
-      } catch (error) {
-        if (tried === TRIES) throw error;
+  const release = holdReload();
+  try {
+    const { id, piece } = await api.startUpload({ name: file.name, type: file.type, size: file.size });
+    for (let at = 0, index = 0; at < file.size || index === 0; at += piece, index++) {
+      const data = await base64(file.slice(at, at + piece));
+      for (let tried = 1; ; tried++) {
+        if (signal.aborted) throw signal.reason;
+        try {
+          await api.uploadPiece(id, index, data);
+          break;
+        } catch (error) {
+          if (tried === TRIES) throw error;
+        }
       }
+      sent(Math.min(at + piece, file.size));
     }
-    sent(Math.min(at + piece, file.size));
+    return id;
+  } finally {
+    release();
   }
-  return id;
 }

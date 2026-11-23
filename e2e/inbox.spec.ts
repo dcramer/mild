@@ -27,6 +27,7 @@ import {
   settingsInbox,
   test,
   failureToast,
+  forward,
   toast,
   tooltip,
 } from './sift.ts';
@@ -179,6 +180,7 @@ test.describe('Inbox', () => {
   });
 
   test('opened again, what the feed changes is not undone by the older rows read from the device after it', async ({ page }) => {
+    test.slow();
     let gone = false;
     await patchJson(page, '**/api/sync*', (feed) => {
       const { conversation } = (feed.conversations.at(-1) ?? {}) as { conversation?: { accountId: string; messages: { receivedAt: number }[] } };
@@ -212,11 +214,14 @@ test.describe('Inbox', () => {
     const asked = page.waitForResponse('**/api/sync*');
     await page.reload();
     await asked;
-    await expect(inboxRows(page)).toHaveCount(100);
+    // What this checks is which rows come, not how soon: slowed four times on CI's runner, beside three other workers,
+    // each hundred takes 3 to 5 s to draw.
+    const drawn = { timeout: 20_000 };
+    await expect(inboxRows(page)).toHaveCount(100, drawn);
     await inboxRows(page).last().scrollIntoViewIfNeeded();
-    await expect(inboxRows(page)).toHaveCount(200);
+    await expect(inboxRows(page)).toHaveCount(200, drawn);
     await inboxRows(page).last().scrollIntoViewIfNeeded();
-    await expect(inboxRows(page)).toHaveCount(248);
+    await expect(inboxRows(page)).toHaveCount(248, drawn);
   });
 
   test('a row’s label does what the label does: one that keeps is saved in place, one that archives takes the conversation out of the inbox once its toast goes', async ({
@@ -267,6 +272,41 @@ test.describe('Inbox', () => {
     await page.reload();
     await expect(inboxRows(page)).toHaveCount(18);
     await expect(row).toHaveCount(0);
+  });
+
+  test('a row’s label menu stays open while what Mild thinks of the row changes, and takes the pick', async ({ page }) => {
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    await pointAt(row);
+    const label = row.getByRole('combobox', { name: 'What Your order has shipped is' });
+    await label.click();
+    await expect(page.getByRole('option', { name: 'Receipts', exact: true })).toBeVisible();
+    // Said in another tab: the feed brings it to this row while its menu is open.
+    await page.evaluate(
+      "fetch('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify({ accountId: 'me@example.org', sender: 'orders@shop.example.com', label: 'personal', messageId: 'm3', carryOut: false }) })",
+    );
+    // Coming back to the tab asks Mild what changed.
+    await putAway(page);
+    await expect(label).toContainText('Personal');
+    await page.getByRole('option', { name: 'Receipts', exact: true }).click();
+    await expect(toast(page, 'Archive as Receipts')).toBeVisible();
+    await expect(row).toHaveCount(0);
+  });
+
+  test('opened again, draws the rule Mild proposes with its rows, from the device, so no row moves when Mild answers', async ({ page }) => {
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    const proposed = proposedRule(page, 'Keep Receipts from billing@utility.example.net?');
+    await expect(proposed).toBeVisible();
+    const where = await boxOf(row);
+    const waiting: (() => void)[] = [];
+    await page.route('**/api/suggestions*', (route) => void waiting.push(() => void route.continue()));
+    await page.reload();
+    await expect(row).toBeVisible();
+    await expect(proposed).toBeVisible();
+    expect((await boxOf(row)).y).toBe(where.y);
+    await expect.poll(() => waiting.length).toBeGreaterThan(0);
+    for (const go of waiting) go();
   });
 
   test('Archive on a row says it is what its label says, and does what the label does', async ({ page, sift }) => {
@@ -734,7 +774,7 @@ test.describe('Inbox', () => {
 
   test('when Gmail takes only some of what is selected, the page says the rest failed once it is sent', async ({ page }) => {
     await page.route('**/api/mail/change', async (route) => {
-      const reply = (await (await route.fetch()).json()) as { actions: number[] };
+      const reply = (await (await forward(route)).json()) as { actions: number[] };
       await route.fulfill({ json: { actions: reply.actions.slice(1), missed: 1 } });
     });
     await page.goto('/inbox');

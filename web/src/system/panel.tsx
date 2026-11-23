@@ -61,10 +61,11 @@ export function Panel({
     return false;
   };
   const stepping = onPrevious !== undefined || onNext !== undefined;
+  const layer = useLayerOpen(open, onClose);
   return (
-    <Base.Root {...useLayerOpen(open, onClose)}>
+    <Base.Root {...layer.root}>
       <Base.Portal>
-        <Backdrop />
+        <Backdrop still={layer.still} />
         {/* The panel takes the focus itself, not its first button, which Enter would press. */}
         <Base.Popup
           // Kept as the popup is attached, which the portal does after the panel's own effects have run.
@@ -73,9 +74,10 @@ export function Panel({
             if (node) openers.set(node, opener);
           }}
           tabIndex={-1}
+          data-still={layer.still || undefined}
           initialFocus={focus ?? popup}
           finalFocus={returnFocus}
-          className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card pr-(--safe-right) pb-(--safe-bottom) [--layer-top:var(--safe-top)] [--surface:var(--card)] text-sm outline-none transition-transform duration-150 ease-out data-ending-style:pointer-events-none data-ending-style:translate-x-full data-starting-style:translate-x-full motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(max(75vw,66rem),80rem,100vw)]'}`}
+          className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card pr-(--safe-right) pb-(--safe-bottom) [--layer-top:var(--safe-top)] [--surface:var(--card)] text-sm outline-none transition-transform duration-150 ease-out data-ending-style:pointer-events-none data-ending-style:translate-x-full data-starting-style:translate-x-full data-still:transition-none motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(max(75vw,66rem),80rem,100vw)]'}`}
         >
           <KeyLayer moves>
             <LayerContent title={title} subtitle={subtitle}>

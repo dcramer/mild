@@ -22,7 +22,7 @@ This first deploy builds without a database. Until steps 2 and 3 are done, the s
 
 In Settings, Environment Variables, keep **Enable access to System Environment Variables** checked. Workflow knows it is on Vercel only by `VERCEL_DEPLOYMENT_ID`; without it every run fails, and every piece of work with it. Mild knows it by `VERCEL` (`src/sift/instance.ts`); without it, it would open a home directory and PGlite as `mild run` does.
 
-In Settings, Advanced, turn on **Skew Protection**. An installed app stays open for days: with it, a page from an older deploy still gets that deploy's files until it moves to another screen, which it then loads whole from the new one (`useStale`, `web/src/lib/build.ts`). Without it, a screen the old page has not fetched yet fails, and offers Reload.
+In Settings, Advanced, turn on **Skew Protection**. An installed app stays open for days: with it, a page from an older deploy still gets that deploy's files until it moves to another screen or is put away or left alone, when it loads whole from the new one (`web/src/lib/build.ts`). Without it, a screen the old page has not fetched yet fails, and offers Reload.
 
 Then, from the project's Storage tab, add Neon and a Redis database. Each sets variables of its own; Mild reads the ones in step 3.
 
@@ -41,19 +41,19 @@ The project's production domain is your Mild's address: `https://<project>.verce
 
 In the project's Environment Variables, for Production. A variable still named `SIFT_…` from before the rename is read while its `MILD_…` name is unset:
 
-| Variable | |
-| --- | --- |
-| `DATABASE_URL` | Neon's pooled address. |
-| `DATABASE_MIGRATION_URL` | Optional, and better: Neon's unpooled address for the owner role, with `DATABASE_URL` then a role that owns nothing (`CREATE ROLE sift LOGIN PASSWORD '…'`), so row-level security holds Mild itself. |
-| `REDIS_URL` | The Redis database's `redis://` or `rediss://` address. |
-| `MILD_GOOGLE_CLIENT_ID`, `MILD_GOOGLE_CLIENT_SECRET` | From step 2. |
-| `MILD_KEY` | Encrypts the credentials and mail Mild stores ([secrets.md](secrets.md)). `openssl rand -base64 32` |
-| `MILD_SESSION_SECRET` | Signs sessions; changing it signs everyone out. `openssl rand -base64 32` |
-| `CRON_SECRET` | Vercel sends it with each cron call; nothing without it can start a tick. `openssl rand -hex 32` |
-| `MILD_URL` | Only when the dashboard is opened somewhere other than the project's production domain: that address, `https://sift.example.com`. Digests link to it. |
-| `MILD_CHATGPT_SIGN_IN` | Only to change how people sign in to ChatGPT ([cli.md](cli.md#models)). |
-| `MILD_CLOUD` | `true` only when this Mild is a service for other people. It gives the site its terms, privacy policy and security page; Google asks for the first two before it publishes the app. They speak for you, so read them first (`web/src/views/legal.tsx`). |
-| `SENTRY_DSN` | Optional: a Sentry project's DSN, to send errors and traces there ([architecture.md](architecture.md#errors-and-traces)). Each deployment is tagged with its `VERCEL_ENV`. |
+| Variable                                             |                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                       | Neon's pooled address.                                                                                                                                                                                                                                  |
+| `DATABASE_MIGRATION_URL`                             | Optional, and better: Neon's unpooled address for the owner role, with `DATABASE_URL` then a role that owns nothing (`CREATE ROLE sift LOGIN PASSWORD '…'`), so row-level security holds Mild itself.                                                   |
+| `REDIS_URL`                                          | The Redis database's `redis://` or `rediss://` address.                                                                                                                                                                                                 |
+| `MILD_GOOGLE_CLIENT_ID`, `MILD_GOOGLE_CLIENT_SECRET` | From step 2.                                                                                                                                                                                                                                            |
+| `MILD_KEY`                                           | Encrypts the credentials and mail Mild stores ([secrets.md](secrets.md)). `openssl rand -base64 32`                                                                                                                                                     |
+| `MILD_SESSION_SECRET`                                | Signs sessions; changing it signs everyone out. `openssl rand -base64 32`                                                                                                                                                                               |
+| `CRON_SECRET`                                        | Vercel sends it with each cron call; nothing without it can start a tick. `openssl rand -hex 32`                                                                                                                                                        |
+| `MILD_URL`                                           | Only when the dashboard is opened somewhere other than the project's production domain: that address, `https://sift.example.com`. Digests link to it.                                                                                                   |
+| `MILD_CHATGPT_SIGN_IN`                               | Only to change how people sign in to ChatGPT ([cli.md](cli.md#models)).                                                                                                                                                                                 |
+| `MILD_CLOUD`                                         | `true` only when this Mild is a service for other people. It gives the site its terms, privacy policy and security page; Google asks for the first two before it publishes the app. They speak for you, so read them first (`web/src/views/legal.tsx`). |
+| `SENTRY_DSN`                                         | Optional: a Sentry project's DSN, to send errors and traces there ([architecture.md](architecture.md#errors-and-traces)). Each deployment is tagged with its `VERCEL_ENV`.                                                                              |
 
 Until every required one is set, the site lists those still missing; `CRON_SECRET` is among them, since without it nothing runs.
 

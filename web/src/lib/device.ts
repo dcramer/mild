@@ -5,7 +5,7 @@ import { timed } from './trace.ts';
 
 /**
  * What this browser keeps of the person, so the page opens on it without waiting for Mild (docs/sync.md): the key the
- * copy is encrypted with, which no script can read out, and the frame's data (who is signed in, Settings' data, usage),
+ * copy is encrypted with, which no script can read out, and the frame's data (who is signed in, Settings' data, usage, For review's list and the rules Mild proposes),
  * encrypted with it. The server knows the device by its cookie, and a device it no longer knows wipes what it kept.
  */
 

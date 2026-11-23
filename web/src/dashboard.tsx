@@ -8,7 +8,6 @@ import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail, useNow } from '@/components/status.tsx';
 import { type Session, api, queryClientFor, useLoaded, useOnline } from '@/lib/api.ts';
 import { forgetDevice, keepFrame as keep, keptFrame, unknownDevice } from '@/lib/device.ts';
-import { serverBuild } from '@/lib/build.ts';
 import { useKeptPlace } from '@/lib/place.ts';
 import { signOut } from '@/lib/sign-out.ts';
 import { keepStart, startsOnInbox } from '@/lib/start.ts';
@@ -74,8 +73,12 @@ const openSettings = () => setParams({ settings: '1' }, { state: { panel: true }
 // A failed sign-in said in Settings (`signin`) goes with it.
 const closeSettings = () => (panelEntry() ? goBack() : setParams({ settings: '', signin: '' }));
 
-/** What the frame is drawn with, kept on the device for the next time the page opens (`web/src/lib/device.ts`). */
-const FRAME = new Set(['session', 'manage', 'usage']);
+/**
+ * What the frame is drawn with, kept on the device for the next time the page opens (`web/src/lib/device.ts`). With it
+ * For review's list and the rules Mild proposes, which Inbox draws above its rows: arriving after them, a proposal
+ * pushed every row down under the pointer.
+ */
+const FRAME = new Set(['session', 'manage', 'usage', 'suggestions-false']);
 let keeping = false;
 
 /**
@@ -144,9 +147,6 @@ function Signed({ addressed, children }: { addressed: boolean; children: ReactNo
   // Not before the session is known: no telemetry then would stop the page load's trace being carried.
   useEffect(() => void (known && startTelemetry(telemetry)), [known, telemetry]);
   useEffect(() => void (settings === '1' && panelOpened('Settings')), [settings]);
-  // Only a session Mild just answered says which build it is: one this device kept (read at time 0) may be from before an update.
-  const build = session.at > 0 ? (known?.build ?? null) : null;
-  useEffect(() => serverBuild(build), [build]);
   const answered = known !== null;
   useEffect(() => {
     if (standIn && answered) window.location.reload();

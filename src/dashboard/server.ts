@@ -139,7 +139,10 @@ export interface DashboardOptions {
   signInAddresses?: readonly string[];
   /** `MILD_CLOUD`: this Mild is a service for other people, with terms, a privacy policy and a security page. */
   cloud?: boolean;
-  /** Which build of the page this server came with (`MILD_BUILD`, next.config.js), for a page left open across an update to notice. */
+  /**
+   * Which build of the page this server came with (`MILD_BUILD`, next.config.js), said on every `/api/` reply
+   * (`x-sift-build`) so a page left open across an update notices at its next call.
+   */
   build?: string | null;
   /** What the dashboard can ask the rest of Mild to do. Without it the page can look but not manage. */
   controls?: Controls;
@@ -340,7 +343,6 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
           addresses: options.signInAddresses ?? [],
           cloud,
           telemetry: forThePage(),
-          build,
           device: person !== null && device !== null && (await (await credentials(ctx.db, 'device')).read(device)) !== null,
         },
         renewed,
@@ -426,7 +428,6 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         addresses: [],
         cloud,
         telemetry: forThePage(),
-        build,
         device: person !== null && device !== null && (await (await credentials(ctx.db, 'device')).read(device)) !== null,
       });
 
@@ -524,6 +525,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
             return json(status, body);
           });
           httpStatus(span, response.status);
+          if (build && pathname.startsWith('/api/')) response.headers.set('x-sift-build', build);
           return response;
         }),
       );

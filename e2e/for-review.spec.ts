@@ -171,6 +171,20 @@ test.describe('For review, with Mild on', () => {
         await route.continue();
       },
     );
+    // Opened again it draws the list kept on the device; loading is when that cannot be used, as after an update. Once
+    // the page has kept it, it is dropped.
+    const dropped = `new Promise((done) => {
+      const opening = indexedDB.open('sift-device');
+      opening.onsuccess = () => {
+        const frame = opening.result.transaction('frame', 'readwrite').objectStore('frame');
+        const kept = frame.getKey('suggestions-false');
+        kept.onsuccess = () => {
+          if (kept.result !== undefined) frame.delete('suggestions-false');
+          frame.transaction.oncomplete = () => (opening.result.close(), done(kept.result !== undefined));
+        };
+      };
+    })`;
+    await expect.poll(() => page.evaluate<boolean>(dropped)).toBe(true);
     await page.reload();
     await expect(page.getByLabel('Loading').first()).toBeVisible();
     expect((await boxOf(reviewSearch(page))).y).toBe(loaded.y);
