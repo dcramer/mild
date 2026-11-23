@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import {
   PHONE,
+  addressed,
   back,
   boxOf,
   composer,
@@ -13,6 +14,7 @@ import {
   reader,
   readerHeading,
   row,
+  settings,
   sideScroll,
   test,
   toast,
@@ -64,6 +66,25 @@ test.describe('The reader, from For review', () => {
 
 test.describe('The reader, from Inbox', () => {
   test.use({ variant: 'inbox' });
+
+  test('names the mailbox a message came to while there is more than one, and Cc on a row of its own', async ({ page }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Notes from the review').getByRole('cell').nth(2).click();
+    await expect(addressed(reader(page), 'To')).toHaveText('me@example.org');
+    await expect(addressed(reader(page), 'Cc')).toHaveText(/^reviewer1@example\.net, .* and 9 more$/);
+
+    await page.goto('/inbox?settings=1');
+    await settings(page).getByRole('button', { name: 'Remove me@work.example.org' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Remove me@work.example.org' });
+    await confirm.getByRole('textbox', { name: 'Type me@work.example.org to confirm' }).fill('me@work.example.org');
+    await confirm.getByRole('button', { name: 'Remove mailbox' }).click();
+    await expect(confirm).toHaveCount(0);
+    await page.goto('/inbox');
+    await inboxRow(page, 'Your order has shipped').getByRole('cell').nth(2).click();
+    await expect(readerHeading(page, 'Your order has shipped')).toBeVisible();
+    // Mail to the one mailbox left, and to no one else, says nothing of whom it went to.
+    await expect(reader(page).getByRole('term')).toHaveCount(0);
+  });
 
   test('J and K step through the conversations, with where it is, and Escape returns to the row last shown', async ({ page }) => {
     await page.goto('/inbox');

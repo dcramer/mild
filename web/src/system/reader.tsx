@@ -1,6 +1,18 @@
 'use client';
 import { ArrowLeftIcon, ChevronDownIcon, ChevronUpIcon, EllipsisVerticalIcon, ReplyIcon } from 'lucide-react';
-import { type ComponentProps, type ReactNode, type Ref, createContext, useContext, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
+import {
+  type ComponentProps,
+  Fragment,
+  type ReactNode,
+  type Ref,
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { cn } from '@/lib/utils';
 import { AnswerPicker } from './answer-picker.tsx';
 import { Button } from './button.tsx';
@@ -294,7 +306,7 @@ interface Answers {
 
 /**
  * Who wrote a message and when, over its text: the name, the address after it (not on a phone), the time at the right,
- * who it went to under them. In a `MessageStack` of several, a press anywhere on it but a link folds the message.
+ * who it went to under them (`to`: a To and a Cc row, the words in a column of their own). In a `MessageStack` of several, a press anywhere on it but a link folds the message.
  * `answers` puts Reply at its end, and Reply all and Forward in its ⋮ menu, for answering this message rather than the
  * newest; `more` adds to that menu what else can be done with the message (Show as text).
  */
@@ -309,7 +321,7 @@ export function MessageHead({
   from: ReactNode;
   address?: ReactNode;
   at: ReactNode;
-  to?: ReactNode;
+  to?: readonly { label: 'To' | 'Cc'; who: ReactNode }[];
   answers?: Answers;
   more?: readonly { label: string; onSelect: () => void }[];
 }) {
@@ -366,7 +378,16 @@ export function MessageHead({
           </span>
         ) : null}
       </div>
-      {to ? <div className={cn('text-sm text-muted-foreground', through)}>{to}</div> : null}
+      {to && to.length > 0 ? (
+        <dl className={cn('grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm', through)}>
+          {to.map((row) => (
+            <Fragment key={row.label}>
+              <dt className="text-muted-foreground">{row.label}</dt>
+              <dd className="min-w-0 text-foreground/85">{row.who}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      ) : null}
     </header>
   );
 }

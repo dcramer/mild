@@ -1521,11 +1521,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                   from={m.from === 'me' ? 'me' : <TextLink href="/system">{m.from}</TextLink>}
                   {...(m.from === 'me' ? {} : { address: m.address })}
                   at={m.at.includes(':') ? m.at : `${m.at}, 9:41 AM`}
-                  to={
-                    <>
-                      To <SomeOf items={['me', 'grace@example.net']} />
-                    </>
-                  }
+                  to={[{ label: 'To', who: <SomeOf items={['me', 'grace@example.net']} /> }]}
                   {...(inbox
                     ? {
                         answers: {
