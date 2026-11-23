@@ -18,6 +18,21 @@ export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   );
 }
 
+/**
+ * Mild's icon, the app's own (`public/icons/icon.svg`) without its ground: an i in ink, its dot a stroke of highlighter.
+ * As tall as a section's tile, for the top of the rail, which is too narrow for the name.
+ */
+export function Emblem() {
+  return (
+    <svg aria-hidden viewBox="0 0 32 32" className="size-10">
+      <g transform="translate(-1.2 0.6) rotate(16 16 17)">
+        <rect x="12.75" y="13.4" width="6.5" height="14" rx="3.25" className="fill-foreground" />
+        <path d="M12.4 4.9 19 4.2 20 5.2 20.6 10.8 13.9 11.5 12.9 10.5Z" className="fill-highlight" />
+      </g>
+    </svg>
+  );
+}
+
 /** `text` with every occurrence of `term` highlighted, as a search result would be marked by hand. */
 export function Marked({ text, term }: { text: string; term?: string }) {
   const needle = term?.trim().toLowerCase();

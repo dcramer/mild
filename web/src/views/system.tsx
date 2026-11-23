@@ -138,6 +138,7 @@ import {
   TrGroup,
   useToast,
   Wordmark,
+  Emblem,
 } from '@/system';
 
 const DAILY_COST = [
@@ -282,6 +283,9 @@ export function SystemView() {
                 <Wordmark />
                 <Wordmark size="lg" />
               </p>
+            </Row>
+            <Row label="emblem" note="The app’s icon, where the name has no room: the top of the rail.">
+              <Emblem />
             </Row>
             <Row label="statement" note="A page’s title, and nothing else.">
               <p className="statement">For review</p>

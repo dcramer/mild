@@ -177,7 +177,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | Nothing is read from a person's Gmail until they have a label of their own | `dueWork`; `tests/run.test.ts` |
 | Mild classifies mail and helps the user sift through it, never "sorts" it. Whether it changes Gmail is whether it is on (Settings: Active, On/Off), not "acting" or "observing" | Nothing: judgment. None of those words is left in the repository to copy |
 | What Mild does is shown as the action alone ("Archive"), never with its extras ("+ unsubscribe") | `Does` takes no extras and there is no helper that formats them |
-| The name is "Mild" wherever a person reads it: the page, a digest, the command line, the docs. It is lowercase only as the wordmark, the name drawn as a logo (the dashboard's, a command's heading, a digest's head), and as code: a command, a path, a variable | `tests/name.test.ts` (the docs' prose, a digest, a command's heading); `e2e/page.spec.ts` (every screen, and its wordmark) |
+| The name is "Mild" wherever a person reads it: the page, a digest, the command line, the docs. It is lowercase only as the wordmark, the name drawn as a logo (the dashboard's, a command's heading, a digest's head), and as code: a command, a path, a variable | `tests/name.test.ts` (the docs' prose, a digest, a command's heading); `e2e/page.spec.ts` (every screen, its wordmark, and the rail's icon named Mild) |
 | Talk to David in plain words: say what a thing does ("the emails you already labelled, shown to the model as examples"), not the term for it ("few-shot", "fixtures", "cascade tier"). A term he has not used needs saying in plain words first | Nothing: judgment |
 
 <!-- BEGIN:nextjs-agent-rules -->
