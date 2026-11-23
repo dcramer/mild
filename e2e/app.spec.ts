@@ -1,6 +1,22 @@
 import type { Page } from '@playwright/test';
 import { STARTUP_SCREENS, startupImage } from '../web/src/lib/startup.ts';
-import { back, boxOf, composer, messageQuery, expect, PHONE, patchJson, path, query, senderPage, settings, test } from './sift.ts';
+import {
+  back,
+  boxOf,
+  closeSettings,
+  composer,
+  messageQuery,
+  expect,
+  PHONE,
+  patchJson,
+  path,
+  putAway,
+  query,
+  senderPage,
+  settings,
+  settingsFromMenu,
+  test,
+} from './sift.ts';
 
 // The installed app: what the phone's own edges, its Back and its network do to the page.
 
@@ -137,8 +153,59 @@ test.describe('When drawing the page fails', () => {
 test.describe('After Mild is updated under an open page', () => {
   test.use({ serviceWorkers: 'block' });
 
+  /** Mild answers as another build than the page's, as after a deploy. */
+  const deployed = (page: Page) =>
+    page.route('**/api/**', async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, headers: { ...response.headers(), 'x-sift-build': 'a-newer-build' } });
+    });
+  /** Opened before the deploy and seen since, so it is past the seconds in which it would load itself again at once. */
+  async function openBefore(page: Page) {
+    await page.clock.install();
+    await page.goto(SENDER);
+    await expect(page.getByRole('heading', { name: 'notifications@code.example.com' })).toBeVisible();
+    await page.clock.runFor(10_000);
+    await page.evaluate('window.stayed = true');
+    await deployed(page);
+  }
+  const reloaded = (page: Page) => page.evaluate<boolean>("!('stayed' in window)").catch(() => false);
+  const IDLE = 10 * 60_000;
+
+  test('put away, it loads itself again as the new build', async ({ page }) => {
+    await openBefore(page);
+    // In view, it carries on until the person switches away.
+    const asked = page.waitForResponse('**/api/**');
+    await page.clock.runFor(60_000);
+    await asked;
+    expect(await reloaded(page)).toBe(false);
+    await expect
+      .poll(async () => {
+        await page.clock.runFor(30_000);
+        await putAway(page);
+        return reloaded(page);
+      })
+      .toBe(true);
+    await page.clock.resume();
+    await expect(page.getByRole('heading', { name: 'notifications@code.example.com' })).toBeVisible();
+  });
+
+  test('left untouched in view, it loads itself again, but not while a dialog is open over it', async ({ page }) => {
+    await openBefore(page);
+    await settingsFromMenu(page);
+    for (let tried = 0; tried < 3; tried++) {
+      const asked = page.waitForResponse('**/api/**');
+      await page.clock.runFor(IDLE);
+      await asked;
+    }
+    expect(await reloaded(page)).toBe(false);
+    await closeSettings(page);
+    await expect.poll(async () => (await page.clock.runFor(IDLE), reloaded(page))).toBe(true);
+    await page.clock.resume();
+    await expect(page.getByRole('heading', { name: 'notifications@code.example.com' })).toBeVisible();
+  });
+
   test('the next screen gone to is loaded whole, from the new build', async ({ page }) => {
-    await patchJson(page, '**/api/session*', (session) => ({ ...session, build: 'a-newer-build' }));
+    await deployed(page);
     await page.goto(SENDER);
     // Just opened, it loads itself again once as the newer build, which may be after the screen was drawn from the device.
     await expect.poll(() => page.evaluate<string>("performance.getEntriesByType('navigation')[0].type").catch(() => 'loading')).toBe('reload');

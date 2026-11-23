@@ -902,10 +902,14 @@ describe('signing in with Google', () => {
     expect((await call('GET', '/api/manage', undefined, second)).status).toBe(200);
   });
 
-  it('says which build of the page it came with, signed in or not', async () => {
+  it('says which build of the page it came with on every reply of the API, refused or not, and nowhere else', async () => {
     const built = await startDashboard(people(store), { signIn, sessionSecret: SECRET, build: 'build-2' });
-    expect((await built.call('GET', '/api/session')).body).toMatchObject({ build: 'build-2' });
-    expect((await (await startDashboard(people(store), { build: 'build-2' })).call('GET', '/api/session')).body).toMatchObject({ build: 'build-2' });
+    expect((await built.call('GET', '/api/session')).headers['x-sift-build']).toBe('build-2');
+    const refused = await built.call('GET', '/api/manage');
+    expect(refused.status).toBe(401);
+    expect(refused.headers['x-sift-build']).toBe('build-2');
+    expect((await built.call('GET', '/auth/login')).headers['x-sift-build']).toBeUndefined();
+    expect((await (await startDashboard(people(store), { build: 'build-2' })).call('GET', '/api/session')).headers['x-sift-build']).toBe('build-2');
   });
 
   it('comes back to where the browser started signing in, and only ever to a page of its own', async () => {
