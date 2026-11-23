@@ -105,9 +105,7 @@ test.describe('On a phone', () => {
     await sideScroll(page).toBe(0);
   });
 
-  test('a conversation opens with no bar above it, its subject at reading size, its text on the first screen and the mailbox it came to in full', async ({
-    page,
-  }) => {
+  test('a conversation opens with no bar above it, its subject at reading size, its text on the first screen and the account as me', async ({ page }) => {
     // Sent to the account and someone else, so who it went to is said.
     await patchJson(page, '**/api/message?*', (detail) => ({
       ...detail,
@@ -124,8 +122,7 @@ test.describe('On a phone', () => {
     await expect(bar(page)).toHaveCount(0);
     // Each head says when, short: no year this year.
     await expect(open.locator('header time').first()).toHaveText(/^([A-Z][a-z]{2} \d{1,2}, )?\d{1,2}:\d\d [AP]M$/);
-    // With two mailboxes, which of them it came to is named in full, first.
-    await expect(open.getByText(/^To\s+me@example\.org, grace@example\.net$/).first()).toBeVisible();
+    await expect(open.getByText('To me, grace@example.net').first()).toBeVisible();
 
     // Measured once the conversation is drawn: the text of its first message.
     const text = open.getByRole('article').first().getByText('Your bill is ready.');

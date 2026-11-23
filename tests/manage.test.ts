@@ -45,7 +45,6 @@ const controls: Controls = {
     return { year: each, three_years: each, all: each };
   },
   changeMail: async () => ({ actions: [], missed: 0 }),
-  mailboxIcons: async (domains) => Object.fromEntries(domains.map((domain) => [domain, null])),
   putBack: async (_db, _account, messageId) => {
     calls.push(`putBack ${messageId}`);
     if (messageId === 'gone') throw new Error('The message no longer exists.');

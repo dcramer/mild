@@ -13,7 +13,6 @@ import {
   reader,
   readerHeading,
   row,
-  settings,
   sideScroll,
   test,
   toast,
@@ -65,27 +64,6 @@ test.describe('The reader, from For review', () => {
 
 test.describe('The reader, from Inbox', () => {
   test.use({ variant: 'inbox' });
-
-  test('says which mailbox a message came to, after its domain’s icon, while there is more than one', async ({ page }) => {
-    await page.goto('/inbox');
-    await inboxRow(page, 'Your order has shipped').getByRole('cell').nth(2).click();
-    const to = reader(page).getByText(/^To\s+me@example\.org$/);
-    await expect(to).toBeVisible();
-    // The domain's own icon, as Mild was given it by the site and keeps it.
-    await expect(to.locator('img')).toHaveAttribute('src', /^data:image\/svg\+xml,/);
-
-    await page.goto('/inbox?settings=1');
-    await settings(page).getByRole('button', { name: 'Remove me@work.example.org' }).click();
-    const confirm = page.getByRole('dialog', { name: 'Remove me@work.example.org' });
-    await confirm.getByRole('textbox', { name: 'Type me@work.example.org to confirm' }).fill('me@work.example.org');
-    await confirm.getByRole('button', { name: 'Remove mailbox' }).click();
-    await expect(confirm).toHaveCount(0);
-    await page.goto('/inbox');
-    await inboxRow(page, 'Your order has shipped').getByRole('cell').nth(2).click();
-    await expect(readerHeading(page, 'Your order has shipped')).toBeVisible();
-    // Mail to the one mailbox left, and to no one else, has no To line at all.
-    await expect(reader(page).getByText(/^To /)).toHaveCount(0);
-  });
 
   test('J and K step through the conversations, with where it is, and Escape returns to the row last shown', async ({ page }) => {
     await page.goto('/inbox');
