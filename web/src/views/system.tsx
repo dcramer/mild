@@ -1055,6 +1055,44 @@ export function SystemView() {
               </Button>
             </div>
           </Section>
+          <Section title="Toast, saying what a press did" meta="one line: what was done, the label it gave, and Undo">
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  [
+                    'Archive, labelled',
+                    'Dependabot: bump lodash to 4.17.21',
+                    [
+                      { action: 'archive', word: 'Archived' },
+                      { action: 'label', word: 'Notifications' },
+                    ],
+                  ],
+                  [
+                    'To the digest',
+                    '3 conversations',
+                    [
+                      { action: 'archive', word: 'Archived' },
+                      { action: 'label', word: 'Build results' },
+                      { action: 'digest', word: 'In the digest' },
+                    ],
+                  ],
+                  [
+                    'Block',
+                    '48 hours only: 30% off',
+                    [
+                      { action: 'block', word: 'Blocked' },
+                      { action: 'label', word: 'Cold outreach' },
+                    ],
+                  ],
+                  ['No label', 'Lunch on Thursday?', [{ action: 'archive', word: 'Archived' }]],
+                ] as const
+              ).map(([press, subject, did]) => (
+                <Button key={press} onClick={() => toast(subject, { did, undo: () => toast('Back in the inbox') })}>
+                  {press}
+                </Button>
+              ))}
+            </div>
+          </Section>
           <Section title="Menu, popover, notice and hover card">
             <div className="flex flex-wrap items-center gap-6">
               <Popover label="Why">
