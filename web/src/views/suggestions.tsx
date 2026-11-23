@@ -192,7 +192,7 @@ function SuggestionRow({
           groups={groups}
           empty={outcomeName('review')}
           onSubmit={(id) => (folded ? answerAll([item, ...rest].map(answerableOf), id) : answer(target, id))}
-          extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
+          extras={[{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }]}
         />
       </RowActions>
       {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}

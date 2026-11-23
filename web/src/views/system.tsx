@@ -719,7 +719,7 @@ export function SystemView() {
                               LABELS.slice(3).map(([id, name]) => ({ id, label: name })),
                             ]}
                             empty={outcomeName('review')}
-                            extra={{ label: 'Add a label…', onSelect: () => toast('Adds a label, then it is among the choices') }}
+                            extras={[{ label: 'Add a label…', onSelect: () => toast('Adds a label, then it is among the choices') }]}
                             onSubmit={(id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
                           />
                         </RowActions>
@@ -1572,7 +1572,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                     value={INBOX}
                     groups={groups}
                     onSubmit={async (id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
-                    extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => toast('Opens adding a label') }}
+                    extras={[{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => toast('Opens adding a label') }]}
                   />
                   <Popover label="Why">{said}</Popover>
                   <Button variant="quiet" aria-label="Make a rule…" onClick={() => toast('Opens the rule dialog')}>

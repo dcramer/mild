@@ -5,8 +5,17 @@ import { Fragment, type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
 
-/** The value of `extra` in the list: never a choice, so never anyone's label id. */
+/** The values of `extras` in the list: never a choice, so never anyone's label id. */
 const EXTRA = '\u0000extra';
+const extraAt = (value: string | null) => (value?.startsWith(EXTRA) ? Number(value.slice(EXTRA.length)) : null);
+
+/** A press at the foot of a picker's list that is not a choice: Add a label…, Make a rule…. */
+interface Extra {
+  label: string;
+  lead?: ReactNode;
+  onSelect: () => void;
+}
+const NO_EXTRAS: readonly Extra[] = [];
 
 export interface Pick {
   id: string;
@@ -28,7 +37,7 @@ export function AnswerPicker({
   onSubmit,
   busy,
   className,
-  extra,
+  extras = NO_EXTRAS,
 }: {
   /** Names the dropdown for a screen reader: "What this message is". */
   label: string;
@@ -40,7 +49,7 @@ export function AnswerPicker({
   busy?: boolean;
   className?: string;
   /** Last in the list, set apart: something to do instead of a choice, such as adding a label that does not exist yet. */
-  extra?: { label: string; lead?: ReactNode; onSelect: () => void };
+  extras?: readonly Extra[];
 }) {
   const [chosen, setChosen] = useState<string | null>(value);
   const all = groups.flat();
@@ -51,7 +60,8 @@ export function AnswerPicker({
         items={all.map((p) => ({ value: p.id, label: p.label }))}
         value={chosen}
         onValueChange={(next, { reason }) => {
-          if (next === EXTRA) return extra?.onSelect();
+          const at = extraAt(next);
+          if (at !== null) return extras[at]?.onSelect();
           // Base UI also sets a value of its own accord (one no longer listed), which is no answer.
           if (next === null || reason !== 'item-press') return;
           const was = chosen;
@@ -77,7 +87,7 @@ export function AnswerPicker({
           </span>
           <ChevronDownIcon aria-hidden className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
         </Base.Trigger>
-        <Choices groups={groups} extra={extra} />
+        <Choices groups={groups} extras={extras} />
       </Base.Root>
       <Button
         aria-label={current ? `Agree: ${current.label}` : 'Choose what it is'}
@@ -96,8 +106,8 @@ export function AnswerPicker({
  * What a message is, changed in place where it is read: on the block a row's presses sit on when the row is pointed at
  * (`RowPresses`' `lead`), or in the reader's toolbar (`ReaderBar`'s `label`, `size="toolbar"`, as tall as its icons). The
  * meter and the label, or Unlabelled, and a chevron. Picking saves it at once, with no check, since there is nothing to
- * agree to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back. `extra`
- * is last in the list, set apart, as `AnswerPicker`'s is.
+ * agree to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back. `extras`
+ * are last in the list, set apart, as `AnswerPicker`'s are.
  */
 export function LabelPick({
   label,
@@ -105,14 +115,14 @@ export function LabelPick({
   groups,
   onSubmit,
   size = 'row',
-  extra,
+  extras = NO_EXTRAS,
 }: {
   label: string;
   value: string | null;
   groups: readonly (readonly Pick[])[];
   onSubmit: (id: string) => Promise<unknown>;
   size?: 'row' | 'toolbar';
-  extra?: { label: string; lead?: ReactNode; onSelect: () => void };
+  extras?: readonly Extra[];
 }) {
   const [chosen, setChosen] = useState<string | null>(value);
   // A new value from Mild is followed in place: drawing the picker again would shut a list the reader has open.
@@ -128,7 +138,8 @@ export function LabelPick({
       items={all.map((p) => ({ value: p.id, label: p.label }))}
       value={chosen}
       onValueChange={(next, { reason }) => {
-        if (next === EXTRA) return extra?.onSelect();
+        const at = extraAt(next);
+        if (at !== null) return extras[at]?.onSelect();
         if (next === null || reason !== 'item-press' || next === chosen) return;
         const was = chosen;
         setChosen(next);
@@ -158,13 +169,13 @@ export function LabelPick({
         </span>
         <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       </Base.Trigger>
-      <Choices groups={groups} extra={extra} />
+      <Choices groups={groups} extras={extras} />
     </Base.Root>
   );
 }
 
-/** The open list of either picker: its groups set apart, and `extra` last. */
-function Choices({ groups, extra }: { groups: readonly (readonly Pick[])[]; extra?: { label: string; lead?: ReactNode; onSelect: () => void } | undefined }) {
+/** The open list of either picker: its groups set apart, and `extras` last. */
+function Choices({ groups, extras }: { groups: readonly (readonly Pick[])[]; extras: readonly Extra[] }) {
   return (
     <Base.Portal>
       <Base.Positioner sideOffset={4} align="start" alignItemWithTrigger={false} className="z-50">
@@ -192,20 +203,19 @@ function Choices({ groups, extra }: { groups: readonly (readonly Pick[])[]; extr
                   ))}
                 </Fragment>
               ))}
-            {extra ? (
-              <>
-                <Base.Separator className="my-1 border-t border-(--rule)" />
-                <Base.Item
-                  value={EXTRA}
-                  className="relative flex cursor-pointer items-center gap-2.5 py-1.5 pr-8 pl-2 whitespace-nowrap text-muted-foreground outline-none select-none data-highlighted:bg-(--fill-strong) data-highlighted:text-foreground pointer-coarse:min-h-11"
-                >
-                  <span aria-hidden className="flex w-3.5 shrink-0 justify-center [&_svg]:size-3.5">
-                    {extra.lead}
-                  </span>
-                  <Base.ItemText>{extra.label}</Base.ItemText>
-                </Base.Item>
-              </>
-            ) : null}
+            {extras.length > 0 ? <Base.Separator className="my-1 border-t border-(--rule)" /> : null}
+            {extras.map((extra, index) => (
+              <Base.Item
+                key={extra.label}
+                value={`${EXTRA}${index}`}
+                className="relative flex cursor-pointer items-center gap-2.5 py-1.5 pr-8 pl-2 whitespace-nowrap text-muted-foreground outline-none select-none data-highlighted:bg-(--fill-strong) data-highlighted:text-foreground pointer-coarse:min-h-11"
+              >
+                <span aria-hidden className="flex w-3.5 shrink-0 justify-center [&_svg]:size-3.5">
+                  {extra.lead}
+                </span>
+                <Base.ItemText>{extra.label}</Base.ItemText>
+              </Base.Item>
+            ))}
           </Base.List>
         </Base.Popup>
       </Base.Positioner>
