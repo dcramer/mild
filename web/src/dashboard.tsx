@@ -73,8 +73,12 @@ const openSettings = () => setParams({ settings: '1' }, { state: { panel: true }
 // A failed sign-in said in Settings (`signin`) goes with it.
 const closeSettings = () => (panelEntry() ? goBack() : setParams({ settings: '', signin: '' }));
 
-/** What the frame is drawn with, kept on the device for the next time the page opens (`web/src/lib/device.ts`). */
-const FRAME = new Set(['session', 'manage', 'usage']);
+/**
+ * What the frame is drawn with, kept on the device for the next time the page opens (`web/src/lib/device.ts`). With it
+ * For review's list and the rules Mild proposes, which Inbox draws above its rows: arriving after them, a proposal
+ * pushed every row down under the pointer.
+ */
+const FRAME = new Set(['session', 'manage', 'usage', 'suggestions-false']);
 let keeping = false;
 
 /**
