@@ -1,4 +1,5 @@
-import { press, undo } from '../actions/executor.ts';
+import { undo } from '../actions/executor.ts';
+import { pressMail } from '../work/press.ts';
 import { removeRuleFilter, writeRuleFilter } from '../actions/rule-filters.ts';
 import { sendMail } from '../actions/send.ts';
 import { attachmentsOf, fileOf, forwardedFiles } from '../work/attachments.ts';
@@ -40,7 +41,6 @@ import { copied } from '../store/copies.ts';
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
-import { reportError } from '../telemetry.ts';
 import type { StandIns } from './sift.ts';
 import { seal } from '../plain.ts';
 
@@ -190,23 +190,8 @@ export async function buildControls(
       if (outcome.status === 'skipped') return 'Already put back by hand';
       throw new Refusal(outcome.reason);
     },
-    changeMail: async (db, accountId, messageIds, change) => {
-      const deps = { db, mailbox: (await gmail(db, accountId)).mailbox };
-      const landed: number[] = [];
-      let missed = 0;
-      for (const messageId of messageIds) {
-        try {
-          const outcome = await press(deps, accountId, messageId, change);
-          // A change whose answer was lost may have landed: Undo is offered, and settles it from Gmail first.
-          if (outcome.status === 'done' || outcome.status === 'unknown') landed.push(outcome.actionId);
-          else if (outcome.status !== 'skipped') missed++;
-        } catch (error) {
-          reportError(error);
-          missed++;
-        }
-      }
-      return { actions: landed, missed };
-    },
+    changeMail: async (db, accountId, messageIds, change) =>
+      await pressMail({ db, mailbox: (await gmail(db, accountId)).mailbox }, accountId, messageIds, change),
     inboxEstimate: async (db, mailboxes, reach) => {
       let messages = 0;
       for (const account of await listAccounts(db)) {

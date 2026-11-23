@@ -251,6 +251,8 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
 
   // Agreeing with a decision that already stands changes nothing about the message itself.
   const changes = given !== null && (given.labelId !== label.id || given.disposition !== outcome);
+  // Unless it was only said, and is now to be done.
+  const decides = given !== null && (changes || (input.carryOut === true && !given.carriedOut));
   // Mild having no suggestion is not Mild being wrong.
   const verdictFor = (target: Pick<Suggestion, 'labelId'>): (typeof VERDICTS)[number] =>
     target.labelId === null ? 'answered' : target.labelId === label.id ? 'right' : 'wrong';
@@ -292,13 +294,13 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
     for (const target of targets) if (input.carryOut || target.carriedOut) await recordDecision(tx, input.accountId, target.messageId, answer, carried);
     // The corrected message gets a decision of its own, so the log shows what the user said and, when
     // it is carried out, the mailbox is brought into line with it.
-    if (given && changes) await recordDecision(tx, input.accountId, given.messageId, answer, carried);
+    if (given && decides) await recordDecision(tx, input.accountId, given.messageId, answer, carried);
   });
   // An answer makes no rule of its own; enough answers giving a sender's mail of one label another action, and Mild offers one.
   await proposeFromCorrections(db, input.accountId, input.sender, label.id, now);
   return {
     corrected: given && changes ? given.messageId : null,
-    carrying: input.carryOut ? targets.length + ((given && changes) || fresh ? 1 : 0) : 0,
+    carrying: input.carryOut ? targets.length + (decides || fresh ? 1 : 0) : 0,
     asked: targets.filter((t) => t.carriedOut).map((t) => t.messageId),
   };
 }

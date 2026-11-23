@@ -308,6 +308,73 @@ describe('changing mail', () => {
   });
 });
 
+describe('a press that says what the mail is', () => {
+  type Example = { messageId: string; labelId: string };
+  const examplesOf = async (me: Me) => (await me.call('GET', '/api/examples')).body['examples'] as Example[];
+  const archive = async (me: Me, id: string) =>
+    (await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' })).body as { actions: number[] };
+
+  /** Receipts set to Digest, and a receipt in the inbox the model read as `labelId`, Mild off. */
+  async function placed(labelId: string, disposition: 'archive' | 'keep' = 'archive') {
+    const { sift, box, me } = await withInbox();
+    expect((await me.call('POST', '/api/labels', { id: 'receipts', disposition: 'digest' })).status).toBe(200);
+    const id = box.deliver({ from: 'Shop <shop@example.com>', subject: 'Your receipt' });
+    await arrives(sift, me);
+    await sift.judged(ME, id, labelId, disposition);
+    return { sift, box, me, id };
+  }
+
+  it('does what the row’s label does when the press is what it does, and keeps the label as the answer', async () => {
+    const { box, me, id } = await placed('receipts');
+    const { actions } = await archive(me, id);
+    expect(actions).toHaveLength(1);
+    expect(box.message(id)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
+    expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'receipts' }]);
+    expect(((await me.call('GET', '/api/decisions')).body['rows'] as unknown[])[0]).toMatchObject({
+      messageId: id,
+      labelId: 'receipts',
+      byUser: true,
+      carryOut: true,
+      actionStatus: 'done',
+    });
+
+    expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
+    expect(box.message(id)!.labelIds).toContain('INBOX');
+  });
+
+  it('does it for an answer that was only said, in Inbox’s reader', async () => {
+    const { box, me, id } = await placed('everything_else', 'keep');
+    const said = await me.call('POST', '/api/feedback', { accountId: ME, sender: 'shop@example.com', label: 'receipts', messageId: id, carryOut: false });
+    expect(said.status).toBe(200);
+    expect(box.message(id)!.labelIds).toContain('INBOX');
+    await archive(me, id);
+    expect(box.message(id)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
+  });
+
+  it('only records the label when the press does something else, and the press goes ahead', async () => {
+    const { box, me, id } = await placed('everything_else', 'keep');
+    await archive(me, id);
+    expect(box.message(id)!.labelIds).toEqual(['UNREAD']);
+    expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'everything_else' }]);
+  });
+
+  it('records a label that archives on mail marked spam, which is still spam', async () => {
+    const { box, me, id } = await placed('receipts');
+    await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'spam' });
+    expect(box.message(id)!.labelIds).toEqual(['UNREAD', 'SPAM']);
+    expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'receipts' }]);
+  });
+
+  it('is only the press for mail Mild never placed', async () => {
+    const { sift, box, me } = await withInbox();
+    const id = box.deliver({ from: 'ada@example.com' });
+    await arrives(sift, me);
+    await archive(me, id);
+    expect(box.message(id)!.labelIds).toEqual(['UNREAD']);
+    expect(await examplesOf(me)).toEqual([]);
+  });
+});
+
 describe('sending mail', () => {
   /** What the composer sends for a press of Send: `id` is the Message-ID it made for that press. */
   const written = (id: string) => ({

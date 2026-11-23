@@ -8,7 +8,7 @@ import { traceIds } from '../store/content.ts';
 import { examplesFor } from '../store/examples.ts';
 import { listLabels } from '../store/labels.ts';
 import { listUnsettledDecisions, recordDecision, settleDecision } from '../store/decisions.ts';
-import { type QueuedMessage, listUndecided, recordLabels } from '../store/messages.ts';
+import { type QueuedMessage, listUndecided } from '../store/messages.ts';
 import { excuseRuns, finishRun, startRun } from '../store/runs.ts';
 import { blockSender, countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
@@ -176,41 +176,63 @@ function over(deps: Pick<TriageDeps, 'now' | 'until'>, report: TriageReport): bo
   return true;
 }
 
-/** Carries a recorded decision out in `box`, settles it, and counts what happened in `report`. */
-function carrier(deps: TriageDeps, account: Account, report: TriageReport) {
+/** Where carrying a decision out got to: `retrying` is left unsettled for the next pass, `troubled` settled failed after its last try. */
+interface Carried {
+  status: 'none' | 'done' | 'skipped' | 'retrying' | 'troubled';
+  /** The change made in Gmail, for Undo. */
+  actionId?: number;
+}
+
+/**
+ * Carries a recorded decision out in `box` and settles it. One that did not land is left unsettled while it has tries
+ * left, so the next pass asks again, from the labels as they are then.
+ */
+export async function carryOutDecision(
+  deps: { db: Sql; now?: () => number },
+  accountId: string,
+  decisionId: number,
+  messageId: string,
+  decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>,
+  box: Mailbox,
+): Promise<Carried> {
   const { db } = deps;
-  const now = deps.now ?? Date.now;
+  const action = planAction(decision);
+  if (!action) {
+    await settleDecision(db, decisionId, 'none');
+    return { status: 'none' };
+  }
+  const outcome = await execute({ db, mailbox: box, now: deps.now ?? Date.now }, accountId, messageId, action, decisionId);
+  if (outcome.status === 'failed' || outcome.status === 'unknown') {
+    const { tries } = await changeTries(db, decisionId);
+    if (tries < CHANGE_TRIES) return { status: 'retrying' };
+    reportError(new Error(`A change was not made after ${tries} tries: ${outcome.reason}`));
+    await settleDecision(db, decisionId, 'failed', outcome.reason);
+    return { status: 'troubled' };
+  }
+  if (outcome.status === 'done') {
+    await settleDecision(db, decisionId, 'done');
+    return { status: 'done', actionId: outcome.actionId };
+  }
+  // An earlier try that could not be read back may have landed after all, leaving nothing to do now.
+  const landed = (await changeTries(db, decisionId)).landed;
+  await settleDecision(db, decisionId, landed ? 'done' : 'skipped', landed ? null : outcome.reason);
+  return { status: landed ? 'done' : 'skipped' };
+}
+
+/** `carryOutDecision`, counting what happened in `report`. */
+function carrier(deps: TriageDeps, account: Account, report: TriageReport) {
   return async (decisionId: number, messageId: string, decision: Pick<Decision, 'disposition' | 'gmailLabel' | 'markRead'>, box: Mailbox) => {
-    const action = planAction(decision);
-    if (!action) {
-      await settleDecision(db, decisionId, 'none');
-      return 'none';
-    }
-    const outcome = await execute({ db, mailbox: box, now }, account.id, messageId, action, decisionId);
-    // So Inbox shows the change now, not once a later sync reads it back from Gmail's history.
-    if (outcome.status === 'done') await recordLabels(db, account.id, messageId, outcome.finalLabels);
-    if (outcome.status === 'failed' || outcome.status === 'unknown') {
-      // Left unsettled, so the next pass asks again, from the labels as they are then.
-      const { tries } = await changeTries(db, decisionId);
-      if (tries < CHANGE_TRIES) {
-        report.retrying++;
-        return outcome.status;
-      }
-      reportError(new Error(`A change was not made after ${tries} tries: ${outcome.reason}`));
-      report.troubled++;
-    }
-    // An earlier try that could not be read back may have landed after all, leaving nothing to do now.
-    const landed = outcome.status === 'skipped' && (await changeTries(db, decisionId)).landed;
-    const settled = landed ? 'done' : outcome.status === 'unknown' ? 'failed' : outcome.status;
-    await settleDecision(db, decisionId, settled, settled === 'done' || outcome.status === 'done' ? null : outcome.reason);
-    if (outcome.status === 'done' || landed) report.acted++;
-    else if (outcome.status === 'skipped') report.skipped++;
+    const carried = await carryOutDecision(deps, account.id, decisionId, messageId, decision, box);
+    if (carried.status === 'retrying') report.retrying++;
+    else if (carried.status === 'troubled') report.troubled++;
+    else if (carried.status === 'done') report.acted++;
+    else if (carried.status === 'skipped') report.skipped++;
     // While Mild is off it changes only the message the person answered.
-    if (action.type === 'archive' && deps.mailbox && (outcome.status === 'done' || landed)) {
-      const archived = outcome.status === 'done' ? outcome.actionId : (await lastStandingChange(db, account.id, messageId))?.id;
-      if (archived !== undefined) await archiveEarlier({ db, mailbox: box, now }, account.id, messageId, archived);
+    if (decision.disposition === 'archive' && deps.mailbox && carried.status === 'done') {
+      const archived = carried.actionId ?? (await lastStandingChange(deps.db, account.id, messageId))?.id;
+      if (archived !== undefined) await archiveEarlier({ db: deps.db, mailbox: box, now: deps.now ?? Date.now }, account.id, messageId, archived);
     }
-    return landed ? 'done' : outcome.status;
+    return carried.status === 'retrying' || carried.status === 'troubled' ? 'failed' : carried.status;
   };
 }
 
