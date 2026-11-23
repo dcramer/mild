@@ -1055,7 +1055,7 @@ export function SystemView() {
               </Button>
             </div>
           </Section>
-          <Section title="Toast, saying what a press did" meta="one line: what was done, the label it gave, and Undo">
+          <Section title="Toast, saying what a press did" meta="the mail it was done to, then what was done and the label it gave">
             <div className="flex flex-wrap gap-2">
               {(
                 [
@@ -1077,10 +1077,18 @@ export function SystemView() {
                     ],
                   ],
                   [
+                    'Answered, kept',
+                    'Your electricity bill for November',
+                    [
+                      { action: 'keep', word: 'Kept' },
+                      { action: 'label', word: 'Receipts' },
+                    ],
+                  ],
+                  [
                     'Block',
                     '48 hours only: 30% off',
                     [
-                      { action: 'block', word: 'Blocked' },
+                      { action: 'block', word: 'Blocked deals@shop.example.com' },
                       { action: 'label', word: 'Cold outreach' },
                     ],
                   ],
@@ -1091,6 +1099,20 @@ export function SystemView() {
                   {press}
                 </Button>
               ))}
+              <Button
+                onClick={() =>
+                  toast('Disk 91% full on db-2', {
+                    did: [
+                      { action: 'archive', word: 'Archived' },
+                      { action: 'label', word: 'Notifications' },
+                    ],
+                    action: { label: 'Same for 2 more', onPress: () => toast('2 messages', { did: [{ action: 'archive', word: 'Archived' }] }) },
+                    undo: () => toast('Back in the inbox'),
+                  })
+                }
+              >
+                With more alike
+              </Button>
             </div>
           </Section>
           <Section title="Menu, popover, notice and hover card">

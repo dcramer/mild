@@ -14,7 +14,7 @@ import {
   back,
   reader,
   readerHeading,
-  toasts,
+  toast,
   param,
   path,
   PHONE,
@@ -362,7 +362,7 @@ test.describe('What Mild saw', () => {
     await param(page, 'message').toBe('m7');
 
     await choose(reader(page), 'Field trips');
-    await expect(toasts(page)).toContainText('as Field trips');
+    await expect(toast(page, 'Notes from the review')).toContainText(/Archived\s*to\s*Field trips/);
   });
 
   test('a rule on a fact alone is for mail from anyone, and re-decides what is waiting', async ({ page }) => {

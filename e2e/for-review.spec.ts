@@ -10,7 +10,7 @@ import {
   reviewRows,
   reviewSearch,
   row,
-  toasts,
+  toast,
   settings,
   sideScroll,
   test,
@@ -31,7 +31,7 @@ test.describe('For review', () => {
 
     // The new label is a choice at once.
     await choose(row(page, 'Notes from the review'), 'Field trips');
-    await expect(toasts(page)).toContainText('as Field trips');
+    await expect(toast(page, 'Notes from the review')).toContainText(/Archived\s*to\s*Field trips/);
     await expect(row(page, 'Notes from the review')).toHaveCount(0);
   });
 

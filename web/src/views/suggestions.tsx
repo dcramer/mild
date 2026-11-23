@@ -105,6 +105,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
 const answerableOf = (i: SuggestionItem): Answerable => ({
   accountId: i.accountId,
   sender: reveal(i.sender),
+  subject: reveal(i.subject),
   messageId: i.messageId,
   decisionId: i.decisionId,
   labelId: i.labelId,
