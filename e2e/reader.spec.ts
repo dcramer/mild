@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
+import { ruleDialog } from './rule.ts';
 import {
   PHONE,
   addressed,
   back,
   boxOf,
   composer,
+  dismiss,
   expect,
   failureToast,
   forReviewLink,
@@ -110,6 +112,37 @@ test.describe('The reader, from Inbox', () => {
     await expect(tooltip(page)).toHaveText('ArchiveE');
     await pointAt(reader(page).getByRole('button', { name: 'Back to Inbox' }));
     await expect(tooltip(page)).toHaveText('Back to Inboxesc');
+  });
+
+  test('Spam and Block sender in the bar take the conversation out with Undo, and go on to the next', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    const sale = inboxRow(page, 'Winter sale starts now');
+    const id = (await sale.getAttribute('data-holds'))!.split('/')[1]!;
+    await inboxRow(page, '48 hours only: 30% off').getByRole('cell').nth(2).click();
+    await expect(readerHeading(page, '48 hours only: 30% off')).toBeVisible();
+    await reader(page).getByRole('button', { name: 'Spam', exact: true }).click();
+    await expect(toast(page, '48 hours only: 30% off')).toContainText('Marked spam');
+    await expect(readerHeading(page, '48 hours only: 30% off')).toHaveCount(0);
+
+    await page.goto('/inbox');
+    await inboxRow(page, 'Winter sale starts now').getByRole('cell').nth(2).click();
+    await expect(readerHeading(page, 'Winter sale starts now')).toBeVisible();
+    await reader(page).getByRole('button', { name: 'Block sender' }).click();
+    await dismiss(page, 'Blocked sale@store.example.com');
+    await expect(readerHeading(page, 'Winter sale starts now')).toHaveCount(0);
+    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
+  });
+
+  test('a rule is made from what the message is: Make a rule… is last in its list, and opens the rule dialog', async ({ page }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    await expect(readerHeading(page, 'Your March bill')).toBeVisible();
+    await expect(open.getByRole('button', { name: 'Make a rule…' })).toHaveCount(0);
+    await open.getByRole('combobox', { name: 'What this message is' }).click();
+    await expect(page.getByRole('option').last()).toHaveText('Make a rule…');
+    await page.getByRole('option', { name: 'Make a rule…' }).click();
+    await expect(ruleDialog(page)).toBeVisible();
   });
 
   test('J and K step through the conversations, with where it is, and Escape returns to the row last shown', async ({ page }) => {
@@ -240,9 +273,9 @@ test.describe('The reader, from Inbox', () => {
 
       // The bar, with what the message is in it, and each message's head each keep to one line.
       const backTo = await boxOf(open.getByRole('button', { name: 'Back to Inbox' }));
-      const rule = await boxOf(open.getByRole('button', { name: 'Make a rule…' }));
+      const why = await boxOf(open.getByRole('button', { name: 'Why' }));
       const next = await boxOf(open.getByRole('button', { name: 'Next' }));
-      for (const one of [answer, rule, next]) expect(one.y + one.height / 2).toBeCloseTo(backTo.y + backTo.height / 2, 0);
+      for (const one of [answer, why, next]) expect(one.y + one.height / 2).toBeCloseTo(backTo.y + backTo.height / 2, 0);
       const head = open.getByRole('article').first();
       const sender = await boxOf(head.getByRole('link', { name: 'Utility', exact: true }));
       const more = await boxOf(head.getByRole('button', { name: 'Reply all, forward and more' }));

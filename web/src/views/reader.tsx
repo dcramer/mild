@@ -1,6 +1,6 @@
 'use client';
 import { eq, useLiveQuery } from '@tanstack/react-db';
-import { ArchiveIcon, MailIcon, PlusIcon, ReplyIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, MailIcon, PlusIcon, ReplyIcon, ShieldAlertIcon, WorkflowIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAnswer, useRecordAnswer } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
@@ -19,7 +19,7 @@ import type { MessageRef } from '@/lib/open-messages.ts';
 import { messageKey, useParam } from '@/lib/params.ts';
 import { AT_API_PRICES } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
-import { type RuleStart, keepStart, messageStart } from '@/lib/rule-start.ts';
+import { type RuleStart, keepStart, messageStart, standingStart } from '@/lib/rule-start.ts';
 import { useStarted } from '@/system/started.ts';
 import { InlineComposer } from '@/views/composer.tsx';
 import { AddLabelsDialog } from '@/views/label-panel.tsx';
@@ -569,12 +569,12 @@ function OpenedMessage({
               onSubmit={async (id) => {
                 await record(target, id);
               }}
-              extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
+              extras={[
+                { label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) },
+                { label: 'Make a rule…', lead: <WorkflowIcon />, onSelect: () => setRuling(messageStart(reveal(detail.fromAddress), shownLabel)) },
+              ]}
             />
             {why ? <Popover label="Why">{why}</Popover> : null}
-            <Button variant="quiet" aria-label="Make a rule…" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
-              Rule…
-            </Button>
           </>
         ) : undefined,
       )}
@@ -590,7 +590,7 @@ function OpenedMessage({
               groups: choices(target, current ? sureness(current) : 1, alternatives),
               empty: outcomeName('review'),
               onSubmit: (id) => answer(target, id),
-              extra: { label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) },
+              extras: [{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }],
             }}
             why={why}
             whyOpen
@@ -734,7 +734,7 @@ export function MessageReader({
     for (const near of [items[index + 1], items[index - 1]])
       if (near?.accountId) readAhead(`message/${near.accountId}/${near.messageId}`, (signal) => api.message(near.messageId, signal, near.accountId));
   }, [items, index]);
-  const { press } = useMailPress();
+  const { press, block, ruling: blocking, stopRuling } = useMailPress();
   const compose = useCompose();
   // Each message starts at its top, as a page does.
   const go = (to: number) => {
@@ -770,6 +770,8 @@ export function MessageReader({
   }, [listed, onShown]);
 
   const archive = () => pressed && press([pressed], 'archive', next);
+  const spam = () => pressed && press([pressed], 'spam', next);
+  const blockSender = () => pressed && data && block([{ ...pressed, from: data.fromAddress }], next);
   const unread = () => pressed && press([pressed], 'unread', onBack);
   // In Inbox, as the bar and the foot of the conversation have them. Reply answers the newest, once it has loaded; a digest has none.
   const thumbs: Thumb[] = threadId
@@ -797,6 +799,14 @@ export function MessageReader({
         threadId
           ? [
               { label: 'Archive', key: 'e', disabled: !pressed, onPress: archive, icon: <ArchiveIcon aria-hidden /> },
+              { label: 'Spam', key: '!', disabled: !pressed, onPress: spam, icon: <ShieldAlertIcon aria-hidden /> },
+              {
+                label: 'Block sender',
+                key: 'Shift+b',
+                disabled: !pressed || !data || data.digest !== null,
+                onPress: blockSender,
+                icon: <BanIcon aria-hidden />,
+              },
               { label: 'Mark unread', key: 'Shift+u', disabled: !pressed, onPress: unread, icon: <MailIcon aria-hidden /> },
             ]
           : []
@@ -823,18 +833,21 @@ export function MessageReader({
       </Reader>
     );
   return (
-    <OpenedMessage
-      key={`${data.accountId}/${data.messageId}`}
-      detail={data}
-      conversation={conversation}
-      bar={bar}
-      thumbs={thumbs}
-      onPick={pick}
-      onUndone={reload}
-      onAnswered={next}
-      onRead={() =>
-        changeLoaded<MailConversation | null>(threadLoad, (read) => read && { ...read, messages: read.messages.map((m) => ({ ...m, unread: false })) })
-      }
-    />
+    <>
+      <OpenedMessage
+        key={`${data.accountId}/${data.messageId}`}
+        detail={data}
+        conversation={conversation}
+        bar={bar}
+        thumbs={thumbs}
+        onPick={pick}
+        onUndone={reload}
+        onAnswered={next}
+        onRead={() =>
+          changeLoaded<MailConversation | null>(threadLoad, (read) => read && { ...read, messages: read.messages.map((m) => ({ ...m, unread: false })) })
+        }
+      />
+      {blocking ? <RuleDialog labels={manage.data?.labels ?? []} start={standingStart({ address: blocking }, 'blocked')} onClose={stopRuling} /> : null}
+    </>
   );
 }
