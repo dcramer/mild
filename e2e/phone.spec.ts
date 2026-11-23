@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { PHONE, addressed, boxOf, expect, forward, param, patchJson, reader, sideScroll, test, toast } from './sift.ts';
+import { PHONE, addressed, boxOf, expect, forward, param, patchJson, path, reader, sideScroll, test, toast } from './sift.ts';
 
 /** The phone's top bar. */
 const bar = (page: Page) => page.getByRole('banner');
@@ -44,14 +44,50 @@ test.describe('On a phone', () => {
     await search.fill('1042');
     await expect(conversations(page)).toHaveCount(1);
     await expect(conversations(page)).toContainText('Your order has shipped');
-    await search.fill('');
+    await bar(page).getByRole('button', { name: 'Back' }).click();
 
-    // The views are a menu on the list's name.
-    await page.getByRole('button', { name: 'Show' }).click();
-    await expect(page.getByRole('menuitemradio', { name: 'Everything' })).toHaveAttribute('aria-checked', 'true');
-    await page.getByRole('menuitemradio', { name: 'Sorted' }).click();
+    // The views are tabs under the bar.
+    const views = page.getByRole('radiogroup', { name: 'Show' });
+    await expect(views.getByRole('radio', { name: 'Everything' })).toBeChecked();
+    await views.getByRole('radio', { name: 'Sorted' }).click();
     await param(page, 'view').toBe('sorted');
-    await expect(page.getByRole('button', { name: 'Show' })).toContainText('InboxSorted');
+    await expect(views.getByRole('radio', { name: 'Sorted' })).toBeChecked();
+  });
+
+  test('pressing the search makes it a screen of its own: the filters, then what it finds, and Back leaves it', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(conversations(page).first()).toBeVisible();
+    const search = bar(page).getByRole('searchbox', { name: 'Search mail' });
+    const leave = bar(page).getByRole('button', { name: 'Back' });
+    const filters = page.getByRole('complementary', { name: 'Filters' });
+    const suggestion = page.getByRole('row').filter({ hasText: 'Keep Receipts from' });
+    await expect(suggestion).toBeVisible();
+
+    await search.click();
+    await expect(leave).toBeVisible();
+    await expect(bar(page).getByRole('button', { name: 'Menu' })).toBeHidden();
+    await expect(filters.getByRole('group', { name: 'Label' })).toBeVisible();
+    // Nothing else of the page around it.
+    await expect(page.getByRole('radiogroup', { name: 'Show' })).toBeHidden();
+    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Compose' })).toBeHidden();
+    await expect(suggestion).toBeHidden();
+
+    await search.fill('1042');
+    await expect(filters).toHaveCount(0);
+    await expect(conversations(page)).toHaveCount(1);
+    await leave.click();
+    await expect(search).toHaveValue('');
+    await expect(bar(page).getByRole('button', { name: 'Menu' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+    await expect(suggestion).toBeVisible();
+
+    // The browser's Back leaves it as well, and stays on Inbox.
+    await search.click();
+    await expect(leave).toBeVisible();
+    await page.goBack();
+    await expect(bar(page).getByRole('button', { name: 'Menu' })).toBeVisible();
+    await path(page).toBe('/inbox');
   });
 
   test('the bar goes as the page scrolls down and comes back as it scrolls up, and the day stays under it', async ({ page }) => {
@@ -101,7 +137,9 @@ test.describe('On a phone', () => {
     await page.setViewportSize({ width: PHONE.height, height: PHONE.width });
     await page.goto('/inbox');
     await expect(bar(page).getByRole('searchbox', { name: 'Search mail' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(0);
+    // The tab bar's: the rail is not drawn.
+    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(1);
+    await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
     await sideScroll(page).toBe(0);
   });
 

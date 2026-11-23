@@ -12,7 +12,7 @@ Everyone the person gets mail from, newest first, each with what Mild does with 
 
 ## How to get to it (user POV)
 
-Press `Contacts` in the rail (an icon, named when pointed at; on a phone, in `Menu`), or open a sender or domain from anywhere they are named.
+Press `Contacts` in the rail (an icon, named when pointed at; on a phone, in the tab bar along the foot), or open a sender or domain from anywhere they are named.
 
 ## Driving it with verify.sh
 

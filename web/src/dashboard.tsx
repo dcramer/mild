@@ -22,7 +22,7 @@ import { ahead, plural } from '@/lib/format.ts';
 import { useOutbox, useOutboxFailures } from '@/lib/waiting.ts';
 import { subscription } from '@/lib/prices.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
-import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, rowHolding, useGoing } from '@/system';
+import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 
@@ -414,6 +414,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
                 </main>
               </BarSlot>
               <PageFoot />
+              {open ? null : <TabBar current={section ?? ''} items={items} />}
             </div>
             {writingNew ? <Composer key={`${to}/${draftParam}`} to={to} draft={draftParam} onClose={closeComposer} /> : null}
           </div>

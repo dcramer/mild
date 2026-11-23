@@ -44,12 +44,26 @@ test.describe('A list on a desktop', () => {
 test.describe('A list on a phone', () => {
   test.use({ viewport: PHONE });
 
-  test('names itself under the bar, with its action beside the name', async ({ page }) => {
+  test('is named by the tab bar, and its action floats just above it at the right', async ({ page }) => {
     await page.goto('/rules');
-    const heading = page.getByRole('heading', { name: 'Rules', level: 1 });
+    const tabs = page.getByRole('navigation', { name: 'Sections' });
+    await expect(tabs.getByRole('link', { name: 'Rules' })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('heading', { name: 'Rules', level: 1 })).toBeAttached();
     const add = page.getByRole('button', { name: 'Add a rule' });
     await expect(add).toHaveCount(1);
-    expect((await boxOf(heading)).height).toBeGreaterThan(20);
-    expect(Math.abs((await middle(add)) - (await middle(heading)))).toBeLessThan(4);
+    const [press, foot] = [await boxOf(add), await boxOf(tabs)];
+    expect(press.y + press.height).toBeLessThan(foot.y);
+    expect(press.x + press.width).toBeGreaterThan(PHONE.width - 24);
+    await add.click();
+    await expect(page.getByRole('dialog', { name: 'Add a rule' })).toBeVisible();
+  });
+
+  test('scrolls to its end clear of its floating action', async ({ page }) => {
+    await page.goto('/labels');
+    const last = page.getByRole('row').last();
+    await expect(last).toBeAttached();
+    await page.evaluate('scrollTo(0, document.documentElement.scrollHeight)');
+    const [end, press] = [await boxOf(last), await boxOf(page.getByRole('button', { name: 'Add labels' }))];
+    expect(end.y + end.height).toBeLessThanOrEqual(press.y);
   });
 });

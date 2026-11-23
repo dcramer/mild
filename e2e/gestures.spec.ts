@@ -1,4 +1,4 @@
-import { TOUCH, boxOf, dismiss, expect, hold, path, reader, swipe, test, toast } from './sift.ts';
+import { TOUCH, boxOf, dismiss, edgeSwipe, expect, hold, path, reader, swipe, test, toast } from './sift.ts';
 import type { Page } from '@playwright/test';
 
 /** A conversation's row in Inbox on a phone, where it has no check to find it by. */
@@ -13,6 +13,9 @@ test.describe('Inbox by touch, on a phone', () => {
     const id = await idOf(page, 'Your order has shipped');
     await swipe(row(page, 'Your order has shipped'), -380);
     await expect(row(page, 'Your order has shipped')).toHaveCount(0);
+    // Above Compose, which floats at the foot of the list.
+    const [note, compose] = [await boxOf(toast(page, 'Your order has shipped')), await boxOf(page.getByRole('button', { name: 'Compose' }))];
+    expect(note.y + note.height).toBeLessThanOrEqual(compose.y);
     await toast(page, 'Your order has shipped').getByRole('button', { name: /^Undo/ }).tap();
     await expect(row(page, 'Your order has shipped')).toBeVisible();
     expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
@@ -21,6 +24,18 @@ test.describe('Inbox by touch, on a phone', () => {
     await dismiss(page, 'Your order has shipped');
     await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
     await expect(row(page, 'Your order has shipped')).toHaveCount(0);
+  });
+
+  test('a finger drawn in from the left edge opens the menu, as the menu button does', async ({ page }) => {
+    await page.goto('/inbox');
+    const shipped = await boxOf(row(page, 'Your order has shipped'));
+    await edgeSwipe(page, shipped.y + shipped.height / 2);
+    const menu = page.getByRole('dialog', { name: 'Menu' });
+    await expect(menu.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+    await menu.getByRole('button', { name: 'Close menu' }).tap();
+    await expect(menu).toHaveCount(0);
+    // The row the finger crossed did not slide.
+    await expect(row(page, 'Your order has shipped').getByRole('button', { name: 'Read' })).not.toBeInViewport();
   });
 
   test('a short swipe stops with its press showing; a press on the row then closes it and opens nothing, and the press archives', async ({ page }) => {

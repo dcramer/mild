@@ -16,7 +16,7 @@ With Inbox on, the person writes new mail in a panel over whatever is open, and 
 
 ## How to get to it (user POV)
 
-- Any screen, C, or `Compose` in the rail (desktop); on a phone, `Compose` in Inbox's header.
+- Any screen, C, or `Compose` in the rail (desktop); on a phone, `Compose` floating at the foot of Inbox.
 - The reader (Inbox, a conversation open), under the conversation: `Reply` (R), `Reply all` (A), `Forward` (F), which open the reply in their place, on the newest. On a phone those three are not drawn: the bar along the bottom has `Reply`, and each message's `Reply all, forward and more` the others. On any open message's head: `Reply to <sender>`, and `Reply all, forward and more`, a menu (Reply all, Forward, and Show as text where Mild holds the HTML). The address alone opens one too: `?message=<id>&compose=reply` (or `all`, `forward`), with `&answering=<id>` for another message of the conversation.
 
 ## Driving it with verify.sh

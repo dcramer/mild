@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import type { ManageState } from '../src/dashboard/types.ts';
-import { boxOf, expect, PHONE, patchJson, pointAt, senderPage, settings, sideScroll, test, tooltip } from './sift.ts';
+import { boxOf, expect, PHONE, patchJson, path, pointAt, senderPage, settings, sideScroll, test, tooltip } from './sift.ts';
 
 test.describe('When a Google sign-in expired', () => {
   // A service worker's page is out of reach of page.route.
@@ -109,15 +109,23 @@ test.describe('The sections', () => {
     await expect(page.getByRole('button', { name: 'Menu' })).toHaveCount(0);
   });
 
-  test('on a phone they are not down the side, and the menu lists them', async ({ page }) => {
+  test('on a phone they run along the foot of the screen, the current one marked, and the menu lists them too', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto('/activity');
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(0);
+    const tabs = page.getByRole('navigation', { name: 'Sections' });
+    await expect(tabs.getByRole('link', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
+    const foot = await boxOf(tabs);
+    expect(foot.y + foot.height).toBeGreaterThanOrEqual(PHONE.height - 1);
+    expect(foot.width).toBeGreaterThan(foot.height);
+    await tabs.getByRole('link', { name: 'Labels' }).click();
+    await path(page).toBe('/labels');
+    await expect(tabs.getByRole('link', { name: 'Labels' })).toHaveAttribute('aria-current', 'page');
+
     await page.getByRole('button', { name: 'Menu' }).click();
-    const sections = page.getByRole('dialog', { name: 'Menu' }).getByRole('navigation', { name: 'Sections' });
-    await expect(sections.getByRole('link', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
-    await sections.getByRole('link', { name: 'Rules' }).click();
-    await expect(page.getByRole('heading', { name: 'Rules', level: 1 })).toBeVisible();
+    const listed = page.getByRole('dialog', { name: 'Menu' }).getByRole('navigation', { name: 'Sections' });
+    await expect(listed.getByRole('link', { name: 'Labels' })).toHaveAttribute('aria-current', 'page');
+    await listed.getByRole('link', { name: 'Rules' }).click();
+    await path(page).toBe('/rules');
     await expect(page.getByRole('dialog', { name: 'Menu' })).toHaveCount(0);
   });
 
