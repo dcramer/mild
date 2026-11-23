@@ -1,6 +1,6 @@
 'use client';
 import { Select as Base } from '@base-ui/react/select';
-import { CheckIcon, ChevronDownIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon, TagIcon } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
@@ -144,6 +144,7 @@ export function LabelPick({
           'whitespace-nowrap text-foreground/75 select-none hover:text-foreground data-popup-open:text-foreground',
         )}
       >
+        {size === 'toolbar' ? <TagIcon aria-hidden className="size-4 shrink-0" /> : null}
         {/* The meter stands on the label's baseline, and both sit a pixel down, as a button's words do. */}
         <span className="relative top-px flex min-w-0 items-baseline gap-2">
           {current ? (

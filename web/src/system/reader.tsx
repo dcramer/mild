@@ -57,7 +57,7 @@ export function Reader({
     <section ref={own} tabIndex={-1} aria-labelledby={heading} className="flex flex-col gap-4 outline-none">
       {bar}
       <div className="flex flex-col gap-3 phone:gap-2">
-        <h1 id={heading} className="statement subject wrap-anywhere">
+        <h1 id={heading} className="heading subject wrap-anywhere">
           {title}
         </h1>
         {answer}

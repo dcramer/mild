@@ -129,6 +129,7 @@ test.describe('A message as its HTML', () => {
   test('fits a phone', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto(DEALS);
+    await expect(readerHeading(page, '48 hours only: 30% off')).toHaveCSS('font-size', '17px');
     const frame = mailFrame(page, '48 hours only: 30% off');
     await expect(frame.getByRole('heading', { name: '30% off everything' })).toBeVisible();
     const paper = await boxOf(page.locator('iframe'));
@@ -139,8 +140,11 @@ test.describe('A message as its HTML', () => {
     await sideScroll(page).toBe(0);
   });
 
-  test('takes the width a wide screen has, with a card written to centre in the middle of it', async ({ page }) => {
+  test('takes the width a wide screen has, under a subject the size a mail app sets it, with a card written to centre in the middle of it', async ({
+    page,
+  }) => {
     await page.goto(DEALS);
+    await expect(readerHeading(page, '48 hours only: 30% off')).toHaveCSS('font-size', '22px');
     const frame = mailFrame(page, '48 hours only: 30% off');
     await expect(frame.getByRole('heading', { name: '30% off everything' })).toBeVisible();
     const paper = await boxOf(page.locator('iframe'));
