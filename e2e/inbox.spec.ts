@@ -179,6 +179,7 @@ test.describe('Inbox', () => {
   });
 
   test('opened again, what the feed changes is not undone by the older rows read from the device after it', async ({ page }) => {
+    test.slow();
     let gone = false;
     await patchJson(page, '**/api/sync*', (feed) => {
       const { conversation } = (feed.conversations.at(-1) ?? {}) as { conversation?: { accountId: string; messages: { receivedAt: number }[] } };
@@ -212,11 +213,14 @@ test.describe('Inbox', () => {
     const asked = page.waitForResponse('**/api/sync*');
     await page.reload();
     await asked;
-    await expect(inboxRows(page)).toHaveCount(100);
+    // What this checks is which rows come, not how soon: slowed four times on CI's runner, beside three other workers,
+    // each hundred takes 3 to 5 s to draw.
+    const drawn = { timeout: 20_000 };
+    await expect(inboxRows(page)).toHaveCount(100, drawn);
     await inboxRows(page).last().scrollIntoViewIfNeeded();
-    await expect(inboxRows(page)).toHaveCount(200);
+    await expect(inboxRows(page)).toHaveCount(200, drawn);
     await inboxRows(page).last().scrollIntoViewIfNeeded();
-    await expect(inboxRows(page)).toHaveCount(248);
+    await expect(inboxRows(page)).toHaveCount(248, drawn);
   });
 
   test('a row’s label does what the label does: one that keeps is saved in place, one that archives takes the conversation out of the inbox once its toast goes', async ({
