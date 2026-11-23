@@ -22,9 +22,6 @@ import { type Thumb, ThumbBar } from './thumbs.tsx';
 import { Tooltip } from './tooltip.tsx';
 import { Kbd } from './type.tsx';
 
-/** As wide as a line of mail reads well, and as wide as a 600px email with room either side. */
-const READING = 'max-w-[46rem]';
-
 /**
  * One message or conversation, opened from a list in the list's place, inside the frame: the bar (`ReaderBar`), the
  * subject as the page's heading, Mild's part (`AnswerRow`), then the conversation and whatever answers it. `side` is a
@@ -58,14 +55,14 @@ export function Reader({
   const heading = useId();
   return (
     <section ref={own} tabIndex={-1} aria-labelledby={heading} className="flex flex-col gap-4 outline-none">
-      <div className={READING}>{bar}</div>
-      <div className={cn('flex flex-col gap-3 phone:gap-2', READING)}>
+      {bar}
+      <div className="flex flex-col gap-3 phone:gap-2">
         <h1 id={heading} className="statement subject wrap-anywhere">
           {title}
         </h1>
         {answer}
       </div>
-      <div className={side ? 'mt-4 flex flex-col gap-12 xl:grid xl:grid-cols-[minmax(0,46rem)_20rem] xl:items-start xl:gap-16' : cn('mt-4', READING)}>
+      <div className={cn('mt-4', side && 'flex flex-col gap-12 xl:grid xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start xl:gap-16')}>
         <div className="flex min-w-0 flex-col gap-6">{children}</div>
         {side ? <aside className="flex min-w-0 flex-col gap-8">{side}</aside> : null}
       </div>

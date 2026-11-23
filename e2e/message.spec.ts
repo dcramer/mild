@@ -138,6 +138,17 @@ test.describe('A message as its HTML', () => {
     expect(card.x + card.width).toBeLessThanOrEqual(paper.x + paper.width);
     await sideScroll(page).toBe(0);
   });
+
+  test('takes the width a wide screen has, with a card written to centre in the middle of it', async ({ page }) => {
+    await page.goto(DEALS);
+    const frame = mailFrame(page, '48 hours only: 30% off');
+    await expect(frame.getByRole('heading', { name: '30% off everything' })).toBeVisible();
+    const paper = await boxOf(page.locator('iframe'));
+    // 46rem, the reading column it was once held to.
+    expect(paper.width).toBeGreaterThan(736);
+    const card = await boxOf(frame.locator('table table'));
+    expect(Math.abs(card.x + card.width / 2 - (paper.x + paper.width / 2))).toBeLessThanOrEqual(2);
+  });
 });
 
 const RELEASE = `/?${messageQuery('m21')}`;
