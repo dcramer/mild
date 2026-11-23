@@ -938,10 +938,6 @@ const Reach = z.object({ messages: z.number(), bytes: z.number(), minutes: z.num
 export const MailReach = z.object({ year: Reach, three_years: Reach, all: Reach });
 export type MailReach = z.infer<typeof MailReach>;
 
-/** GET /api/mailbox/icons: for the domain of each of the person's mailboxes, the icon its site gives itself, as a `data:` address, or null. */
-export const MailboxIcons = z.object({ icons: z.record(z.string(), z.string().nullable()) });
-export type MailboxIcons = z.infer<typeof MailboxIcons>;
-
 /** GET /api/manage: everything the Settings view shows. */
 export const ManageState = z.object({
   /** Whether the viewer owns the install, and so may change what applies to all of it. */

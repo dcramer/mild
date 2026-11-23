@@ -22,9 +22,7 @@ export type Beginning = { begun: true } | { begun: false; since?: number };
  * Google's own addresses (`tests/google.ts`), so Mild's Gmail client runs as it does against Google.
  */
 export interface StandIns {
-  model?: ChosenModel;
-  /** In place of asking a domain's site for its icon (`fetchIcon`, src/icons.ts). */
-  icon?: (domain: string) => Promise<string | null>;
+  model: ChosenModel;
 }
 
 /** What a host gives sift: `mild run` on a machine, or a function on Vercel (docs/runtime.md). */
@@ -111,7 +109,7 @@ export async function createSift(host: Host): Promise<Sift> {
     ephemeral,
     log,
     ...(host.url ? { dashboard: host.url } : {}),
-    ...(standIns?.model
+    ...(standIns
       ? {}
       : {
           model: async (db: Sql) => {

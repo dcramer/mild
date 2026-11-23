@@ -27,7 +27,15 @@ test('every screen calls it Mild, and only its wordmark mild', async ({ page }) 
     await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
     // A word of its own: a command, a path or a Gmail label (`mild/digest`) keeps its spelling.
     await expect(page.locator('main'), path).not.toContainText(/(?<![\w/.@~$-])sift(?![\w/.@-])/);
-    await expect(page.locator('.wordmark').filter({ visible: true }), path).toHaveText('mild');
+    // On a desktop the rail draws the icon in place of the name.
+    await expect(page.getByRole('link', { name: 'Mild', exact: true }).filter({ visible: true }), path).toHaveCount(1);
+    await expect(
+      page
+        .locator('.wordmark')
+        .filter({ visible: true })
+        .filter({ hasNotText: /^mild$/ }),
+      path,
+    ).toHaveCount(0);
     await expect(page.locator('[aria-label="mild"]'), path).toHaveCount(0);
   }
 });

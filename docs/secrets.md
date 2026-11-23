@@ -31,12 +31,12 @@ Each value records the id of the key that encrypted it (a short hash, the `2cac0
 
 Rotating the key (above) is enough only if nobody who had the key could also have read what it protects. If a copy of the home directory or a backup may be out with it, treat what it holds as exposed too, and replace it at its source:
 
-| What                                                                     | Do                                                                                                                                              |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gmail access                                                             | In each Google Account, remove Mild's access under third-party apps; that ends every token Mild was given. Then sign in to the dashboard again. |
-| The Google client (`google-client.json`, or `MILD_GOOGLE_CLIENT_SECRET`) | In Google Cloud Console, reset the client's secret, then `mild init` and paste the new JSON, or set the new secret on Vercel.                   |
-| Model keys and sign-ins                                                  | Revoke the API key, or sign out other sessions, at the provider. Then sign in again under Settings in the dashboard.                            |
-| Dashboard sessions (`dashboard-key`, or `MILD_SESSION_SECRET`)           | Delete the file, or set a new secret. Everyone is signed out.                                                                                   |
+| What | Do |
+| --- | --- |
+| Gmail access | In each Google Account, remove Mild's access under third-party apps; that ends every token Mild was given. Then sign in to the dashboard again. |
+| The Google client (`google-client.json`, or `MILD_GOOGLE_CLIENT_SECRET`) | In Google Cloud Console, reset the client's secret, then `mild init` and paste the new JSON, or set the new secret on Vercel. |
+| Model keys and sign-ins | Revoke the API key, or sign out other sessions, at the provider. Then sign in again under Settings in the dashboard. |
+| Dashboard sessions (`dashboard-key`, or `MILD_SESSION_SECRET`) | Delete the file, or set a new secret. Everyone is signed out. |
 
 Then rotate the key itself. The key leaves the rest of the record plain (labels, and what was decided and done, and when), so a copied home carries that too.
 
@@ -44,10 +44,10 @@ Then rotate the key itself. The key leaves the rest of the record plain (labels,
 
 Mild refuses to start (on Vercel, the deploy fails), and names what it cannot open. If `mild init` made the key, first check that Mild was started from the directory whose `.env` holds it. Otherwise nothing the key sealed can be recovered: the files below, every sign-in, and in the databases the text and headers of recorded mail, rules' conditions and names, and decisions' reasons.
 
-| Lost                 | Then                                                                               |
-| -------------------- | ---------------------------------------------------------------------------------- |
+| Lost | Then |
+| --- | --- |
 | `google-client.json` | Delete it, then `mild init`, and paste the client again from Google Cloud Console. |
-| `dashboard-key`      | Delete it; everyone is signed out of the dashboard.                                |
+| `dashboard-key` | Delete it; everyone is signed out of the dashboard. |
 
 Mild checks every sealed row before it starts, so it will not start while any the key sealed is still in a database, and there is not yet a way to drop only those rows (TODO.md).
 

@@ -404,10 +404,7 @@ export type Browser = Awaited<ReturnType<Awaited<ReturnType<typeof startSift>>['
  * it, as a Workflow run would after the request answered. `browser()` is a browser with nobody signed in; `signIn` signs one
  * in through Google's consent screen as a mailbox: a new person, or with `addTo`, another mailbox of whoever that browser is.
  */
-export async function startSift(
-  google: FakeGoogle,
-  options: { model?: ChosenModel; keys?: Keyring; now?: () => number; env?: Record<string, string>; icon?: (domain: string) => Promise<string | null> } = {},
-) {
+export async function startSift(google: FakeGoogle, options: { model?: ChosenModel; keys?: Keyring; now?: () => number; env?: Record<string, string> } = {}) {
   const config = loadConfig({ MILD_HOME: tempDir(), ...options.env });
   installClient(config, JSON.stringify({ web: { client_id: SECRETS.clientId, client_secret: SECRETS.clientSecret } }));
   const store = await freshStore(options.keys);
@@ -426,8 +423,7 @@ export async function startSift(
       queued.push(piece);
       return { begun: true };
     },
-    // No site is asked for its icon: a domain has the one `icon` gives it, or none.
-    standIns: { ...(options.model ? { model: options.model } : {}), icon: options.icon ?? (async () => null) },
+    ...(options.model ? { standIns: { model: options.model } } : {}),
   });
 
   const browser = () => {

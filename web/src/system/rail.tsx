@@ -7,7 +7,7 @@ import { useShortcut } from './keys.tsx';
 import { type MailboxChoice, mailboxChoices } from './mailbox.tsx';
 import { Avatar, Menu, type MenuItem } from './menu.tsx';
 import { Tooltip } from './tooltip.tsx';
-import { Wordmark } from './type.tsx';
+import { Emblem } from './type.tsx';
 
 /** A section, or Compose: its icon in a rounded square, which the current section fills. */
 const TILE = 'relative flex size-10 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-100 motion-reduce:transition-none';
@@ -22,11 +22,11 @@ export interface NavItem {
 }
 
 /**
- * The sections down the left of every screen on a desktop: the name at the top, then `compose` (writing a new message,
+ * The sections down the left of every screen on a desktop: Mild's icon at the top, then `compose` (writing a new message,
  * with Inbox on, also C, with no keycap: the rail is not a list worked through), then each section as its icon
  * in a rounded square, named when pointed at, the current one filled in ink, not yellow, which is for what waits on the reader, then at the foot `aside` (Mild's line, stacked), the
- * `mailbox` the dashboard shows, beside whose they are, and `account` (who is signed in, behind their `Avatar`). No fill; a line sets it apart. As tall as the window, and never taller
- * than what holds it. Given no sections it is the name alone, as `Masthead` is.
+ * `mailbox` the dashboard shows, beside whose they are, and `account` (who is signed in, behind their `Avatar`). No fill; a faint line sets it apart. As tall as the window, and never taller
+ * than what holds it. Given no sections it is the icon alone.
  */
 export function Rail({
   items,
@@ -44,9 +44,10 @@ export function Rail({
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   return (
-    <header className="sticky top-0 hidden h-svh max-h-full w-[calc(4.5rem+var(--safe-left))] shrink-0 flex-col items-center border-r border-(--frame) pt-[calc(1.25rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))] pl-(--safe-left) md:flex">
-      <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Mild" className="flex min-h-(--control) items-center">
-        <Wordmark />
+    <header className="sticky top-0 hidden h-svh max-h-full w-[calc(4.5rem+var(--safe-left))] shrink-0 flex-col items-center border-r border-(--rule) pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))] pl-(--safe-left) md:flex">
+      {/* The page's top and its search bar's height, so the icon sits level with the bar beside it. */}
+      <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Mild" className="flex h-9.5 items-center">
+        <Emblem />
       </Anchor>
       {compose ? <Compose onPress={compose} /> : null}
       {items.length > 0 ? (
