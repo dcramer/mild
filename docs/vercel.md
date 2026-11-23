@@ -22,7 +22,7 @@ This first deploy builds without a database. Until steps 2 and 3 are done, the s
 
 In Settings, Environment Variables, keep **Enable access to System Environment Variables** checked. Workflow knows it is on Vercel only by `VERCEL_DEPLOYMENT_ID`; without it every run fails, and every piece of work with it. Mild knows it by `VERCEL` (`src/sift/instance.ts`); without it, it would open a home directory and PGlite as `mild run` does.
 
-In Settings, Advanced, turn on **Skew Protection**. An installed app stays open for days: with it, a page from an older deploy still gets that deploy's files until it moves to another screen, which it then loads whole from the new one (`useStale`, `web/src/lib/build.ts`). Without it, a screen the old page has not fetched yet fails, and offers Reload.
+In Settings, Advanced, turn on **Skew Protection**. An installed app stays open for days: with it, a page from an older deploy still gets that deploy's files until it moves to another screen or is put away or left alone, when it loads whole from the new one (`web/src/lib/build.ts`). Without it, a screen the old page has not fetched yet fails, and offers Reload.
 
 Then, from the project's Storage tab, add Neon and a Redis database. Each sets variables of its own; Mild reads the ones in step 3.
 
