@@ -82,15 +82,30 @@ test.describe('Inbox by touch, on a phone', () => {
     await expect(shipped).toHaveCount(0);
   });
 
-  test('a row swiped right to the edge is read, and then swipes to be unread again', async ({ page, sift }) => {
+  test('a row swiped right shows Label, which opens a sheet of every label: Cancel keeps it, and a label that archives takes it once its toast goes', async ({
+    page,
+    sift,
+  }) => {
     await page.goto('/inbox');
     const id = await idOf(page, 'Lunch on Thursday?');
     const lunch = row(page, 'Lunch on Thursday?');
-    await expect(lunch.getByRole('button', { name: 'Read' })).toHaveCount(1);
-    await swipe(lunch, 380);
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('UNREAD');
-    await expect(lunch.getByRole('button', { name: 'Unread' })).toHaveCount(1);
+    const label = lunch.getByRole('button', { name: 'Label' });
+    await swipe(lunch, 110);
+    await expect(label).toBeInViewport({ ratio: 1 });
+    const pressed = await boxOf(label);
+    await page.touchscreen.tap(pressed.x + pressed.width / 2, pressed.y + pressed.height / 2);
+    const sheet = page.getByRole('dialog', { name: 'Ada Lovelace' });
+    await expect(sheet).toContainText('Lunch on Thursday?');
+    await sheet.getByRole('button', { name: 'Cancel' }).tap();
+    await expect(sheet).toHaveCount(0);
     await expect(lunch).toBeVisible();
+
+    await swipe(lunch, 380);
+    await sheet.getByRole('button', { name: /^Receipts/ }).tap();
+    await expect(sheet).toHaveCount(0);
+    await expect(lunch).toHaveCount(0);
+    await dismiss(page, 'Archive as Receipts');
+    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
   });
 
   test('a finger held on a row selects it; then a press selects or lets go, and the bar along the bottom archives them', async ({ page }) => {

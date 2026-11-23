@@ -36,6 +36,7 @@ import {
   LabelName,
   AnswerPicker,
   LabelPick,
+  LabelSheet,
   ActionIcon,
   Avatar,
   Button,
@@ -195,6 +196,18 @@ const LABELS = [
   ['newsletter', 'Newsletters'],
   ['marketing', 'Marketing'],
   ['phishing', 'Scams and phishing'],
+] as const;
+const SHEET_LABELS = [
+  [[INBOX, INBOX_NAME, 'keep']],
+  [['marketing', 'Marketing', 'archive', 3]],
+  [
+    ['newsletter', 'Newsletters', 'archive'],
+    ['receipts', 'Receipts and transactions', 'archive'],
+    ['notifications', 'Notifications', 'archive'],
+    ['alerts', 'Account alerts', 'keep'],
+    ['outreach', 'Cold outreach', 'spam'],
+    ['phishing', 'Scams and phishing', 'spam'],
+  ],
 ] as const;
 const ROWS = [
   { sender: 'Example Weekly', address: 'news@example.com', subject: 'Five things to read', label: 'Newsletters', does: 'archive' },
@@ -1022,7 +1035,7 @@ export function SystemView() {
                     <Td className="max-w-0">
                       <Swipe
                         {...(opened ? { opened } : {})}
-                        start={{ label: 'Read', icon: <MailOpenIcon />, onPress: () => toast('Read') }}
+                        start={{ label: 'Label', icon: <TagIcon />, onPress: () => toast('Label') }}
                         end={{ label: 'Archive', icon: <ArchiveIcon />, onPress: () => toast('Archived') }}
                       >
                         <span className="flex flex-col leading-snug">
@@ -1036,6 +1049,9 @@ export function SystemView() {
                 ))}
               </tbody>
             </Table>
+          </Section>
+          <Section title="Label sheet" meta="on a phone, what one conversation is: Inbox's swipe right">
+            <LabelSheetSpecimen />
           </Section>
           <Section title="Reserve" meta="holds the room for what arrives late, so nothing below moves">
             <Reserve id="specimen" ready={false} room="min-h-24" placeholder={<Loading rows={2} />}>
@@ -1807,5 +1823,33 @@ function SpecimenDraft({ to: start }: { to: Recipient[] }) {
       <DraftText aria-label="Message" className="min-h-48" />
       <DraftFiles files={files} onRemove={(key) => setFiles((all) => all.filter((f) => f.key !== key))} />
     </>
+  );
+}
+
+function LabelSheetSpecimen() {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <Button onClick={() => setOpen(true)}>Label…</Button>
+      {open ? (
+        <LabelSheet
+          open
+          onClose={() => setOpen(false)}
+          who="Store"
+          subject="48 hours only: 30% off everything"
+          value="marketing"
+          groups={SHEET_LABELS.map((group) =>
+            group.map(([id, label, does, sure]) => ({
+              id,
+              label,
+              does: <Does action={does}>{ACTIONS.find(([k]) => k === does)?.[1] ?? does}</Does>,
+              ...(sure ? { lead: <Meter level={sure} /> } : {}),
+            })),
+          )}
+          onPick={(id) => toast(`Saved: ${id}`)}
+        />
+      ) : null}
+    </div>
   );
 }

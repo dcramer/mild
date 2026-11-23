@@ -11,7 +11,7 @@ With Inbox on, Inbox takes For review's place (`/` is `/inbox`): every conversat
 - `inbox-archive`: `Archive` or E: the toast names the subject under `Archived`, with `Undo Z`; from the reader, it goes on to the next conversation. `Spam` is the same under `Marked spam`. `Block sender` gives the sender the Blocked standing (rule-shortcuts.md): `Blocked <address>` under `Rule added`, with Undo.
 - `inbox-select`: X on a row, or its check: a toolbar `Selected rows` (`2 selected`) with `Archive` (E), `Spam`, `Block sender`, `Mark read` (Shift+I), `Mark unread` (Shift+U), `Select none`.
 - `inbox-search`: `Search mail` (/), a searchbox that searches the text Inbox keeps as it is typed (`?q=`). Enter, or `Ask`, asks the model instead: its filter shows as `Clear From: …` (SKILL.md says what the stand-in finds).
-- `inbox-phone`: a short swipe stops on Archive or Read, one to the edge does it, and a finger held on a row selects it. Not drivable here (SKILL.md, Drive).
+- `inbox-phone`: a short swipe stops on Archive (left) or Label (right), one to the edge does it (Label opens a sheet of every label), and a finger held on a row selects it. Not drivable here (SKILL.md, Drive).
 
 ## How to get to it (user POV)
 
