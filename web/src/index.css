@@ -208,9 +208,10 @@
       letter-spacing: -0.03em;
     }
   }
-  /* An opened message's subject: a page's title on a desktop, a line at reading size on a phone, so its text starts high. */
+  /* An opened message's subject: a section heading's size on a desktop, as a mail app sets it, so the message leads and not
+     its title; a line at reading size on a phone, so its text starts high. */
   @media (width < 48rem), (height < 30rem) {
-    .statement.subject {
+    .heading.subject {
       font-size: var(--text-reading);
       line-height: 1.3;
       letter-spacing: -0.02em;

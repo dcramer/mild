@@ -663,6 +663,8 @@ test.describe('Inbox', () => {
     await expect(open.getByRole('article')).toHaveCount(3);
     // Answered as Receipts, as its row says, though Mild could not place it.
     await expect(open.getByRole('combobox', { name: 'What this message is' })).toContainText('Receipts');
+    // A label, in a toolbar of icons, by its tag.
+    await expect(open.getByRole('combobox', { name: 'What this message is' }).locator('svg.lucide-tag')).toBeVisible();
     // In Inbox, Mild's reason waits for Why, in a card over the page rather than in the mail, and Escape puts the card away.
     await expect(open.getByText(/^Your answer\. Mild said: /)).toHaveCount(0);
     await open.getByRole('button', { name: 'Why' }).click();
