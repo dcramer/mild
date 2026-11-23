@@ -9,7 +9,6 @@ import { DigestBody } from '@/components/digest.tsx';
 import { useMailPress } from '@/components/mail.tsx';
 import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
-import { useMailboxIcon } from '@/components/mailbox-icon.tsx';
 import { useAction } from '@/lib/action.ts';
 import { saveFile, useFiles } from '@/lib/attachments.ts';
 import { type Confidential, type MailConversation, type MessageDetail, type RuleMatch, api, changeLoaded, readAhead, useLoaded } from '@/lib/api.ts';
@@ -37,7 +36,6 @@ import {
   Heads,
   Heard,
   Loading,
-  MailboxIcon,
   MessageHead,
   MessageStack,
   Note,
@@ -47,6 +45,8 @@ import {
   type Thumb,
   Section,
   SomeOf,
+  Popover,
+  LabelPick,
   Table,
   Td,
   TextLink,
@@ -191,52 +191,26 @@ const historyCount = (detail: MessageDetail) => detail.decisions.length + detail
 const people = (list: MessageDetail['to'], account: string) => list.map((p) => (reveal(p.address) === account ? 'me' : reveal(p.address)));
 
 /**
- * Who a message went to, unless that was the account alone, which says nothing. A long list folds. Someone with
- * several mailboxes is always told which of them it came to, first, in full, after its domain's icon.
+ * Who a message went to, as To and Cc rows, a long list folded. To the account alone says nothing, unless the person
+ * has more than one mailbox: then To always names the one it came to, in full, first where it was not addressed.
  */
-function AddressedTo({ detail }: { detail: MessageDetail }) {
-  const iconOf = useMailboxIcon();
+function useAddressedTo(detail: MessageDetail): { label: 'To' | 'Cc'; who: ReactNode }[] {
+  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
   const own = detail.accountId;
-  if (!iconOf) {
-    if (detail.cc.length === 0 && detail.to.every((p) => reveal(p.address) === own)) return null;
-    return (
-      <>
-        {detail.to.length > 0 ? (
-          <>
-            To <SomeOf items={people(detail.to, own)} />
-          </>
-        ) : null}
-        {detail.cc.length > 0 ? (
-          <>
-            {detail.to.length > 0 ? ', cc ' : 'Cc '}
-            <SomeOf items={people(detail.cc, own)} />
-          </>
-        ) : null}
-      </>
-    );
+  const to = detail.to.map((p) => reveal(p.address));
+  const cc = detail.cc.map((p) => reveal(p.address));
+  if ((manage.data?.accounts.length ?? 0) > 1) {
+    const named = to.includes(own) || cc.includes(own);
+    return [
+      { label: 'To' as const, who: <SomeOf items={named ? to : [own, ...to]} /> },
+      ...(cc.length > 0 ? [{ label: 'Cc' as const, who: <SomeOf items={cc} /> }] : []),
+    ];
   }
-  const others = (list: MessageDetail['to']) => list.map((p) => reveal(p.address)).filter((address) => address !== own);
-  const to = others(detail.to);
-  const cc = others(detail.cc);
-  return (
-    <>
-      To{' '}
-      <span className="inline-flex align-[-3px]">
-        <MailboxIcon address={own} icon={iconOf(own)} />
-      </span>{' '}
-      <span className="text-foreground/85">{own}</span>
-      {to.length > 0 ? (
-        <>
-          , <SomeOf items={to} />
-        </>
-      ) : null}
-      {cc.length > 0 ? (
-        <>
-          , cc <SomeOf items={cc} />
-        </>
-      ) : null}
-    </>
-  );
+  if (cc.length === 0 && to.every((address) => address === own)) return [];
+  return [
+    ...(to.length > 0 ? [{ label: 'To' as const, who: <SomeOf items={people(detail.to, own)} /> }] : []),
+    ...(cc.length > 0 ? [{ label: 'Cc' as const, who: <SomeOf items={people(detail.cc, own)} /> }] : []),
+  ];
 }
 
 type Answer = Exclude<Writing, { kind: 'new' }>;
@@ -247,6 +221,7 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
   const name = reveal(detail.fromName);
   const id = detail.messageId;
   const mine = address === detail.accountId;
+  const addressedTo = useAddressedTo(detail);
   const { html, more } = useMessageView(detail);
   return (
     <>
@@ -266,7 +241,7 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
         }
         {...(name && !mine ? { address: <SenderLink address={address} /> } : {})}
         at={<Heard at={detail.receivedAt} />}
-        to={<AddressedTo detail={detail} />}
+        to={addressedTo}
         {...(onAnswer
           ? {
               answers: {
@@ -402,7 +377,7 @@ function Arriving({ conversation, subject, bar, thumbs }: { conversation: MailCo
   const messages = stacked(conversation);
   const open = new Set([messages.at(-1)!.id, ...conversation.messages.filter((m) => m.unread).map((m) => m.messageId)]);
   return (
-    <Reader bar={bar} thumbs={thumbs} title={reveal(subject) || '(no subject)'} answer={<Blank className="h-(--control) w-60 py-0" />}>
+    <Reader bar={bar} thumbs={thumbs} title={reveal(subject) || '(no subject)'}>
       <MessageStack messages={messages} open={open} onToggle={() => {}}>
         {(id) => {
           const m = conversation.messages.find((one) => one.messageId === id)!;
@@ -449,8 +424,9 @@ function Answering({ what, newest, onClose }: { what: Answer; newest: MessageDet
 }
 
 /**
- * Everything about one message once it has loaded. Mild's row under the title: the answer, which starts on the reader's
- * own where they gave one, Why (Mild's reason, and in Inbox the history) and Rule…; answering moves on to the next item.
+ * Everything about one message once it has loaded. What the message is, which starts on the reader's own answer where
+ * they gave one, Why (Mild's reason, and in Inbox the history) and Rule…: in Inbox in the bar, as a mail app's toolbar
+ * holds a label, with Why a `Popover`; elsewhere on Mild's row under the title, where answering moves on to the next item.
  * Then the conversation, and what answers it. Opened from anywhere but Inbox, a side column has what Mild saw, the
  * sender, what else of theirs waits, and the history.
  */
@@ -466,7 +442,8 @@ function OpenedMessage({
 }: {
   detail: MessageDetail;
   conversation: MailConversation | null;
-  bar: ReactNode;
+  /** The bar, given what the message is where Inbox puts it there. */
+  bar: (label?: ReactNode) => ReactNode;
   /** The presses at the bottom of a phone's screen, put away while the reply box is open. */
   thumbs: readonly Thumb[];
   /** Show another message from the same sender here. */
@@ -579,11 +556,32 @@ function OpenedMessage({
   return (
     <Reader
       ref={root}
-      bar={bar}
+      bar={bar(
+        inInbox && !detail.digest ? (
+          <>
+            <LabelPick
+              key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
+              size="toolbar"
+              label="What this message is"
+              value={shownLabel}
+              groups={choices(target, current ? sureness(current) : 1, alternatives)}
+              // The reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
+              onSubmit={async (id) => {
+                await record(target, id);
+              }}
+              extra={{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }}
+            />
+            {why ? <Popover label="Why">{why}</Popover> : null}
+            <Button variant="quiet" aria-label="Make a rule…" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
+              Rule…
+            </Button>
+          </>
+        ) : undefined,
+      )}
       thumbs={written && written.kind !== 'new' ? [] : thumbs}
       title={reveal(detail.subject) || '(no subject)'}
       answer={
-        detail.digest ? undefined : (
+        inInbox || detail.digest ? undefined : (
           <AnswerRow
             key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
             picker={{
@@ -591,12 +589,11 @@ function OpenedMessage({
               value: shownLabel,
               groups: choices(target, current ? sureness(current) : 1, alternatives),
               empty: outcomeName('review'),
-              // In Inbox the reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
-              onSubmit: (id) => (inInbox ? record(target, id) : answer(target, id)),
+              onSubmit: (id) => answer(target, id),
               extra: { label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) },
             }}
             why={why}
-            whyOpen={!inInbox}
+            whyOpen
           >
             <Button variant="quiet" aria-label="Make a rule…" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
               Rule…
@@ -781,15 +778,16 @@ export function MessageReader({
           : []),
       ]
     : [];
-  const bar = (
+  const bar = (label?: ReactNode) => (
     <ReaderBar
+      label={label}
       back={back}
       onBack={onBack}
       presses={
         threadId
           ? [
-              { label: 'Archive', key: 'e', disabled: !pressed, onPress: archive },
-              { label: 'Mark unread', key: 'Shift+u', quiet: true, disabled: !pressed, onPress: unread },
+              { label: 'Archive', key: 'e', disabled: !pressed, onPress: archive, icon: <ArchiveIcon aria-hidden /> },
+              { label: 'Mark unread', key: 'Shift+u', disabled: !pressed, onPress: unread, icon: <MailIcon aria-hidden /> },
             ]
           : []
       }
@@ -798,16 +796,17 @@ export function MessageReader({
       onNext={index < items.length - 1 ? () => go(index + 1) : undefined}
     />
   );
-  if (loading && fromCopy && conversation) return <Arriving conversation={conversation} subject={subject!} bar={bar} thumbs={thumbs} />;
+  if (loading && fromCopy && conversation)
+    return <Arriving conversation={conversation} subject={subject!} bar={bar(<Blank className="h-(--control) w-40 py-0" />)} thumbs={thumbs} />;
   if (loading || (threadId && !conversation && thread.loading))
     return (
-      <Reader bar={bar} thumbs={thumbs} title={<Blank />}>
+      <Reader bar={bar()} thumbs={thumbs} title={<Blank />}>
         <Loading rows={6} />
       </Reader>
     );
   if (!data)
     return (
-      <Reader bar={bar} thumbs={thumbs} title={reveal(item.subject) || '(no subject)'}>
+      <Reader bar={bar()} thumbs={thumbs} title={reveal(item.subject) || '(no subject)'}>
         <Note tone="failure" title="Could not load this message">
           <p>{error}</p>
         </Note>

@@ -123,6 +123,7 @@ describe('as little chrome as it takes', () => {
     'recipients.tsx',
     'toast.tsx',
     'hover-card.tsx',
+    'popover.tsx',
     'tooltip.tsx',
     'nav.tsx',
     'chart.tsx',
