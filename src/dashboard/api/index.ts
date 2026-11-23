@@ -1,4 +1,4 @@
-import type { Frame, Read, Write } from './route.ts';
+import type { Download, Frame, Read, Write } from './route.ts';
 import accountDeleteWrite from './routes/account/delete/post.ts';
 import activeWrite from './routes/active/post.ts';
 import checkWrite from './routes/check/post.ts';
@@ -44,6 +44,7 @@ import mailboxPrimaryWrite from './routes/mailbox/primary/post.ts';
 import mailboxRemoveWrite from './routes/mailbox/remove/post.ts';
 import manageRead from './routes/manage/get.ts';
 import messageRead from './routes/message/get.ts';
+import messageFileDownload from './routes/message/file/download.ts';
 import messageHtmlFrame from './routes/message/html/frame.ts';
 import modelChatgptFinishWrite from './routes/model/chatgpt/finish/post.ts';
 import modelChatgptWrite from './routes/model/chatgpt/post.ts';
@@ -73,7 +74,7 @@ import undoWrite from './routes/undo/post.ts';
 import usageRead from './routes/usage/get.ts';
 
 /**
- * Every route under `/api/`, each its own module at `routes/<path>/<get|post|frame>.ts`. The server applies
+ * Every route under `/api/`, each its own module at `routes/<path>/<get|post|frame|download>.ts`. The server applies
  * the session, the scope and the write checks to all of them.
  */
 export const READS: readonly Read[] = [
@@ -152,3 +153,4 @@ export const WRITES: readonly Write[] = [
   undoWrite,
 ];
 export const FRAMES: readonly Frame[] = [messageHtmlFrame];
+export const DOWNLOADS: readonly Download[] = [messageFileDownload];

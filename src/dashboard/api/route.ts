@@ -56,6 +56,16 @@ export interface Frame<Q extends z.ZodType = z.ZodType> {
 }
 
 /**
+ * A GET answered with a file from the person's mail, always to save: never shown at Mild's own address, where an HTML or
+ * SVG file a sender wrote would run as the page (`fileHeaders` in server.ts). Null when there is no such file.
+ */
+export interface Download<Q extends z.ZodType = z.ZodType> {
+  path: string;
+  query: Q;
+  run(ctx: Context, scope: Scope, query: z.output<Q>): Promise<{ name: string; type: string; data: Buffer } | null>;
+}
+
+/**
  * Whose data a write touches. An account: only someone who has that mailbox may make it. `self`: the
  * signed-in person's own (their model and its sign-in), so anyone signed in may. `anyone`: nothing of
  * anybody's. Null: the body names
@@ -85,6 +95,8 @@ export interface Write<B extends z.ZodType = z.ZodType, R extends z.ZodType = z.
 export const read = <Q extends z.ZodType, R extends z.ZodType>(route: Read<Q, R>): Read => route;
 /** A frame, with its query typed from its schema. */
 export const frame = <Q extends z.ZodType>(route: Frame<Q>): Frame => route;
+/** A download, with its query typed from its schema. */
+export const download = <Q extends z.ZodType>(route: Download<Q>): Download => route;
 /** A write, with its body and reply typed from its schemas. */
 export const write = <B extends z.ZodType, R extends z.ZodType>(route: Write<B, R>): Write => route;
 

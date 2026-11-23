@@ -46,6 +46,7 @@ import {
   DiscardButton,
   type DraftFile,
   DraftFiles,
+  MessageFiles,
   Recipients,
   Copyable,
   Dialog,
@@ -1555,6 +1556,16 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                     </Quoted>
                   ) : null}
                 </div>
+                {m === NEWEST ? (
+                  // The second is being fetched from Gmail.
+                  <MessageFiles
+                    files={[
+                      { key: '1', name: 'Thursday menu.pdf', size: 182_400 },
+                      { key: '2', name: 'Directions to the restaurant from the station.png', size: 2_310_000, saving: true },
+                    ]}
+                    onSave={(key) => toast(key === '1' ? 'Saves Thursday menu.pdf' : 'Saving…')}
+                  />
+                ) : null}
               </>
             );
           }}

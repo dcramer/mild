@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import {
   PHONE,
   back,
   boxOf,
   composer,
   expect,
+  failureToast,
   forReviewLink,
   inboxRow,
   openMessage,
@@ -153,6 +155,37 @@ test.describe('The reader, from Inbox', () => {
 
     release();
     await expect(reader(page).getByRole('article').getByText('Your bill is ready.', { exact: true })).toHaveCount(3);
+  });
+
+  test('lists a message’s files under it, each saved with its own name as it is pressed', async ({ page }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Notes from the review').getByRole('cell').nth(2).click();
+    const files = reader(page).getByRole('list', { name: 'Attachments' });
+    await expect(files.getByRole('listitem')).toHaveText([/review-notes\.pdf\s*18 bytes/]);
+
+    const saving = page.waitForEvent('download');
+    await files.getByRole('button', { name: 'Download review-notes.pdf' }).click();
+    const saved = await saving;
+    expect(saved.suggestedFilename()).toBe('review-notes.pdf');
+    expect(readFileSync(await saved.path(), 'utf8')).toBe('%PDF-1.4 synthetic');
+  });
+
+  test.describe('a file Gmail no longer has', () => {
+    test.use({ allow: ['status of 400'] });
+
+    test('says why it could not be saved', async ({ page }) => {
+      await page.route(/\/api\/message\/file\?/, (route) =>
+        route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'review-notes.pdf is no longer in this message in Gmail.' }),
+        }),
+      );
+      await page.goto('/inbox');
+      await inboxRow(page, 'Notes from the review').getByRole('cell').nth(2).click();
+      await reader(page).getByRole('button', { name: 'Download review-notes.pdf' }).click();
+      await expect(failureToast(page, 'Could not download review-notes.pdf')).toContainText('review-notes.pdf is no longer in this message in Gmail.');
+    });
   });
 
   test('the sender’s name over the message goes to their page', async ({ page }) => {

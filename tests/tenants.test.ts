@@ -77,6 +77,13 @@ async function seed(account: string): Promise<void> {
     messageId: `m-${mark}`,
     bodyText: sealPart(db, account, `m-${mark}`, 'text', `Text ${mark}`)!,
     bodyHtml: sealPart(db, account, `m-${mark}`, 'html', `<p>Html ${mark}</p>`),
+    attachments: sealPart(
+      db,
+      account,
+      `m-${mark}`,
+      'attachments',
+      JSON.stringify([{ part: '1', name: `${mark}.pdf`, type: 'application/pdf', size: 3, gmailId: 'a' }]),
+    ),
     search: searchIndex(db, { text: `Text ${mark}`, fromName: null, fromAddress: sender.address, subject: `Subject ${mark}` }),
     fetchedAt: 1000,
   });
@@ -177,6 +184,8 @@ beforeEach(async () => {
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     send: async (_db, { accountId, threadId }) => (calls.push(`send ${accountId} ${threadId}`), { id: 's', threadId: threadId ?? 's' }),
     attachments: async (_db, { accountId }) => (calls.push(`attachments ${accountId}`), []),
+    // The file of whichever mailbox is asked for: only the route's scope keeps it from the wrong person.
+    file: async (_db, { accountId }) => ({ name: `${MARK[accountId]}.pdf`, type: 'application/pdf', data: Buffer.from(`File ${MARK[accountId]}`) }),
     dropDraft: async (_db, { accountId }) => void calls.push(`drop draft ${accountId}`),
     checkNow: async () => void calls.push('check'),
     activity: async () => ({
@@ -214,6 +223,7 @@ const READS = (account: string, mark: string) => [
   `/api/domain?domain=${mark}.example.com`,
   `/api/examples?mailbox=${encodeURIComponent(account)}`,
   `/api/message/html?id=m-${mark}`,
+  `/api/message/file?id=m-${mark}&part=1`,
   `/api/rules/waiting?id=${ids[account]!.rule}`,
   `/api/rules/usage?id=${ids[account]!.rule}`,
   `/api/rules/inbox?id=${ids[account]!.rule}`,
@@ -320,6 +330,10 @@ describe("nobody sees or changes another person's mail", () => {
     const html = await call('GET', `/api/message/html?id=m-${MARK[ALPHA_WORK]}`, ALPHA);
     expect(html.status).toBe(200);
     expect(html.text).toContain(MARK[ALPHA_WORK]);
+    // A message's file, from any of their own mailboxes.
+    const file = await call('GET', `/api/message/file?id=m-${MARK[ALPHA_WORK]}&part=1`, ALPHA);
+    expect(file.status).toBe(200);
+    expect(file.text).toBe(`File ${MARK[ALPHA_WORK]}`);
     // Someone else's mailbox is not one that can be asked for.
     expect((await call('GET', `/api/rules?mailbox=${encodeURIComponent(BRAVO)}`, ALPHA)).status).toBe(404);
     expect((await call('GET', '/api/rules', null)).status).toBe(401);
@@ -651,7 +665,7 @@ describe('removing a mailbox and deleting an account', () => {
 // Runs last: it reads what every test above called.
 describe('every route', () => {
   it('is called above as a signed-in person', () => {
-    const missing = [...api.READS, ...api.WRITES, ...api.FRAMES].map((route) => route.path).filter((path) => !called.has(path));
+    const missing = [...api.READS, ...api.WRITES, ...api.FRAMES, ...api.DOWNLOADS].map((route) => route.path).filter((path) => !called.has(path));
     expect(missing, 'add these to the reads or writes above, called as someone whose data it is not').toEqual([]);
   });
 });

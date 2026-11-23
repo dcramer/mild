@@ -1,5 +1,5 @@
 'use client';
-import { PaperclipIcon, XIcon } from 'lucide-react';
+import { DownloadIcon, PaperclipIcon, XIcon } from 'lucide-react';
 import { useRef } from 'react';
 import { size } from '@/lib/format';
 import { Button } from './button.tsx';
@@ -14,6 +14,8 @@ export interface DraftFile {
   sent?: number;
   failed?: string;
 }
+
+const bytes = (n: number) => (n < 1000 ? `${n} bytes` : size(n));
 
 /** A draft's press that attaches files: a quiet paperclip beside Send, which opens the device's file picker. */
 export function AttachButton({ onFiles }: { onFiles: (files: File[]) => void }) {
@@ -55,11 +57,7 @@ export function DraftFiles({ files, onRemove }: { files: readonly DraftFile[]; o
             <PaperclipIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
             <span className="min-w-0 truncate">{file.name}</span>
             <span className="shrink-0 text-muted-foreground tabular-nums">
-              {file.sent !== undefined && !file.failed
-                ? `${Math.round((file.sent / Math.max(file.size, 1)) * 100)}%`
-                : file.size < 1000
-                  ? `${file.size} bytes`
-                  : size(file.size)}
+              {file.sent !== undefined && !file.failed ? `${Math.round((file.sent / Math.max(file.size, 1)) * 100)}%` : bytes(file.size)}
             </span>
             <button
               type="button"
@@ -71,6 +69,33 @@ export function DraftFiles({ files, onRemove }: { files: readonly DraftFile[]; o
             </button>
           </span>
           <Failure className="text-sm">{file.failed}</Failure>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A file of a message. `saving`: it is being fetched to save. */
+interface MessageFile {
+  key: string;
+  name: string;
+  size: number;
+  saving?: boolean;
+}
+
+/** A message's files, under its text: each its name and size, pressed to save it to the device. */
+export function MessageFiles({ files, onSave }: { files: readonly MessageFile[]; onSave: (key: string) => void }) {
+  if (files.length === 0) return null;
+  return (
+    <ul aria-label="Attachments" className="flex flex-wrap gap-1.5">
+      {files.map((file) => (
+        <li key={file.key} className="flex max-w-full min-w-0">
+          <Button busy={file.saving === true} aria-label={`Download ${file.name}`} className="max-w-full min-w-0 font-normal" onClick={() => onSave(file.key)}>
+            <PaperclipIcon className="text-muted-foreground" aria-hidden />
+            <span className="min-w-0 truncate">{file.name}</span>
+            <span className="text-muted-foreground tabular-nums">{bytes(file.size)}</span>
+            <DownloadIcon className="text-muted-foreground" aria-hidden />
+          </Button>
         </li>
       ))}
     </ul>
