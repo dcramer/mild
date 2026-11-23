@@ -132,6 +132,18 @@ describe('runOnce', () => {
     expect(box.asked(MODIFY)).toHaveLength(1);
   });
 
+  it('takes a conversation out of the inbox when it archives the newest message, as Gmail’s Archive does', async () => {
+    await addRule(db, { match: { from: ['shop@example.com'] }, labelId: 'personal' }, 'user');
+    await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
+    inbox = [message('order', 'Shop <shop@example.com>', { threadId: 't-order', at: 1000 })];
+    await runOnce(await active(true), options());
+    expect(labelsOf('order')).toEqual(['INBOX', 'UNREAD', 'mild/personal']);
+    inbox = [message('shipped', 'News <news@example.com>', { threadId: 't-order', at: 2000 })];
+    await runOnce(db, options());
+    expect(labelsOf('shipped')).toEqual(['UNREAD', 'mild/newsletters']);
+    expect(labelsOf('order')).toEqual(['UNREAD', 'mild/personal']);
+  });
+
   it('settles each mailbox’s unconfirmed changes from that mailbox', async () => {
     const OTHER = 'other@example.org';
     const { db: own } = await onePerson(ACCOUNT, OTHER);
@@ -153,7 +165,7 @@ describe('runOnce', () => {
     await runOnce(await active(true), options());
 
     // Both get the label for what they are; only the archived one gets the label for what Mild did.
-    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters', 'mild/did/archived']);
+    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters']);
     expect(labelsOf('ada')).toEqual(['INBOX', 'UNREAD', 'mild/personal']);
     expect(await decisions()).toMatchObject([
       { message_id: 'ada', disposition: 'keep', carry_out: true, outcome: 'done' },
@@ -166,9 +178,10 @@ describe('runOnce', () => {
     expect((await listRules(db)).map((r) => r.hits)).toEqual([1, 1]);
   });
 
-  it('labels undecided mail for review and leaves it in the inbox', async () => {
+  it('leaves mail it could not place in the inbox as it was, with no label of its own', async () => {
     await runOnce(await active(true), { ...options(), model: unsure });
-    expect(labelsOf('ada')).toEqual(['INBOX', 'UNREAD', 'mild/review']);
+    expect(labelsOf('ada')).toEqual(['INBOX', 'UNREAD']);
+    expect(await decisions()).toContainEqual(expect.objectContaining({ message_id: 'ada', disposition: 'review', carry_out: true, outcome: 'none' }));
   });
 
   it('with no model, leaves what no rule covers in the queue: no decision, no question, nothing changed', async () => {
@@ -182,10 +195,11 @@ describe('runOnce', () => {
   });
 
   it('decides each message once, however many passes run', async () => {
+    await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await runOnce(await active(true), { ...options(), model: unsure });
     await runOnce(await active(true), { ...options(), model: unsure });
     expect(await decisions()).toHaveLength(2);
-    expect(box.asked(MODIFY)).toHaveLength(2);
+    expect(box.asked(MODIFY)).toHaveLength(1);
     expect(logs).toHaveLength(1);
   });
 
@@ -193,7 +207,8 @@ describe('runOnce', () => {
     await addRule(db, { match: { fromDomain: ['example.com'] }, labelId: 'marketing', disposition: 'spam' }, 'user');
     wroteTo('news@example.com');
     // The person archives ada while the model reads it.
-    const archiving = async () => testModel(async () => (box.change('ada', { remove: ['INBOX'] }), UNSURE));
+    const archiving = async () =>
+      testModel(async () => (box.change('ada', { remove: ['INBOX'] }), { label: 'personal', reason: 'a note from a friend', confidence: 0.95 }));
     await runOnce(await active(true), { ...options(), model: archiving });
 
     expect(await decisions()).toMatchObject([
@@ -228,7 +243,7 @@ describe('runOnce', () => {
 
     await runOnce(await active(true), options());
     expect(await decisions()).toMatchObject([{ message_id: 'news', outcome: 'done' }]);
-    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters', 'mild/did/archived']);
+    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters']);
   });
 });
 
@@ -698,7 +713,7 @@ describe('inference tier', () => {
       cost_usd: 0.002,
       outcome: 'done',
     });
-    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters', 'mild/did/archived']);
+    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters']);
   });
 
   it('proposes no rule for a sender the model keeps labelling the same way: it would do what already happens', async () => {
@@ -751,7 +766,7 @@ describe('inference tier', () => {
       reason: 'rule: from news@example.com: archive it',
     });
     // Out of the inbox, marked as Mild's doing, and given no label of what it is.
-    expect(labelsOf('g1')).toEqual(['UNREAD', 'mild/did/archived']);
+    expect(labelsOf('g1')).toEqual(['UNREAD']);
   });
 
   it('applies a rule that waits for a label only to mail the model gives that label, and asks about the rest', async () => {
@@ -944,7 +959,7 @@ describe('unsubscribing', () => {
     await raw(db).run('UPDATE messages SET decided = false');
     await runOnce(await active(true), withUnsubscribe());
     expect(asked).toEqual(['news']);
-    expect(labelsOf('news')).toContain('mild/did/archived');
+    expect(labelsOf('news')).not.toContain('INBOX');
     expect(logs.at(-1)).toContain('unsubscribed from 1 sender');
   });
 
@@ -965,7 +980,7 @@ describe('unsubscribing', () => {
     await rememberCorrespondent(db, ACCOUNT, 'news@example.com', true);
     inbox = [inbox[0]!];
     await runOnce(await active(true), withUnsubscribe());
-    expect(labelsOf('news')).toContain('mild/did/archived');
+    expect(labelsOf('news')).not.toContain('INBOX');
     expect(asked).toEqual([]);
 
     await raw(db).run('DELETE FROM actions');
@@ -984,7 +999,7 @@ describe('correcting what Mild did', () => {
     await addRule(db, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'learned');
     inbox = [inbox[0]!];
     await runOnce(await active(true), options());
-    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters', 'mild/did/archived']);
+    expect(labelsOf('news')).toEqual(['UNREAD', 'mild/newsletters']);
 
     const result = await applyFeedback(db, {
       accountId: ACCOUNT,
@@ -1024,7 +1039,7 @@ describe('blocking', () => {
   it('marks the message spam and makes a rule for the sender, so their later mail needs no model', async () => {
     inbox = [phish('p1', true)];
     await runOnce(await active(true), { ...options(), model: phishing });
-    expect(labelsOf('p1')).toEqual(['mild/phishing', 'mild/did/spam', 'SPAM']);
+    expect(labelsOf('p1')).toEqual(['mild/phishing', 'SPAM']);
     expect(await listRules(db)).toMatchObject([{ match: { from: ['alerts@example.net'] }, labelId: 'phishing', source: 'learned' }]);
     expect(logs.at(-1)).toContain('blocked 1 sender');
 
@@ -1054,7 +1069,7 @@ describe('blocking', () => {
     wroteTo('alerts@example.net');
     inbox = [phish('p1', true)];
     await runOnce(await active(true), { ...options(), model: phishing });
-    expect(labelsOf('p1')).toEqual(['INBOX', 'mild/phishing', 'mild/review']);
+    expect(labelsOf('p1')).toEqual(['INBOX', 'mild/phishing']);
     expect(await listRules(db)).toEqual([]);
   });
 });

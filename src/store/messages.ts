@@ -1,4 +1,4 @@
-import { type SQL, and, asc, count, decisions, desc, eq, inArray, lte, max, messages, notExists, or, sql } from './query.ts';
+import { type SQL, and, asc, count, decisions, desc, eq, feedback, inArray, lte, max, messages, notExists, or, sql } from './query.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
 import type { Facts, RuleFacts } from '../triage/facts.ts';
@@ -118,6 +118,48 @@ export async function recordedThread(db: Sql, accountId: string, threadId: strin
     .from(messages)
     .where(and(eq(messages.accountId, accountId), eq(messages.threadId, threadId)))
     .orderBy(asc(messages.receivedAt), asc(messages.id));
+}
+
+/**
+ * The earlier messages of `messageId`'s conversation that Mild has recorded in the inbox and that may leave it with it, each
+ * with its sender: not one the person answered for, nor one Mild left for review. None when the owner wrote in the
+ * conversation, as the record or the thread's facts show, since the model may not hide such a conversation either.
+ */
+export async function earlierInInbox(db: Sql, accountId: string, messageId: string): Promise<{ id: string; fromAddress: string }[]> {
+  const [self] = await db
+    .select({ threadId: messages.threadId, receivedAt: messages.receivedAt })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+  if (!self) return [];
+  const thread = await db
+    .select({ id: messages.id, receivedAt: messages.receivedAt, labelIds: messages.labelIds, headers: messages.headers })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.threadId, self.threadId)));
+  if (thread.some((m) => m.labelIds.includes('SENT')) || (await storedFacts(db, accountId, messageId))?.ownerInThread) return [];
+  // Older as Inbox orders a conversation, whose newest it shows.
+  const earlier = thread.filter(
+    (m) => m.labelIds.includes('INBOX') && (m.receivedAt < self.receivedAt || (m.receivedAt === self.receivedAt && m.id < messageId)),
+  );
+  if (earlier.length === 0) return [];
+  const ids = earlier.map((m) => m.id);
+  const decided = await db
+    .select({ id: decisions.id, messageId: decisions.messageId, disposition: decisions.disposition })
+    .from(decisions)
+    .where(and(eq(decisions.accountId, accountId), inArray(decisions.messageId, ids)))
+    .orderBy(asc(decisions.id));
+  const latest = new Map(decided.map((d) => [d.messageId, d.disposition] as const));
+  const answered = new Set(
+    (
+      await db
+        .select({ messageId: decisions.messageId })
+        .from(feedback)
+        .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
+        .where(and(eq(decisions.accountId, accountId), inArray(decisions.messageId, ids)))
+    ).map((r) => r.messageId),
+  );
+  return earlier
+    .filter((m) => latest.get(m.id) !== 'review' && !answered.has(m.id))
+    .map((m) => ({ id: m.id, fromAddress: plain(openEnvelope(db, accountId, m.id, { headers: m.headers }).fromAddress) }));
 }
 
 /**

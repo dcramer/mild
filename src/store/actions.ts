@@ -78,7 +78,15 @@ const fromRow =
 /** Write the intent before touching the provider. Returns the action id. */
 export async function insertPendingAction(
   db: Sql,
-  action: { accountId: string; messageId: string | null; type: ActionType; payload: ActionPayload; originalLabels: string[]; decisionId?: number },
+  action: {
+    accountId: string;
+    messageId: string | null;
+    type: ActionType;
+    payload: ActionPayload;
+    originalLabels: string[];
+    decisionId?: number;
+    alongside?: number;
+  },
   now: number,
 ): Promise<number> {
   const [row] = await db
@@ -90,6 +98,7 @@ export async function insertPendingAction(
       payload: sealJson(db, actionName(db, action.accountId), action.payload),
       originalLabels: action.originalLabels,
       decisionId: action.decisionId ?? null,
+      alongside: action.alongside ?? null,
       status: 'pending',
       createdAt: now,
     })
@@ -133,6 +142,16 @@ export async function lastStandingChange(db: Sql, accountId: string, messageId: 
     .orderBy(desc(actions.id))
     .limit(1);
   return row ? fromRow(db)(row) : null;
+}
+
+/** The changes that archived earlier messages of a conversation with `actionId`, the archive of its newest, that still stand. */
+export async function standingAlongside(db: Sql, actionId: number): Promise<ActionRecord[]> {
+  const rows = await db
+    .select(COLUMNS)
+    .from(actions)
+    .where(and(eq(actions.alongside, actionId), eq(actions.status, 'done')))
+    .orderBy(asc(actions.id));
+  return rows.map(fromRow(db));
 }
 
 /** Actions whose outcome was never confirmed, oldest first. Optionally limited to one message. */

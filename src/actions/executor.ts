@@ -11,27 +11,23 @@ import {
   insertPendingAction,
   listOpenActions,
   setActionStatus,
+  standingAlongside,
 } from '../store/actions.ts';
-import { recordLabels } from '../store/messages.ts';
+import { earlierInInbox, recordLabels } from '../store/messages.ts';
+import { cachedCorrespondent, rememberCorrespondent } from '../store/senders.ts';
 import type { Mailbox } from './mailbox.ts';
 import { Refusal } from '../refusal.ts';
-import { traced } from '../telemetry.ts';
+import { reportError, traced } from '../telemetry.ts';
 import { plain } from '../plain.ts';
 
 export interface MessageAction {
   /** `label` leaves the message where it is; `archive` and `spam` take it out of the inbox. */
   type: 'label' | 'archive' | 'spam';
-  /** Gmail labels to add, by name: what the mail is. */
+  /** Gmail labels to add, by name: what the mail is. Mild adds none of its own; what it did is in its log. */
   labels?: string[];
   /** Also mark the message read. Not for spam. */
   markRead?: boolean;
 }
-
-/**
- * What Mild did, as a second Gmail label beside the one for what the mail is. Applied here to every
- * archived or spammed message whatever the caller passes, so anything Mild moved can be found in Gmail itself.
- */
-const AUDIT_LABELS = { archive: 'mild/did/archived', spam: 'mild/did/spam' } as const;
 
 export type Outcome =
   | { status: 'done'; actionId: number; finalLabels: string[] }
@@ -60,7 +56,7 @@ async function labelsNow(deps: ActionDeps, accountId: string, messageId: string)
   return labels;
 }
 
-type Target = { accountId: string; messageId: string; type: ActionType; undoOf?: number; decisionId?: number };
+type Target = { accountId: string; messageId: string; type: ActionType; undoOf?: number; decisionId?: number; alongside?: number };
 
 /** The single path for changing a message, as a span of its own. */
 const applyChange = (deps: ActionDeps, target: Target, current: string[], requested: LabelChange): Promise<Outcome> =>
@@ -92,6 +88,7 @@ async function changeLabels(deps: ActionDeps, target: Target, current: string[],
       payload,
       originalLabels: current,
       ...(target.decisionId === undefined ? {} : { decisionId: target.decisionId }),
+      ...(target.alongside === undefined ? {} : { alongside: target.alongside }),
     },
     clock(deps),
   );
@@ -162,14 +159,48 @@ export async function execute(deps: ActionDeps, accountId: string, messageId: st
     const refusal = await spamRefusal(deps, accountId, messageId);
     if (refusal) return { status: 'skipped', reason: refusal };
   }
-  const names = [...(action.labels ?? []), ...(action.type === 'label' ? [] : [AUDIT_LABELS[action.type]])];
   const add: string[] = [];
-  for (const name of new Set(names)) add.push(await deps.mailbox.ensureLabel(name));
+  for (const name of new Set(action.labels ?? [])) add.push(await deps.mailbox.ensureLabel(name));
   const read = action.markRead && action.type !== 'spam' ? ['UNREAD'] : [];
   const change: LabelChange =
     action.type === 'label' ? { add, remove: read } : { add: [...add, ...(action.type === 'spam' ? ['SPAM'] : [])], remove: ['INBOX', ...read] };
 
   return await applyChange(deps, { accountId, messageId, type: action.type, ...(decisionId === undefined ? {} : { decisionId }) }, current, change);
+}
+
+/**
+ * Archive the earlier messages of a conversation still in the inbox with its newest, which `actionId` archived, as Gmail's
+ * Archive takes a whole conversation: Gmail and Inbox both list a conversation while any message of it is in the inbox.
+ * Each is a change of its own, made `alongside` that one, so undoing it puts them back. Left in the inbox: what
+ * `earlierInInbox` leaves out, and mail from someone the owner has written to, not knowing counting as yes, which the
+ * model may not hide either. Returns how many were archived.
+ */
+export async function archiveEarlier(deps: ActionDeps, accountId: string, messageId: string, actionId: number): Promise<number> {
+  let archived = 0;
+  for (const earlier of await earlierInInbox(deps.db, accountId, messageId)) {
+    try {
+      if (await hasWritten(deps, accountId, earlier.fromAddress)) continue;
+      const current = await labelsNow(deps, accountId, earlier.id);
+      if (!current?.includes('INBOX')) continue;
+      const outcome = await applyChange(deps, { accountId, messageId: earlier.id, type: 'archive', alongside: actionId }, current, {
+        add: [],
+        remove: ['INBOX'],
+      });
+      if (outcome.status === 'done') archived++;
+    } catch (error) {
+      // The newest is archived and its decision settled; one left behind is only a conversation still listed.
+      reportError(error);
+    }
+  }
+  return archived;
+}
+
+async function hasWritten(deps: ActionDeps, accountId: string, address: string): Promise<boolean> {
+  const cached = await cachedCorrespondent(deps.db, accountId, address, clock(deps));
+  if (cached !== undefined) return cached;
+  const written = await deps.mailbox.hasSentTo(address);
+  await rememberCorrespondent(deps.db, accountId, address, written, clock(deps));
+  return written;
 }
 
 /** What the person can do to mail in their inbox from Inbox, and the change in Gmail each is. */
@@ -240,6 +271,16 @@ export async function undo(deps: ActionDeps, actionId: number): Promise<Outcome>
     remove: action.payload.add,
   });
   // 'skipped' means the user already put everything back by hand.
-  if (outcome.status === 'done' || outcome.status === 'skipped') await setActionStatus(deps.db, action.id, 'undone');
+  if (outcome.status === 'done' || outcome.status === 'skipped') {
+    await setActionStatus(deps.db, action.id, 'undone');
+    for (const earlier of await standingAlongside(deps.db, action.id)) {
+      try {
+        await undo(deps, earlier.id);
+      } catch (error) {
+        // Gone or in the trash since: the rest of the conversation still comes back.
+        if (!(error instanceof Refusal)) throw error;
+      }
+    }
+  }
   return outcome;
 }

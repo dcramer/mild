@@ -274,7 +274,7 @@ describe('managing Mild from the dashboard', () => {
     expect(await raw(db).get(`SELECT count(*) AS n FROM messages WHERE id = 'e1'`)).toEqual({ n: 1 });
   });
 
-  it('a rule that decides mail Mild marked for review settles it, and has the mark taken back', async () => {
+  it('a rule that decides mail Mild left for review settles it, and has the label it guessed taken back', async () => {
     const { call } = await start();
     await recordSync(db, ACCOUNT, [facts({ messageId: 'r1', from: { address: 'sales@example.com', domain: 'example.com' } })], '2');
     const asked = await recordDecision(
@@ -286,10 +286,10 @@ describe('managing Mild from the dashboard', () => {
     );
     const mark = await insertPendingAction(
       db,
-      { accountId: ACCOUNT, messageId: 'r1', type: 'label', payload: { add: ['mild/review'], remove: [] }, originalLabels: ['INBOX'], decisionId: asked },
+      { accountId: ACCOUNT, messageId: 'r1', type: 'label', payload: { add: ['mild/marketing'], remove: [] }, originalLabels: ['INBOX'], decisionId: asked },
       1,
     );
-    await finishAction(db, mark, 'done', ['INBOX', 'mild/review'], null, 1);
+    await finishAction(db, mark, 'done', ['INBOX', 'mild/marketing'], null, 1);
     await settleDecision(db, asked, 'done');
 
     expect((await call('POST', '/api/rules', { match: { from: ['sales@example.com'] }, disposition: 'archive' })).body).toMatchObject({ redecided: 1 });
@@ -1138,8 +1138,9 @@ describe('going through the inbox', () => {
     gmail.gmail.deliver({ id: 'a', from: 'News <news@example.com>', to: ACCOUNT, labelIds: ['INBOX'] }, { quietly: true });
     await setActive(db, true);
     await recordSync(db, ACCOUNT, [facts({ messageId: 'a' })], '2');
-    // Mild could not place it, and marked it for the user in Gmail.
-    await triageAccount({ db, mailbox: gmail.mailbox, model: testModel(), sources: gmail, now: () => 10 }, await firstAccount(db));
+    // Mild was not sure enough to act, and put the label the model guessed on it in Gmail.
+    const guess = testModel(async () => ({ label: 'marketing', reason: 'perhaps a sale', confidence: 0.5 }));
+    await triageAccount({ db, mailbox: gmail.mailbox, model: guess, sources: gmail, now: () => 10 }, await firstAccount(db));
     const marked = labelsOf('a');
     expect(marked.length).toBeGreaterThan(1);
     // Now a rule says what it is.

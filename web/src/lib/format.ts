@@ -377,7 +377,7 @@ export const STANDINGS = [
   ['blocked', 'Block', 'Blocked'],
 ] as const;
 
-// Mail no tier could place is left in the inbox with Mild's own Gmail label: what Mild did there is ask.
+// Mail no tier could place is left in the inbox as it was: what Mild did there is ask.
 const DID: Record<string, string> = {
   archive: 'Archived',
   digest: 'Put in the digest',

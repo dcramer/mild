@@ -376,6 +376,7 @@ export const actions = pgTable(
     accountId: text('account_id').notNull(),
     messageId: text('message_id'),
     decisionId: integer('decision_id'), // null for changes made by hand and for undos
+    alongside: integer('alongside'), // an earlier message of a conversation archived with its newest: that change, which undoing takes this back with it
     type: text('type', { enum: ACTION_TYPES }).notNull(),
     payload: text('payload').notNull(), // encrypted JSON: an unsubscribe's host and a filter's criteria name senders (src/store/content.ts)
     originalLabels: jsonb('original_labels').$type<string[]>().notNull(), // as read immediately before
@@ -398,6 +399,9 @@ export const actions = pgTable(
       .on(t.status)
       .where(sql`${t.status} IN ('pending', 'unknown')`),
     index('actions_decision').on(t.decisionId),
+    index('actions_alongside')
+      .on(t.alongside)
+      .where(sql`${t.alongside} IS NOT NULL`),
     // A rule's filter history is read across the person's mailboxes.
     index('actions_filters')
       .on(t.userId, t.accountId, t.id)

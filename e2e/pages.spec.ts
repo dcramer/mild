@@ -31,15 +31,17 @@ const rows = (page: Page, within: Page | Locator = page) => within.getByRole('ro
 test.describe('Activity, after a pass with Mild on', () => {
   test.use({ variant: 'on' });
 
-  test('mail Mild could not place says it asked you, and an undone change is struck through', async ({ page }) => {
+  test('an undone change is struck through, and mail Mild could not place, which it left untouched, says it asked you', async ({ page }) => {
     await page.goto('/activity');
     await expect(page.getByRole('radio', { name: 'Changed' })).toBeChecked();
-    await expect(row(page, 'Quick question')).toContainText('Asked you');
-    await expect(row(page, 'Quick question')).not.toContainText('Unlabelled');
     await expect(row(page, 'Last day of the sale').getByText('Archived', { exact: true }).filter({ visible: true })).toHaveCSS(
       'text-decoration-line',
       'line-through',
     );
+    await expect(row(page, 'Quick question')).toHaveCount(0);
+    await page.getByRole('radio', { name: 'Everything' }).click();
+    await expect(row(page, 'Quick question')).toContainText('Asked you');
+    await expect(row(page, 'Quick question')).not.toContainText('Unlabelled');
   });
 
   test('says the time Mild saved and which labels it came from, each narrowing the list to its label', async ({ page }) => {

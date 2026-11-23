@@ -554,6 +554,13 @@
       "when": 1795381576051,
       "tag": "0078_drafts_row_security",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1795452912946,
+      "tag": "0079_archived_alongside",
+      "breakpoints": true
     }
   ]
 }

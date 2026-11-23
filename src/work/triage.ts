@@ -1,5 +1,5 @@
 import type { Sql } from '../store/sql.ts';
-import { execute, undo } from '../actions/executor.ts';
+import { archiveEarlier, execute, undo } from '../actions/executor.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import { planAction } from '../actions/plan.ts';
@@ -205,6 +205,11 @@ function carrier(deps: TriageDeps, account: Account, report: TriageReport) {
     await settleDecision(db, decisionId, settled, settled === 'done' || outcome.status === 'done' ? null : outcome.reason);
     if (outcome.status === 'done' || landed) report.acted++;
     else if (outcome.status === 'skipped') report.skipped++;
+    // While Mild is off it changes only the message the person answered.
+    if (action.type === 'archive' && deps.mailbox && (outcome.status === 'done' || landed)) {
+      const archived = outcome.status === 'done' ? outcome.actionId : (await lastStandingChange(db, account.id, messageId))?.id;
+      if (archived !== undefined) await archiveEarlier({ db, mailbox: box, now }, account.id, messageId, archived);
+    }
     return landed ? 'done' : outcome.status;
   };
 }

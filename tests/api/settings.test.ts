@@ -41,7 +41,7 @@ describe('Mild on and off', () => {
     expect((await me.call('POST', '/api/active', { active: true })).status).toBe(200);
     expect(await manage(me)).toMatchObject({ active: true });
     const done = await receipt();
-    expect(box.message(done)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts'), box.labelId('mild/did/archived')]);
+    expect(box.message(done)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
     expect(box.message(suggested)!.labelIds).toEqual(['INBOX', 'UNREAD']);
 
     await me.call('POST', '/api/active', { active: false });

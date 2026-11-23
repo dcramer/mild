@@ -56,8 +56,8 @@ const same = (
  *   word; only what follows from it is worked out again;
  * - the rule that decided it has gone: it goes back to what a tier said before the rule, or to review.
  *
- * Mail Mild marked for review in Gmail while on is settled only by a rule of the user's that decides it by itself,
- * no model needed: that is recorded as the user's press, to be carried out, and the review mark Mild put on it
+ * Mail Mild left for review while on is settled only by a rule of the user's that decides it by itself, no model
+ * needed: that is recorded as the user's press, to be carried out, and the label Mild put on it, if it guessed one,
  * is returned in `marks` to take back. Nothing else changes it.
  *
  * Mail a rule decided only because of an earlier call here is included, so removing that rule brings
@@ -72,7 +72,7 @@ export async function redecideWaiting(db: Sql, accountId: string, now: number = 
 interface Redecided {
   /** How many decisions were recorded. */
   recorded: number;
-  /** The changes that marked for review mail a rule of the user's has now settled, to undo in Gmail. */
+  /** The changes that labelled mail left for review that a rule of the user's has now settled, to undo in Gmail. */
   marks: number[];
 }
 
@@ -174,7 +174,7 @@ async function redecide(db: Sql, accountId: string, now: number, learnedGone: st
     let runId: number | null = null;
     const ruled = await rules.decide(facts);
     if (marked.has(messageId)) {
-      // Marked for review in Gmail: only a rule of the user's, deciding it outright, takes it from them.
+      // Left for review while on: only a rule of the user's, deciding it outright, takes it from them.
       if (!ruled || stored.find((r) => r.id === ruled.ruleId)?.learned || !(await stillWaiting(db, accountId, messageId, decisionId))) continue;
       const mark = await lastStandingChange(db, accountId, messageId);
       await recordDecision(db, accountId, messageId, ruled, { carryOut: true, byUser: true, now });
