@@ -20,13 +20,13 @@ A label's id and Gmail label never change after it is made, so renaming one orph
 
 Tiers run cheapest first. A tier either names a label or abstains; the first answer wins.
 
-| Tier                                                | Where                                      | Cost                 | Status                                                                                               |
-| --------------------------------------------------- | ------------------------------------------ | -------------------- | ---------------------------------------------------------------------------------------------------- |
-| 1. Gmail filters                                    | Gmail itself; runs even when Mild is down  | none                 | built: a rule is copied there when the user asks ([Rules as Gmail filters](#rules-as-gmail-filters)) |
-| 2. Rules                                            | `src/triage/stages/rules.ts`               | none                 | built and wired                                                                                      |
-| 3. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts`          | ~$0.0001 per message | stage built, provider not wired                                                                      |
-| 4. Model                                            | `src/triage/stages/model.ts`, `src/model/` | one model call       | built; in use with Mild off, with a ChatGPT subscription model                                       |
-| Fallback                                            | `src/triage/pipeline.ts`                   | none                 | built                                                                                                |
+| Tier | Where | Cost | Status |
+| --- | --- | --- | --- |
+| 1. Gmail filters | Gmail itself; runs even when Mild is down | none | built: a rule is copied there when the user asks ([Rules as Gmail filters](#rules-as-gmail-filters)) |
+| 2. Rules | `src/triage/stages/rules.ts` | none | built and wired |
+| 3. Decision model (Jev / Clef via pi-ai `classify`) | `src/triage/stages/classifier.ts` | ~$0.0001 per message | stage built, provider not wired |
+| 4. Model | `src/triage/stages/model.ts`, `src/model/` | one model call | built; in use with Mild off, with a ChatGPT subscription model |
+| Fallback | `src/triage/pipeline.ts` | none | built |
 
 Every message is meant to be one of the labels or Leave in inbox. The model gives a label only when the mail plainly is what it describes, since most labels hide mail. When it cannot tell which (its "unsure": it might be one of the person's labels, or whether it is), the answer is `review`: the message stays where it is, gets the review label, and the user is asked which label it is, or adds one. A model call that fails (a provider error, or an answer that is not a usable verdict) is not "unsure" and decides nothing: the message stays in the triage queue and is asked about again on the next pass. After three tries that failed on its own account (`MAX_ATTEMPTS`, `src/store/runs.ts`) the model is not asked again: the next pass runs only the rules on it, and if none decides, records `review` with no label, so it is on For review as Unlabelled like any mail no tier could place. A try counts when no decision came of it: an unusable answer, a provider error while the model answers other calls in the same pass, a call a stopped pass never finished (it is recorded as started before it is made), or a billed verdict whose decision was never recorded. Provider errors that say nothing about the message do not count (they are stamped `retried_at`): three in a row stop the pass asking the model, since the provider is likely down, and errors in a pass where the model answered nothing are an outage too. After that stop, mail that needs the model stays queued, unrecorded, rather than going to a rule that would have deferred to it; mail a rule decides by itself still is. Each call is one attempt with a 60-second timeout and no retries inside the provider's SDK (`src/model/judge.ts`), so a hung call cannot hold up a pass and every attempt is a run of its own. With no model connected, mail no rule covers is not decided at all: it stays in the triage queue (newest first, so it never holds up new mail) and is neither a suggestion nor changed, until a model is connected or a rule comes to cover it.
 
@@ -102,6 +102,7 @@ public/       icons, the iPhone startup pictures (pnpm startup-images) and the s
 tests/        synthetic fixtures only
 docker/       Dockerfile and compose file; upgrade, backup and restore are in docs/deploy.md
 ```
+
 
 Boundaries are enforced by lint; see [AGENTS.md](../AGENTS.md).
 
