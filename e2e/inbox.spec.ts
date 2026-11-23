@@ -831,11 +831,11 @@ test.describe('Inbox', () => {
   test.describe('on a phone', () => {
     test.use({ viewport: PHONE });
 
-    test('reads as a mail app, and archiving from the reader goes on to the next conversation', async ({ page }) => {
+    test('reads as a mail app, with no label on the row, and archiving from the reader goes on to the next conversation', async ({ page }) => {
       await page.goto('/inbox');
       const widgets = page.getByRole('row').filter({ hasText: 'Widgets, part two' });
       await expect(widgets).toContainText('Weekly Digest');
-      await expect(widgets).toContainText('Newsletters');
+      await expect(widgets).not.toContainText('Newsletters');
       await widgets.click();
       const open = reader(page);
       await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 1 })).toBeVisible();

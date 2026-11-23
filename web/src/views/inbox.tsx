@@ -1,5 +1,5 @@
 'use client';
-import { ArchiveIcon, BanIcon, CircleHelpIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, SquarePenIcon, WorkflowIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, CircleHelpIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, SquarePenIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { proposalStart, standingStart } from '@/lib/rule-start.ts';
@@ -10,7 +10,7 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { DraftList } from '@/components/drafts.tsx';
-import { Thinks, WhoWrote, type Writer, useMailPress } from '@/components/mail.tsx';
+import { WhoWrote, type Writer, useMailPress } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api, readAheadOnRest, useLoaded, usePages } from '@/lib/api.ts';
 import { type Copied, conversations, copiedKey, useWhole } from '@/lib/copy.ts';
 import { useOutbox } from '@/lib/waiting.ts';
@@ -19,7 +19,7 @@ import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
 import { useCompose } from '@/lib/compose.ts';
-import { MOVES_OUT, count, inboxFirst, period, sureness } from '@/lib/format.ts';
+import { ACTIONS, MOVES_OUT, count, inboxFirst, period, sureness } from '@/lib/format.ts';
 import { messageKey, proposalKey, setParams, threadKey, useParam } from '@/lib/params.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -32,8 +32,10 @@ import {
   Failure,
   FilterGroup,
   Heads,
+  Does,
   Hint,
   LabelPick,
+  LabelSheet,
   ListView,
   More,
   Note,
@@ -163,6 +165,35 @@ function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabe
   );
 }
 
+/** On a phone, what the conversation swiped right is, picked from every label (`LabelSheet`), as `Label` says it on a computer. */
+function LabelSheetFor({ thread, labels, onClose }: { thread: Listed; labels: readonly AnswerLabel[]; onClose: () => void }) {
+  const answer = useListAnswer(labels);
+  const { thinks } = thread;
+  const target = {
+    accountId: thread.accountId,
+    threadId: thread.threadId,
+    sender: reveal(thread.from),
+    messageId: newest(thread).messageId,
+    labelId: thinks?.labelId ?? null,
+    ...(thinks ? { decisionId: thinks.decisionId } : {}),
+  };
+  const does = (id: string) => {
+    const action = labels.find((l) => l.id === id)?.disposition ?? 'keep';
+    return <Does action={action}>{ACTIONS.find(([k]) => k === action)?.[1] ?? action}</Does>;
+  };
+  return (
+    <LabelSheet
+      open
+      onClose={onClose}
+      who={<WhoWrote writers={thread.who} />}
+      subject={reveal(thread.subject) || '(no subject)'}
+      value={thinks?.labelId ?? null}
+      groups={answerChoices(labels, target, thinks ? sureness(thinks) : 1, []).map((group) => group.map((p) => ({ ...p, does: does(p.id) })))}
+      onPick={(id) => void answer(target, id).catch(() => undefined)}
+    />
+  );
+}
+
 /** What a row's presses do, the same from one draw to the next, so a row is drawn again only when its own conversation changes. */
 type Hands = {
   select: (thread: Listed, on: boolean) => void;
@@ -175,8 +206,8 @@ type Hands = {
 /**
  * One conversation, on one line as Gmail lists it: who wrote and how many messages, the subject and the start of the
  * newest, and when, marked where Mild could not place it; pointed at, its label, Archive, Spam and Block take the time's
- * place. Unread is bold and bright, read is plain and dimmer. On a phone it reads as For review's rows do: who and when, the subject, then a
- * line of the text with the label.
+ * place. Unread is bold and bright, read is plain and dimmer. On a phone it reads as a mail app's: who and when, the subject, then a line of
+ * the text, with no label.
  */
 const ThreadRow = memo(function ThreadRow({
   thread,
@@ -194,14 +225,9 @@ const ThreadRow = memo(function ThreadRow({
   const { who } = thread;
   const many = thread.messageIds.length > 1 ? <span className="font-normal text-muted-foreground tabular-nums">{thread.messageIds.length}</span> : null;
   const ink = thread.unread ? 'font-semibold text-foreground' : 'text-foreground/70';
-  // Swiped right it is read, or unread again; swiped left, archived. Neither acts on its sender.
-  const start = useMemo<SwipePress>(
-    () =>
-      thread.unread
-        ? { label: 'Read', icon: <MailOpenIcon />, onPress: () => press([thread], 'read') }
-        : { label: 'Unread', icon: <MailIcon />, onPress: () => press([thread], 'unread') },
-    [thread, press],
-  );
+  // Swiped right it is labelled, from a sheet of every label; swiped left, archived. Neither acts on its sender.
+  const [labelling, setLabelling] = useState(false);
+  const start = useMemo<SwipePress>(() => ({ label: 'Label', icon: <TagIcon />, onPress: () => setLabelling(true) }), []);
   const end = useMemo<SwipePress>(() => ({ label: 'Archive', icon: <ArchiveIcon />, onPress: () => press([thread], 'archive') }), [thread, press]);
   return (
     <Tr
@@ -220,7 +246,7 @@ const ThreadRow = memo(function ThreadRow({
           </span>
           {many}
         </span>
-        {/* On a phone, a mail app's three lines set close: who and when, the subject, the start of the text with the label. */}
+        {/* On a phone, a mail app's three lines set close: who and when, the subject, the start of the text. */}
         <div className="md:hidden">
           <Swipe start={start} end={end}>
             <span className="flex flex-col leading-snug">
@@ -241,12 +267,11 @@ const ThreadRow = memo(function ThreadRow({
               </span>
               <span className="flex items-baseline gap-3 text-muted-foreground">
                 <span className="min-w-0 flex-1 truncate">{thread.preview ? reveal(thread.preview) : null}</span>
-                <span className="shrink-0 text-sm">
-                  <Thinks thinks={thread.thinks} />
-                </span>
+                {unplaced(thread) ? <Hint icon={CircleHelpIcon} says="Unlabelled" tone="look" /> : null}
               </span>
             </span>
           </Swipe>
+          {labelling ? <LabelSheetFor thread={thread} labels={labels} onClose={() => setLabelling(false)} /> : null}
         </div>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-full">
