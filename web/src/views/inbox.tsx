@@ -172,6 +172,7 @@ function LabelSheetFor({ thread, labels, onClose }: { thread: Listed; labels: re
     accountId: thread.accountId,
     threadId: thread.threadId,
     sender: reveal(thread.from),
+    subject: reveal(thread.subject),
     messageId: newest(thread).messageId,
     labelId: thinks?.labelId ?? null,
     ...(thinks ? { decisionId: thinks.decisionId } : {}),

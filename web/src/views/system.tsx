@@ -14,7 +14,6 @@ import {
   TagIcon,
   Trash2Icon,
   WorkflowIcon,
-  MailOpenIcon,
   SquarePenIcon,
 } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
