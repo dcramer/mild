@@ -304,7 +304,8 @@ test.describe('The history a reply quotes, as each mail program writes it', () =
 
 test.describe('Who a message went to', () => {
   test('a long list folds, so the message fits under it on a phone, opens where it stands, and folds again', async ({ page }) => {
-    await page.setViewportSize(PHONE);
+    // A small phone's, so the list opened is longer than the screen.
+    await page.setViewportSize({ width: PHONE.width, height: 667 });
     await page.goto('/');
     const open = await openMessage(page, 'Notes from the review');
     await expect(addressed(open, 'Cc')).toHaveText('reviewer1@example.net, reviewer2@example.net, reviewer3@example.net and 9 more');

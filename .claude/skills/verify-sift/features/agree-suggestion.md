@@ -13,7 +13,7 @@ A message Mild placed shows the label it gave in the row's answer: a dropdown st
 ## How to get to it (user POV)
 
 - For review, the check on a row.
-- On a phone the row has no dropdown or check; it opens the message, where the same answer is under the title.
+- On a phone the row has no dropdown or check; it opens the message, where the same answer is in the toolbar.
 
 ## Driving it with verify.sh
 

@@ -36,6 +36,7 @@ export interface Pick {
  * Saying what something is: a dropdown that starts on Mild's answer, and a check that agrees with it.
  * Picking from the list is the answer, so agreeing is one press and a change is two. `groups` run most
  * likely first; `empty` is what shows, in quiet ink (down a list, the row's until it is the row the reader is on), when there is no answer yet, and the check is off.
+ * In the reader's toolbar (`size="toolbar"`) it is drawn as `LabelPick` is there, its tag and no fill, with the check an icon.
  */
 export function AnswerPicker({
   label,
@@ -46,6 +47,7 @@ export function AnswerPicker({
   busy,
   className,
   ending,
+  size = 'row',
 }: {
   /** Names the dropdown for a screen reader: "What this message is". */
   label: string;
@@ -57,8 +59,10 @@ export function AnswerPicker({
   busy?: boolean;
   className?: string;
   ending: Ending;
+  size?: 'row' | 'toolbar';
 }) {
   const [chosen, setChosen] = useState<string | null>(value);
+  const toolbar = size === 'toolbar';
   const all = groups.flat();
   const current = all.find((p) => p.id === chosen);
   return (
@@ -79,8 +83,14 @@ export function AnswerPicker({
       >
         <Base.Trigger
           aria-label={label}
-          className="press inline-flex h-(--control) min-w-0 flex-1 cursor-pointer items-center gap-2 pr-2 pl-3 text-sm whitespace-nowrap select-none border border-transparent bg-(--fill) hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)"
+          className={cn(
+            'press inline-flex h-(--control) min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm whitespace-nowrap select-none',
+            toolbar
+              ? 'px-3 text-foreground/75 hover:bg-(--fill) hover:text-foreground data-popup-open:bg-(--fill) data-popup-open:text-foreground'
+              : 'border border-transparent bg-(--fill) pr-2 pl-3 hover:bg-(--fill-strong) data-popup-open:bg-(--fill-strong)',
+          )}
         >
+          {toolbar ? <TagIcon aria-hidden className="size-4 shrink-0" /> : null}
           {/* The meter stands on the label's baseline, and both sit a pixel down, as a button's words do. */}
           <span className="relative top-px flex min-w-0 items-baseline gap-2">
             {current ? (
@@ -92,7 +102,7 @@ export function AnswerPicker({
               <span className="truncate text-muted-foreground group-hover/row:text-supporting group-focus-within/row:text-supporting">{empty}</span>
             )}
           </span>
-          <ChevronDownIcon aria-hidden className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
+          <ChevronDownIcon aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground', !toolbar && 'ml-auto')} />
         </Base.Trigger>
         <Choices groups={groups} ending={ending} />
       </Base.Root>
@@ -101,7 +111,7 @@ export function AnswerPicker({
         disabled={chosen === null}
         busy={busy ?? false}
         onClick={() => chosen !== null && void Promise.resolve(onSubmit(chosen)).catch(() => undefined)}
-        className="px-2"
+        {...(toolbar ? { variant: 'quiet' as const, size: 'icon' as const } : { className: 'px-2' })}
       >
         <CheckIcon aria-hidden />
       </Button>

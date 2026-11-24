@@ -44,9 +44,13 @@ test.describe('The reader, from For review', () => {
     await expect(open.getByRole('complementary')).toContainText('What Mild saw');
     await expect(open.getByRole('complementary')).toContainText('Sender');
     await expect(open.getByRole('complementary').getByText(/^History · \d+$/)).toBeVisible();
-    // Why is open from the start: answering is the job here.
-    await expect(open.getByRole('button', { name: 'Why' })).toHaveAttribute('aria-expanded', 'true');
-    await expect(open.getByText('Marketing: synthetic: a sale sent to a list').first()).toBeVisible();
+    // What Mild thinks is in the toolbar, as Inbox's reader has it, over the subject; its reason waits for Why.
+    expect((await boxOf(open.getByRole('combobox', { name: 'What this message is' }))).y).toBeLessThan(
+      (await boxOf(open.getByRole('heading', { level: 1 }))).y,
+    );
+    await open.getByRole('button', { name: 'Why' }).click();
+    await expect(page.getByRole('dialog').getByText('Marketing: synthetic: a sale sent to a list').first()).toBeVisible();
+    await page.keyboard.press('Escape');
     // The message and the column sit side by side.
     const message = await boxOf(open.getByText('Up to half off.'));
     const column = await boxOf(open.getByRole('complementary'));

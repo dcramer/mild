@@ -26,7 +26,7 @@ import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import {
   Ago,
-  AnswerRow,
+  AnswerPicker,
   Arrived,
   Blank,
   Button,
@@ -566,43 +566,40 @@ function OpenedMessage({
     <Reader
       ref={root}
       bar={bar(
-        inInbox && !detail.digest ? (
+        detail.digest ? undefined : (
           <>
-            <LabelPick
-              key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
-              size="toolbar"
-              label="What this message is"
-              value={shownLabel}
-              groups={choices(target, current ? sureness(current) : 1, alternatives)}
-              // The reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
-              onSubmit={async (id) => {
-                await record(target, id);
-              }}
-              ending={ending}
-            />
+            {inInbox ? (
+              <LabelPick
+                key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
+                size="toolbar"
+                label="What this message is"
+                value={shownLabel}
+                groups={choices(target, current ? sureness(current) : 1, alternatives)}
+                // The reader handles their own mail: the answer is saved and the conversation stays, as the list's does.
+                onSubmit={async (id) => {
+                  await record(target, id);
+                }}
+                ending={ending}
+              />
+            ) : (
+              <AnswerPicker
+                key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
+                size="toolbar"
+                className="min-w-0"
+                label="What this message is"
+                value={shownLabel}
+                groups={choices(target, current ? sureness(current) : 1, alternatives)}
+                empty={outcomeName('review')}
+                onSubmit={(id) => answer(target, id)}
+                ending={ending}
+              />
+            )}
             {why ? <Popover label="Why">{why}</Popover> : null}
           </>
-        ) : undefined,
+        ),
       )}
       thumbs={written && written.kind !== 'new' ? [] : thumbs}
       title={reveal(detail.subject) || '(no subject)'}
-      answer={
-        inInbox || detail.digest ? undefined : (
-          <AnswerRow
-            key={`${current?.id ?? 'undecided'}/${shownLabel ?? ''}`}
-            picker={{
-              label: 'What this message is',
-              value: shownLabel,
-              groups: choices(target, current ? sureness(current) : 1, alternatives),
-              empty: outcomeName('review'),
-              onSubmit: (id) => answer(target, id),
-              ending,
-            }}
-            why={why}
-            whyOpen
-          />
-        )
-      }
       side={
         inInbox ? undefined : (
           <>

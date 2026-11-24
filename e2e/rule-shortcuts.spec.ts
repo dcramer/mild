@@ -73,7 +73,8 @@ test.describe('Rules from a shortcut', () => {
     await expect(dialog).toHaveCount(0);
     await expect(message).toBeVisible();
 
-    await message.getByRole('button', { name: 'Keep as Marketing…' }).click();
+    await message.getByRole('button', { name: 'Why' }).click();
+    await page.getByRole('button', { name: 'Keep as Marketing…' }).click();
     await expect(dialog.getByRole('textbox', { name: 'What should it do?' })).toHaveValue(
       'Mail from sale@store.example.com, once it is Marketing: leave it in the inbox.',
     );
@@ -96,7 +97,8 @@ test.describe('Rules from a shortcut', () => {
 
     await page.goBack();
     await expect(opened).toHaveCount(0);
-    await expect(message.getByText('Rule: from sale@store.example.com is Marketing').first()).toBeVisible();
+    await message.getByRole('button', { name: 'Why' }).click();
+    await expect(page.getByRole('dialog').getByText('Rule: from sale@store.example.com is Marketing').first()).toBeVisible();
     await query(page).toBe(STORE);
   });
 
