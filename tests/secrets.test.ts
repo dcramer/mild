@@ -9,22 +9,9 @@ import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';
 import { credentialStore } from '../src/model/credentials.ts';
 import { type Keyring, loadKeyring, openSecret, openToRekey, readSecret, rekeySecrets, writeSecret } from '../src/secrets.ts';
 import { credentials, rekeyCredentials } from '../src/store/credentials.ts';
-import {
-  conditionsHash,
-  exampleKeys,
-  openJson,
-  openPart,
-  proposalName,
-  rekeyContent,
-  ruleDraftName,
-  askName,
-  ruleName,
-  sealJson,
-  sealPart,
-} from '../src/store/content.ts';
+import { exampleKeys, openJson, openPart, rekeyContent, ruleDraftName, askName, sealPart } from '../src/store/content.ts';
 import { getRuleFilter, setRuleFilter } from '../src/store/filters.ts';
 import { finishLabelProposal, latestLabelProposal, startLabelProposal } from '../src/store/labels.ts';
-import { listProposals } from '../src/store/proposals.ts';
 import { rekeyStore } from '../src/store/rekey.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { mailBodies, readBodies } from '../src/store/query.ts';
@@ -403,48 +390,6 @@ describe('mail', () => {
     expect(await hasRuleFor(db, { from: ['a@example.com'] })).toBe(false);
     await rekeyContent(db);
     expect(await hasRuleFor(db, { from: ['a@example.com'] })).toBe(true);
-  });
-
-  it('reads a rule or proposal stored with one value per condition as a list of it', async () => {
-    const { as } = await alpha(A);
-    const db = await as(A);
-    await withSampleLabels(db);
-    const old = { from: 'a@example.com', subjectContains: 'Weekly' };
-    await raw(db).run(
-      `INSERT INTO rules (id, position, match, except_matches, conditions, disposition, source, created_at) VALUES ('r', 0, ?, ?, 'unset:r', 'archive', 'user', 0)`,
-      sealJson(db, ruleName(db, 'r', 'match'), old),
-      sealJson(db, ruleName(db, 'r', 'except'), [{ fromName: 'Example' }]),
-    );
-    await raw(db).run(
-      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES ('alpha@example.org', ?, 'unset:p', 'newsletter', 'archive', 3, 0)`,
-      sealJson(db, proposalName(db, 'alpha@example.org'), { from: 'b@example.com' }),
-    );
-    await rekeyContent(db);
-    expect((await listRules(db))[0]).toMatchObject({
-      match: { from: ['a@example.com'], subjectContains: ['Weekly'] },
-      except: [{ fromName: ['Example'] }],
-    });
-    expect(await raw(db).get('SELECT conditions FROM rules')).toEqual({
-      conditions: conditionsHash(db, { from: ['a@example.com'], subjectContains: ['Weekly'] }, [{ fromName: ['Example'] }]),
-    });
-    expect((await listProposals(db, 'alpha@example.org'))[0]).toMatchObject({ match: { from: ['b@example.com'] } });
-  });
-
-  it('keeps the answered one of two proposals for the same mail that hashed apart before conditions held lists', async () => {
-    const { as } = await alpha(A);
-    const db = await as(A);
-    await withSampleLabels(db);
-    await raw(db).run(
-      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, status, created_at) VALUES ('alpha@example.org', ?, 'unset:p', 'newsletter', 'archive', 3, 'dismissed', 0)`,
-      sealJson(db, proposalName(db, 'alpha@example.org'), { from: 'b@example.com' }),
-    );
-    await raw(db).run(
-      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES ('alpha@example.org', ?, ?, 'newsletter', 'archive', 3, 1)`,
-      sealJson(db, proposalName(db, 'alpha@example.org'), { from: ['b@example.com'] }),
-      conditionsHash(db, { from: ['b@example.com'] }),
-    );
-    await rekeyContent(db);
-    expect(await raw(db).all('SELECT status FROM proposals')).toEqual([{ status: 'dismissed' }]);
   });
 
   it('finds mail by its subject, which the database cannot read', async () => {

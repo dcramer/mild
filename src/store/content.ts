@@ -16,7 +16,6 @@ import {
   eq,
   examples,
   gt,
-  inArray,
   labelProposals,
   mailAsks,
   mailBodies,
@@ -260,12 +259,6 @@ export async function rekeyContent(db: Sql, write = true): Promise<number> {
 
 const UNSET = 'unset:';
 
-/** A match stored before a condition held a list (migration 0029), with each value as a list of it. */
-function asLists(stored: unknown): RuleMatch {
-  const match = stored as Record<string, unknown>;
-  return Object.fromEntries(Object.entries(match).map(([key, value]) => [key, typeof value === 'string' ? [value] : value])) as RuleMatch;
-}
-
 /**
  * Rules, proposals, label proposals, rule drafts, asks and digests: few, so read whole. Their conditions are hashed again with the key, and those a
  * migration could not hash (`unset:`) are hashed here even without one.
@@ -276,8 +269,8 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
   const ruleUpdates = ruleRows
     .filter((r) => r.conditions.startsWith(UNSET) || behind(r.match) || behind(r.except) || behind(r.name))
     .map((r) => {
-      const match = asLists(JSON.parse(reopen(db, ruleName(db, r.id, 'match'), r.match)));
-      const except = (JSON.parse(reopen(db, ruleName(db, r.id, 'except'), r.except)) as unknown[]).map(asLists);
+      const match = JSON.parse(reopen(db, ruleName(db, r.id, 'match'), r.match)) as RuleMatch;
+      const except = JSON.parse(reopen(db, ruleName(db, r.id, 'except'), r.except)) as RuleMatch[];
       const name = r.name === null ? null : reopen(db, ruleName(db, r.id, 'name'), r.name);
       return {
         id: r.id,
@@ -292,26 +285,14 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
   const filterUpdates = (await db.select({ ruleId: ruleFilters.ruleId, accountId: ruleFilters.accountId, written: ruleFilters.written }).from(ruleFilters))
     .filter((r) => behind(r.written))
     .map((r) => ({ ...r, written: seal(db, ruleName(db, r.ruleId, 'filter'), reopen(db, ruleName(db, r.ruleId, 'filter'), r.written!)) }));
-  const proposalRows = await db
-    .select({ id: proposals.id, accountId: proposals.accountId, match: proposals.match, conditions: proposals.conditions, status: proposals.status })
-    .from(proposals)
-    .orderBy(asc(proposals.id));
-  const proposalUpdates = proposalRows
+  const proposalUpdates = (
+    await db.select({ id: proposals.id, accountId: proposals.accountId, match: proposals.match, conditions: proposals.conditions }).from(proposals)
+  )
     .filter((r) => r.conditions.startsWith(UNSET) || behind(r.match))
     .map((r) => {
-      const match = asLists(JSON.parse(reopen(db, proposalName(db, r.accountId), r.match)));
+      const match = JSON.parse(reopen(db, proposalName(db, r.accountId), r.match)) as RuleMatch;
       return { id: r.id, set: { match: sealJson(db, proposalName(db, r.accountId), match), conditions: conditionsHash(db, match) } };
     });
-  // Two proposals for the same mail hashed apart once (one made while a sender was still one value, before
-  // 0029) hash alike now, which `proposals_once` refuses: the one the user answered stays, else the first.
-  const hashed = new Map(proposalUpdates.map((u) => [u.id, u.set.conditions]));
-  const kept = new Map<string, number>();
-  const duplicates: number[] = [];
-  for (const r of proposalRows.toSorted((a, b) => Number(a.status === 'open') - Number(b.status === 'open'))) {
-    const key = `${r.accountId}\n${hashed.get(r.id) ?? r.conditions}`;
-    if (kept.has(key)) duplicates.push(r.id);
-    else kept.set(key, r.id);
-  }
   const labelProposalRows = await db
     .select({ id: labelProposals.id, accountId: labelProposals.accountId, goal: labelProposals.goal, labels: labelProposals.labels, note: labelProposals.note })
     .from(labelProposals);
@@ -358,8 +339,7 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
           .update(ruleFilters)
           .set({ written })
           .where(and(eq(ruleFilters.ruleId, ruleId), eq(ruleFilters.accountId, accountId)));
-      if (duplicates.length > 0) await tx.delete(proposals).where(inArray(proposals.id, duplicates));
-      for (const { id, set } of proposalUpdates) if (!duplicates.includes(id)) await tx.update(proposals).set(set).where(eq(proposals.id, id));
+      for (const { id, set } of proposalUpdates) await tx.update(proposals).set(set).where(eq(proposals.id, id));
       for (const { id, set } of labelProposalUpdates) await tx.update(labelProposals).set(set).where(eq(labelProposals.id, id));
     });
 }
