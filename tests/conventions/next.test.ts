@@ -23,6 +23,6 @@ describe('Next.js answers nothing that skips the API', () => {
 
 it('names no NEXT_PUBLIC_ variable, which Next.js would write into the JavaScript it sends the browser', () => {
   const PUBLIC = /NEXT_PUBLIC_/;
-  const named = OWN.filter((file) => !file.endsWith('.md') && file !== 'tests/next.test.ts' && PUBLIC.test(readFileSync(file, 'utf8')));
+  const named = OWN.filter((file) => !file.endsWith('.md') && file !== 'tests/conventions/next.test.ts' && PUBLIC.test(readFileSync(file, 'utf8')));
   expect(named).toEqual([]);
 });

@@ -1,8 +1,8 @@
 import { globSync, readFileSync } from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
-import { ui } from '../src/cli/ui.ts';
-import { writeDigest } from '../src/digest/mail.ts';
+import { ui } from '../../src/cli/ui.ts';
+import { writeDigest } from '../../src/digest/mail.ts';
 
 /** The name in lowercase as a word of its own, not part of a command, a path, an address or a variable, nor the verb. */
 const LOWERCASE_NAME = /(?<![\w/.@~$-])mild(?![\w/.@-])/;

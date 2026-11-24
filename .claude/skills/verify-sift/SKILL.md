@@ -117,7 +117,7 @@ State is in `~/.cache/sift-verify-maint/`. Delete `suggested-on` there to see to
 ## What this cannot show
 
 - Signing in with Google, and connecting another account or letting Mild send: the browser goes to Google's own consent screen, which the fake does not draw.
-- Gmail itself: the fake answers what Mild asks as `tests/google.ts` reads Gmail's API. Its search reads only the operators Mild's queries use, its estimates are exact counts, and it takes every filter it is asked for. Whether Gmail accepts a filter, and what it does to mail, is for `tests/filters.test.ts` and a real account.
+- Gmail itself: the fake answers what Mild asks as `tests/google.ts` reads Gmail's API. Its search reads only the operators Mild's queries use, its estimates are exact counts, and it takes every filter it is asked for. Whether Gmail accepts a filter, and what it does to mail, is for `tests/validate-filter.test.ts` and a real account.
 - Mail arriving, or the person changing it in Gmail: nothing comes into the fake after the seed, so a pass finds nothing new.
 - The model tier: the seed's stand-in model never calls a provider and places only `m8` and the code.example.com mail it knows by name, so every other unmatched message is "Unlabelled". With no model at all such mail would wait undecided and not be a suggestion, and every screen would be the setting-up steps. The rule and label stand-ins are fixed answers too: what they fill in proves the dialogs and the code around the model, not what a model would choose.
 - Sending: the fake Gmail keeps what it was asked to send, labelled `SENT`, in `$RUN/google.json`, and answers as Gmail would, with no one receiving it.
