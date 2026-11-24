@@ -165,8 +165,12 @@ export const PHONE = { width: 390, height: 844 };
 /** How far the page scrolls sideways, asked again until it matches: a part arriving late can widen it. */
 export const sideScroll = (page: Page) => expect.poll(() => page.evaluate('document.documentElement.scrollWidth - document.documentElement.clientWidth'));
 
-/** Where `target` is once the page has stopped moving: a layer that just opened or closed is still sliding. */
+/**
+ * Where `target` is once it is on the page and the page has stopped moving: a layer that just opened or closed is still
+ * sliding. Waiting for motion before the target arrives would miss its own slide in.
+ */
 export async function boxOf(target: Locator) {
+  await target.waitFor();
   await settled(target.page());
   const box = await target.boundingBox();
   if (!box) throw new Error(`${target.toString()} is not on the page`);

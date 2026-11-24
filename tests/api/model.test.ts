@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Browser } from '../fixtures.ts';
+import { credentials } from '../../src/store/credentials.ts';
 import { ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
@@ -28,16 +29,22 @@ describe('a model by API key', () => {
     const me = await sift.settled(ME);
     expect((await me.call('GET', '/api/models')).body).toEqual({ models: [], shortlist: {}, costs: {} });
 
+    expect((await me.call('POST', '/api/model/key', { provider: 'anthropic' })).status).toBe(400);
     expect((await me.call('POST', '/api/model/key', { provider: 'anthropic', key: ' sk-ant-test ' })).status).toBe(200);
     expect(sift.queued).toContainEqual({ kind: 'pass', person: 1, mailbox: 1 });
     expect(await modelOf(me)).toMatchObject({ signedIn: ['anthropic'] });
+    expect(JSON.parse((await (await credentials(await sift.db(ME), 'model')).read('anthropic'))!)).toMatchObject({ key: 'sk-ant-test' });
     const offered = (await me.call('GET', '/api/models')).body as { models: string[]; shortlist: Record<string, string[]> };
     expect(offered.models.length).toBeGreaterThan(0);
     expect(offered.models.every((m) => m.startsWith('anthropic/'))).toBe(true);
     expect(offered.shortlist['anthropic']!.every((m) => offered.models.includes(m))).toBe(true);
 
+    await sift.work();
     expect((await me.call('POST', '/api/model', { model: offered.models[0] })).status).toBe(200);
+    expect(sift.queued).toContainEqual({ kind: 'pass', person: 1, mailbox: 1 });
+    expect(await modelOf(me)).toMatchObject({ reasoning: 'low' });
     expect((await me.call('POST', '/api/model/reasoning', { reasoning: 'high' })).status).toBe(200);
+    for (const level of ['off', 'none', 'max']) expect((await me.call('POST', '/api/model/reasoning', { reasoning: level })).status, level).toBe(400);
     expect(await modelOf(me)).toMatchObject({ chosen: offered.models[0], reasoning: 'high' });
     expect((await me.call('POST', '/api/model', { model: 'no-provider' })).status).toBe(400);
 
@@ -73,7 +80,10 @@ describe('ChatGPT', () => {
     const asked = openAI();
     const me = await (await start()).settled(ME);
     const started = await me.call('POST', '/api/model/chatgpt', {});
-    expect(started).toMatchObject({ status: 200, body: { code: 'ABCD-1234', url: expect.stringMatching(/^https:\/\/auth\.openai\.com\//) } });
+    expect(started).toMatchObject({
+      status: 200,
+      body: { code: 'ABCD-1234', url: expect.stringMatching(/^https:\/\/auth\.openai\.com\//), expiresAt: expect.any(Number) },
+    });
     expect(asked).toEqual(['/api/accounts/deviceauth/usercode']);
     expect(await modelOf(me)).toMatchObject({ pending: { code: 'ABCD-1234' } });
     expect(await me.call('POST', '/api/model/chatgpt/finish', { address: `${CALLBACK}?code=c` })).toMatchObject({

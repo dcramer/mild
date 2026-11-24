@@ -61,7 +61,7 @@ const scaleAt = flags.indexOf('--scale');
 const scale = scaleAt === -1 ? 0 : Number(flags.splice(scaleAt, 2)[1]);
 if (!Number.isInteger(scale) || scale < 0) throw new Error('--scale takes a number of messages');
 const variant = flags[0];
-process.env['SIFT_HOME'] = resolve(home);
+process.env['MILD_HOME'] = resolve(home);
 const config = loadConfig();
 if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
 
