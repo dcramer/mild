@@ -7,6 +7,7 @@ import { changeCopied, copied, copiedKey, opened } from './copy.ts';
 import { type Sealed, device, seal, unseal } from './device.ts';
 import { reportError } from './telemetry.ts';
 import { type Change, tellFailed, tellWaiting } from './waiting.ts';
+import { isMailThreads } from './api/keys.ts';
 
 /**
  * Inbox's presses on the way to Gmail (docs/sync.md): kept on the device before anything is shown, so a press is never
@@ -152,7 +153,7 @@ function settle(id: string, refused: string | null) {
   else outcome?.refused(new Error(refused));
   told();
   // A list that is not the copy's shows what Mild did once it loads again.
-  if (refused === null) void queryClientFor().invalidateQueries({ predicate: (query) => String(query.queryKey[0]).startsWith('mail-threads') });
+  if (refused === null) void queryClientFor().invalidateQueries({ predicate: (query) => isMailThreads(query.queryKey[0]) });
   pump();
 }
 

@@ -2,12 +2,12 @@
 import { PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, NamedLabel } from '@/components/bits.tsx';
-import { type LabelSummary, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
+import { type LabelSummary } from '@/lib/api/endpoints.ts';
 import { useOpened } from '@/lib/params.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { INBOX, count, percent } from '@/lib/format.ts';
 import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
+import { useManage } from '@/lib/api/reads.ts';
 
 /** What Mild does with a label's mail, as the page groups it: blocking is marking spam, and more. */
 const GROUPS = [
@@ -32,7 +32,7 @@ function Right({ label }: { label: LabelSummary }) {
 
 /** Labels' own action, adding some, with how many there are of how many Mild keeps. */
 export function LabelActions() {
-  const { data, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
+  const { data, reload } = useManage({ refreshMs: 10_000 });
   const [adding, setAdding] = useState(false);
   // Leave in inbox is not one of the labels the limit counts.
   const own = data ? data.labels.filter((label) => label.id !== INBOX).length : 0;
@@ -58,7 +58,7 @@ export function LabelActions() {
  * it is, how much of the mail it is and how often Mild has had it right.
  */
 export function LabelsView({ loading: loadingRows }: { loading: ReactNode }) {
-  const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
+  const { data, error, loading, reload } = useManage({ refreshMs: 10_000 });
   const [open, setOpen] = useOpened('labels');
   const all = data?.labels ?? [];
   const mail = all.reduce((sum, label) => sum + label.messages, 0);

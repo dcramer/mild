@@ -7,9 +7,8 @@ import { useNow } from '@/components/status.tsx';
 import { count } from '@/lib/format.ts';
 import { MailWindowDialog, TurnInboxOn, windowName } from '@/components/inbox-switch.tsx';
 import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
-import { costLine, spentLine, subscription } from '@/lib/prices.ts';
+import { costLine, spentLine, usePlan, providerOf } from '@/lib/prices.ts';
 import { type ManageState, type Removed, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { forgetHere } from '@/lib/sign-out.ts';
 import { useAction } from '@/lib/action.ts';
 import { useParam } from '@/lib/params.ts';
@@ -35,6 +34,7 @@ import {
   useShortcutsOn,
   useToast,
 } from '@/system';
+import { useSession, useManage, useModels } from '@/lib/api/reads.ts';
 
 /** Whether Mild is on for the reader's own mail: what they come to Settings for first. */
 function Active({ state, reload }: { state: ManageState; reload: () => void }) {
@@ -207,7 +207,7 @@ function DigestRow({ state, reload }: { state: ManageState; reload: () => void }
 /** Change the provider: choose, sign in, try a model, switch. Until the switch, the one in use goes on classifying. */
 function ChangeProvider({ state, reload, onClose }: { state: ManageState; reload: () => void; onClose: () => void }) {
   const { choices, chosen } = state.model;
-  const inUse = chosen?.split('/')[0] ?? null;
+  const inUse = providerOf(chosen);
   const [picked, setPicked] = useState<(typeof choices)[number] | null>(null);
   const subtitle = `${providerName(
     choices.find((c) => c.provider === inUse),
@@ -241,7 +241,7 @@ function Switch({
   const { ready, next } = step;
   const { busy, error, run } = useAction();
   const toast = useToast();
-  const old = state.model.chosen?.split('/')[0] ?? null;
+  const old = providerOf(state.model.chosen);
   const name = providerName(choice, choice.provider);
   const doSwitch = () =>
     run(async () => {
@@ -292,8 +292,9 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
   const { busy, error, run, settle } = useAction();
   const { chosen, choices, signedIn } = state.model;
   const [changing, setChanging] = useState(false);
-  const models = useLoaded(`models ${signedIn.join(' ')}`, (signal) => api.models(signal), 300_000);
-  const provider = chosen?.split('/')[0] ?? null;
+  const models = useModels(signedIn);
+  const plan = usePlan();
+  const provider = providerOf(chosen);
   const choice = choices.find((c) => c.provider === provider);
   // Connecting a model is SetUp's Connect step, under this panel: the button closes the panel onto it.
   if (chosen === null || provider === null || !signedIn.includes(provider))
@@ -312,11 +313,7 @@ function Model({ state, reload, onConnect }: { state: ManageState; reload: () =>
   return (
     <SettingsGroup
       title="Model"
-      note={
-        spent.costUsd > 0
-          ? `Classifies what no rule covers. ${spentLine(spent.costUsd, spent.judged, subscription(state.model))}`
-          : 'Classifies what no rule covers.'
-      }
+      note={spent.costUsd > 0 ? `Classifies what no rule covers. ${spentLine(spent.costUsd, spent.judged, plan)}` : 'Classifies what no rule covers.'}
     >
       <Sheet>
         <SettingRow title={providerName(choice, provider)} note={choice?.how === 'key' ? 'Key saved.' : 'Signed in.'}>
@@ -558,8 +555,8 @@ function Keys() {
 /** How mild runs, most used first. What it does with mail is under Labels and Rules. */
 /** Settings, over whatever is showing. Opened from the account menu, or from the setting-up page, so nothing has to be set up first. */
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const { data, error, loading, reload } = useLoaded('manage', (signal) => api.manage(signal), 10_000);
-  const session = useLoaded('session', (signal) => api.session(signal), 300_000);
+  const { data, error, loading, reload } = useManage({ refreshMs: 10_000 });
+  const session = useSession();
   const signedInAs = session.data?.email ?? null;
   return (
     <Panel open onClose={onClose} title="Settings">

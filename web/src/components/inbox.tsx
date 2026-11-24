@@ -1,21 +1,15 @@
 'use client';
 import { type InboxEstimate, type ManageState, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import { count, money, plural } from '@/lib/format.ts';
 import { Ago, Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
-import { costOfMessages, priceNote, subscription } from '@/lib/prices.ts';
+import { costOfMessages, priceNote, usePlan } from '@/lib/prices.ts';
 import { useNow } from '@/components/status.tsx';
-
-type Reach = 'inbox' | 'recent';
-
-/** What going through the newest of the inbox would take. Read from Gmail, so it is not asked for again for a while. */
-export function useInboxEstimate(reach: Reach) {
-  return useLoaded(`inbox-${reach}`, (signal) => api.inboxEstimate(reach, signal), 300_000);
-}
+import { useInboxEstimate } from '@/lib/api/reads.ts';
 
 /** How many messages, how many need the model, and about what that costs on the model in use. */
 export function InboxFigures({ estimate, model }: { estimate: InboxEstimate | null; model: ManageState['model'] }) {
+  const plan = usePlan();
   if (!estimate)
     return (
       <Figures>
@@ -27,7 +21,7 @@ export function InboxFigures({ estimate, model }: { estimate: InboxEstimate | nu
     <Figures>
       <Figure label="In your inbox" value={count(estimate.messages)} />
       <Figure label="Need the model" value={count(estimate.model)} />
-      {estimate.cost === null ? null : <Figure label="About" value={money(estimate.cost)} tone="look" note={priceNote(model.chosen, subscription(model))} />}
+      {estimate.cost === null ? null : <Figure label="About" value={money(estimate.cost)} tone="look" note={priceNote(model.chosen, plan)} />}
     </Figures>
   );
 }
@@ -90,6 +84,7 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
   const { busy, error, run } = useAction();
   const estimate = useInboxEstimate('inbox');
   const now = useNow(10_000);
+  const plan = usePlan();
   if (going)
     return (
       <SettingRow
@@ -114,7 +109,7 @@ export function InboxRow({ state, reload, onGoThrough }: { state: ManageState; r
       </SettingRow>
     );
   const said = estimate.data;
-  const costs = !said || said.cost === null ? null : costOfMessages(said.cost, subscription(state.model));
+  const costs = !said || said.cost === null ? null : costOfMessages(said.cost, plan);
   return (
     <SettingRow
       title="Your inbox"

@@ -2,12 +2,12 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { ErrorNote, Verdict } from '@/components/bits.tsx';
 import { SenderCell, senderHref } from '@/components/sender.tsx';
-import { type ContactPage, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
+import { type ContactPage } from '@/lib/api/endpoints.ts';
 import { CONTACT_FILTER, STANDINGS, count, dateTime, plural } from '@/lib/format.ts';
 import { paramNow, setParams, useGo, useParam } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { Ago, Empty, FilterGroup, Heads, ListView, OnPhone, Pager, Table, Td, Th, Tr } from '@/system';
+import { useContacts } from '@/lib/api/reads.ts';
 
 const PAGE = 50;
 
@@ -52,7 +52,7 @@ export function ContactsView({ loading: loadingRows }: { loading: ReactNode }) {
   }, [typed]);
 
   const query = { q: search, standing, know, limit: PAGE, offset };
-  const { data, error, loading } = useLoaded(`contacts-${JSON.stringify(query)}`, (signal) => api.contacts(query, signal), 120_000);
+  const { data, error, loading } = useContacts(query);
   const narrowed = search !== '' || standing !== '' || know !== '';
 
   return (

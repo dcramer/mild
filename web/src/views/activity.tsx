@@ -4,7 +4,6 @@ import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, type Summary, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { paramNow, setParams, useParam } from '@/lib/params.ts';
 import {
   FACT_FILTER_OPTIONS,
@@ -23,8 +22,8 @@ import {
 import { Empty, Figure, Figures, FilterGroup, ListView, Pager, Reserve, Select, Share, StackedBars, TextLink, useToast } from '@/system';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { PhoneSiftStatus } from '@/components/status.tsx';
-import { usePlan } from '@/components/model-connect.tsx';
-import { costName } from '@/lib/prices.ts';
+import { costName, usePlan } from '@/lib/prices.ts';
+import { useManage, useDecisions, useSummary } from '@/lib/api/reads.ts';
 
 const PAGE = 50;
 /** What the list shows. Changed: what Mild did, or tried to do, in Gmail. Everything adds suggestions and mail left alone. */
@@ -121,10 +120,10 @@ export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
 
   const status = view === '' ? 'changed' : '';
   const query = { days, status, search, fact, label, limit: PAGE, offset };
-  const { data, error, loading } = useLoaded(`decisions-${JSON.stringify(query)}`, (signal) => api.decisions(query, signal));
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const { data, error, loading } = useDecisions(query);
+  const manage = useManage();
   const labels = new Map((manage.data?.labels ?? []).map((l) => [l.id, l.name] as const));
-  const summary = useLoaded(`summary-${days}-${label}`, (signal) => api.summary(days, signal, label));
+  const summary = useSummary(days, label);
   const daily = summary.data?.daily ?? [];
   // A day's column is worth drawing only beside others, and only once something happened.
   const charted = daily.length > 1 && daily.some((day) => day.costUsd > 0 || Object.values(day.counts).some((n) => n > 0));

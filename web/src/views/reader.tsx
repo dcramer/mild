@@ -7,18 +7,17 @@ import { StatusWord, Verdict } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts, useMessageView } from '@/components/message-parts.tsx';
 import { DigestBody } from '@/components/digest.tsx';
 import { useMailPress } from '@/components/mail.tsx';
-import { usePlan } from '@/components/model-connect.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
 import { useAction } from '@/lib/action.ts';
 import { saveFile, useFiles } from '@/lib/attachments.ts';
 import { type Confidential, type MailConversation, type MessageDetail, type RuleMatch, api } from '@/lib/api/endpoints.ts';
-import { changeLoaded, readAhead, useLoaded } from '@/lib/api/query.ts';
+import { changeLoaded, useLoaded } from '@/lib/api/query.ts';
 import { conversationOf, conversations, copied, copiedKey } from '@/lib/copy.ts';
 import { type Writing, closeReply, useCompose, writing } from '@/lib/compose.ts';
 import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
 import type { MessageRef } from '@/lib/open-messages.ts';
 import { messageKey, useParam } from '@/lib/params.ts';
-import { AT_API_PRICES } from '@/lib/prices.ts';
+import { AT_API_PRICES, usePlan } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { type RuleStart, keepStart, messageStart, standingStart } from '@/lib/rule-start.ts';
 import { useStarted } from '@/system/started.ts';
@@ -59,6 +58,8 @@ import {
   MessageFiles,
   LabelChip,
 } from '@/system';
+import { useManage, useMessage, readMessageAhead, useSuggestion } from '@/lib/api/reads.ts';
+import { keys } from '@/lib/api/keys.ts';
 
 type Decision = MessageDetail['decisions'][number];
 type Action = MessageDetail['actions'][number];
@@ -197,7 +198,7 @@ const people = (list: MessageDetail['to'], account: string) => list.map((p) => (
  * has more than one mailbox: then To always names the one it came to, in full, first where it was not addressed.
  */
 function useAddressedTo(detail: MessageDetail): { label: 'To' | 'Cc'; who: ReactNode }[] {
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const manage = useManage();
   const own = detail.accountId;
   const to = detail.to.map((p) => reveal(p.address));
   const cc = detail.cc.map((p) => reveal(p.address));
@@ -292,19 +293,14 @@ function Files({ detail }: { detail: MessageDetail }) {
 }
 
 /** A message of the conversation: the reader's own as it was loaded, any other read as it is first wanted and kept. */
-function useMessage(id: string, newest: MessageDetail): { detail: MessageDetail | null; error: string | null } {
+function useConversationMessage(id: string, newest: MessageDetail): { detail: MessageDetail | null; error: string | null } {
   const other = id === newest.messageId ? null : id;
-  const loaded = useLoaded(
-    `message/${newest.accountId}/${other ?? ''}`,
-    (signal) => (other ? api.message(other, signal, newest.accountId) : Promise.resolve(null)),
-    30_000,
-    '',
-  );
+  const loaded = useMessage(newest.accountId, other);
   return other ? { detail: loaded.data, error: loaded.error } : { detail: newest, error: null };
 }
 
 function OpenOne({ id, newest, onAnswer }: { id: string; newest: MessageDetail; onAnswer?: ((what: Answer) => void) | undefined }) {
-  const { detail, error } = useMessage(id, newest);
+  const { detail, error } = useConversationMessage(id, newest);
   if (detail) return <Opened detail={detail} onAnswer={onAnswer} />;
   return error ? <Failure>{error}</Failure> : <Loading rows={4} />;
 }
@@ -412,7 +408,7 @@ function Arriving({ conversation, subject, bar, thumbs }: { conversation: MailCo
 
 /** The reply box, at the foot of the conversation, on the message it answers, which it names when that is not the newest. */
 function Answering({ what, newest, onClose }: { what: Answer; newest: MessageDetail; onClose: () => void }) {
-  const { detail, error } = useMessage(what.messageId, newest);
+  const { detail, error } = useConversationMessage(what.messageId, newest);
   if (!detail) return error ? <Failure>{error}</Failure> : <Loading rows={3} />;
   const who = reveal(detail.fromName) ?? reveal(detail.fromAddress);
   const about =
@@ -460,8 +456,8 @@ function OpenedMessage({
   labelling: boolean;
   onLabelled: () => void;
 }) {
-  const waiting = useLoaded(`suggestion/${reveal(detail.fromAddress)}`, (signal) => api.suggestion(reveal(detail.fromAddress), signal), 120_000);
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const waiting = useSuggestion(reveal(detail.fromAddress));
+  const manage = useManage();
   const toast = useToast();
   const compose = useCompose();
   const [composeAs] = useParam('compose');
@@ -719,15 +715,9 @@ export function MessageReader({
     setPicked(null);
   }
   const shown = picked ?? item;
-  // Not narrowed: a message linked to may be in a mailbox the dashboard is not narrowed to.
-  const { data, error, loading, reload } = useLoaded(
-    `message/${shown.accountId}/${shown.messageId}`,
-    (signal) => api.message(shown.messageId, signal, shown.accountId),
-    30_000,
-    '',
-  );
+  const { data, error, loading, reload } = useMessage(shown.accountId, shown.messageId);
   const threadId = picked ? undefined : item.threadId;
-  const threadLoad = `thread/${item.accountId}/${threadId ?? ''}`;
+  const threadLoad = keys.thread(item.accountId, threadId ?? '');
   // A conversation in the inbox is in this browser's copy already (docs/sync.md); the server is asked for one that is not.
   const key = threadId && item.accountId ? copiedKey(item.accountId, threadId) : null;
   const started = useStarted();
@@ -743,8 +733,7 @@ export function MessageReader({
   );
   // The conversations either side are read ahead, so previous and next wait on nothing.
   useEffect(() => {
-    for (const near of [items[index + 1], items[index - 1]])
-      if (near?.accountId) readAhead(`message/${near.accountId}/${near.messageId}`, (signal) => api.message(near.messageId, signal, near.accountId));
+    for (const near of [items[index + 1], items[index - 1]]) if (near?.accountId) readMessageAhead(near.accountId, near.messageId);
   }, [items, index]);
   const { press, block, ruling: blocking, stopRuling } = useMailPress();
   const compose = useCompose();
@@ -762,7 +751,7 @@ export function MessageReader({
   const conversation = threadId ? (fromCopy ? conversationOf(fromCopy) : thread.data) : null;
   // The copy has all a press needs before the message has loaded.
   const subject = data?.subject ?? fromCopy?.conversation.messages.at(-1)?.subject;
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const manage = useManage();
   // What the message is, as its row shows it, which Archive gives it where the label archives too.
   const current = data?.decisions.at(-1);
   const label = manage.data?.labels.find((l) => l.id === (current?.answer ? current.answer.labelId : current?.labelId));

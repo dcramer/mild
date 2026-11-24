@@ -5,7 +5,6 @@ import { type ReactNode, useState } from 'react';
 import { ErrorNote, NamedLabel, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, DomainNamed, NameCell, RuleWords, SenderCell, SenderFacts, senderHref } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import { STANDINGS, count, dateTime, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
@@ -37,6 +36,7 @@ import {
 import { type OpenMessages, useOpenMessages } from '@/lib/open-messages.ts';
 import { useStarted } from '@/system/started.ts';
 import { reveal } from '@/lib/reveal.ts';
+import { useManage, useWhoPage, useSenderUnder } from '@/lib/api/reads.ts';
 
 const GIVE = STANDINGS.map(([key, press]) => [key, press] as const);
 
@@ -278,9 +278,7 @@ export function WhoView({ kind, shell }: { kind: 'sender' | 'domain'; shell: Rea
 function SenderView({ who }: { who: Who }) {
   const onOpen = useOpenMessages();
   const key = 'address' in who ? who.address : who.domain;
-  const { data, error, loading, reload } = useLoaded(`${'address' in who ? 'sender' : 'domain'}-page-${key}`, (signal) =>
-    'address' in who ? api.sender(who.address, signal) : api.domain(who.domain, signal),
-  );
+  const { data, error, loading, reload } = useWhoPage(who);
   const go = useGo();
   const compose = useCompose();
   const give = useAction();
@@ -290,7 +288,7 @@ function SenderView({ who }: { who: Who }) {
   const toast = useToast();
   // Every other rule this page starts opens the rule dialog on it, to see and change before adding.
   const [starting, setStarting] = useState<RuleStart | null>(null);
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const manage = useManage();
   // A standing is a rule for exactly them that says only what happens to their mail, so it is given in one press, with Undo.
   const giveStanding = (standing: Given) =>
     give.run(async () => {
@@ -318,9 +316,7 @@ function SenderView({ who }: { who: Who }) {
   // pressed on, which only narrows the mail where there is a From to show it.
   const [named, setUnder] = useParam('name');
   const under = data && data.names.length > 1 ? named : '';
-  const narrowed = useLoaded(`sender-page-${key}-under-${under}`, (signal) =>
-    'address' in who && under !== '' ? api.sender(who.address, signal, under) : Promise.resolve(null),
-  );
+  const narrowed = useSenderUnder(who, under);
   if (error && !data) return 'domain' in who ? <Empty>{error}</Empty> : <ErrorNote message={error} />;
   if (loading || !data)
     return (

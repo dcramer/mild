@@ -13,7 +13,6 @@ import { TurnInboxOn } from '@/components/inbox-switch.tsx';
 import { DraftList } from '@/components/drafts.tsx';
 import { WhoWrote, type Writer, useMailPress } from '@/components/mail.tsx';
 import { type MailThread, type MailView, api } from '@/lib/api/endpoints.ts';
-import { readAheadOnRest, useLoaded, usePages } from '@/lib/api/query.ts';
 import { type Copied, conversations, copiedKey, useWhole } from '@/lib/copy.ts';
 import { useOutbox } from '@/lib/waiting.ts';
 import { useShown } from '@/lib/telemetry.ts';
@@ -54,6 +53,7 @@ import {
   usePhone,
   type Ending,
 } from '@/system';
+import { useManage, useSuggestions, readMessageAhead, useMailThreads } from '@/lib/api/reads.ts';
 
 /** What Inbox shows: its conversations, narrowed or not, or the mail begun and not sent. */
 type Shown = MailView | 'drafts';
@@ -130,8 +130,7 @@ function useRows(manage: { labels: readonly AnswerLabel[]; accounts: readonly { 
 }
 
 /** Its newest message read ahead of a press that opens it, which then waits on nothing. */
-const ahead = (t: Listed) =>
-  readAheadOnRest(`message/${t.accountId}/${newest(t).messageId}`, (signal) => api.message(newest(t).messageId, signal, t.accountId));
+const ahead = (t: Listed) => readMessageAhead(t.accountId, newest(t).messageId, true);
 
 /** Where a conversation a search found is, when that is not the inbox, in front of its subject as Gmail puts a label. */
 function Place({ thread }: { thread: Listed }) {
@@ -375,7 +374,7 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
 /** Inbox: the conversations in the inbox, as a mail app lists them, with what Mild thinks of each; a search looks through all the mail Mild keeps. */
 export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const manage = useManage();
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   // Everything is the list unnarrowed, with nothing in the address.
@@ -386,7 +385,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const view: MailView = drafting ? 'all' : shown;
   const [unread, setUnread] = useParam('unread');
   // Rules Mild proposes, at the top of the inbox: For review is not a section of its own while Inbox is on.
-  const suggestions = useLoaded('suggestions-false', (signal) => api.suggestions(false, '', signal));
+  const suggestions = useSuggestions();
   const q = useDeferredValue(search.trim());
   const ask = useAsk();
   const query = { view, label, q, unread: unread === '1', ...ask.query } as const;
@@ -396,9 +395,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const local = on && started && q === '' && !ask.narrowed && !drafting;
   // Asked only once the page has started: until then it cannot say whether the copy will draw the list.
   const server = on && started && !local && !drafting;
-  const pages = usePages(`mail-threads-${server}-${query.view}-${label}-${query.unread}-${q}-${JSON.stringify(ask.query)}`, (before, signal) =>
-    server ? api.mailThreads(query, before, signal) : Promise.resolve({ threads: [], next: null }),
-  );
+  const pages = useMailThreads(server, query, ask.query);
   const mailbox = useContext(Mailbox);
   const [reach, setReach] = useState(COPY_PAGE);
   const copy = useLiveQuery({

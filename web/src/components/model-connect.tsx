@@ -2,11 +2,11 @@
 import { ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { type ManageState, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import { money } from '@/lib/format.ts';
-import { AT_API_PRICES, costLine, planOf, subscription } from '@/lib/prices.ts';
+import { AT_API_PRICES, costLine } from '@/lib/prices.ts';
 import { Button, ChoiceGroup, Copyable, Disclosure, Fact, Facts, Failure, Form, Heads, Input, Select, Sub, Table, Td, TextLink, Th, Tr } from '@/system';
+import { useModels } from '@/lib/api/reads.ts';
 
 type Choice = ManageState['model']['choices'][number];
 
@@ -65,16 +65,6 @@ const KEY_PAGE: Record<string, string> = {
   openrouter: 'https://openrouter.ai/settings/keys',
 };
 
-/**
- * The way in to the model in use when it is a subscription, or the way a call on `model` went, from what
- * Settings loads: whether a sum is only an API price.
- */
-export function usePlan(model?: string): Choice | null {
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
-  if (!manage.data) return null;
-  return model === undefined ? subscription(manage.data.model) : planOf(model, manage.data.model.choices);
-}
-
 /** The press a step ends with: a link out, or something done here. */
 export interface Next {
   label: string;
@@ -92,7 +82,7 @@ export interface Next {
 export function useProviderConnect(choice: Choice, model: ManageState['model'], reload: () => void) {
   const name = providerName(choice, choice.provider);
   const signedIn = model.signedIn.includes(choice.provider);
-  const listed = useLoaded(`models ${model.signedIn.join(' ')}`, (signal) => api.models(signal), 300_000);
+  const listed = useModels(model.signedIn);
   const mine = (listed.data?.models ?? []).filter((m) => m.startsWith(`${choice.provider}/`));
   const shortlist = listed.data?.shortlist[choice.provider] ?? [];
   const costs = listed.data?.costs ?? {};

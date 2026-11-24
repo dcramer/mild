@@ -1,10 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { type ManageState, type MailReach, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import { duration, roughly, size } from '@/lib/format.ts';
 import { Button, ChoiceGroup, DeleteButton, Dialog, Failure } from '@/system';
+import { useMailReach } from '@/lib/api/reads.ts';
 
 type Window = ManageState['mailWindow'];
 
@@ -25,7 +25,7 @@ const reachNote = (reach: MailReach[Window]) =>
  * on asks it; while on, choosing wider copies the rest, and narrower deletes what falls outside.
  */
 export function MailWindowDialog({ current, onClose, onDone }: { current: Window | null; onClose: () => void; onDone?: () => void }) {
-  const reach = useLoaded('mail-reach', (signal) => api.mailReach(signal), 300_000);
+  const reach = useMailReach();
   const [chosen, setChosen] = useState<Window>(current ?? 'year');
   const { busy, error, run } = useAction();
   const narrower = current !== null && WINDOWS.findIndex(([key]) => key === chosen) < WINDOWS.findIndex(([key]) => key === current);
