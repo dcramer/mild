@@ -1,4 +1,4 @@
-import type { FactFilter, RuleFacts, RuleMatch, StageKey } from './api.ts';
+import type { FactFilter, RuleFacts, RuleMatch, StageKey } from './api/endpoints.ts';
 import type { LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME } from '../../../src/triage/types.ts';
 
 /**

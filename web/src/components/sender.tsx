@@ -2,7 +2,8 @@
 import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
 import { NamedLabel } from '@/components/bits.tsx';
 import { Fragment, type ReactNode } from 'react';
-import { type Contact, type RuleMatch, type SenderProfile, api, useLoaded } from '@/lib/api.ts';
+import { type Contact, type RuleMatch, type SenderProfile, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import {
   CONTACT_SAYS,
   INBOX,

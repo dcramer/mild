@@ -1,5 +1,5 @@
 'use client';
-import type { MessageDetail } from '@/lib/api.ts';
+import type { MessageDetail } from '@/lib/api/endpoints.ts';
 import { count } from '@/lib/format.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';

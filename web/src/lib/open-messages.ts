@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { Confidential } from '@/lib/api.ts';
+import type { Confidential } from './api/endpoints.ts';
 
 /** One item of a list a message is opened from. */
 export interface MessageRef {

@@ -1,4 +1,4 @@
-import type { ManageState } from './api.ts';
+import type { ManageState } from './api/endpoints.ts';
 import { money, plural } from './format.ts';
 
 /**

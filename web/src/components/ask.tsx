@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { api } from '@/lib/api.ts';
+import { api } from '@/lib/api/endpoints.ts';
 import { useAction } from '@/lib/action.ts';
 import { setParams, useParam } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';

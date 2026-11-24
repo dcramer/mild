@@ -1,5 +1,5 @@
 'use client';
-import { type Confidential, type Given, type MailThread, api } from '@/lib/api.ts';
+import { type Confidential, type Given, type MailThread, api } from '@/lib/api/endpoints.ts';
 import { Fragment, useState } from 'react';
 import { SenderName } from '@/components/sender.tsx';
 import { useAction } from '@/lib/action.ts';

@@ -3,7 +3,8 @@ import { PlusIcon, XIcon } from 'lucide-react';
 import { NamedLabel } from '@/components/bits.tsx';
 import { useState } from 'react';
 import { useOpenRule, useOpened } from '@/lib/params.ts';
-import { type LabelSummary, type RuleBody, type RuleDraft, type RuleFilter, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
+import { type LabelSummary, type RuleBody, type RuleDraft, type RuleFilter, type RuleMatch, type RuleSummary, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import { type By, type Condition, type RuleStart, addedWords, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
 import {

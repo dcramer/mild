@@ -1,6 +1,6 @@
 'use client';
 import { type ReactNode, useState } from 'react';
-import { type LabelProposal, type LabelSummary, api } from '@/lib/api.ts';
+import { type LabelProposal, type LabelSummary, api } from '@/lib/api/endpoints.ts';
 import { useAction } from '@/lib/action.ts';
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 import { DescribeStep } from '@/components/describe.tsx';

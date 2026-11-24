@@ -1,6 +1,7 @@
 import { environmentManager } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import { api, queryClientFor, readAheadOnRest } from '../web/src/lib/api.ts';
+import { api } from '../web/src/lib/api/endpoints.ts';
+import { queryClientFor, readAheadOnRest } from '../web/src/lib/api/query.ts';
 
 const answer = (status: number, body: string, type: string) => vi.fn(async () => new Response(body, { status, headers: { 'content-type': type } }));
 // A change is refused before it is sent while Mild cannot be reached.

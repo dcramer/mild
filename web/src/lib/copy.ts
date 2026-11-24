@@ -2,7 +2,8 @@ import { type ChangeMessageOrDeleteKeyMessage, type Collection, type SyncConfig,
 import { onlineManager } from '@tanstack/react-query';
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import { useSyncExternalStore } from 'react';
-import { type MailConversation, type SyncPage, type SyncedConversation, api, onWrite } from './api.ts';
+import { type MailConversation, type SyncPage, type SyncedConversation, api } from './api/endpoints.ts';
+import { onWrite } from './api/client.ts';
 import { type Sealed, device, seal, unseal } from './device.ts';
 import { timed } from './trace.ts';
 

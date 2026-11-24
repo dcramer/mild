@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { type ManageState, type MailReach, api, useLoaded } from '@/lib/api.ts';
+import { type ManageState, type MailReach, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import { duration, roughly, size } from '@/lib/format.ts';
 import { Button, ChoiceGroup, DeleteButton, Dialog, Failure } from '@/system';

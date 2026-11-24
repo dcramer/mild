@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { DecisionRow } from '@/lib/api.ts';
+import type { DecisionRow } from '@/lib/api/endpoints.ts';
 import { INBOX, INBOX_NAME, type Status, STATUS_NAMES, doesName, outcomeName, status } from '@/lib/format.ts';
 import { Does, LabelName, Note, Sub, Tooltip } from '@/system';
 

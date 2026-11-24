@@ -1,7 +1,7 @@
 'use client';
 import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { Session } from '@/lib/api.ts';
+import type { Session } from '@/lib/api/endpoints.ts';
 import { Button, Code, Copyable, Entry, Note, Rope, Splash } from '@/system';
 import { useStarted } from '@/system/started.ts';
 

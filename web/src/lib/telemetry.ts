@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { Session } from './api.ts';
+import type { Session } from './api/endpoints.ts';
 import type * as Sdk from './telemetry-sdk.ts';
 import type { captureMessage } from './telemetry-sdk.ts';
 import { type Timing, drain, opening, stopCarrying, timed } from './trace.ts';
