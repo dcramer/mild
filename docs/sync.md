@@ -24,7 +24,7 @@ A message's HTML is still a frame loaded from the server under its own policy (`
 
 ## Records
 
-A conversation is one record, `SyncedConversation` (`src/dashboard/types.ts`): its recorded messages, oldest first, each as Inbox and the reader's folded rows show it (sender's name and address, subject, preview, when, Gmail's label ids), and what Mild thinks of its newest (the current decision, or the person's answer where they gave one; the label by its id, named from the person's labels so renaming one changes no conversation). It is one record because an archive in Gmail that takes its last message out of the inbox takes all of it out of the window, including messages that did not change.
+A conversation is one record, `SyncedConversation` (`src/dashboard/types/mail.ts`): its recorded messages, oldest first, each as Inbox and the reader's folded rows show it (sender's name and address, subject, preview, when, Gmail's label ids), and what Mild thinks of its newest (the current decision, or the person's answer where they gave one; the label by its id, named from the person's labels so renaming one changes no conversation). It is one record because an archive in Gmail that takes its last message out of the inbox takes all of it out of the window, including messages that did not change.
 
 A message's text is not in the feed: the reader reads it with the rest of the message (`GET /api/message`), ahead of a press that opens it. Labels, rules, proposals and settings stay server reads for now (Settings' data is kept with the frame, `web/src/lib/device.ts`); each gets a kind of its own in the feed when a screen needs it.
 
