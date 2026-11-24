@@ -9,18 +9,19 @@ import type { FakeGmail } from './google.ts';
 import { getRuleFilter, ruleFilterStatus } from '../src/store/filters.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { addRule, removeRule, setRule } from '../src/store/rules.ts';
-import { type FilterableRule, filterFor } from '../src/triage/filter.ts';
+import { filterFor } from '../src/triage/filter.ts';
+import type { Rule } from '../src/triage/rule.ts';
 import { validateFilter } from '../src/actions/filters.ts';
 import { ACCOUNT, SAMPLE_LABELS } from './helpers.ts';
 
-const rule = (overrides: Partial<FilterableRule> = {}): FilterableRule => ({
+const rule = (overrides: Partial<Rule> = {}): Rule => ({
   id: 'r1',
   match: { from: ['news@example.com'] },
   labelId: 'newsletter',
   ...overrides,
 });
-const verdict = (candidate: FilterableRule, others: FilterableRule[] = []) => filterFor(candidate, SAMPLE_LABELS, [candidate, ...others]);
-const reason = (candidate: FilterableRule, others: FilterableRule[] = []) => {
+const verdict = (candidate: Rule, others: Rule[] = []) => filterFor(candidate, SAMPLE_LABELS, [candidate, ...others]);
+const reason = (candidate: Rule, others: Rule[] = []) => {
   const v = verdict(candidate, others);
   return v.possible ? null : v.reason;
 };
@@ -36,7 +37,7 @@ describe('whether a rule can be a Gmail filter', () => {
   });
 
   it('turns a rule that only archives into a filter that only skips the inbox', () => {
-    const archive: FilterableRule = { id: 'a', match: { from: ['notifications@example.com'] }, disposition: 'archive' };
+    const archive: Rule = { id: 'a', match: { from: ['notifications@example.com'] }, disposition: 'archive' };
     const v = verdict(archive);
     expect(v).toMatchObject({ possible: true, plan: { criteria: { from: 'notifications@example.com' }, archive: true } });
     expect(v.possible && v.plan).not.toHaveProperty('gmailLabel');
@@ -60,7 +61,7 @@ describe('whether a rule can be a Gmail filter', () => {
     expect(v).toMatchObject({ possible: true, plan: { criteria: { from: 'news@example.com OR @example.org', subject: '"receipt" OR "invoice"' } } });
     expect(v.possible && validateFilter({ criteria: v.plan.criteria, action: { removeLabelIds: ['INBOX'] } })).toEqual([]);
     // Either sender could be one a narrower rule keeps.
-    const keep: FilterableRule = { id: 'k', match: { from: ['billing@example.org'] }, disposition: 'keep' };
+    const keep: Rule = { id: 'k', match: { from: ['billing@example.org'] }, disposition: 'keep' };
     expect(reason(rule({ match: { fromDomain: ['example.com', 'example.org'] } }), [keep])).toMatch(/Another rule/);
     expect(reason(rule({ match: { fromDomain: ['example.com', 'example.net'] } }), [keep])).toBeNull();
   });
@@ -84,7 +85,7 @@ describe('whether a rule can be a Gmail filter', () => {
   });
 
   it('holds back a filter that would get to mail a narrower rule on a fact keeps', () => {
-    const replies: FilterableRule = { id: 'r2', match: { from: ['news@example.com'], facts: { isReply: true } }, labelId: 'personal' };
+    const replies: Rule = { id: 'r2', match: { from: ['news@example.com'], facts: { isReply: true } }, labelId: 'personal' };
     expect(reason(rule(), [replies])).toMatch(/Another rule \(from news@example.com, is a reply\)/);
   });
 

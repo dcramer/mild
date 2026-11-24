@@ -4,6 +4,7 @@ import { windowStart } from '../mail-window.ts';
 import { inboxRow } from './labels.ts';
 import type { Sql } from './sql.ts';
 import type { Store } from './store.ts';
+import { DAY_MS } from '../time.ts';
 
 export interface Account {
   id: string;
@@ -174,12 +175,12 @@ export async function lastSyncedAt(db: Sql, accountId: string): Promise<number |
 }
 
 /** How long Google lets a sign-in from a client in Testing last ([gmail.md](../../docs/gmail.md#signing-in)). */
-export const TESTING_SIGN_IN_MS = 7 * 86_400_000;
+export const TESTING_SIGN_IN_MS = 7 * DAY_MS;
 /**
  * How long after the week an ended sign-in is still taken for Testing's: it is found only at the next look, and a
  * revoked or password-changed one is refused the same way. Gmail still answering past it means the client is not in Testing.
  */
-const NOTICED_MS = 86_400_000;
+const NOTICED_MS = DAY_MS;
 
 export async function signedIn(db: Sql, accountId: string, now: number): Promise<void> {
   await db.update(mailboxes).set({ signedInAt: now }).where(eq(mailboxes.id, accountId));

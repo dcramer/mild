@@ -126,7 +126,7 @@ export function writeDigest(digest: Digest): DigestMail {
         : `${senders.slice(0, 3).join(', ')} and ${plural(senders.length - 3, 'other')}`;
   const more = Math.max(0, entries.length - LISTED);
   const stayedOut = entries.length === 1 ? 'This one stayed out of your inbox.' : `These ${entries.length.toLocaleString('en-US')} stayed out of your inbox.`;
-  const inSift = digest.dashboard && `${digest.dashboard}/activity?${new URLSearchParams({ label: digest.label.id }).toString()}`;
+  const inMild = digest.dashboard && `${digest.dashboard}/activity?${new URLSearchParams({ label: digest.label.id }).toString()}`;
   // Held to the subject's last word, so a phone never leaves the count on a line alone.
   const times = (count: number) => (count > 1 ? `\u00a0×${count}` : '');
 
@@ -186,7 +186,7 @@ export function writeDigest(digest: Digest): DigestMail {
     row(
       `<td style="font:400 13px/1.6 ${FONT};color:${MUTED};padding:16px 0 0;">` +
         [
-          ...(inSift ? [`<a href="${escape(inSift)}" style="color:${MUTED};white-space:nowrap;">See them in Mild</a>`] : []),
+          ...(inMild ? [`<a href="${escape(inMild)}" style="color:${MUTED};white-space:nowrap;">See them in Mild</a>`] : []),
           `<a href="${escape(labelLink(digest))}" style="color:${MUTED};white-space:nowrap;">Open ${escape(digest.label.name)} in Gmail</a>`,
           ...(digest.dashboard
             ? [`<a href="${escape(`${digest.dashboard}/labels`)}" style="color:${MUTED};white-space:nowrap;">Change or stop this digest</a>`]
@@ -216,7 +216,7 @@ export function writeDigest(digest: Digest): DigestMail {
     '',
     stayedOut,
     '',
-    ...(inSift ? [`See them in Mild: ${inSift}`] : []),
+    ...(inMild ? [`See them in Mild: ${inMild}`] : []),
     `Open in Gmail: ${labelLink(digest)}`,
     ...(digest.dashboard ? [`Change or stop this digest: ${digest.dashboard}/labels`] : []),
     '',

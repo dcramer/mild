@@ -33,7 +33,7 @@ export interface Driver {
   close(): Promise<void>;
   /** Bring the planner's statistics up to date, where nothing else does: PGlite has no autovacuum. */
   analyze?(): Promise<void>;
-  /** For whoever runs sift: the role it connects as is not held by row-level security (`openDatabase`). */
+  /** For whoever runs Mild: the role it connects as is not held by row-level security (`openDatabase`). */
   readonly warning?: string;
 }
 

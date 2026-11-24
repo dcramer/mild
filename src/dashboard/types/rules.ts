@@ -57,7 +57,7 @@ export const RuleSummary = z.object({
   unsubscribe: z.boolean(),
   /** A plain-language condition only the model can apply. */
   when: z.string().nullable(),
-  /** `user`: written by the user. `correction`: made by correcting sift. `learned`: made by Mild when it blocked the sender. */
+  /** `user`: written by the user. `correction`: made by correcting Mild. `learned`: made by Mild when it blocked the sender. */
   source: z.string(),
   hits: z.number(),
   lastHitAt: z.number().nullable(),

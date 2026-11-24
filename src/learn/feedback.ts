@@ -34,7 +34,7 @@ async function undecided(db: Sql, accountId: string, messageId: string): Promise
  * The newest decision for a message that is not one of the user's own answers (a rule they applied is still scored),
  * or null when there is none: what an answer is scored against, so picking again is never scored against the last pick.
  */
-async function siftSaid(db: Sql, accountId: string, messageId: string): Promise<{ decisionId: number; labelId: string | null } | null> {
+async function mildSaid(db: Sql, accountId: string, messageId: string): Promise<{ decisionId: number; labelId: string | null } | null> {
   const [row] = await db
     .select({ decisionId: decisions.id, labelId: decisions.labelId })
     .from(decisions)
@@ -105,7 +105,7 @@ export async function applyFeedback(db: Sql, input: FeedbackInput, now: number =
   if (from !== undefined && from !== input.sender) throw new Refusal('That message is not from that sender.');
   if (targets.length === 0 && !given && !fresh) throw new Refusal('That message is no longer waiting for review.');
   // With only the user's own answers before it, there is nothing of Mild's to be right or wrong.
-  const scored = given ? ((await siftSaid(db, input.accountId, given.messageId)) ?? { decisionId: given.decisionId, labelId: null }) : null;
+  const scored = given ? ((await mildSaid(db, input.accountId, given.messageId)) ?? { decisionId: given.decisionId, labelId: null }) : null;
 
   // Agreeing with a decision that already stands changes nothing about the message itself.
   const changes = given !== null && (given.labelId !== label.id || given.disposition !== outcome);

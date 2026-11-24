@@ -1,9 +1,11 @@
-import { and, desc, eq, mailBodies, messages, notExists, preferences, sql } from '../store/query.ts';
+import { and, desc, eq, mailBodies, messages, notExists, sql } from '../store/query.ts';
+import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { pendingSuggestions } from '../store/suggestions.ts';
 import { READ_KEEP_DAYS, type Text, heldText, keepRead, keepText, neverRead } from '../store/kept.ts';
 import { type MessageContent, heldContent } from '../gmail/body.ts';
+import { DAY_MS } from '../time.ts';
 
 const PER_PASS = 50;
 
@@ -54,7 +56,7 @@ export function readingOnce(db: Sql, accountId: string, api: Reader, now: () => 
 
 /** Waiting mail Mild would move or could not place whose text it has never read, newest first. Bounded: a mailbox's suggestions go back a year. */
 async function unreadWaiting(db: Sql, accountId: string, now: number): Promise<string[]> {
-  const since = now - READ_KEEP_DAYS * 86_400_000;
+  const since = now - READ_KEEP_DAYS * DAY_MS;
   const waiting = (await pendingSuggestions(db, { accountId, since })).filter((s) => s.disposition !== 'keep').map((s) => s.messageId);
   const unread = new Set(await neverRead(db, accountId, waiting));
   return waiting.filter((id) => unread.has(id));
@@ -96,11 +98,9 @@ const textless = (db: Sql, accountId: string, limit: number) =>
     .orderBy(desc(messages.receivedAt))
     .limit(limit);
 
-export const inboxOn = async (db: Sql) => (await db.select({ mail: preferences.mail }).from(preferences))[0]?.mail === true;
-
 /** Whether `keepMailBodies` has text to keep: Inbox is on and some inbox mail has none. */
 export async function mailBodiesDue(db: Sql, accountId: string): Promise<boolean> {
-  return (await inboxOn(db)) && (await textless(db, accountId, 1)).length > 0;
+  return (await preferences(db)).mail && (await textless(db, accountId, 1)).length > 0;
 }
 
 /**
@@ -109,7 +109,7 @@ export async function mailBodiesDue(db: Sql, accountId: string): Promise<boolean
  * kept empty, so it is not asked for again. Returns how many it kept.
  */
 export async function keepMailBodies(db: Sql, reader: Reader, accountId: string, now: () => number = Date.now): Promise<number> {
-  if (!(await inboxOn(db))) return 0;
+  if (!(await preferences(db)).mail) return 0;
   let kept = 0;
   for (const { id: messageId } of await textless(db, accountId, PER_PASS)) {
     if (!(await keepText(db, accountId, messageId, textOf(await reader.getContent(messageId)), now()))) break;

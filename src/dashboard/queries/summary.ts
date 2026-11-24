@@ -26,9 +26,10 @@ import { accuracy } from '../../store/suggestions.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DayChanges, type StageKey, type Summary } from '../types.ts';
 import { STAGE_NAMES } from '../../triage/types.ts';
-import { DAY_MS, labelIs, listDecisions } from './decisions.ts';
+import { labelIs, listDecisions } from './decisions.ts';
 import { keptOutLessDigests, net, saved, unsubscribed } from './saved.ts';
 import { labelNames } from '../../store/labels.ts';
+import { DAY_MS } from '../../time.ts';
 
 const first = alias(decisions, 'first');
 

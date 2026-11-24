@@ -1,5 +1,6 @@
 import { and, conversationChanges, eq, inArray, lt, messages, notExists, sql, syncHeads } from './query.ts';
 import type { Sql } from './sql.ts';
+import { DAY_MS } from '../time.ts';
 
 /** Where a person's copy stands (docs/sync.md): the latest change's number, and the oldest a cursor may be from. */
 export async function headOf(db: Sql): Promise<{ seq: number; purgedThrough: number }> {
@@ -22,7 +23,7 @@ export async function pruneGone(db: Sql, now: number): Promise<number> {
   const gone = await db
     .select({ accountId: conversationChanges.accountId, threadId: conversationChanges.threadId, seq: conversationChanges.seq })
     .from(conversationChanges)
-    .where(and(lt(conversationChanges.changedAt, now - GONE_KEEP_DAYS * 86_400_000), notExists(recorded)));
+    .where(and(lt(conversationChanges.changedAt, now - GONE_KEEP_DAYS * DAY_MS), notExists(recorded)));
   if (gone.length === 0) return 0;
   const through = Math.max(...gone.map((g) => g.seq));
   await db.transaction(async (tx) => {

@@ -56,7 +56,7 @@
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
               {
                 // Every module in src/ but this one; a new one goes here too.
-                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/digest/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/prompts/**", "**/sift/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
+                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/digest/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/prompts/**", "**/sift/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts", "**/time.ts"],
                 "message": "triage/ is pure and depends on nothing else in src/."
               }
             ]
@@ -74,7 +74,7 @@
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." },
               { "group": ["node:*", "@googleapis/*", "googleapis", "google-auth-library", "@earendil-works/*", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "prompts/ is pure: no I/O. What a prompt needs arrives through a port, as in triage/." },
               {
-                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/digest/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/sift/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
+                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/digest/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/sift/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts", "**/time.ts"],
                 "message": "prompts/ is pure and depends on nothing in src/ but triage/."
               }
             ]
@@ -91,7 +91,7 @@
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." },
               { "group": ["node:*", "@googleapis/*", "googleapis", "google-auth-library", "@earendil-works/*", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "digest/ is pure: it writes the digest from what it is given." },
               {
-                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/prompts/**", "**/sift/**", "**/store/**", "**/triage/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
+                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/prompts/**", "**/sift/**", "**/store/**", "**/triage/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts", "**/time.ts"],
                 "message": "digest/ is pure and depends on nothing else in src/."
               }
             ]
@@ -129,7 +129,7 @@
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." }, 
               {
                 "group": ["**/gmail/**", "**/actions/**", "**/work/**", "@googleapis/*", "googleapis", "google-auth-library"],
-                "message": "dashboard/ shows the database and records what the user teaches sift (src/learn). It never reaches Gmail or changes the mailbox."
+                "message": "dashboard/ shows the database and records what the user teaches Mild (src/learn). It never reaches Gmail or changes the mailbox."
               },
               { "group": ["@earendil-works/*"], "message": "Only src/model talks to model providers. The dashboard reaches it through Controls (src/dashboard/controls.ts)." },
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "Only src/store opens a database. Take an Sql (src/store/sql.ts)." },

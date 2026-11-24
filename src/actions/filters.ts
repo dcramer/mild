@@ -1,6 +1,6 @@
 import type { RuleFacts } from '../triage/facts.ts';
 
-/** A Gmail filter as proposed by a rule promotion or the agent. Mirrors `users.settings.filters`. */
+/** A Gmail filter as Mild would write it for a rule. Mirrors `users.settings.filters`. */
 export interface FilterProposal {
   criteria: {
     from?: string;

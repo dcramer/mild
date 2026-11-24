@@ -14,7 +14,7 @@ export interface SetupState {
   location?: 'local' | 'remote';
 }
 
-/** What the wizard needs from the rest of sift. Everything that touches the network or the disk is injected. */
+/** What the wizard needs from the rest of Mild. Everything that touches the network or the disk is injected. */
 export interface InitDeps {
   config: Config;
   ui: Ui;

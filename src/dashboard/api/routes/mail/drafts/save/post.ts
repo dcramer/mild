@@ -5,9 +5,10 @@ import { preferences } from '../../../../../../store/preferences.ts';
 import { reportError } from '../../../../../../telemetry.ts';
 import { DraftSave } from '../../../../../types.ts';
 import { done, named, write } from '../../../../route.ts';
+import { DAY_MS } from '../../../../../../time.ts';
 
 /** How far ahead mail may be scheduled, as Gmail allows. */
-const FURTHEST_MS = 49 * 365 * 86_400_000;
+const FURTHEST_MS = 49 * 365 * DAY_MS;
 
 /**
  * Keep what the composer holds, as the person pauses: on every device at once, and in Gmail's Drafts once they stop. With

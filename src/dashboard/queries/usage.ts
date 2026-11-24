@@ -2,9 +2,9 @@ import { and, gte, modelRuns } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { type Scope, within } from '../scope.ts';
 import type { Usage } from '../types.ts';
-import { DAY_MS } from './decisions.ts';
 import { localDay } from './summary.ts';
 import { keptOutLessDigests, net, saved, wouldKeepOut } from './saved.ts';
+import { DAY_MS } from '../../time.ts';
 
 /** Days the masthead's cost and each rule's cover. */
 export const MONTH = 30;

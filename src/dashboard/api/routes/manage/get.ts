@@ -5,12 +5,12 @@ import { copyProgress } from '../../../../store/copies.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
 import { waitingCount } from '../../../../store/suggestions.ts';
 import { preferences } from '../../../../store/preferences.ts';
-import { DAY_MS } from '../../../queries/decisions.ts';
 import { listLabelSummaries } from '../../../queries/labels.ts';
 import { modelSpend } from '../../../queries/summary.ts';
 import { type Scope, sees } from '../../../scope.ts';
 import { ManageState } from '../../../types.ts';
 import { type Context, ok, read } from '../../route.ts';
+import { DAY_MS } from '../../../../time.ts';
 
 /** Everything the Settings screen shows, for the mailboxes in scope. */
 async function manageState({ db, controls, person, now }: Context, scope: Scope): Promise<ManageState> {

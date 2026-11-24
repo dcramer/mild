@@ -29,8 +29,9 @@ import { listRules } from './rules.ts';
 import { plain } from '../plain.ts';
 import type { CONTACTS } from './states.ts';
 import { isCurrent, ofMessage } from './decisions.ts';
+import { DAY_MS } from '../time.ts';
 
-const CORRESPONDENT_TTL_MS = 7 * 86_400_000;
+const CORRESPONDENT_TTL_MS = 7 * DAY_MS;
 
 /** The cached answer to "has the owner written to this address", or undefined if unknown or stale. A yes never goes stale. */
 export async function cachedCorrespondent(db: Sql, accountId: string, address: string, now: number = Date.now()): Promise<boolean | undefined> {
@@ -122,7 +123,7 @@ export interface SenderFacts {
   why: string;
 }
 
-const MONTH_MS = 30 * 86_400_000;
+const MONTH_MS = 30 * DAY_MS;
 
 async function facts(db: Sql, accounts: readonly string[], who: { address: string } | { domain: string }, now: number): Promise<SenderFacts> {
   const column = 'address' in who ? messages.senderHash : messages.domainHash;
