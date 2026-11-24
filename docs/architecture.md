@@ -94,8 +94,8 @@ src/
   gmail/      the only module that holds the Google token: OAuth, API adapter, history sync
   dashboard/  the JSON API (server.ts), the Google sign-in and the browser's key (sign-in.ts), the session cookie (session.ts): api/ (a module per route, at its path), queries/ (what they read), scope.ts (whose data a request may see)
   work/       what a tick does: what is due and each piece of it (run.ts), whether a pass is wanted (due.ts), the pass (pass.ts), sync, triage, going through the inbox, upkeep (upkeep.ts)
-  learn/      what the user teaches: suggestions and answers, answers read from what they did in Gmail, and asking their model for labels (labels.ts) or a rule (rules.ts)
-  model/      the only module that talks to model providers (pi-ai): login, credentials, the judge, the label proposer (propose.ts), the rule drafter (draft-rule.ts), and Inbox's Ask (ask.ts)
+  learn/      what the user teaches: answers, answers read from what they did in Gmail, and asking their model for labels (labels.ts) or a rule (rules.ts)
+  model/      the only module that talks to model providers (pi-ai): the providers (models.ts), signing in to ChatGPT (chatgpt-sign-in.ts), credentials, the judge, the label proposer (propose.ts), the rule drafter (draft-rule.ts), and Inbox's Ask (ask.ts)
   refusal.ts  an error written for the person at the dashboard, the only kind whose words the page is shown
 app/          Next.js: the layouts, a page per screen, the error pages, the web manifest, and the Vercel functions (api/, auth/)
 web/          the dashboard page: React, Tailwind, its own design system on Base UI
