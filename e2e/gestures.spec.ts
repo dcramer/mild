@@ -47,6 +47,24 @@ test.describe('Inbox by touch, on a phone', () => {
     expect(await page.evaluate('document.elementFromPoint(195, 4).className')).toBe('status-cover');
   });
 
+  test('a row swiped away closes up, its height shrinking to nothing in the press’s colour, rather than vanishing', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(row(page, 'Your order has shipped')).toBeVisible();
+    // Every height the row takes on its way out, as the browser lays it out.
+    await page.evaluate(`(() => {
+      const tr = [...document.querySelectorAll('tr')].find((r) => r.textContent.includes('Your order has shipped'));
+      window.heights = [tr.offsetHeight];
+      new ResizeObserver(([entry]) => window.heights.push(entry.borderBoxSize[0].blockSize)).observe(tr);
+    })()`);
+    await swipe(row(page, 'Your order has shipped'), -380);
+    await expect(row(page, 'Your order has shipped')).toHaveCount(0);
+    const heights = (await page.evaluate('window.heights')) as number[];
+    const full = heights[0]!;
+    expect(heights.some((h) => h > 1 && h < full / 2)).toBe(true);
+    expect(Math.min(...heights)).toBeLessThan(2);
+    await dismiss(page, 'Your order has shipped');
+  });
+
   test('a finger drawn in from the left edge opens the menu, as the menu button does', async ({ page }) => {
     await page.goto('/inbox');
     const shipped = await boxOf(row(page, 'Your order has shipped'));

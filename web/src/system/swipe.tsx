@@ -7,6 +7,8 @@ export interface SwipePress {
   label: string;
   icon: ReactNode;
   onPress: () => void;
+  /** It takes the row out of the list (Archive): swiped to the edge, the row closes up first, as a mail app's does. */
+  leaves?: boolean;
 }
 
 /** The content filling the row, the far end and the press before it scrolled out of sight. The track is what `offsetLeft` counts from. */
@@ -22,6 +24,46 @@ const PRESS_PX = 96;
 const AT_END = 8;
 /** Where `scrollend` is not sent, a swipe has ended once it has not moved for this long. */
 const STILL_MS = 150;
+/** How long a row swiped away takes to close up. */
+const CLOSE_MS = 180;
+/** A row closed up that its list has not taken away by then (the press failed) opens again. */
+const GIVE_BACK_MS = 1000;
+
+/**
+ * Closes up the row `track` is in, its press's colour still across it: the track's height and every cell's padding to
+ * nothing, then `done`, which takes the row away.
+ */
+function closeRow(track: HTMLElement, done: () => void) {
+  const timing = { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : CLOSE_MS, easing: 'ease-in', fill: 'forwards' } as const;
+  const own = getComputedStyle(track);
+  const runs = [
+    track.animate(
+      [
+        { height: `${track.offsetHeight}px`, marginTop: own.marginTop, marginBottom: own.marginBottom },
+        { height: '0px', marginTop: '0px', marginBottom: '0px' },
+      ],
+      timing,
+    ),
+  ];
+  for (const cell of track.closest('tr')?.cells ?? []) {
+    const padding = getComputedStyle(cell);
+    runs.push(
+      cell.animate(
+        [
+          { paddingTop: padding.paddingTop, paddingBottom: padding.paddingBottom },
+          { paddingTop: '0px', paddingBottom: '0px' },
+        ],
+        timing,
+      ),
+    );
+  }
+  void runs[0].finished.then(() => {
+    done();
+    setTimeout(() => {
+      if (track.isConnected) for (const run of runs) run.cancel();
+    }, GIVE_BACK_MS);
+  });
+}
 
 // One row open at a time: opening another closes it.
 let closeOpen: (() => void) | null = null;
@@ -65,16 +107,27 @@ export function Swipe({
     if (!el) return;
     const close = () => rest(el, content.current, true);
     let still: ReturnType<typeof setTimeout> | undefined;
+    // A swipe acts once, as soon as it is at the edge with the finger off: not after the snap there has settled.
+    let touching = false;
+    let acted = false;
+    const act = (what: SwipePress) => {
+      acted = true;
+      if (what.leaves) return closeRow(el, what.onPress);
+      rest(el, content.current);
+      what.onPress();
+    };
+    const atEdge = () => {
+      if (touching || acted) return false;
+      const max = el.scrollWidth - el.clientWidth;
+      if (el.scrollLeft <= AT_END) act(start);
+      else if (el.scrollLeft >= max - AT_END) act(end);
+      else return false;
+      return true;
+    };
     const ended = () => {
       clearTimeout(still);
-      const max = el.scrollWidth - el.clientWidth;
-      if (el.scrollLeft <= AT_END) {
-        rest(el, content.current);
-        start.onPress();
-      } else if (el.scrollLeft >= max - AT_END) {
-        rest(el, content.current);
-        end.onPress();
-      } else if (opened) {
+      if (atEdge() || acted) return;
+      if (opened) {
         // Drawn open, beside others drawn open.
       } else if (isOpen(el, content.current)) {
         if (closeOpen !== close) closeOpen?.();
@@ -83,13 +136,30 @@ export function Swipe({
     };
     const scrolled = () => {
       clearTimeout(still);
-      still = setTimeout(ended, STILL_MS);
+      // Back at rest, the next swipe acts again (a trackpad's, which no touch begins).
+      if (!isOpen(el, content.current)) acted = false;
+      if (!atEdge() && !('onscrollend' in el)) still = setTimeout(ended, STILL_MS);
     };
-    const ends = 'onscrollend' in el;
-    el.addEventListener(ends ? 'scrollend' : 'scroll', ends ? ended : scrolled);
+    const down = () => {
+      touching = true;
+      acted = false;
+    };
+    const up = () => {
+      touching = false;
+      atEdge();
+    };
+    el.addEventListener('scroll', scrolled, { passive: true });
+    el.addEventListener('scrollend', ended);
+    el.addEventListener('touchstart', down, { passive: true });
+    el.addEventListener('touchend', up);
+    el.addEventListener('touchcancel', up);
     return () => {
       clearTimeout(still);
-      el.removeEventListener(ends ? 'scrollend' : 'scroll', ends ? ended : scrolled);
+      el.removeEventListener('scroll', scrolled);
+      el.removeEventListener('scrollend', ended);
+      el.removeEventListener('touchstart', down);
+      el.removeEventListener('touchend', up);
+      el.removeEventListener('touchcancel', up);
       if (closeOpen === close) closeOpen = null;
     };
   }, [start, end, opened]);
@@ -100,6 +170,7 @@ export function Swipe({
       tabIndex={-1}
       onClick={(event) => {
         event.stopPropagation();
+        if (what.leaves && track.current) return closeRow(track.current, what.onPress);
         rest(track.current, content.current);
         what.onPress();
       }}
