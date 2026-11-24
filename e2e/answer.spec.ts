@@ -85,6 +85,33 @@ test.describe('Answering mail', () => {
     await seededRulesOnly(page);
   });
 
+  test.describe('before the sender’s other mail has loaded', () => {
+    let release = () => {};
+    test.beforeEach(async ({ page }) => {
+      const held = new Promise<void>((done) => (release = done));
+      await page.route('**/api/suggestion?*', async (route) => {
+        await held;
+        await route.continue();
+      });
+    });
+
+    test('an answer still offers it the same, once it has', async ({ page }) => {
+      await page.goto('/');
+      await choose(await openMessage(page, 'Disk 91% full on db-2'), 'Notifications');
+      await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
+      release();
+      await expect(toast(page, 'Disk 91% full on db-2').getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
+    });
+
+    test('an answer that closes the panel, and the read with it, still offers it', async ({ page }) => {
+      await page.goto('/?q=db-');
+      await choose(await openMessage(page, 'Replica lag on db-3'), 'Notifications');
+      await expect(reader(page)).toHaveCount(0);
+      release();
+      await expect(toast(page, 'Replica lag on db-3').getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
+    });
+  });
+
   test('“Same for 1 more” in the panel answers the message on show, which then says so', async ({ page }) => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');

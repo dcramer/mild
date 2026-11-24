@@ -137,7 +137,7 @@ function SuggestionRow({
   onOpen: () => void;
 }) {
   const target = answerableOf(item);
-  const { answer, answerAll, choices } = useAnswer(labels, waiting);
+  const { answer, answerAll, choices } = useAnswer(labels, () => waiting);
   const folded = rest.length > 0;
   const subjects = [item, ...rest].map((i) => reveal(i.subject) || '(no subject)').join(' · ');
   const { ending, dialogs } = useLabelEnding(labels, () => messageStart(target.sender, item.labelId));

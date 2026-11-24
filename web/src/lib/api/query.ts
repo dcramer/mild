@@ -3,10 +3,12 @@ import {
   QueryCache,
   QueryClient,
   environmentManager,
+  isCancelledError,
   keepPreviousData,
   onlineManager,
   useInfiniteQuery,
   useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
 import { useContext, useSyncExternalStore } from 'react';
 import { keptReads, readName } from '../kept.ts';
@@ -67,6 +69,8 @@ export interface Loaded<T> {
   loading: boolean;
   /** When `data` was read. */
   at: number;
+  /** The data at once when there is some, else once the read on its way brings it. */
+  ready: () => Promise<T>;
 }
 
 /**
@@ -78,15 +82,17 @@ export interface Loaded<T> {
 export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>, refreshMs = 30_000, mailbox?: string): Loaded<T> {
   const under = useContext(Mailbox);
   const narrowed = mailbox ?? under;
+  const client = useQueryClient();
   // All mailboxes is the key alone, as the device keeps the frame under it (`web/src/lib/device.ts`).
   const queryKey = narrowed ? [key, narrowed] : [key];
+  const queryFn = ({ signal }: { signal: AbortSignal }) => {
+    if (narrowed) narrow(signal, narrowed);
+    return fetcher(signal);
+  };
   const query = useQuery({
     queryKey,
     ...kept<T>(queryKey),
-    queryFn: ({ signal }) => {
-      if (narrowed) narrow(signal, narrowed);
-      return fetcher(signal);
-    },
+    queryFn,
     refetchInterval: refreshMs,
     placeholderData: keepPreviousData,
   });
@@ -97,6 +103,12 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
     loading: query.isPending,
     at: query.dataUpdatedAt,
     reload: () => void query.refetch({ cancelRefetch: false }),
+    ready: () => {
+      // What the device kept (`kept`, read at 0) may be out of date: wait for Mild's.
+      const read = () => client.fetchQuery({ queryKey, queryFn, staleTime: (q) => (q.state.dataUpdatedAt === 0 ? 0 : Infinity) });
+      // The read on its way is stopped if what drew it goes (a panel closed by the press that asked): read it again.
+      return read().catch((error: unknown) => (isCancelledError(error) ? read() : Promise.reject(error)));
+    },
   };
 }
 

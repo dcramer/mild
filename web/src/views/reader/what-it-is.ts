@@ -34,14 +34,15 @@ export function useWhatItIs(detail: MessageDetail, onAnswered: () => void) {
   };
   const { answer, choices } = useAnswer(
     labels,
-    (waiting.data?.messages ?? []).map((m) => ({
-      accountId: m.accountId,
-      sender: reveal(detail.fromAddress),
-      subject: reveal(m.subject),
-      messageId: m.messageId,
-      decisionId: m.decisionId,
-      labelId: m.labelId,
-    })),
+    async () =>
+      (await waiting.ready()).messages.map((m) => ({
+        accountId: m.accountId,
+        sender: reveal(detail.fromAddress),
+        subject: reveal(m.subject),
+        messageId: m.messageId,
+        decisionId: m.decisionId,
+        labelId: m.labelId,
+      })),
     onAnswered,
   );
   const record = useRecordAnswer();
