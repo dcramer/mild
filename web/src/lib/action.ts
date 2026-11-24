@@ -2,6 +2,7 @@
 import { type QueryClient, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useToast } from '@/system';
+import { isModels } from './api/keys.ts';
 
 interface Change {
   work: () => Promise<unknown>;
@@ -13,8 +14,8 @@ interface Change {
 
 const CHANGE = ['change'];
 
-/** Everything on screen, asked for again. Not the model list: it comes from the provider, and is asked for again when a sign-in changes (its key names them). */
-export const reloadAll = (client: QueryClient) => client.invalidateQueries({ predicate: (query) => !String(query.queryKey[0]).startsWith('models ') });
+/** Everything on screen, asked for again, but the model list (`isModels`). */
+export const reloadAll = (client: QueryClient) => client.invalidateQueries({ predicate: (query) => !isModels(query.queryKey[0]) });
 
 /**
  * Run a change, tracking whether it is in flight and what went wrong. When it is done, everything on screen loads again.

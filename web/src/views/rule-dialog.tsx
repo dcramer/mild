@@ -4,7 +4,6 @@ import { NamedLabel } from '@/components/bits.tsx';
 import { useState } from 'react';
 import { useOpenRule, useOpened } from '@/lib/params.ts';
 import { type LabelSummary, type RuleBody, type RuleDraft, type RuleFilter, type RuleMatch, type RuleSummary, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import { type By, type Condition, type RuleStart, addedWords, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
 import {
@@ -25,6 +24,7 @@ import { Button, Check, Dialog, Does, Failure, Field, FieldGroup, Form, Input, N
 import { useFilterOffer } from '@/views/gmail-filter.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
 import { reveal } from '@/lib/reveal.ts';
+import { useRules } from '@/lib/api/reads.ts';
 
 const BY = [
   ['from', 'from'],
@@ -202,7 +202,7 @@ export function RuleDialog({
           : undefined;
   // Adding a rule with exactly the conditions of one already there replaces it, so the dialog says which. A rule
   // being changed cannot take another's conditions: the server refuses, and one with exceptions only it can tell.
-  const rules = useLoaded('rules', (signal) => api.rules(signal));
+  const rules = useRules();
   const others = (rules.data?.rules ?? []).filter((r) => r.id !== editing?.id);
   const replaces = ready && !editing?.except.length ? replacedBy(others, match, waitsFor?.id ?? null) : undefined;
   const twin = editing ? replaces : undefined;

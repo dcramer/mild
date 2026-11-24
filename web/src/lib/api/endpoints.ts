@@ -1,45 +1,6 @@
 import { Refused, get, post, reason, send, setSigningOut } from './client.ts';
 import { queryClientFor } from './query.ts';
 import { traceHeaders } from '../trace.ts';
-
-export type {
-  Contact,
-  ContactPage,
-  InboxEstimate,
-  DecisionPage,
-  DecisionRow,
-  FactFilter,
-  FeedbackRequest,
-  Given,
-  LabelProposal,
-  LabelSummary,
-  ListedDecision,
-  MailAsk,
-  MailConversation,
-  MailReach,
-  MailThread,
-  MailView,
-  ManageState,
-  MessageDetail,
-  Removed,
-  RuleDraft,
-  RuleFacts,
-  RuleFilter,
-  RuleMatch,
-  RuleSummary,
-  SenderPage,
-  SenderProfile,
-  Session,
-  StageKey,
-  SuggestionDetail,
-  SuggestionItem,
-  Suggestions,
-  Summary,
-  SyncedConversation,
-  SyncPage,
-  Usage,
-} from '../../../../src/dashboard/types.ts';
-export type { Confidential } from '../../../../src/confidential.ts';
 import type {
   AddressSuggestion,
   DraftSave,
@@ -81,9 +42,48 @@ import type {
   Usage,
 } from '../../../../src/dashboard/types.ts';
 
+export type {
+  Contact,
+  ContactPage,
+  InboxEstimate,
+  DecisionPage,
+  DecisionRow,
+  FactFilter,
+  FeedbackRequest,
+  Given,
+  LabelProposal,
+  LabelSummary,
+  ListedDecision,
+  MailAsk,
+  MailConversation,
+  MailReach,
+  MailThread,
+  MailView,
+  ManageState,
+  MessageDetail,
+  Removed,
+  RuleDraft,
+  RuleFacts,
+  RuleFilter,
+  RuleMatch,
+  RuleSummary,
+  SenderPage,
+  SenderProfile,
+  Session,
+  StageKey,
+  SuggestionDetail,
+  SuggestionItem,
+  Suggestions,
+  Summary,
+  SyncedConversation,
+  SyncPage,
+  Usage,
+} from '../../../../src/dashboard/types.ts';
+export type { Confidential } from '../../../../src/confidential.ts';
+
 export type Days = 1 | 7 | 30 | 90;
 
-interface DecisionQuery {
+export interface DecisionQuery {
   days: Days;
   status: string;
   search: string;
@@ -95,7 +95,7 @@ interface DecisionQuery {
   offset: number;
 }
 
-interface ContactQuery {
+export interface ContactQuery {
   q: string;
   /** Empty for any. */
   standing: Given | '';
@@ -123,6 +123,16 @@ export interface RuleBody {
   when?: string;
   /** What the reader calls it; empty for none. */
   name?: string;
+}
+
+export interface MailThreadsQuery {
+  view: MailView;
+  label: string;
+  q: string;
+  unread: boolean;
+  from: string;
+  domain: string;
+  since: number | null;
 }
 
 export const api = {
@@ -235,11 +245,7 @@ export const api = {
   /** `message`: what the page will not show by itself, if anything. */
   undo: (id: number) => post<{ message: string | null }>('/api/undo', { id }),
   /** Inbox's conversations, a page from `before`; empty `label`, `q`, `from` and `domain` (the last two comma-separated) narrow nothing. */
-  mailThreads: (
-    query: { view: MailView; label: string; q: string; unread: boolean; from: string; domain: string; since: number | null },
-    before: string,
-    signal: AbortSignal,
-  ) =>
+  mailThreads: (query: MailThreadsQuery, before: string, signal: AbortSignal) =>
     get<MailThreads>(
       '/api/mail/threads',
       {

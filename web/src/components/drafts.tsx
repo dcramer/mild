@@ -1,11 +1,10 @@
 'use client';
-import { api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { type Writing, useCompose } from '@/lib/compose.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { dateTime } from '@/lib/format.ts';
 import { Arrived, Empty, Heads, Loading, Table, Td, Th, Tr } from '@/system';
 import type { SavedDraft } from '../../../src/dashboard/types.ts';
+import { useDrafts } from '@/lib/api/reads.ts';
 
 /** What opens a draft in the composer: a new message by its name, a reply or forward by the message it answers. */
 function writingOf(draft: SavedDraft): Writing {
@@ -18,7 +17,7 @@ function writingOf(draft: SavedDraft): Writing {
  * minutes after it was last changed). Pressed, a draft opens in the composer where it was left.
  */
 export function DraftList({ mailbox }: { mailbox: string }) {
-  const saved = useLoaded('drafts', (signal) => api.drafts(signal), 60_000, '');
+  const saved = useDrafts();
   const compose = useCompose();
   if (!saved.data) return <Loading rows={3} />;
   const drafts = saved.data.drafts.filter((d) => !mailbox || d.accountId === mailbox).toReversed();

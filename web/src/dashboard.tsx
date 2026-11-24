@@ -1,14 +1,11 @@
 'use client';
 import { useIsFetching } from '@tanstack/react-query';
 import { ActivityIcon, ContactRoundIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
-import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
 import { SiftStatus, UsageDetail, useNow } from '@/components/status.tsx';
-import { type Session, api } from '@/lib/api/endpoints.ts';
-import { queryClientFor, useLoaded, useOnline } from '@/lib/api/query.ts';
-import { forgetDevice, keepFrame as keep, keptFrame, unknownDevice } from '@/lib/device.ts';
+import { useOnline } from '@/lib/api/query.ts';
 import { useKeptPlace } from '@/lib/place.ts';
 import { signOut } from '@/lib/sign-out.ts';
 import { keepStart, startsOnInbox } from '@/lib/start.ts';
@@ -21,11 +18,14 @@ import { useStarted } from '@/system/started.ts';
 import { useHidden } from '@/lib/action.ts';
 import { ahead, plural } from '@/lib/format.ts';
 import { useOutbox, useOutboxFailures } from '@/lib/waiting.ts';
-import { subscription } from '@/lib/prices.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
 import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
+import { useSession, useManage, useUsage } from '@/lib/api/reads.ts';
+import dynamic from 'next/dynamic';
+import { usePlan } from '@/lib/prices.ts';
+import { useDeviceFrame } from '@/lib/frame.ts';
 
 // What opens over a screen, or in its place, is fetched when first needed and, once the page is idle, ahead of need.
 const loadSettings = () => import('@/views/settings.tsx');
@@ -75,57 +75,13 @@ const openSettings = () => setParams({ settings: '1' }, { state: { panel: true }
 const closeSettings = () => (panelEntry() ? goBack() : setParams({ settings: '', signin: '' }));
 
 /**
- * What the frame is drawn with, kept on the device for the next time the page opens (`web/src/lib/device.ts`). With it
- * For review's list and the rules Mild proposes, which Inbox draws above its rows: arriving after them, a proposal
- * pushed every row down under the pointer.
- */
-const FRAME = new Set(['session', 'manage', 'usage', 'suggestions-false']);
-let keeping = false;
-
-/**
- * Draw the frame from what this device kept, at once, and keep what Mild answers for next time: the page is one shell for
- * everyone, which the service worker serves without asking Mild, so who is signed in comes from here first and from Mild
- * after. What was kept is marked out of date, so Mild is still asked. Nobody signed in, or a device Mild no longer
- * knows, wipes what was kept; then a device is made again.
- */
-function keepFrame() {
-  if (keeping || typeof window === 'undefined') return;
-  keeping = true;
-  const client = queryClientFor();
-  void keptFrame().then((kept) => {
-    for (const [name, value] of Object.entries(kept)) if (client.getQueryData([name]) === undefined) client.setQueryData([name], value, { updatedAt: 0 });
-  });
-  client.getQueryCache().subscribe((event) => {
-    // Only what Mild answered: the frame put back from the device (`setQueryData`, `manual`) is what was kept.
-    if (event.type !== 'updated' || event.action.type !== 'success' || event.action.manual) return;
-    const [name, ...narrowed] = event.query.queryKey as unknown[];
-    if (narrowed.length > 0 || typeof name !== 'string' || !FRAME.has(name)) return;
-    const data = event.query.state.data;
-    const session = client.getQueryData<Session>(['session']);
-    // Signed out, here or by the server: nothing more is kept, nor a key asked for that would be refused.
-    if (!session || (session.required && session.email === null)) return void (name === 'session' && forgetDevice());
-    // In turn: the wipe first, then what is kept, under a key made again. What answered before the session was kept
-    // under the old key and wiped with it, so all Mild has answered of the frame is kept again.
-    if (name === 'session' && !session.device) {
-      void unknownDevice();
-      for (const kept of FRAME) {
-        const state = client.getQueryState([kept]);
-        if (state && state.dataUpdatedAt > 0) void keep(kept, state.data);
-      }
-      return;
-    }
-    void keep(name, data);
-  });
-}
-
-/**
  * The dashboard around `children`, the screen the address names: the sign-in screen for nobody, the setting-up steps
  * until there is something to show, and otherwise the sections, the screen and its foot. Drawn the same for everyone,
  * so the service worker can keep it; `addressed`, a sender's or a domain's page, which stands in for any page it has not
  * kept.
  */
 export function Dashboard({ addressed = false, children }: { addressed?: boolean; children: ReactNode }) {
-  useEffect(keepFrame, []);
+  useDeviceFrame();
   return <Signed addressed={addressed}>{children}</Signed>;
 }
 
@@ -138,7 +94,7 @@ const ADDRESSED = /^\/(sender|domain)(\/|$)/;
 function Signed({ addressed, children }: { addressed: boolean; children: ReactNode }) {
   const [settings] = useParam('settings');
   const [signin] = useParam('signin');
-  const session = useLoaded('session', (signal) => api.session(signal), 300_000);
+  const session = useSession();
   const online = useOnline();
   const known = session.data;
   // The router's path, not the address bar's, which Next.js moves only once the page it goes to is drawn.
@@ -270,10 +226,10 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const waitingPresses = useOutbox().waiting;
   useOutboxFailures();
   // Drawn above the `Mailbox` it provides, so for all of them: whose mailboxes these are, and whose sign-in expired.
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const manage = useManage();
   const mailboxes = (manage.data?.accounts ?? []).map((a) => a.email);
   const mailbox = useChosenMailbox(mailboxes);
-  const inMailbox = useLoaded('manage', (signal) => api.manage(signal), 60_000, mailbox);
+  const inMailbox = useManage({ mailbox });
   const expired = manage.data?.activity.expired ?? [];
   const now = useNow(60_000);
   // The soonest sign-in Google will end within the warning, so it is renewed before Mild stops reading that mailbox.
@@ -313,8 +269,8 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const accounts = manage.data?.accounts ?? [];
   // Who they are, not which mailbox they happened to sign in with.
   const name = accounts.find((a) => a.primary)?.email ?? signedInAs;
-  const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
-  const plan = manage.data ? subscription(manage.data.model) : null;
+  const usage = useUsage();
+  const plan = usePlan();
   // An answer on its way has left the list, so it leaves the count with it until the count is read again.
   const waiting = Math.max(0, (inMailbox.data?.waiting ?? 0) - [...useHidden(inMailbox.at)].filter(isMessageKey).length);
 

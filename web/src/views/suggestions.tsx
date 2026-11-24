@@ -8,7 +8,6 @@ import { SenderCell } from '@/components/sender.tsx';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { messageKey, proposalKey, useParam } from '@/lib/params.ts';
 import { type SuggestionItem, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
 import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, duration, factFilterName, outcomeName, period, plural, sureness } from '@/lib/format.ts';
 import {
@@ -42,6 +41,7 @@ import { messageStart, proposalStart } from '@/lib/rule-start.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { useShown } from '@/lib/telemetry.ts';
+import { useManage, useUsage, useSuggestions } from '@/lib/api/reads.ts';
 
 /** Rows drawn at first, and added as the end of the list comes near: all of them at once took seconds to draw. */
 const ROWS = 100;
@@ -213,11 +213,11 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
   // Narrowed to Leave in inbox, the mail it would leave there is what was asked for.
   const withKept = includeKept || label === INBOX;
   // Unnarrowed, the same list the masthead counts.
-  const { data, error, loading } = useLoaded(`suggestions-${withKept}${fact ? `-${fact}` : ''}`, (signal) => api.suggestions(withKept, fact, signal));
+  const { data, error, loading } = useSuggestions(withKept, fact);
   // The server draws the page with this, so whether Mild is off is said before the list arrives.
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const manage = useManage();
   // The masthead's, drawn on the server too.
-  const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
+  const usage = useUsage();
   const saved = usage.data?.saved;
   const [search, setSearch] = useParam('q');
   const [does, setDoes] = useParam('does', DOES);

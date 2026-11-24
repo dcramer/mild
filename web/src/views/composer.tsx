@@ -5,7 +5,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { reloadAll } from '@/lib/action.ts';
 import { type Party, type Recipient, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
 import { api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { dateTime } from '@/lib/format.ts';
 import { type Draft, type Writing, draftId, emptyDraft, keepDraft, keptDraft, newMessageId, useCompose } from '@/lib/compose.ts';
 import { uploadFile } from '@/lib/upload.ts';
@@ -38,6 +37,8 @@ import {
   useToast,
 } from '@/system';
 import type { ManageState, MessageDetail } from '../../../src/dashboard/types.ts';
+import { useSession, useManage, useDrafts } from '@/lib/api/reads.ts';
+import { keys } from '@/lib/api/keys.ts';
 
 /** An address mail can be from: a mailbox's own, or one of its aliases, and whether Google lets Mild send from that mailbox. */
 interface From {
@@ -65,7 +66,7 @@ const TITLES = { new: 'New message', reply: 'Reply', all: 'Reply to all', forwar
  * The person's drafts as Mild has them, which another device may have written. The composer opens without them, from
  * what this browser kept, and takes Mild's copy as it comes if it is newer.
  */
-const useSaved = () => useLoaded('drafts', (signal) => api.drafts(signal), 60_000, '');
+const useSaved = () => useDrafts();
 
 /** Mild's copy of the draft for `what`, as the composer holds one, and when it is scheduled to go or why it did not. */
 function savedFor(saved: ReturnType<typeof useSaved>['data'], what: Writing): { draft: Draft; sendAt: number | null; sendError: string | null } | null {
@@ -77,7 +78,7 @@ function savedFor(saved: ReturnType<typeof useSaved>['data'], what: Writing): { 
 
 /** A new message, in a panel of its own; `to` someone already, from their page. `draft` names it, made as it opened. */
 export function Composer({ to, draft, onClose }: { to: string; draft: string; onClose: () => void }) {
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000, '');
+  const manage = useManage({ mailbox: '' });
   const saved = useSaved();
   const accounts = manage.data?.accounts ?? [];
   const chosen = useChosenMailbox(accounts.map((a) => a.email));
@@ -115,7 +116,7 @@ export function InlineComposer({
   about?: ReactNode;
   onClose: () => void;
 }) {
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000, '');
+  const manage = useManage({ mailbox: '' });
   const saved = useSaved();
   const account = manage.data?.accounts.find((a) => a.id === message.accountId);
   if (!account) return <Loading rows={3} />;
@@ -270,7 +271,7 @@ function Writer({
   about?: ReactNode;
   onClose: () => void;
 }) {
-  const who = useLoaded('session', (signal) => api.session(signal), 300_000, '').data?.email ?? '';
+  const who = useSession('').data?.email ?? '';
   const client = useQueryClient();
   const [draft, setDraft] = useState(() => keptDraft(who, what, saved?.draft ?? null) ?? start);
   // Mild's copy, come since it opened: the newer is kept, as it was as it opened.
@@ -293,7 +294,7 @@ function Writer({
   const forget = () => {
     saving.current.stored = false;
     void api.removeDraft(draftId(what)).then(
-      () => client.invalidateQueries({ queryKey: ['drafts'] }),
+      () => client.invalidateQueries({ queryKey: [keys.drafts] }),
       () => {},
     );
   };
@@ -316,7 +317,7 @@ function Writer({
         writing: { ...latest, of: ofWhat(what) },
       })
       .then(
-        () => client.invalidateQueries({ queryKey: ['drafts'] }),
+        () => client.invalidateQueries({ queryKey: [keys.drafts] }),
         () => {},
       );
   };
@@ -464,13 +465,15 @@ function Writer({
     onClose();
     void api.saveDraft({ id: draftId(what), accountId: from.accountId, writing, sendAt: at }).then(
       () => {
-        void client.invalidateQueries({ queryKey: ['drafts'] });
+        void client.invalidateQueries({ queryKey: [keys.drafts] });
         toast(said, {
           kind: `Scheduled for ${dateTime(at)}`,
           undo: () => {
             const again = { ...writing, at: Date.now() };
             keepDraft(who, what, again);
-            void api.saveDraft({ id: draftId(what), accountId: from.accountId, writing: again }).then(() => client.invalidateQueries({ queryKey: ['drafts'] }));
+            void api
+              .saveDraft({ id: draftId(what), accountId: from.accountId, writing: again })
+              .then(() => client.invalidateQueries({ queryKey: [keys.drafts] }));
             compose?.(what);
           },
         });

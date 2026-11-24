@@ -2,8 +2,7 @@
 import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
 import { NamedLabel } from '@/components/bits.tsx';
 import { Fragment, type ReactNode } from 'react';
-import { type Contact, type RuleMatch, type SenderProfile, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
+import { type Contact, type RuleMatch, type SenderProfile } from '@/lib/api/endpoints.ts';
 import {
   CONTACT_SAYS,
   INBOX,
@@ -24,6 +23,7 @@ import { rulePath } from '@/lib/params.ts';
 import { Ago, Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td, TextLink, LabelName } from '@/system';
 import { reveal } from '@/lib/reveal.ts';
 import { cn } from '@/lib/utils';
+import { useWhoCard } from '@/lib/api/reads.ts';
 
 /** A sender's page; with `name`, their mail under that name. */
 export const senderHref = (address: string, name?: string | null) => `/sender/${encodeURIComponent(address)}${name ? `?name=${encodeURIComponent(name)}` : ''}`;
@@ -178,11 +178,7 @@ const NAMES_SHOWN = 3;
  */
 function Preview({ who, name }: { who: Who; name?: string | null }) {
   const key = 'address' in who ? who.address : who.domain;
-  const { data, error } = useLoaded(
-    `${'address' in who ? 'sender' : 'domain'}-${key}`,
-    (signal) => ('address' in who ? api.sender(who.address, signal) : api.domain(who.domain, signal)),
-    300_000,
-  );
+  const { data, error } = useWhoCard(who);
   // A domain anyone can get an address at has no page of its own, and the refusal says so.
   if (error) return 'domain' in who ? <p className="text-muted-foreground">{error}</p> : <Failure>{error}</Failure>;
   if (!data) return <p className="text-muted-foreground">Loading…</p>;

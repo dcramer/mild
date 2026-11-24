@@ -3,15 +3,16 @@ import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type LabelProposal, type ManageState, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { signOut } from '@/lib/sign-out.ts';
 import { useAction } from '@/lib/action.ts';
 import { count } from '@/lib/format.ts';
-import { InboxFigures, useInboxEstimate } from '@/components/inbox.tsx';
+import { InboxFigures } from '@/components/inbox.tsx';
 import { Button, Dialog, Failure, Form, Note, Onboarding, TextArea } from '@/system';
 import { type LabelDraft, LabelFields } from '@/views/label-panel.tsx';
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 import { reveal } from '@/lib/reveal.ts';
+import { useManage, useLabelProposal, useInboxEstimate } from '@/lib/api/reads.ts';
+import { providerOf } from '@/lib/prices.ts';
 
 type Choice = ManageState['model']['choices'][number];
 type Account = { name: string; onSettings: () => void; onSignOut: () => void } | undefined;
@@ -44,8 +45,8 @@ const OFFERED = 6;
  * the labels are made, Mild may go through the newest of the inbox to suggest about. Settings opens over it.
  */
 export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string | null; onSettings: () => void; children: ReactNode }) {
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
-  const proposal = useLoaded('labelProposal', (signal) => api.labelProposal(signal), 300_000);
+  const manage = useManage();
+  const proposal = useLabelProposal();
   // Each press moves to the next step itself rather than waiting for the next load, which would show a step
   // from before it: suggestions just made, labels just made, older mail asked for.
   const [fresh, setFresh] = useState<LabelProposal | null>(null);
@@ -55,7 +56,7 @@ export function SetUp({ signedInAs, onSettings, children }: { signedInAs: string
   const state = manage.data;
   // Until it is known which, the dashboard, as the server drew it: most who open it have set up long ago.
   if (!state) return children;
-  const inUse = state.model.chosen?.split('/')[0] ?? null;
+  const inUse = providerOf(state.model.chosen);
   const walled = inUse === null || !state.model.signedIn.includes(inUse);
   const bare = !made && !state.labels.some((l) => l.gmailLabel !== null);
   if (!walled && !bare && !teaching) return children;

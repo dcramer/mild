@@ -2,8 +2,7 @@
 import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, NamedLabel } from '@/components/bits.tsx';
-import { type RuleSummary, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
+import { type RuleSummary } from '@/lib/api/endpoints.ts';
 import { useOpened, useParam } from '@/lib/params.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
@@ -11,9 +10,9 @@ import { RemoveRule, RulePanel, Who, checked, whoText } from '@/views/rule-panel
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { INBOX, MADE_BY, count, dateTime, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
 import { Ago, Heads, Button, Does, Empty, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
-import { usePlan } from '@/components/model-connect.tsx';
-import { approx, atApiPrices } from '@/lib/prices.ts';
+import { approx, atApiPrices, usePlan } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
+import { useManage, useRules } from '@/lib/api/reads.ts';
 
 const SOURCES = [['', 'Anyone'] as const, ...MADE_BY];
 
@@ -52,8 +51,8 @@ function Result({ rule }: { rule: RuleSummary }) {
 
 /** Rules' own action: adding one, shown from the start and pressable once the labels are known, so it does not arrive late and move the page. */
 export function AddRule() {
-  const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
-  const rules = useLoaded('rules', (signal) => api.rules(signal));
+  const manage = useManage();
+  const rules = useRules();
   const [adding, setAdding] = useState(false);
   return (
     <>
@@ -70,8 +69,8 @@ export function AddRule() {
 export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
   const onOpen = useOpenMessages();
   const plan = usePlan();
-  const { data, error, loading } = useLoaded('rules', (signal) => api.rules(signal));
-  const manage = useLoaded('rule-accounts', (signal) => api.manage(signal), 60_000);
+  const { data, error, loading } = useRules();
+  const manage = useManage();
   const [search, setSearch] = useParam('q');
   const [label, setLabel] = useParam('label');
   const [source, setSource] = useParam('by', SOURCES);

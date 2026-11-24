@@ -1,5 +1,6 @@
 import type { ManageState } from './api/endpoints.ts';
 import { money, plural } from './format.ts';
+import { useManage } from './api/reads.ts';
 
 /**
  * What Mild's sums of money say. Through a subscription (ChatGPT) the plan is not charged by the message, so a
@@ -8,12 +9,15 @@ import { money, plural } from './format.ts';
 
 type Choice = ManageState['model']['choices'][number];
 
+/** The provider of a `provider/model-id`, or null for no model. */
+export const providerOf = (model: string | null) => model?.split('/')[0] ?? null;
+
 /**
  * The way in to the model in use when it is a subscription (ChatGPT), whose plan is not charged by the message:
  * a price through it is only what the same use would cost through the API, and is said to be.
  */
 export function subscription(model: Pick<ManageState['model'], 'choices' | 'chosen'>): Choice | null {
-  const provider = model.chosen?.split('/')[0];
+  const provider = providerOf(model.chosen);
   return model.choices.find((c) => c.provider === provider && c.how !== 'key') ?? null;
 }
 
@@ -60,3 +64,13 @@ export const costName = (plan: Choice | null) => (plan ? 'Model cost at API pric
 /** The way in a call on `model` (`provider/model-id`) went through, when it was a subscription. */
 export const planOf = (model: string, choices: ManageState['model']['choices']): Choice | null =>
   choices.find((c) => model.startsWith(`${c.provider}/`) && c.how !== 'key') ?? null;
+
+/**
+ * The way in to the model in use when it is a subscription, or the way a call on `model` went, from what
+ * Settings loads: whether a sum is only an API price.
+ */
+export function usePlan(model?: string): Choice | null {
+  const manage = useManage();
+  if (!manage.data) return null;
+  return model === undefined ? subscription(manage.data.model) : planOf(model, manage.data.model.choices);
+}

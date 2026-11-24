@@ -2,13 +2,14 @@ import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineMa
 import { useContext, useSyncExternalStore } from 'react';
 import { Mailbox } from '../narrowed.ts';
 import { Refused, Unreachable, narrow } from './client.ts';
+import { keys } from './keys.ts';
 
 const makeClient = (): QueryClient => {
   const client = new QueryClient({
     // A session that ended elsewhere: ask who is signed in again, which shows the sign-in screen.
     queryCache: new QueryCache({
       onError: (error) => {
-        if (error instanceof Refused && error.status === 401) void client.invalidateQueries({ queryKey: ['session'] });
+        if (error instanceof Refused && error.status === 401) void client.invalidateQueries({ queryKey: [keys.session] });
       },
     }),
     defaultOptions: {

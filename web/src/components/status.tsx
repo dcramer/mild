@@ -1,11 +1,11 @@
 'use client';
 import { RefreshCwIcon } from 'lucide-react';
 import { useCallback, useSyncExternalStore } from 'react';
-import { type ManageState, type Usage, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
-import { approx, atApiPrices, subscription } from '@/lib/prices.ts';
+import { type ManageState, type Usage } from '@/lib/api/endpoints.ts';
+import { approx, atApiPrices, usePlan } from '@/lib/prices.ts';
 import { dateTime, duration, money } from '@/lib/format.ts';
 import { Ago, Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';
+import { useManage, useUsage } from '@/lib/api/reads.ts';
 
 type Accounts = ManageState['accounts'];
 /** The way in to the model when it is a subscription, whose plan pays for the calls: the sums are API prices. */
@@ -101,11 +101,12 @@ export function SiftStatus({ accounts, usage, plan, stacked = false }: { account
 
 /** Mild's line on Activity, where what it counts is, on a phone, whose bar has no room for it. Its room is held while it loads. */
 export function PhoneSiftStatus() {
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
-  const usage = useLoaded('usage', (signal) => api.usage(signal), 60_000);
+  const manage = useManage();
+  const usage = useUsage();
+  const plan = usePlan();
   return (
     <p className="mb-4 flex h-5 items-center text-sm text-muted-foreground md:hidden">
-      {manage.data ? <SiftStatus accounts={manage.data.accounts} usage={usage.data} plan={subscription(manage.data.model)} /> : null}
+      {manage.data ? <SiftStatus accounts={manage.data.accounts} usage={usage.data} plan={plan} /> : null}
     </p>
   );
 }

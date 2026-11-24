@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { Thinks } from '@/components/mail.tsx';
 import { ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import { conversations } from '@/lib/copy.ts';
 import { count } from '@/lib/format.ts';
@@ -13,15 +12,16 @@ import { proposalStart } from '@/lib/rule-start.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { Arrived, Empty, Heads, Loading, Reader, ReaderBar, Section, Table, Td, Th, Tr } from '@/system';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { useManage, useSuggestions } from '@/lib/api/reads.ts';
 
 /**
  * A rule Mild proposes, opened from Inbox in the list's place: the rule, why Mild proposes it, and the mail in the inbox it
  * would apply to, from the copy in this browser. Make the rule opens the rule dialog started on it; Dismiss goes back.
  */
 export function ProposalReader({ id, onBack }: { id: string; onBack: () => void }) {
-  const suggestions = useLoaded('suggestions-false', (signal) => api.suggestions(false, '', signal));
+  const suggestions = useSuggestions();
   const proposal = suggestions.data?.proposals.find((p) => String(p.id) === id) ?? null;
-  const manage = useLoaded('manage', (signal) => api.manage(signal), 60_000);
+  const manage = useManage();
   const [making, setMaking] = useState(false);
   const dismiss = useAction();
   const inbox = useLiveQuery({ query: (from) => from.from({ c: conversations() }).orderBy(({ c }) => c.newestAt, 'desc') });

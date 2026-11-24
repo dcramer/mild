@@ -1,6 +1,5 @@
 'use client';
 import { type LabelSummary, type RuleMatch, type RuleSummary, api } from '@/lib/api/endpoints.ts';
-import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import {
   HANDLED,
@@ -57,9 +56,9 @@ import {
   TrGroup,
   useToast,
 } from '@/system';
-import { usePlan } from '@/components/model-connect.tsx';
-import { AT_API_PRICES, approx, costName, priceNote } from '@/lib/prices.ts';
+import { AT_API_PRICES, approx, costName, priceNote, usePlan } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
+import { useRuleInbox, useRuleWaiting, useRuleUsage } from '@/lib/api/reads.ts';
 
 const QUIET: Record<string, string> = {
   fromDomain: 'anyone at',
@@ -113,7 +112,7 @@ export function whoText(match: RuleMatch): string {
 function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void }) {
   const plan = usePlan();
   // Each look searches Gmail, so it is not repeated on a timer.
-  const inbox = useLoaded(`rule-inbox ${rule.id}`, (signal) => api.ruleInbox(rule.id, signal), 0);
+  const inbox = useRuleInbox(rule.id);
   const apply = useAction();
   const toast = useToast();
   const sample = inbox.data;
@@ -219,7 +218,7 @@ function ApplyDialog({ rule, onClose }: { rule: RuleSummary; onClose: () => void
 
 /** Mail the rule decided that is still waiting in the inbox, how far applying it there has got, and the press that applies it. */
 function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) {
-  const waiting = useLoaded(`rule-waiting ${rule.id}`, (signal) => api.ruleWaiting(rule.id, signal));
+  const waiting = useRuleWaiting(rule.id);
   const [applying, setApplying] = useParam('apply');
   const stop = useAction();
   const { total = 0, messages = [], applying: going = null } = waiting.data ?? {};
@@ -281,7 +280,7 @@ function InInbox({ rule, onOpen }: { rule: RuleSummary; onOpen: OpenMessages }) 
  */
 function Use({ rule }: { rule: RuleSummary }) {
   const plan = usePlan();
-  const usage = useLoaded(`rule-usage ${rule.id}`, (signal) => api.ruleUsage(rule.id, signal));
+  const usage = useRuleUsage(rule.id);
   const daily = usage.data?.daily ?? [];
   const matched = daily.reduce((sum, day) => sum + day.changed + day.left, 0);
   const cost = daily.reduce((sum, day) => sum + day.costUsd, 0);
