@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { mailDocument } from '../src/dashboard/mail-html.ts';
 import { FRAME_POLICY } from '../src/dashboard/policy.ts';
-import { addRule, makeRule, ruleDialog, rulePanel, writeRule } from './rule.ts';
+import { addRule, ruleDialog, ruleFromMessage, rulePanel, writeRule } from './rule.ts';
 import {
   addLabelsDialog,
   boxOf,
@@ -376,7 +376,7 @@ test.describe('What Mild saw', () => {
     await expect(readerHeading(page, '48 hours only: 30% off')).toBeVisible();
     await expect(page).toHaveURL(DEALS);
 
-    await makeRule(reader(page));
+    await ruleFromMessage(reader(page));
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(reader(page)).toBeVisible();
@@ -385,7 +385,7 @@ test.describe('What Mild saw', () => {
 
   test('a rule added from the panel opens at its own address, and Back returns to the message', async ({ page }) => {
     await page.goto('/');
-    const dialog = await makeRule(await openMessage(page, 'Winter sale starts now'));
+    const dialog = await ruleFromMessage(await openMessage(page, 'Winter sale starts now'));
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await addRule(dialog);
     const sheet = rulePanel(page, 'sale@store.example.com');

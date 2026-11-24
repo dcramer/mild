@@ -32,6 +32,7 @@ import {
   tooltip,
 } from './sift.ts';
 import type { Page } from '@playwright/test';
+import { ruleDialog } from './rule.ts';
 
 /** How many mail changes the page has sent. */
 function changesSent(page: Page): () => number {
@@ -272,6 +273,17 @@ test.describe('Inbox', () => {
     await page.reload();
     await expect(inboxRows(page)).toHaveCount(18);
     await expect(row).toHaveCount(0);
+  });
+
+  test('a row’s label menu ends as every label menu does, Add a label… then Make a rule…, which starts the rule on its sender', async ({ page }) => {
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    await pointAt(row);
+    await row.getByRole('combobox', { name: 'What Your order has shipped is' }).click();
+    await expect(page.getByRole('option').nth(-2)).toHaveText('Add a label…');
+    await expect(page.getByRole('option').last()).toHaveText('Make a rule…');
+    await page.getByRole('option', { name: 'Make a rule…' }).click();
+    await expect(ruleDialog(page)).toContainText('orders@shop.example.com');
   });
 
   test('a row’s label menu stays open while what Mild thinks of the row changes, and takes the pick', async ({ page }) => {

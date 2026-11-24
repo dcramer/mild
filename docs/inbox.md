@@ -6,7 +6,7 @@ Mild's dashboard was built to answer what Mild could not decide. Inbox makes it 
 
 - Reading and answering mail as fast as in Gmail: a list, a reader, a composer, keys for everything.
 - Seeing mail the way Mild sees it: every row says what Mild thinks it is, and the list narrows by that.
-- Correcting Mild where you read, not on a separate screen: the reader every list opens has the answer and Rule… on one line under the title.
+- Correcting Mild where you read, not on a separate screen: the reader every list opens has the answer on one line under the title, its list ending with Add a label… and Make a rule….
 
 ## The frame
 

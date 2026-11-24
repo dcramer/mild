@@ -1,5 +1,6 @@
 import { TOUCH, boxOf, dismiss, edgeSwipe, expect, hold, path, reader, swipe, test, toast } from './sift.ts';
 import type { Page } from '@playwright/test';
+import { ruleDialog } from './rule.ts';
 
 /** A conversation's row in Inbox on a phone, where it has no check to find it by. */
 const row = (page: Page, subject: string) => page.getByRole('row').filter({ hasText: subject });
@@ -99,6 +100,16 @@ test.describe('Inbox by touch, on a phone', () => {
     await sheet.getByRole('button', { name: 'Cancel' }).tap();
     await expect(sheet).toHaveCount(0);
     await expect(lunch).toBeVisible();
+
+    // It ends as every label menu does, and Make a rule… gives way to the rule dialog, started on the sender.
+    await swipe(lunch, 380);
+    await expect(sheet.getByRole('listitem').nth(-2)).toHaveText('Add a label…');
+    await expect(sheet.getByRole('listitem').last()).toHaveText('Make a rule…');
+    await sheet.getByRole('button', { name: 'Make a rule…' }).tap();
+    await expect(sheet).toHaveCount(0);
+    await expect(ruleDialog(page)).toContainText('ada@example.org');
+    await page.keyboard.press('Escape');
+    await expect(ruleDialog(page)).toHaveCount(0);
 
     await swipe(lunch, 380);
     await sheet.getByRole('button', { name: /^Receipts/ }).tap();

@@ -1,21 +1,29 @@
 'use client';
 import { Select as Base } from '@base-ui/react/select';
-import { CheckIcon, ChevronDownIcon, TagIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon, PlusIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from './button.tsx';
 
-/** The values of `extras` in the list: never a choice, so never anyone's label id. */
-const EXTRA = '\u0000extra';
-const extraAt = (value: string | null) => (value?.startsWith(EXTRA) ? Number(value.slice(EXTRA.length)) : null);
-
-/** A press at the foot of a picker's list that is not a choice: Add a label…, Make a rule…. */
-interface Extra {
-  label: string;
-  lead?: ReactNode;
-  onSelect: () => void;
+/**
+ * What every list of labels for one message ends with, set apart, in this order: a label of the person's own, for mail
+ * none of theirs fits, and a rule started on the message, for mail like it. Every picker and `LabelSheet` draws them.
+ */
+export interface Ending {
+  onAdd: () => void;
+  onRule: () => void;
 }
-const NO_EXTRAS: readonly Extra[] = [];
+
+export const endingOf = ({ onAdd, onRule }: Ending) =>
+  [
+    { key: 'add', label: 'Add a label…', icon: PlusIcon, onSelect: onAdd },
+    { key: 'rule', label: 'Make a rule…', icon: WorkflowIcon, onSelect: onRule },
+  ] as const;
+
+/** An ending's value in the list: never a choice, so never anyone's label id. */
+const ENDING = '\u0000ending:';
+const endingAt = (value: string | null, ending: Ending) =>
+  value?.startsWith(ENDING) ? endingOf(ending).find((e) => e.key === value.slice(ENDING.length)) : undefined;
 
 export interface Pick {
   id: string;
@@ -37,7 +45,7 @@ export function AnswerPicker({
   onSubmit,
   busy,
   className,
-  extras = NO_EXTRAS,
+  ending,
 }: {
   /** Names the dropdown for a screen reader: "What this message is". */
   label: string;
@@ -48,8 +56,7 @@ export function AnswerPicker({
   onSubmit: (id: string) => unknown;
   busy?: boolean;
   className?: string;
-  /** Last in the list, set apart: something to do instead of a choice, such as adding a label that does not exist yet. */
-  extras?: readonly Extra[];
+  ending: Ending;
 }) {
   const [chosen, setChosen] = useState<string | null>(value);
   const all = groups.flat();
@@ -60,8 +67,8 @@ export function AnswerPicker({
         items={all.map((p) => ({ value: p.id, label: p.label }))}
         value={chosen}
         onValueChange={(next, { reason }) => {
-          const at = extraAt(next);
-          if (at !== null) return extras[at]?.onSelect();
+          const press = endingAt(next, ending);
+          if (press) return press.onSelect();
           // Base UI also sets a value of its own accord (one no longer listed), which is no answer.
           if (next === null || reason !== 'item-press') return;
           const was = chosen;
@@ -87,7 +94,7 @@ export function AnswerPicker({
           </span>
           <ChevronDownIcon aria-hidden className="ml-auto size-3.5 shrink-0 text-muted-foreground" />
         </Base.Trigger>
-        <Choices groups={groups} extras={extras} />
+        <Choices groups={groups} ending={ending} />
       </Base.Root>
       <Button
         aria-label={current ? `Agree: ${current.label}` : 'Choose what it is'}
@@ -106,8 +113,8 @@ export function AnswerPicker({
  * What a message is, changed in place where it is read: on the block a row's presses sit on when the row is pointed at
  * (`RowPresses`' `lead`), or in the reader's toolbar (`ReaderBar`'s `label`, `size="toolbar"`, as tall as its icons). The
  * meter and the label, or Unlabelled, and a chevron. Picking saves it at once, with no check, since there is nothing to
- * agree to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back. `extras`
- * are last in the list, set apart, as `AnswerPicker`'s are.
+ * agree to; picking again is the undo. `onSubmit` settles as the save does, and on failure the pick goes back. Its list
+ * ends as `AnswerPicker`'s does (`Ending`).
  */
 export function LabelPick({
   label,
@@ -115,14 +122,14 @@ export function LabelPick({
   groups,
   onSubmit,
   size = 'row',
-  extras = NO_EXTRAS,
+  ending,
 }: {
   label: string;
   value: string | null;
   groups: readonly (readonly Pick[])[];
   onSubmit: (id: string) => Promise<unknown>;
   size?: 'row' | 'toolbar';
-  extras?: readonly Extra[];
+  ending: Ending;
 }) {
   const [chosen, setChosen] = useState<string | null>(value);
   // A new value from Mild is followed in place: drawing the picker again would shut a list the reader has open.
@@ -138,8 +145,8 @@ export function LabelPick({
       items={all.map((p) => ({ value: p.id, label: p.label }))}
       value={chosen}
       onValueChange={(next, { reason }) => {
-        const at = extraAt(next);
-        if (at !== null) return extras[at]?.onSelect();
+        const press = endingAt(next, ending);
+        if (press) return press.onSelect();
         if (next === null || reason !== 'item-press' || next === chosen) return;
         const was = chosen;
         setChosen(next);
@@ -169,13 +176,13 @@ export function LabelPick({
         </span>
         <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       </Base.Trigger>
-      <Choices groups={groups} extras={extras} />
+      <Choices groups={groups} ending={ending} />
     </Base.Root>
   );
 }
 
-/** The open list of either picker: its groups set apart, and `extras` last. */
-function Choices({ groups, extras }: { groups: readonly (readonly Pick[])[]; extras: readonly Extra[] }) {
+/** The open list of either picker: its groups set apart, and its `Ending` last. */
+function Choices({ groups, ending }: { groups: readonly (readonly Pick[])[]; ending: Ending }) {
   return (
     <Base.Portal>
       <Base.Positioner sideOffset={4} align="start" alignItemWithTrigger={false} className="z-50">
@@ -203,17 +210,17 @@ function Choices({ groups, extras }: { groups: readonly (readonly Pick[])[]; ext
                   ))}
                 </Fragment>
               ))}
-            {extras.length > 0 ? <Base.Separator className="my-1 border-t border-(--rule)" /> : null}
-            {extras.map((extra, index) => (
+            <Base.Separator className="my-1 border-t border-(--rule)" />
+            {endingOf(ending).map(({ key, label, icon: Icon }) => (
               <Base.Item
-                key={extra.label}
-                value={`${EXTRA}${index}`}
+                key={key}
+                value={`${ENDING}${key}`}
                 className="relative flex cursor-pointer items-center gap-2.5 py-1.5 pr-8 pl-2 whitespace-nowrap text-muted-foreground outline-none select-none data-highlighted:bg-(--fill-strong) data-highlighted:text-foreground pointer-coarse:min-h-11"
               >
-                <span aria-hidden className="flex w-3.5 shrink-0 justify-center [&_svg]:size-3.5">
-                  {extra.lead}
+                <span aria-hidden className="flex w-3.5 shrink-0 justify-center">
+                  <Icon className="size-3.5" />
                 </span>
-                <Base.ItemText>{extra.label}</Base.ItemText>
+                <Base.ItemText>{label}</Base.ItemText>
               </Base.Item>
             ))}
           </Base.List>

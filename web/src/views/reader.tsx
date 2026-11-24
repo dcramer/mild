@@ -1,6 +1,6 @@
 'use client';
 import { eq, useLiveQuery } from '@tanstack/react-db';
-import { ArchiveIcon, BanIcon, MailIcon, PlusIcon, ReplyIcon, ShieldAlertIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, MailIcon, ReplyIcon, ShieldAlertIcon, TagIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAnswer, useRecordAnswer, withDoes } from '@/components/answer.tsx';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
@@ -555,6 +555,7 @@ function OpenedMessage({
         {inInbox ? <History detail={detail} onUndone={onUndone} /> : null}
       </>
     ) : null;
+  const ending = { onAdd: () => setAdding(true), onRule: () => setRuling(messageStart(reveal(detail.fromAddress), shownLabel)) };
   // A reply answers the newest in the inbox, or another message of its conversation.
   const answered = conversation?.messages.some((m) => m.messageId === answering) ? answering : detail.messageId;
   const written = compose ? writing(composeAs, answered) : null;
@@ -577,10 +578,7 @@ function OpenedMessage({
               onSubmit={async (id) => {
                 await record(target, id);
               }}
-              extras={[
-                { label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) },
-                { label: 'Make a rule…', lead: <WorkflowIcon />, onSelect: () => setRuling(messageStart(reveal(detail.fromAddress), shownLabel)) },
-              ]}
+              ending={ending}
             />
             {why ? <Popover label="Why">{why}</Popover> : null}
           </>
@@ -598,15 +596,11 @@ function OpenedMessage({
               groups: choices(target, current ? sureness(current) : 1, alternatives),
               empty: outcomeName('review'),
               onSubmit: (id) => answer(target, id),
-              extras: [{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }],
+              ending,
             }}
             why={why}
             whyOpen
-          >
-            <Button variant="quiet" aria-label="Make a rule…" onClick={() => setRuling(messageStart(reveal(detail.fromAddress), shownLabel))}>
-              Rule…
-            </Button>
-          </AnswerRow>
+          />
         )
       }
       side={
@@ -680,6 +674,7 @@ function OpenedMessage({
           value={shownLabel}
           groups={withDoes(labels, choices(target, current ? sureness(current) : 1, alternatives))}
           onPick={(id) => void Promise.resolve(inInbox ? record(target, id) : answer(target, id)).catch(() => undefined)}
+          ending={ending}
         />
       ) : null}
       {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}

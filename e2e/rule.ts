@@ -1,11 +1,17 @@
 import type { Locator, Page } from '@playwright/test';
-import { expect, path } from './sift.ts';
+import { choose, expect, path } from './sift.ts';
 
 export const ruleDialog = (page: Page) => page.getByRole('dialog', { name: 'Add a rule' });
 
 /** Presses `within`'s Make a rule…, which opens the dialog started on what that place knows. */
 export async function makeRule(within: Locator) {
   await within.getByRole('button', { name: 'Make a rule…' }).click();
+  return ruleDialog(within.page());
+}
+
+/** A message's Make a rule…, at the end of the list of what it is, as every label picker ends. */
+export async function ruleFromMessage(within: Locator) {
+  await choose(within, 'Make a rule…');
   return ruleDialog(within.page());
 }
 
