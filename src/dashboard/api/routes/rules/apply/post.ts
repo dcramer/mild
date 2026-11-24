@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, rules } from '../../../../../store/query.ts';
+import { ruleExists } from '../../../../../store/rules.ts';
 import { listAccounts } from '../../../../../store/accounts.ts';
 import { REACH, startInboxRuns } from '../../../../../store/inbox-runs.ts';
 import { hasOwnLabels } from '../../../../../store/labels.ts';
@@ -14,8 +14,7 @@ export default write({
   reply: done,
   touches: self,
   run: async ({ db, controls, now }, { id }) => {
-    const [rule] = await db.select({ id: rules.id }).from(rules).where(eq(rules.id, id));
-    if (!rule) return null;
+    if (!(await ruleExists(db, id))) return null;
     // A run is only gone on with where Mild reads.
     if (!(await hasOwnLabels(db))) throw new Refusal('Mild reads nothing from your inbox until you have a label of your own.');
     const mailboxes = (await listAccounts(db)).map((a) => a.id);

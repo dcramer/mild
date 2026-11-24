@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { getEvalRun } from '../../../../learn/evals.ts';
-import { sees } from '../../../scope.ts';
+import { evalRun } from '../../../queries/evals.ts';
 import { EvalDetail } from '../../../types.ts';
 import { missing, ok, read } from '../../route.ts';
 
@@ -9,7 +8,7 @@ export default read({
   query: z.object({ id: z.coerce.number().int() }),
   reply: EvalDetail,
   run: async ({ db }, scope, { id }) => {
-    const found = await getEvalRun(db, id);
-    return found && sees(scope, found.run.accountId) ? ok(found) : missing('No such run');
+    const found = await evalRun(db, scope, id);
+    return found ? ok(found) : missing('No such run');
   },
 });
