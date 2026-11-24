@@ -109,7 +109,7 @@ test.describe('The reader, from Inbox', () => {
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
     await expect(readerHeading(page, 'Your March bill')).toBeVisible();
     await pointAt(reader(page).getByRole('button', { name: 'Archive', exact: true }));
-    await expect(tooltip(page)).toHaveText('ArchiveE');
+    await expect(tooltip(page)).toHaveText('Archive⇧E');
     await pointAt(reader(page).getByRole('button', { name: 'Back to Inbox' }));
     await expect(tooltip(page)).toHaveText('Back to Inboxesc');
   });

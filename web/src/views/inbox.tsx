@@ -517,7 +517,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
         count: chosen.length,
         clear: () => setSelected(new Set()),
         actions: [
-          { label: 'Archive', key: 'e', onPress: () => act('archive') },
+          { label: 'Archive', key: 'Shift+e', onPress: () => act('archive') },
           { label: 'Spam', key: '!', onPress: () => act('spam') },
           { label: chosen.length === 1 ? 'Block sender' : 'Block senders', key: 'Shift+b', onPress: () => block(chosen, () => setSelected(new Set())) },
           { label: 'Mark read', key: 'Shift+i', onPress: () => act('read') },

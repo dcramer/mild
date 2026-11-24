@@ -832,7 +832,7 @@ export function SystemView() {
                   count: picked.size,
                   clear: () => setPicked(new Set()),
                   actions: [
-                    { label: 'Archive', key: 'e', onPress: () => toast(`Archived ${picked.size}`) },
+                    { label: 'Archive', key: 'Shift+e', onPress: () => toast(`Archived ${picked.size}`) },
                     { label: 'Mark read', key: 'Shift+i', onPress: () => toast(`Marked ${picked.size} read`) },
                   ],
                 }}
@@ -1573,7 +1573,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             presses={
               inbox
                 ? [
-                    { label: 'Archive', key: 'e', icon: <ArchiveIcon aria-hidden />, onPress: () => toast('Archived') },
+                    { label: 'Archive', key: 'Shift+e', icon: <ArchiveIcon aria-hidden />, onPress: () => toast('Archived') },
                     { label: 'Mark unread', key: 'Shift+u', icon: <MailIcon aria-hidden />, onPress: () => toast('Marked unread') },
                   ]
                 : []

@@ -695,12 +695,12 @@ test.describe('Inbox', () => {
     await expect(inboxRow(page, 'Your March bill')).toHaveCount(0);
   });
 
-  test('in the reader E archives the conversation and goes on to the next, and Shift+U marks it unread and closes it', async ({ page }) => {
+  test('in the reader Shift+E archives the conversation and goes on to the next, and Shift+U marks it unread and closes it', async ({ page }) => {
     await page.goto('/inbox');
     await inboxRow(page, 'This week in widgets').getByRole('cell').nth(2).click();
     const open = reader(page);
     await expect(open.getByRole('button', { name: /^Archive/ })).toBeEnabled();
-    await page.keyboard.press('e');
+    await page.keyboard.press('Shift+E');
     await expect(toast(page, 'This week in widgets')).toBeVisible();
     await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 1 })).toBeVisible();
     await page.keyboard.press('Shift+U');
@@ -760,7 +760,7 @@ test.describe('Inbox', () => {
     await expect(unplaced.getByRole('combobox', { name: 'What 48 hours only: 30% off is' })).toHaveText('Unlabelled');
   });
 
-  test('X selects, E archives what is selected, and Undo puts it back', async ({ page }) => {
+  test('X selects, Shift+E archives what is selected, a lone E does nothing, and Undo puts it back', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);
     // The rule Mild proposes is the first row; the mail starts after it.
@@ -772,6 +772,9 @@ test.describe('Inbox', () => {
     const bar = page.getByRole('toolbar', { name: 'Selected rows' });
     await expect(bar).toContainText('2 selected');
     await page.keyboard.press('e');
+    await expect(inboxRows(page)).toHaveCount(19);
+    await expect(bar).toContainText('2 selected');
+    await page.keyboard.press('Shift+E');
     await expect(toast(page, '2 conversations')).toBeVisible();
     await expect(inboxRows(page)).toHaveCount(17);
     await expect(inboxRow(page, 'This week in widgets')).toHaveCount(0);
@@ -795,7 +798,7 @@ test.describe('Inbox', () => {
     await page.keyboard.press('x');
     await page.keyboard.press('j');
     await page.keyboard.press('x');
-    await page.keyboard.press('e');
+    await page.keyboard.press('Shift+E');
     await dismiss(page, '2 conversations');
     await expect(failureToast(page, 'Could not archive them')).toContainText('Gmail did not take all of them. Try again.');
   });
