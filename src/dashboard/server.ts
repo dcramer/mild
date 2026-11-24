@@ -1,125 +1,21 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { People } from '../store/people.ts';
-import { credentials } from '../store/credentials.ts';
 import { headOf } from '../store/changes.ts';
-import type { z } from 'zod';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { DOWNLOADS, FRAMES, READS, WRITES } from './api/index.ts';
 import type { Context, Write } from './api/route.ts';
 import { frameNote } from './mail-html.ts';
 import { Refusal } from '../refusal.ts';
-import { asked, forThePage, identify, httpStatus, reportError, traced } from '../telemetry.ts';
+import { asked, identify, httpStatus, reportError, traced } from '../telemetry.ts';
 import type { Controls, SignIn } from './controls.ts';
 import { type Scope, narrow, scopeFor, sees } from './scope.ts';
-import { FRAME_POLICY, IMAGES_FRAME_POLICY, NOSNIFF } from './policy.ts';
-
-/** A message's own HTML, in a frame on the page (`FRAMES`). A link it opens, or an image it shows, learns nothing of where it was opened from. */
-const frameHeaders = (images: boolean) => ({
-  'content-security-policy': images ? IMAGES_FRAME_POLICY : FRAME_POLICY,
-  ...NOSNIFF,
-  'referrer-policy': 'no-referrer',
-  // A link's host would otherwise be looked up ahead of a click, which tells its DNS the message was opened.
-  'x-dns-prefetch-control': 'off',
-  'content-type': 'text/html; charset=utf-8',
-  'cache-control': 'no-store',
-});
-
-const MEDIA_TYPE = /^[A-Za-z0-9!#$&^_.+-]+\/[A-Za-z0-9!#$&^_.+-]+$/;
-
-/**
- * A file from the person's mail (`DOWNLOADS`), whose name and type its sender chose: always saved, never shown at this
- * address, where an HTML or SVG file would run as the page, and with no origin of its own if a browser shows it anyway.
- * The name twice, as a quoted ASCII stand-in and in RFC 6266's encoding, which keeps every character.
- */
-const fileHeaders = (name: string, type: string) => {
-  // No control character, which could end the header.
-  const clean = name
-    .split('')
-    .filter((c) => c >= ' ' && c !== '\u007f')
-    .join('');
-  const ascii = clean.replaceAll(/[^\x20-\x7e]/g, '_').replaceAll(/["\\]/g, '\\$&');
-  const encoded = encodeURIComponent(clean).replaceAll(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-  return {
-    'content-type': MEDIA_TYPE.test(type) ? type : 'application/octet-stream',
-    'content-disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`,
-    'content-security-policy': "default-src 'none'; sandbox",
-    ...NOSNIFF,
-    'referrer-policy': 'no-referrer',
-    'cache-control': 'no-store',
-  };
-};
-
-/** Streamed, since Vercel answers at most 4.5 MB in one body that is not, and a file may be 25 MB. */
-const STREAM_PIECE = 256 * 1024;
-const streamed = (data: Buffer) => {
-  let at = 0;
-  return new ReadableStream<Uint8Array>({
-    pull(stream) {
-      if (at >= data.length) return stream.close();
-      stream.enqueue(data.subarray(at, (at += STREAM_PIECE)));
-    },
-  });
-};
+import { NOSNIFF } from './policy.ts';
+import { cookie, fileHeaders, frameHeaders, json, readJson, refusedBy, replied, streamed } from './http.ts';
+import { DEVICE_ID, cookies, readSession } from './session.ts';
+import { SIGN_IN_PATHS, type SignInOptions, type Visit, answerDevice, answerSignIn } from './sign-in.ts';
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
-/** Answered here rather than by a route module. */
-const SIGN_IN_PATHS = new Set(['/auth/login', '/auth/callback', '/api/session', '/api/signout', '/api/device']);
-/** A sign-in in flight: the PKCE verifier, whose mailbox it adds or lets send, and where to return to. */
-type PendingSignIn = { verifier: string; redirectUri: string; addTo: string | null; send: string | null; to: string; expires: number };
-
-// Data, fetched by the page: a policy or a referrer policy would govern nothing.
-const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
-  new Response(JSON.stringify(body), { status, headers: { ...NOSNIFF, 'content-type': 'application/json', 'cache-control': 'no-store', ...headers } });
-
-/** A path on this site: not `//host` or `/\host`, which a browser reads as another site. */
-const LOCAL_PATH = /^\/(?![/\\])[^\s\\]{0,2000}$/;
-
-const redirect = (location: string, ...cookies: string[]) => {
-  const headers = new Headers({ location, 'cache-control': 'no-store' });
-  for (const value of cookies) headers.append('set-cookie', value);
-  return new Response(null, { status: 303, headers });
-};
 
 const MAX_BODY = 20_000;
-
-/**
- * What was wrong with a request, for whoever sent it: the first field refused and why. It names the
- * field, never its value.
- */
-const refusedBy = (error: z.ZodError) => {
-  const issue = error.issues[0];
-  const field = issue?.path.join('.');
-  return field ? `${field}: ${issue?.message}` : (issue?.message ?? 'That request is not well formed.');
-};
-
-/**
- * A reply that does not match its route's schema is Mild's own mistake: it is not sent, since what it
- * would send is not what the page was promised.
- */
-const replied = (schema: z.ZodType, body: unknown): { status: number; body: unknown } => {
-  const parsed = schema.safeParse(body);
-  return parsed.success
-    ? { status: 200, body: parsed.data }
-    : { status: 500, body: { error: `The reply did not match its schema (${refusedBy(parsed.error)}).` } };
-};
-
-/** Read a JSON body of at most `largest` characters. Null if it is longer or not a JSON object. */
-async function readJson(request: Request, largest: number): Promise<Record<string, unknown> | null> {
-  let body = '';
-  if (request.body) {
-    const decoder = new TextDecoder();
-    for await (const chunk of request.body) {
-      body += decoder.decode(chunk, { stream: true });
-      if (body.length > largest) return null;
-    }
-  }
-  try {
-    const parsed: unknown = JSON.parse(body);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
 
 export interface DashboardOptions {
   /** Names and addresses, besides localhost, that the dashboard answers to. */
@@ -157,50 +53,6 @@ export interface Dashboard {
   /** Everything but the page's own files. The scheme is the URL's, where `forwarded` believes it. */
   handle: (request: Request) => Promise<Response>;
 }
-
-const SESSION_DAYS = 30;
-/** A browser's key outlives any one session: the copy it encrypts is kept across sign-ins until one signs out. 400 days is the most a browser keeps a cookie. */
-const DEVICE_DAYS = 400;
-/** A device's id, as the server makes it. */
-const DEVICE_ID = /^[0-9a-f]{32}$/;
-/** A session in use is issued again once this old, so someone who opens Mild within the month is never signed out. */
-const RENEW_MS = 86_400_000;
-const b64 = (value: string | Buffer) => Buffer.from(value).toString('base64url');
-
-/** A session cookie value: which mailbox, whose, until when, signed so it cannot be forged or altered. */
-function signSession(session: { email: string; person: number }, secret: string, now: number): string {
-  const body = b64(JSON.stringify({ e: session.email, p: session.person, x: now + SESSION_DAYS * 86_400_000 }));
-  return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`;
-}
-
-/** The mailbox and person a session cookie was issued to, and when it ends, or null if it is missing, forged or expired. */
-function readSession(value: string | undefined, secret: string, now: number): { email: string; person: number; expires: number } | null {
-  const [body, signature] = (value ?? '').split('.');
-  if (!body || !signature) return null;
-  const expected = Buffer.from(createHmac('sha256', secret).update(body).digest('base64url'));
-  const given = Buffer.from(signature);
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
-  try {
-    const { e, p, x } = JSON.parse(Buffer.from(body, 'base64url').toString()) as { e?: unknown; p?: unknown; x?: unknown };
-    return typeof e === 'string' && typeof p === 'number' && typeof x === 'number' && x > now ? { email: e, person: p, expires: x } : null;
-  } catch {
-    return null;
-  }
-}
-
-/** How long a sign-in started here may take to come back from Google. */
-const SIGN_IN_MS = 600_000;
-
-const same = (a: string, b: string) => {
-  const [x, y] = [Buffer.from(a), Buffer.from(b)];
-  return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
-};
-
-const cookie = (request: Request, name: string) =>
-  (request.headers.get('cookie') ?? '')
-    .split(';')
-    .map((part) => part.trim().split('='))
-    .find(([key]) => key === name)?.[1];
 
 const hostname = (host: string | null | undefined) => (host ?? '').replace(/:\d+$/, '').toLowerCase();
 
@@ -256,9 +108,17 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       (request.headers.get('content-type') ?? '').startsWith('application/json')
     );
   };
-  /** A sign-in in flight, by the state Google echoes back: the PKCE verifier and where to return to. */
-  const pendingKey = (state: string) => `signin:google:${state}`;
-
+  const signInOptions: SignInOptions = {
+    people,
+    signIn,
+    ephemeral,
+    secret,
+    signInAddresses: options.signInAddresses ?? [],
+    cloud,
+    now,
+    report,
+    fromOwnPage,
+  };
   const refuse = async (id: number): Promise<never> => {
     throw new Error(`Nobody is signed in to open person ${id}'s database.`);
   };
@@ -315,121 +175,26 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
       said: (error) => failed(request, error).error,
       now,
     };
-    const sessionCookie = (value: string, maxAge: number) =>
-      `sift_session=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
-    // The sign-in under way in this browser. Google's return carries the state; only the browser that
-    // started the sign-in also holds it here, so a consent link sent to someone else completes nothing.
-    const signInCookie = (state: string, maxAge: number) =>
-      `sift_signin=${state}; Path=/auth; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
-    const deviceCookie = (value: string, maxAge: number) => `sift_device=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`;
     const given = cookie(request, 'sift_device') ?? '';
-    const device = DEVICE_ID.test(given) ? given : null;
+    const visit: Visit = {
+      request,
+      url,
+      https,
+      origin,
+      googleCanReturnHere,
+      issued,
+      session,
+      person,
+      db: ctx.db,
+      device: DEVICE_ID.test(given) ? given : null,
+    };
     const { method } = request;
 
-    if (signIn && method === 'GET' && url.pathname === '/api/session') {
-      const reason = !signIn.hasClient() ? 'no-client' : !googleCanReturnHere ? 'address' : null;
-      // The page asks every few minutes while it is open, which is when a session is renewed.
-      const renewed: Record<string, string> =
-        session && issued && issued.expires - now() < SESSION_DAYS * 86_400_000 - RENEW_MS
-          ? { 'set-cookie': sessionCookie(signSession({ email: session, person: issued.person }, secret, now()), SESSION_DAYS * 86_400) }
-          : {};
-      return json(
-        200,
-        {
-          required: true,
-          email: session,
-          canSignIn: reason === null,
-          reason,
-          addresses: options.signInAddresses ?? [],
-          cloud,
-          telemetry: forThePage(),
-          device: person !== null && device !== null && (await (await credentials(ctx.db, 'device')).read(device)) !== null,
-        },
-        renewed,
-      );
-    }
-    if (signIn && method === 'GET' && url.pathname === '/auth/login') {
-      // Letting Mild send is for a mailbox of whoever is signed in.
-      const send = query.get('grant') === 'send' ? (query.get('mailbox') ?? '') : null;
-      if (!signIn.hasClient() || !googleCanReturnHere || (send !== null && !person?.accounts.includes(send))) return redirect('/');
-      const state = randomBytes(16).toString('hex');
-      const verifier = randomBytes(32).toString('base64url');
-      const redirectUri = `${origin}/auth/callback`;
-      // Adding a second account is only for someone already signed in. `to` is where the browser started, and only
-      // ever a path on this site: anything else would make the sign-in a way to send someone elsewhere.
-      const to = query.get('to') ?? '';
-      const pending: PendingSignIn = {
-        verifier,
-        redirectUri,
-        addTo: query.get('add') === '1' && send === null ? session : null,
-        send,
-        to: LOCAL_PATH.test(to) ? to : '/',
-        expires: now() + SIGN_IN_MS,
-      };
-      await ephemeral!.set(pendingKey(state), pending, SIGN_IN_MS);
-      return redirect(signIn.url(redirectUri, state, createHash('sha256').update(verifier).digest('base64url'), send), signInCookie(state, SIGN_IN_MS / 1000));
-    }
-    if (signIn && method === 'GET' && url.pathname === '/auth/callback') {
-      const state = query.get('state') ?? '';
-      // Taken, so it completes once.
-      const entry = state ? await ephemeral!.take<PendingSignIn>(pendingKey(state)) : null;
-      // Someone still signed in was adding a mailbox or signing in again, so it is said in Settings, where mailboxes are; the sign-in page is only for someone signed out.
-      const fail = (message: string) => redirect(`/?${session ? 'settings=1&' : ''}signin=${encodeURIComponent(message)}`, signInCookie('', 0));
-      const code = query.get('code');
-      if (!entry || entry.expires < now()) return fail('That sign-in expired. Try again.');
-      if (!same(cookie(request, 'sift_signin') ?? '', state)) return fail('That sign-in was started in another browser. Start it again here.');
-      // A mailbox joins whoever started adding it, so that person must still be the one signed in here.
-      if (entry.addTo !== null && session !== entry.addTo) return fail('Sign in again, then add the mailbox.');
-      if (entry.send !== null && !person?.accounts.includes(entry.send)) return fail('Sign in again, then let Mild send.');
-      if (!code) return fail(query.get('error') === 'access_denied' ? 'Google did not grant access.' : 'Google did not complete the sign-in.');
-      try {
-        const email = await signIn.complete(entry.redirectUri, code, entry.verifier, entry.addTo, entry.send);
-        if (entry.send !== null) return redirect(entry.to, signInCookie('', 0));
-        const who = await people.signedIn(email);
-        if (!who) return fail('Google did not complete the sign-in.');
-        // A mailbox added joins whoever is signed in, who stays signed in as themselves, back in Settings where they added it.
-        // One already someone else's never changes hands, and signing in as them instead is not what was asked.
-        if (entry.addTo !== null)
-          return who.id === person?.id ? redirect('/?settings=1', signInCookie('', 0)) : fail(`${email} is already connected to Mild by someone else.`);
-        return redirect(entry.to, sessionCookie(signSession({ email, person: who.id }, secret, now()), SESSION_DAYS * 86_400), signInCookie('', 0));
-      } catch (error) {
-        if (error instanceof Refusal) return fail(error.message);
-        report(request, error);
-        return fail('Google did not complete the sign-in.');
-      }
-    }
+    const signedOut = await answerSignIn(visit, signInOptions);
+    if (signedOut) return signedOut;
     if (signIn && session === null && url.pathname.startsWith('/api/')) return json(401, { error: 'Sign in to use the dashboard.' });
-    if (signIn && method === 'POST' && url.pathname === '/api/signout') {
-      // The browser's key goes, so a copy left on the device can never be read again, and the browser is told to delete it.
-      if (person && device) await (await credentials(ctx.db, 'device')).remove(device);
-      const headers = new Headers({ ...NOSNIFF, 'content-type': 'application/json', 'cache-control': 'no-store', 'clear-site-data': '"storage"' });
-      headers.append('set-cookie', sessionCookie('', 0));
-      headers.append('set-cookie', deviceCookie('', 0));
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
-    }
-    // The key this browser's copy of the person's mail is encrypted with (docs/sync.md): read by the page's frame, and made
-    // by the page the first time, since a page drawn by Next.js cannot set a cookie.
-    if (url.pathname === '/api/device' && person) {
-      if (method === 'GET') return json(200, { key: device ? await (await credentials(ctx.db, 'device')).read(device) : null });
-      if (method === 'POST') {
-        if (!fromOwnPage(request)) return json(403, { error: 'This request did not come from the dashboard.' });
-        const id = randomBytes(16).toString('hex');
-        const key = randomBytes(32).toString('base64url');
-        await (await credentials(ctx.db, 'device')).write(id, key);
-        return json(200, { key }, { 'set-cookie': deviceCookie(id, DEVICE_DAYS * 86_400) });
-      }
-    }
-    if (!signIn && method === 'GET' && url.pathname === '/api/session')
-      return json(200, {
-        required: false,
-        email: null,
-        canSignIn: false,
-        reason: null,
-        addresses: [],
-        cloud,
-        telemetry: forThePage(),
-        device: person !== null && device !== null && (await (await credentials(ctx.db, 'device')).read(device)) !== null,
-      });
+    const device = await answerDevice(visit, signInOptions);
+    if (device) return device;
 
     if (method === 'POST') {
       const handler = writes.get(url.pathname);
@@ -445,7 +210,7 @@ export function createDashboard(people: People, options: DashboardOptions = {}):
         const result: unknown = await handler.run(ctx, body.data, whole);
         if (result === null) return json(400, { error: 'That request is not well formed.' });
         const reply = replied(handler.reply, result);
-        if (reply.status === 200 && handler.endsSession?.(reply.body)) return json(200, reply.body, { 'set-cookie': sessionCookie('', 0) });
+        if (reply.status === 200 && handler.endsSession?.(reply.body)) return json(200, reply.body, { 'set-cookie': cookies(https).session('', 0) });
         // How far this write brought the person's copy: the page's copy holds its change once it has read that far.
         return json(reply.status, reply.body, person ? { 'x-sift-seq': String((await headOf(ctx.db)).seq) } : {});
       } catch (error) {

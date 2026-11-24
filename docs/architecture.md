@@ -92,7 +92,7 @@ src/
   digest/     pure: a digest's message (mail.ts) and when it is due in a person's day (schedule.ts)
   actions/    the only mutation path: executor, undo, decision-to-action planning, Mailbox port, filter validation
   gmail/      the only module that holds the Google token: OAuth, API adapter, history sync
-  dashboard/  the JSON API and the Google sign-in handler (server.ts): api/ (a module per route, at its path), queries/ (what they read), scope.ts (whose data a request may see)
+  dashboard/  the JSON API (server.ts), the Google sign-in and the browser's key (sign-in.ts), the session cookie (session.ts): api/ (a module per route, at its path), queries/ (what they read), scope.ts (whose data a request may see)
   work/       what a tick does: what is due and each piece of it (run.ts), whether a pass is wanted (due.ts), the pass (pass.ts), sync, triage, going through the inbox, upkeep (upkeep.ts)
   learn/      what the user teaches: suggestions and answers, answers read from what they did in Gmail, and asking their model for labels (labels.ts) or a rule (rules.ts)
   model/      the only module that talks to model providers (pi-ai): login, credentials, the judge, the label proposer (propose.ts), the rule drafter (draft-rule.ts), and Inbox's Ask (ask.ts)
