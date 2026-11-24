@@ -3,10 +3,29 @@ import { syncAccount, syncWants } from '../src/work/sync.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
 import { addMailbox, setMailboxAliases } from '../src/store/accounts.ts';
 import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw } from './fixtures.ts';
-import type { FakeGmail, Mail } from './google.ts';
-import { ACCOUNT, DAY, rawMessage, HOUR } from './helpers.ts';
+import { ACCOUNT, DAY, HOUR } from './helpers.ts';
 import { parseAddressList } from '../src/triage/features.ts';
-import { RATE_LIMITED, type GmailMethod } from './google.ts';
+import { type FakeGmail, type GmailMethod, type Mail, RATE_LIMITED } from './google.ts';
+import type { RawMessage } from '../src/gmail/api.ts';
+
+/** A message as Gmail's metadata read returns it. `from` is the From header; `headers` replaces all of them. */
+function rawMessage(
+  id: string,
+  { from = 'News <news@example.com>', subject = `Subject ${id}`, ...overrides }: Partial<RawMessage> & { from?: string; subject?: string } = {},
+): RawMessage {
+  return {
+    id,
+    threadId: `t-${id}`,
+    labelIds: ['INBOX', 'UNREAD'],
+    internalDate: 1000,
+    headers: [
+      { name: 'From', value: from },
+      { name: 'To', value: ACCOUNT },
+      { name: 'Subject', value: subject },
+    ],
+    ...overrides,
+  };
+}
 
 const fake = fakeGoogle();
 
