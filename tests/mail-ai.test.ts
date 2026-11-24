@@ -7,7 +7,7 @@ import { recordSync } from '../src/store/messages.ts';
 import { ASK_TOOL, type MailAsker, readMailFilter } from '../src/prompts/mail-ask.ts';
 import { FIND_TOOL } from '../src/prompts/rule-draft.ts';
 import { personWith, raw, fauxModel } from './fixtures.ts';
-import { SAMPLE_LABELS, facts, toolReply } from './helpers.ts';
+import { SAMPLE_LABELS, facts, toolReply, email } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
@@ -104,12 +104,7 @@ describe('the model turning words into a filter', () => {
 describe('asking Inbox in words', () => {
   it('records the call with what it cost, its words and answer encrypted, after looking up only the person’s senders', async () => {
     const { db } = await personWith(KEYS, ACCOUNT);
-    await recordSync(
-      db,
-      ACCOUNT,
-      [facts({ accountId: ACCOUNT, messageId: 'm1', from: { address: 'billing@vendor.example.org', domain: 'vendor.example.org' } })],
-      '2',
-    );
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'm1', from: email('billing@vendor.example.org') })], '2');
     const ask: MailAsker = async (given, find) => {
       expect(given).toMatchObject({ words: 'Vendor bills', today: TODAY });
       expect((await find('vendor')).map((s) => s.address)).toEqual(['billing@vendor.example.org']);

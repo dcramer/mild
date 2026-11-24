@@ -9,7 +9,7 @@ import { rememberCorrespondent } from '../src/store/senders.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
 import { plain } from '../src/plain.ts';
 import { onePerson, startDashboard } from './fixtures.ts';
-import { ACCOUNT, DAY, facts } from './helpers.ts';
+import { ACCOUNT, DAY, facts, email } from './helpers.ts';
 
 const NOW = Date.UTC(2026, 5, 15, 12);
 const WORK = 'me@work.example.org';
@@ -60,24 +60,23 @@ describe("a sender's next mail", () => {
 describe('GET /api/contacts', () => {
   async function seeded() {
     const { store, db } = await onePerson(ACCOUNT, WORK);
-    const from = (address: string, name?: string) => ({ address, domain: address.split('@')[1]!, ...(name ? { name } : {}) });
     await recordSync(
       db,
       ACCOUNT,
       [
-        facts({ messageId: 'news', receivedAt: NOW - 5 * DAY, from: from('news@example.com', 'Example News') }),
-        facts({ messageId: 'bill-1', receivedAt: NOW - 4 * DAY, from: from('billing@utility.example.net', 'Utility') }),
-        facts({ messageId: 'bill-2', receivedAt: NOW - 3 * DAY, from: from('billing@utility.example.net', 'Utility') }),
-        facts({ messageId: 'cold', receivedAt: NOW - 2 * DAY, from: from('cold@example.net') }),
-        facts({ messageId: 'ada', receivedAt: NOW - DAY, from: from('ada@example.org', 'Ada Lovelace') }),
-        facts({ messageId: 'old', receivedAt: NOW - 60 * DAY, from: from('ada@example.org', 'Ada') }),
+        facts({ messageId: 'news', receivedAt: NOW - 5 * DAY, from: email('news@example.com', 'Example News') }),
+        facts({ messageId: 'bill-1', receivedAt: NOW - 4 * DAY, from: email('billing@utility.example.net', 'Utility') }),
+        facts({ messageId: 'bill-2', receivedAt: NOW - 3 * DAY, from: email('billing@utility.example.net', 'Utility') }),
+        facts({ messageId: 'cold', receivedAt: NOW - 2 * DAY, from: email('cold@example.net') }),
+        facts({ messageId: 'ada', receivedAt: NOW - DAY, from: email('ada@example.org', 'Ada Lovelace') }),
+        facts({ messageId: 'old', receivedAt: NOW - 60 * DAY, from: email('ada@example.org', 'Ada') }),
         // Mail the person sent is recorded under their own address, and they are not their own contact.
-        facts({ messageId: 'mine', receivedAt: NOW, from: from(ACCOUNT, 'Me') }),
+        facts({ messageId: 'mine', receivedAt: NOW, from: email(ACCOUNT, 'Me') }),
       ],
       '1',
       NOW,
     );
-    await recordSync(db, WORK, [facts({ accountId: WORK, messageId: 'boss', receivedAt: NOW - 1000, from: from('boss@work.example.org', 'Boss') })], '1', NOW);
+    await recordSync(db, WORK, [facts({ accountId: WORK, messageId: 'boss', receivedAt: NOW - 1000, from: email('boss@work.example.org', 'Boss') })], '1', NOW);
     for (const id of ['bill-1', 'bill-2']) await recordDecision(db, ACCOUNT, id, { ...said, disposition: 'review' }, { now: NOW });
     await recordDecision(db, ACCOUNT, 'ada', { ...said, disposition: 'review' }, { now: NOW });
     // The reader answered Utility's mail: that is what their row says, not Mild's Unlabelled.

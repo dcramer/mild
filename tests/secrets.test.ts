@@ -36,7 +36,7 @@ import { listDecisions } from '../src/dashboard/queries/decisions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { hasRuleFor, listRules, setRule, startRuleDraft } from '../src/store/rules.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
-import { SAMPLE_LABELS, everything, facts, storeExample, tempDir, withSampleLabels } from './helpers.ts';
+import { SAMPLE_LABELS, everything, facts, storeExample, tempDir, withSampleLabels, email } from './helpers.ts';
 import { examplesFor } from '../src/store/examples.ts';
 import { freshStore, raw } from './fixtures.ts';
 
@@ -206,9 +206,7 @@ describe('mail', () => {
     await recordSync(
       await as(keys),
       'alpha@example.org',
-      ['m1', 'm2'].map((messageId) =>
-        facts({ accountId: 'alpha@example.org', messageId, from: { address: 'news@example.com', domain: 'example.com', name: 'Example News' } }),
-      ),
+      ['m1', 'm2'].map((messageId) => facts({ accountId: 'alpha@example.org', messageId, from: email('news@example.com', 'Example News') })),
       '2',
       0,
     );
@@ -275,11 +273,7 @@ describe('mail', () => {
     expect(row!.facts.listId).not.toContain('example.com');
     expect(await storedFacts(db, 'alpha@example.org', 'm3')).toMatchObject({ listId: 'news.example.com' });
     await storeExample(db, 'alpha@example.org', { id: 'm4', from: 'list@example.net', label: 'newsletter', headers: { 'list-id': '<news.example.com>' } });
-    const [shot] = await examplesFor(
-      db,
-      facts({ accountId: 'alpha@example.org', from: { address: 'list@example.net', domain: 'example.net' } }),
-      SAMPLE_LABELS,
-    );
+    const [shot] = await examplesFor(db, facts({ accountId: 'alpha@example.org', from: email('list@example.net') }), SAMPLE_LABELS);
     expect(shot).toMatchObject({ messageId: 'm4', facts: { listId: 'news.example.com' } });
   });
 
@@ -292,8 +286,7 @@ describe('mail', () => {
     );
     const stored = async () => await raw(await as(A)).get<{ name_hash: string; subject_hash: string }>('SELECT name_hash, subject_hash FROM examples');
     expect(await stored()).toEqual({ name_hash: 'unset:', subject_hash: 'unset:' });
-    const like = (db: Sql) =>
-      exampleKeys(db, facts({ from: { address: 'other@example.com', domain: 'example.com', name: 'Example  NEWS' }, subject: 'Re: Weekly digest' }));
+    const like = (db: Sql) => exampleKeys(db, facts({ from: email('other@example.com', 'Example  NEWS'), subject: 'Re: Weekly digest' }));
 
     await rekeyContent(await as(A));
     const underA = await stored();

@@ -76,6 +76,9 @@ export function memorySignIns(): SignIns & { stored: Map<string, string> } {
   };
 }
 
+/** An address as a message's facts hold it, its domain what follows the @. */
+export const email = (address: string, name?: string): Address => ({ address, domain: address.split('@')[1] ?? '', ...(name ? { name } : {}) });
+
 const header = (a: Address) => (a.name ? `${a.name} <${a.address}>` : a.address);
 
 /** A synthetic message, with headers that say what it does, as Gmail's would. Tests never use real mail. */
@@ -84,8 +87,8 @@ export function facts(overrides: Partial<MessageFacts> = {}): MessageFacts {
     accountId: ACCOUNT,
     messageId: 'm1',
     threadId: 't1',
-    from: { address: 'news@example.com', domain: 'example.com' },
-    to: [{ address: ACCOUNT, domain: 'example.org' }],
+    from: email('news@example.com'),
+    to: [email(ACCOUNT)],
     cc: [],
     subject: 'Weekly digest',
     labelIds: ['INBOX', 'UNREAD'],
@@ -120,7 +123,6 @@ export async function storeExample(
     headers?: Record<string, string>;
   },
 ): Promise<void> {
-  const from = { address: example.from, domain: example.from.split('@')[1] ?? '', ...(example.name ? { name: example.name } : {}) };
   await recordSync(
     db,
     accountId,
@@ -128,7 +130,7 @@ export async function storeExample(
       facts({
         accountId,
         messageId: example.id,
-        from,
+        from: email(example.from, example.name),
         subject: example.subject ?? `Subject ${example.id}`,
         headers: example.headers ?? {},
         receivedAt: example.receivedAt ?? 0,

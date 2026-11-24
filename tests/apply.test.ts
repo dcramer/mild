@@ -14,7 +14,7 @@ import { inboxQuery, ruleInbox } from '../src/work/apply.ts';
 import { continueRuleRun } from '../src/work/inbox-runs.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw } from './fixtures.ts';
-import { ACCOUNT, facts, testModel } from './helpers.ts';
+import { ACCOUNT, facts, testModel, email } from './helpers.ts';
 
 const fake = fakeGoogle();
 
@@ -22,7 +22,7 @@ let db: Sql;
 let gmail: ReturnType<typeof connectGmail>;
 
 const message = (id: string, address: string, subject = `Subject ${id}`) =>
-  facts({ messageId: id, threadId: `t-${id}`, from: { address, domain: address.split('@')[1]! }, subject, receivedAt: 1000 });
+  facts({ messageId: id, threadId: `t-${id}`, from: email(address), subject, receivedAt: 1000 });
 
 /** `inbox` in Gmail's inbox from before Mild, the first the newest. */
 function hold(inbox: MessageFacts[]) {

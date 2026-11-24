@@ -19,7 +19,7 @@ import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { addRule, listRules, setRule } from '../src/store/rules.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import type { Decision, Disposition } from '../src/triage/types.ts';
-import { ACCOUNT, DAY, everything, facts, testModel } from './helpers.ts';
+import { ACCOUNT, DAY, everything, facts, testModel, email } from './helpers.ts';
 import { connectGmail, fakeGoogle, firstAccount, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 
@@ -32,7 +32,7 @@ let serial = 0;
 /** Record a message from `address` and what Mild would do with it, as a suggestion. */
 async function suggest(address: string, disposition: Disposition, extra: Partial<Decision> = {}): Promise<number> {
   const id = `m${++serial}`;
-  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
+  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: email(address), subject: `Subject ${id}` })], '2');
   return await recordDecision(db, ACCOUNT, id, { disposition, subscription: 'preserve', stage: 'model', reason: 'looks like it', ...extra }, { now: serial });
 }
 
@@ -146,7 +146,7 @@ describe('suggestions', () => {
       ['newer', at.newer],
       ['older', at.older],
     ] as const)
-      await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address: `${id}@example.com`, domain: 'example.com' }, receivedAt })], '2');
+      await recordSync(db, ACCOUNT, [facts({ messageId: id, from: email(`${id}@example.com`), receivedAt })], '2');
     await recordDecision(
       db,
       ACCOUNT,
@@ -211,7 +211,7 @@ describe('teaching', () => {
   });
 
   it('answering again mail only the user ever placed is still no mistake of Mild’s', async () => {
-    await recordSync(db, ACCOUNT, [facts({ messageId: 'never', from: { address: 'cold@example.net', domain: 'example.net' } })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'never', from: email('cold@example.net') })], '2');
     for (const label of ['personal', 'newsletter']) await applyFeedback(db, { accountId: ACCOUNT, sender: 'cold@example.net', label, messageId: 'never' });
     expect(await raw(db).all('SELECT verdict, label_id FROM feedback')).toEqual([{ verdict: 'answered', label_id: 'newsletter' }]);
   });
@@ -257,7 +257,7 @@ describe('an answer pressed in the dashboard', () => {
   it('is carried out on its message even while Mild is off, and makes no rule', async () => {
     const decisionId = await suggest('news@example.com', 'archive', NEWS);
     // Mild's own decision, left over from when it was on: while off it must still be left alone.
-    await recordSync(db, ACCOUNT, [facts({ messageId: 'left', from: { address: 'other@example.com', domain: 'example.com' } })], '3');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'left', from: email('other@example.com') })], '3');
     await recordDecision(
       db,
       ACCOUNT,
@@ -288,7 +288,7 @@ describe('an answer pressed in the dashboard', () => {
   });
 
   it('answers mail the model could never judge before a pass leaves it to the user, as mail Mild had no suggestion for', async () => {
-    await recordSync(db, ACCOUNT, [facts({ messageId: 'stuck', from: { address: 'news@example.com', domain: 'example.com' } })], '3');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'stuck', from: email('news@example.com') })], '3');
     for (let i = 0; i < MAX_ATTEMPTS; i++) await startRun(db, { accountId: ACCOUNT, messageId: 'stuck', model: 'test/model', now: 0 });
     await expect(
       applyFeedback(db, { accountId: ACCOUNT, sender: 'other@example.com', label: 'newsletter', messageId: 'stuck', carryOut: true }),
@@ -473,7 +473,7 @@ describe('correcting a decision that is not waiting', () => {
   /** A message Mild already acted on. */
   async function acted(address: string, labelId: string) {
     const id = `a${++serial}`;
-    await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: id, from: email(address), subject: `Subject ${id}` })], '2');
     await recordDecision(
       db,
       ACCOUNT,

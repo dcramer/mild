@@ -14,7 +14,7 @@ import { addRule, listRules, removeRule } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import type * as Senders from '../src/store/senders.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { ACCOUNT, facts } from './helpers.ts';
+import { ACCOUNT, facts, email } from './helpers.ts';
 
 const fake = fakeGoogle();
 
@@ -43,7 +43,7 @@ const MARKETING_GUESS = { labelId: 'marketing', gmailLabel: 'mild/marketing' } a
 /** A message from `address` with the decision Mild suggested for it. Returns the message id. */
 async function decided(address: string, decision: Partial<Decision> = {}, at = ++serial): Promise<string> {
   const id = `m${++serial}`;
-  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address, domain: address.split('@')[1] ?? '' }, subject: `Subject ${id}` })], '2');
+  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: email(address), subject: `Subject ${id}` })], '2');
   await recordDecision(
     db,
     ACCOUNT,

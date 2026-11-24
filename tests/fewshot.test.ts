@@ -18,7 +18,7 @@ import {
 } from '../src/triage/fewshot.ts';
 import { buildPrompt } from '../src/triage/prompt.ts';
 import { type JudgeInput, modelStage } from '../src/triage/stages/model.ts';
-import { ACCOUNT, facts, storeExample, SAMPLE_LABELS, testModel } from './helpers.ts';
+import { ACCOUNT, facts, storeExample, SAMPLE_LABELS, testModel, email } from './helpers.ts';
 
 const fake = fakeGoogle();
 
@@ -35,7 +35,7 @@ const shot = (messageId: string, from: string, labelId: string, markedAt: number
 });
 
 describe('choosing examples', () => {
-  const judged = facts({ messageId: 'now', from: { address: 'news@example.com', domain: 'example.com' } });
+  const judged = facts({ messageId: 'now', from: email('news@example.com') });
   const ids = (shots: Shot[]) => shots.map((s) => s.messageId);
 
   it('takes the same sender first, then the same domain, then the newest of each label', () => {
@@ -71,7 +71,7 @@ describe('choosing examples', () => {
   });
 
   it('skips the same domain when anyone can get an address there', () => {
-    const stranger = facts({ messageId: 'now', from: { address: 'someone@gmail.com', domain: 'gmail.com' } });
+    const stranger = facts({ messageId: 'now', from: email('someone@gmail.com') });
     const candidates = [shot('other', 'another@gmail.com', 'personal', 2), shot('receipt', 'shop@example.org', 'transactional', 1)];
     expect(ids(pickShots(candidates, stranger, SAMPLE_LABELS))).toEqual(['other', 'receipt']);
     expect(ids(pickShots([shot('other', 'another@gmail.com', 'personal', 2), shot('mine', 'pal@gmail.com', 'personal', 1)], stranger, SAMPLE_LABELS))).toEqual([
@@ -298,7 +298,7 @@ describe('stored examples', () => {
   });
 
   it('picks captured examples from the domain and each label, with an excerpt and never the whole text', async () => {
-    const shots = await examplesFor(db, facts({ from: { address: 'other@example.com', domain: 'example.com' } }), SAMPLE_LABELS);
+    const shots = await examplesFor(db, facts({ from: email('other@example.com') }), SAMPLE_LABELS);
     expect(shots.map((c) => c.messageId)).toEqual(['e1', 'e5']);
     expect(shots[0]).toEqual({
       messageId: 'e1',
@@ -319,7 +319,7 @@ describe('stored examples', () => {
       await storeExample(db, ACCOUNT, { id, from: `shop${i}@example.net`, label: 'transactional', markedAt: 10 + i });
     const receipt = facts({
       messageId: 'now',
-      from: { address: 'orders@example.com', domain: 'example.com' },
+      from: email('orders@example.com'),
       subject: 'Your order #5 has shipped',
     });
     expect((await examplesFor(db, receipt, SAMPLE_LABELS)).map((c) => c.messageId)).toEqual(['shipped', 'e1', 't3', 'e5']);

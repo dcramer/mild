@@ -15,7 +15,7 @@ import { contactOf, contacts, domainFacts, rememberCorrespondent, senderFacts } 
 import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type JudgeFailure, type Verdict, modelStage } from '../src/triage/stages/model.ts';
-import { ACCOUNT, DAY, b64, facts, memorySignIns, SAMPLE_LABELS, toolReply } from './helpers.ts';
+import { ACCOUNT, DAY, b64, facts, memorySignIns, SAMPLE_LABELS, toolReply, email } from './helpers.ts';
 
 function evidence(overrides: Partial<Evidence['sender']> = {}, body: string | null = 'Our autumn sale starts today.'): Evidence {
   const f = facts({ headers: { 'list-unsubscribe': '<https://example.com/u>' } });
@@ -114,7 +114,7 @@ describe('prompt', () => {
 
   it("says when the sender is the owner or at the owner's own domain, and how to read that", () => {
     const trustedPart = (from: string) => {
-      const f = facts({ from: { address: from, domain: from.split('@')[1]! } });
+      const f = facts({ from: email(from) });
       return buildPrompt({ evidence: { ...evidence(), facts: f, known: deriveFacts(f) }, labels: SAMPLE_LABELS }).split('# The email (untrusted)')[0]!;
     };
     expect(trustedPart('grace@example.org')).toContain("From the owner's own domain\n");
@@ -168,11 +168,8 @@ describe('prompt', () => {
 
   it('states only the facts that are there, each kind of signal on one line', () => {
     const f = facts({
-      from: { address: 'billing@pay.example.com', domain: 'pay.example.com' },
-      to: [
-        { address: ACCOUNT, domain: 'example.org' },
-        { address: 'team@example.org', domain: 'example.org' },
-      ],
+      from: email('billing@pay.example.com'),
+      to: [{ address: ACCOUNT, domain: 'example.org' }, email('team@example.org')],
       labelIds: ['INBOX', 'IMPORTANT', 'CATEGORY_UPDATES'],
       receivedAt: 31 * DAY,
       headers: {
@@ -405,7 +402,7 @@ describe('contact', () => {
 
   it('is read for many senders at once, each in their own account', async () => {
     const d = await openUserDb(ACCOUNT);
-    const from = (address: string) => ({ address, domain: address.split('@')[1]! });
+    const from = (address: string) => email(address);
     await recordSync(
       d,
       ACCOUNT,
@@ -438,8 +435,7 @@ describe('standing', () => {
     at = 1000,
     stage: 'model' | 'rules' = 'model',
   ) => {
-    const domain = address.split('@')[1]!;
-    await recordSync(d, ACCOUNT, [facts({ messageId: id, from: { address, domain }, receivedAt: at })], '2');
+    await recordSync(d, ACCOUNT, [facts({ messageId: id, from: email(address), receivedAt: at })], '2');
     return await recordDecision(d, ACCOUNT, id, { disposition: 'keep', subscription: 'preserve', stage, ...(labelId ? { labelId } : {}), reason: 'r' });
   };
 
