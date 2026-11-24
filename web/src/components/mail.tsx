@@ -5,6 +5,7 @@ import { SenderName } from '@/components/sender.tsx';
 import { useAction } from './action.ts';
 import { press as outbox } from '@/lib/outbox.ts';
 import { outcomeName, sureness } from '@/lib/words.ts';
+import { plural } from '@/lib/format.ts';
 import { threadKey } from '@/lib/rows.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { type Did, Meter, useToast } from '@/system';
@@ -17,13 +18,20 @@ export type Pressed = Pick<MailThread, 'accountId' | 'threadId' | 'messageIds' |
 type Shown = { name: string; does: string };
 type Press = 'archive' | 'spam' | 'read' | 'unread';
 
-/** What a press that takes conversations out of the inbox is said as. */
-const DONE = { archive: 'Archived', spam: 'Marked spam' } as const;
+/** What a press that takes conversations out of the inbox is said as, on one and on several. */
+const DONE = {
+  archive: (n: number) => (n === 1 ? 'Archived' : `Archived ${plural(n, 'conversation')}`),
+  spam: (n: number) => (n === 1 ? 'Marked spam' : `Marked ${plural(n, 'conversation')} as spam`),
+} as const;
 /** The labels whose own action is the press, which the press carries out; any other is only recorded, so not shown. */
 const MATCHES = { archive: ['archive', 'digest'], spam: ['spam', 'block'] } as const;
 
-/** What a press did, for its toast: the press, the labels it gave, and the digest they go in. */
-function didOf(threads: readonly Pressed[], what: 'archive' | 'spam', first: Did = { action: what, word: DONE[what] }): [Did, ...Did[]] {
+/**
+ * What a press did, for its toast: the press, the labels it gave, and the digest they go in. On several, only the press
+ * and how many: a chip for every label any of them had says nothing about which.
+ */
+function didOf(threads: readonly Pressed[], what: 'archive' | 'spam', first: Did = { action: what, word: DONE[what](threads.length) }): [Did, ...Did[]] {
+  if (threads.length > 1) return [first];
   const given = threads.flatMap((t) => (t.label && (MATCHES[what] as readonly string[]).includes(t.label.does) ? [t.label] : []));
   return [
     first,

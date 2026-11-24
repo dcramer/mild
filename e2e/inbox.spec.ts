@@ -865,7 +865,8 @@ test.describe('Inbox', () => {
     const bar = page.getByRole('toolbar', { name: 'Selected rows' });
     await expect(bar).toContainText('2 selected');
     await page.keyboard.press('e');
-    await expect(toast(page, '2 conversations')).toBeVisible();
+    // The press and how many, not a chip for each label they had.
+    await expect(toast(page, '2 conversations')).toHaveAccessibleDescription('Archived 2 conversations');
     await expect(inboxRows(page)).toHaveCount(17);
     await expect(inboxRow(page, 'This week in widgets')).toHaveCount(0);
     await expect(bar).toHaveCount(0);
