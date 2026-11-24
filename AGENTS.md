@@ -137,7 +137,7 @@ When David corrects you, fix the mistake and add its rule here. If the rule is a
 | The CLI prints only through `src/cli/ui.ts` | `no-console`, `.oxlintrc.json` |
 | Screens write no fills, frames, corners, shadows, colours or inline styles; red is `Failure` and `DeleteButton`, yellow a part's tone. Every deletion is a `DeleteButton` | `tests/conventions/design-system.test.ts` |
 | Type sizes come from the scale in `web/src/index.css`; nothing under 12px but a column head (`text-head`, `Th` alone) | `tests/conventions/design-system.test.ts` |
-| Only what floats has a surface; one shadow, the `--edge` | `tests/conventions/design-system.test.ts`, and the theme has no grey tokens to reach for |
+| Only what floats, and the sections on `--rail`, has a surface; one shadow, the `--edge` | `tests/conventions/design-system.test.ts`, and the theme has no grey tokens to reach for |
 | Keys only where someone works through a list one item after another (For review, Activity, and the panel they open); no other list, form or step gets shortcuts or key hints | `Table` has none unless given `keys`; `tests/conventions/design-system.test.ts` |
 | A key's cap is drawn beside a control only where pressing that control is the work (For review's answer, a line of presses in words); nothing reserves room for one. An icon alone, as in the reader's toolbar, says its key when pointed at. A row's check and the presses over its time draw none: X and the rest are in the list of every key (`?`) | `RowCheck` and `RowPresses` (`web/src/system/table.tsx`) draw none; elsewhere judgment |
 | `mark` and `ink` buttons are never down a list; one `mark` per screen | `tests/conventions/design-system.test.ts` (inside `Tr` / `RowActions` in the same file) |

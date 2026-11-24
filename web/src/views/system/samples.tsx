@@ -74,6 +74,7 @@ export const ROWS = [
 
 export const INKS = [
   ['bg-background', 'background', 'The page.'],
+  ['bg-rail', 'rail', 'The sections: the rail, and on a phone the tab bar.'],
   ['bg-popover', 'popover', 'What floats: a dialog, a menu, a failed toast.'],
   ['bg-foreground', 'foreground', 'Ink: text, the main action, and a toast.'],
   ['bg-supporting', 'supporting', 'What supports the text: a preview, a hint, Mild’s label.'],

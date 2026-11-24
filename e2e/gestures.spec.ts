@@ -37,7 +37,7 @@ test.describe('Inbox by touch, on a phone', () => {
     expect(box).toMatchObject({ x: 0, y: 0, width: 390 });
     expect(box.height).toBeGreaterThan(10);
     await expect(cover).toHaveCSS('position', 'fixed');
-    await expect(cover).toHaveCSS('background-color', 'rgb(17, 17, 16)');
+    await expect(cover).toHaveCSS('background-color', 'rgb(24, 24, 23)');
     // What a touch at the edge hits, as iOS asks, at rest and scrolled.
     expect(await page.evaluate('document.elementFromPoint(195, 4).className')).toBe('status-cover');
     await page.mouse.wheel(0, 600);
