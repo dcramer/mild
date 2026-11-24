@@ -1,6 +1,6 @@
 import { finishLabelProposal, listLabels, startLabelProposal } from '../store/labels.ts';
 import type { Sql } from '../store/sql.ts';
-import type { LabelDraft, Proposer } from '../triage/proposal.ts';
+import type { LabelDraft, Proposer } from '../prompts/proposal.ts';
 import { LEAVE_IN_INBOX } from '../triage/types.ts';
 import { recordedAsk } from './recorded.ts';
 

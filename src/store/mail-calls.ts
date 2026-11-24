@@ -1,4 +1,4 @@
-import type { MailAnswer } from '../triage/mail-ask.ts';
+import type { MailAnswer } from '../prompts/mail-ask.ts';
 import { type Usage } from '../triage/types.ts';
 import { askName, sealJson } from './content.ts';
 import { eq, mailAsks } from './query.ts';

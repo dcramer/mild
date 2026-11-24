@@ -1,5 +1,5 @@
 import type { Api, Model, Models, Tool } from '@earendil-works/pi-ai';
-import { BY, FACT_WORDS, FILL_TOOL, RULE_DRAFT_PROMPT, type RuleDrafter, buildRuleDraftPrompt, readRuleDraft } from '../triage/rule-draft.ts';
+import { BY, FACT_WORDS, FILL_TOOL, RULE_DRAFT_PROMPT, type RuleDrafter, buildRuleDraftPrompt, readRuleDraft } from '../prompts/rule-draft.ts';
 import { DECIDED } from '../triage/types.ts';
 import { withLookups } from './lookups.ts';
 import type { Reasoning } from './reasoning.ts';

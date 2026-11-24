@@ -1,7 +1,7 @@
-import { RULE_FACTS, type RuleFacts } from './facts.ts';
-import { isSharedDomain } from './standing.ts';
-import { type Named, type RuleMatch, nameAlone, tidyMatch } from './rule.ts';
-import { DECIDED, type DecidedDisposition, type Label, LEAVE_IN_INBOX, type Usage } from './types.ts';
+import { RULE_FACTS, type RuleFacts } from '../triage/facts.ts';
+import { isSharedDomain } from '../triage/standing.ts';
+import { type Named, type RuleMatch, nameAlone, tidyMatch } from '../triage/rule.ts';
+import { DECIDED, type DecidedDisposition, type Label, LEAVE_IN_INBOX, type Usage } from '../triage/types.ts';
 
 export const FIND_TOOL = 'find_senders';
 export const FILL_TOOL = 'fill_rule';

@@ -3,7 +3,7 @@ import { listLabels } from '../store/labels.ts';
 import { finishRuleDraft, startRuleDraft } from '../store/rules.ts';
 import { senderDirectory } from '../store/senders.ts';
 import type { Sql } from '../store/sql.ts';
-import { type FoundSender, type RuleDraft, type RuleDrafter, searchSenders } from '../triage/rule-draft.ts';
+import { type FoundSender, type RuleDraft, type RuleDrafter, searchSenders } from '../prompts/rule-draft.ts';
 import { recordedAsk } from './recorded.ts';
 
 /**

@@ -4,8 +4,8 @@ import { askMail } from '../src/learn/mail.ts';
 import { createMailAsker } from '../src/model/ask.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { recordSync } from '../src/store/messages.ts';
-import { ASK_TOOL, type MailAsker, readMailFilter } from '../src/triage/mail-ask.ts';
-import { FIND_TOOL } from '../src/triage/rule-draft.ts';
+import { ASK_TOOL, type MailAsker, readMailFilter } from '../src/prompts/mail-ask.ts';
+import { FIND_TOOL } from '../src/prompts/rule-draft.ts';
 import { personWith, raw } from './fixtures.ts';
 import { SAMPLE_LABELS, facts } from './helpers.ts';
 

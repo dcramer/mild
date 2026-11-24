@@ -1,6 +1,6 @@
 import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FILL_TOOL, FIND_TOOL } from '../../src/triage/rule-draft.ts';
+import { FILL_TOOL, FIND_TOOL } from '../../src/prompts/rule-draft.ts';
 import { FILTER_CHECK_MINUTES } from '../../src/work/filters.ts';
 import { type Browser, fakeGoogle, fauxModel, startSift } from '../fixtures.ts';
 import { DAY } from '../helpers.ts';

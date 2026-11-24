@@ -19,9 +19,9 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
 import type { StandIns } from '../../../../src/sift/sift.ts';
-import { PROPOSAL_TOOL } from '../../../../src/triage/proposal.ts';
-import { FILL_TOOL, FIND_TOOL } from '../../../../src/triage/rule-draft.ts';
-import { ASK_TOOL } from '../../../../src/triage/mail-ask.ts';
+import { PROPOSAL_TOOL } from '../../../../src/prompts/proposal.ts';
+import { FILL_TOOL, FIND_TOOL } from '../../../../src/prompts/rule-draft.ts';
+import { ASK_TOOL } from '../../../../src/prompts/mail-ask.ts';
 import { FakeGoogle, serveGoogle } from '../../../../tests/google.ts';
 
 const file = process.env['MILD_STAND_INS'];

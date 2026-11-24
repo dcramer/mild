@@ -1,7 +1,7 @@
 import { listLabels } from '../store/labels.ts';
 import { finishAsk, startAsk } from '../store/mail-calls.ts';
 import type { Sql } from '../store/sql.ts';
-import type { MailAnswer, MailAsker } from '../triage/mail-ask.ts';
+import type { MailAnswer, MailAsker } from '../prompts/mail-ask.ts';
 import { recordedAsk } from './recorded.ts';
 import { senderLookup } from './rules.ts';
 

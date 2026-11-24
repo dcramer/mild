@@ -6,7 +6,7 @@ import { loadKeyring } from '../src/secrets.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { senderDirectory } from '../src/store/senders.ts';
-import { FILL_TOOL, FIND_TOOL, type FoundSender, MAX_LOOKUPS, type RuleDrafter, readRuleDraft, searchSenders } from '../src/triage/rule-draft.ts';
+import { FILL_TOOL, FIND_TOOL, type FoundSender, MAX_LOOKUPS, type RuleDrafter, readRuleDraft, searchSenders } from '../src/prompts/rule-draft.ts';
 import { personWith, raw } from './fixtures.ts';
 import { SAMPLE_LABELS, facts } from './helpers.ts';
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { addLabels } from '../../../../../store/labels.ts';
-import { MAX_DRAFTS } from '../../../../../triage/proposal.ts';
+import { MAX_DRAFTS } from '../../../../../prompts/proposal.ts';
 import { rememberTimeZone } from '../../../../../store/preferences.ts';
 import { fromOutcome, outcome, self, text, timeZone, write } from '../../../route.ts';
 import { DESCRIPTION } from '../../../shared/labels.ts';

@@ -1,4 +1,4 @@
-import { type Usage } from './types.ts';
+import type { Usage } from '../triage/types.ts';
 
 export const HIGHLIGHT_TOOL = 'record_highlights';
 

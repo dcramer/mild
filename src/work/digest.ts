@@ -20,7 +20,7 @@ import {
 import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { invokeAgent, reportError } from '../telemetry.ts';
-import type { Highlighter } from '../triage/digest.ts';
+import type { Highlighter } from '../prompts/digest.ts';
 
 /**
  * How long past the hour a digest waits, so an archive Gmail confirmed just before it is in the record by then: the

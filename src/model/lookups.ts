@@ -1,5 +1,5 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool, ToolCall } from '@earendil-works/pi-ai';
-import { FIND_TOOL, type FoundSender, MAX_LOOKUPS, describeFound } from '../triage/rule-draft.ts';
+import { FIND_TOOL, type FoundSender, MAX_LOOKUPS, describeFound } from '../prompts/rule-draft.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
 import { type Usage } from '../triage/types.ts';
 import { chat, executeTool, usageOf } from './chat.ts';

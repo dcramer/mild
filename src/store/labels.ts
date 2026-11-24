@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposals, labels, or, rules, sql } from './query.ts';
 import { costOf } from './runs.ts';
 import { labelProposalName, openJson, sealJson } from './content.ts';
-import type { LabelDraft } from '../triage/proposal.ts';
+import type { LabelDraft } from '../prompts/proposal.ts';
 import type { Sql } from './sql.ts';
 import { type Disposition, LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME, type Label, type Usage } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';

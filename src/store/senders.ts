@@ -22,7 +22,7 @@ import {
 import type { Sql } from './sql.ts';
 import { hashOf, hashCorrespondent, newestOfGroup, openNewest } from './content.ts';
 import { parseListId } from '../triage/features.ts';
-import type { FoundSender } from '../triage/rule-draft.ts';
+import type { FoundSender } from '../prompts/rule-draft.ts';
 import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts';
 import { labelNames, listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
