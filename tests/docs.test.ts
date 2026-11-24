@@ -3,13 +3,15 @@ import { dirname, join, normalize } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const DOCS = globSync(['*.md', 'docs/**/*.md', '.claude/skills/**/*.md']);
-// What is built or installed, never committed: named in .gitignore without a slash or wildcard.
-const BUILT = new Set(
-  readFileSync('.gitignore', 'utf8')
-    .split('\n')
-    .map((line) => line.trim().replace(/\/$/, ''))
-    .filter((line) => line && !line.startsWith('#') && !/[/*]/.test(line)),
-);
+// What is built or installed, never committed: named in .gitignore without a wildcard. As in .gitignore, an entry with a
+// slash before its end is a path from the root; one without names a file or directory anywhere.
+const IGNORED = readFileSync('.gitignore', 'utf8')
+  .split('\n')
+  .map((line) => line.trim().replace(/\/$/, ''))
+  .filter((line) => line && !line.startsWith('#') && !line.includes('*'));
+const BUILT_NAMES = new Set(IGNORED.filter((line) => !line.includes('/')));
+const BUILT_PATHS = IGNORED.filter((line) => line.includes('/')).map((line) => line.replace(/^\//, ''));
+const built = (path: string) => path.split('/').some((part) => BUILT_NAMES.has(part)) || BUILT_PATHS.some((at) => path === at || path.startsWith(`${at}/`));
 
 /** Repository paths a document names: a code span that is one path from the root, or a relative link. */
 function named(file: string): string[] {
@@ -27,7 +29,7 @@ describe('the docs', () => {
     expect(DOCS.length).toBeGreaterThan(10);
     const gone = DOCS.flatMap((file) =>
       named(file)
-        .filter((path) => !existsSync(path) && !existsSync(`${path}.ts`) && !path.split('/').some((part) => BUILT.has(part)))
+        .filter((path) => !existsSync(path) && !existsSync(`${path}.ts`) && !built(path))
         .map((path) => `${file}: ${path}`),
     );
     expect(gone, 'a moved or removed file is still named here: point at where it is now').toEqual([]);
