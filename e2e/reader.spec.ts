@@ -1,30 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { ruleDialog } from './rule.ts';
-import {
-  PHONE,
-  addressed,
-  back,
-  boxOf,
-  composer,
-  dismiss,
-  expect,
-  failureToast,
-  forReviewLink,
-  inboxRow,
-  openMessage,
-  pointAt,
-  query,
-  reader,
-  readerHeading,
-  row,
-  settings,
-  sideScroll,
-  test,
-  toast,
-  tooltip,
-  ME,
-  sections,
-} from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, pointAt, query, sideScroll, tooltip } from './wait.ts';
+import { row } from './parts.ts';
+import { addressed, back, openMessage, reader, readerHeading } from './reader.ts';
+import { forReviewLink, sections } from './navigation.ts';
+import { dismiss, failureToast, toast } from './toast.ts';
+import { composer } from './composer.ts';
+import { settings } from './settings.ts';
+import { ME } from './mailboxes.ts';
+import { inboxRow } from './inbox.ts';
 
 test.describe('The reader, from For review', () => {
   test('opens in the list’s place, inside the frame, and Back returns to the list on the row it showed', async ({ page }) => {

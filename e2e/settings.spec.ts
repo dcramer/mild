@@ -1,26 +1,21 @@
 import type { Page } from '@playwright/test';
+import { expect, test } from './fixture.ts';
+import { param, pointAt, query, settled } from './wait.ts';
+import { openMessage } from './reader.ts';
+import { messageQuery } from './navigation.ts';
+import { patchJson, throughChatGPT } from './network.ts';
 import {
   closeSettings,
   confirmTurnOn,
-  expect,
   goThrough,
-  messageQuery,
-  openMessage,
-  param,
-  patchJson,
-  pointAt,
-  query,
   settings,
   settingsActive,
   settingsInbox,
   mailWindow,
   settingsFromMenu,
-  settled,
-  test,
-  throughChatGPT,
   turnOn,
   turnOnQuestion,
-} from './sift.ts';
+} from './settings.ts';
 
 const offCallout = (page: Page) => page.getByRole('heading', { name: 'Mild is off' });
 

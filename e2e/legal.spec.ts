@@ -1,4 +1,6 @@
-import { boxOf, expect, path, PHONE, test, phoneMenu, sections } from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, path } from './wait.ts';
+import { phoneMenu, sections } from './navigation.ts';
 
 test.describe('A Mild run as a service', () => {
   test.use({ cloud: true });

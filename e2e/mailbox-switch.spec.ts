@@ -1,5 +1,9 @@
 import type { Page } from '@playwright/test';
-import { PHONE, WORK, expect, mailboxChoice, mailboxesAsked, reviewRows, switchMailbox, test, phoneMenu } from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { phoneMenu } from './navigation.ts';
+import { reviewRows } from './review.ts';
+import { mailboxesAsked } from './network.ts';
+import { WORK, mailboxChoice, switchMailbox } from './mailboxes.ts';
 
 // A desktop and a phone each name it in a place of their own.
 const named = (page: Page) => page.getByRole('main').getByText(WORK, { exact: true }).filter({ visible: true });

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { buildPage } from '../src/cli/next.ts';
-import { HELD, SEED, TEMPLATES, type Variant } from './sift.ts';
+import { HELD, SEED, TEMPLATES, type Variant } from './fixture.ts';
 import { loadConfig } from '../src/config.ts';
 import { plain } from '../src/plain.ts';
 import { listAccounts } from '../src/store/accounts.ts';

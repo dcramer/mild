@@ -1,26 +1,13 @@
 import type { Page } from '@playwright/test';
 import { standing } from './rule.ts';
-import {
-  PHONE,
-  boxOf,
-  composer,
-  domainPage,
-  expect,
-  pointAt,
-  reader,
-  param,
-  path,
-  row,
-  section,
-  senderCard,
-  senderPage,
-  sideScroll,
-  test,
-  toast,
-  recipients,
-  ME,
-  sections,
-} from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, pointAt, param, path, sideScroll } from './wait.ts';
+import { row, section, senderCard } from './parts.ts';
+import { reader } from './reader.ts';
+import { domainPage, senderPage, sections } from './navigation.ts';
+import { toast } from './toast.ts';
+import { composer, recipients } from './composer.ts';
+import { ME } from './mailboxes.ts';
 
 /** The directory's rows, not its column heads. */
 const contacts = (page: Page) =>

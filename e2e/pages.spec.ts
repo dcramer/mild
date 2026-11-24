@@ -1,27 +1,12 @@
 import type { Locator, Page } from '@playwright/test';
 import { fact, ruleDialog, rulePanel, standing } from './rule.ts';
-import {
-  boxOf,
-  domainPage,
-  expect,
-  messageQuery,
-  openMessage,
-  back,
-  reader,
-  readerHeading,
-  param,
-  patchJson,
-  path,
-  PHONE,
-  query,
-  row,
-  section,
-  senderPage,
-  sideScroll,
-  test,
-  toast,
-  SENDER,
-} from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, param, path, query, sideScroll } from './wait.ts';
+import { row, section } from './parts.ts';
+import { openMessage, back, reader, readerHeading } from './reader.ts';
+import { domainPage, messageQuery, senderPage, SENDER } from './navigation.ts';
+import { toast } from './toast.ts';
+import { patchJson } from './network.ts';
 
 const DOMAIN = domainPage('code.example.com');
 

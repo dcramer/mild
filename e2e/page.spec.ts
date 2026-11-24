@@ -1,6 +1,8 @@
 import { PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import type { Session } from '../src/dashboard/types.ts';
-import { HELD, PHONE, boxOf, domainPage, expect, senderPage, sideScroll, test } from './sift.ts';
+import { HELD, expect, test, PHONE } from './fixture.ts';
+import { boxOf, sideScroll } from './wait.ts';
+import { domainPage, senderPage } from './navigation.ts';
 
 test("the page cannot be framed by another site, sends no referrer, and holds nothing of anyone's", async ({ page }) => {
   const { request } = page;

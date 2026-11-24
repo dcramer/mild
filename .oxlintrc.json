@@ -196,7 +196,7 @@
       "rules": { "jsx-a11y/no-noninteractive-tabindex": "off" }
     },
     {
-      "files": ["web/src/views/**/*.tsx", "web/src/components/**/*.tsx", "web/src/lib/**/*.ts", "web/src/lib/**/*.tsx", "web/src/*.ts", "web/src/*.tsx"],
+      "files": ["web/src/views/**/*.ts", "web/src/views/**/*.tsx", "web/src/components/**/*.ts", "web/src/components/**/*.tsx", "web/src/lib/**/*.ts", "web/src/lib/**/*.tsx", "web/src/*.ts", "web/src/*.tsx"],
       "rules": {
         "no-restricted-imports": [
           "error",

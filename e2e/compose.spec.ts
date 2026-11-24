@@ -1,28 +1,12 @@
 import type { Page } from '@playwright/test';
-import {
-  PHONE,
-  WORK,
-  boxOf,
-  composer,
-  expect,
-  inboxRow,
-  readerHeading,
-  param,
-  path,
-  readSent,
-  reader,
-  sendNow,
-  failureToast,
-  recipients,
-  inboxRows,
-  reviewRows,
-  sideScroll,
-  switchMailbox,
-  test,
-  toast,
-  toasts,
-  ME,
-} from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, param, path, sideScroll } from './wait.ts';
+import { readerHeading, reader } from './reader.ts';
+import { reviewRows } from './review.ts';
+import { failureToast, toast, toasts } from './toast.ts';
+import { composer, readSent, sendNow, recipients } from './composer.ts';
+import { WORK, switchMailbox, ME } from './mailboxes.ts';
+import { inboxRow, inboxRows } from './inbox.ts';
 
 const compose = (page: Page) => page.getByRole('button', { name: /Compose/ });
 

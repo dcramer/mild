@@ -24,7 +24,7 @@ import { onOutboxFailed, useOutbox } from '@/lib/waiting.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
 import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing, useNow, useToast } from '@/system';
 import { Boot } from '@/views/boot.tsx';
-import type * as ReaderModule from '@/views/reader.tsx';
+import type * as ReaderModule from '@/views/reader/index.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { useSession, useManage, useUsage } from '@/lib/api/reads.ts';
 import { usePlan } from '@/lib/prices.ts';
@@ -32,9 +32,9 @@ import { useDeviceFrame } from '@/lib/frame.ts';
 
 // What opens over a screen, or in its place, is fetched when first needed and, once the page is idle, ahead of need;
 // the reader, as the page starts.
-const loadSettings = () => import('@/views/settings.tsx');
-const loadReader = () => import('@/views/reader.tsx');
-const loadComposer = () => import('@/views/composer.tsx');
+const loadSettings = () => import('@/views/settings/index.tsx');
+const loadReader = () => import('@/views/reader/index.tsx');
+const loadComposer = () => import('@/views/composer/index.tsx');
 // Opened together from the address (`?compose=new&settings=1`), each waits for both, so they open in the order they are
 // drawn, the last on top, whichever arrived first.
 const loadPanels = () => Promise.all([loadSettings(), loadComposer()]);

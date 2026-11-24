@@ -1,37 +1,13 @@
-import {
-  PHONE,
-  back,
-  boxOf,
-  choose,
-  dismiss,
-  expect,
-  forReviewLink,
-  proposedRule,
-  inboxLink,
-  inboxRow,
-  inboxRows,
-  inboxSearch,
-  mailWindow,
-  param,
-  patchJson,
-  path,
-  pointAt,
-  putAway,
-  reader,
-  readerHeading,
-  senderCard,
-  section,
-  senderPage,
-  settings,
-  settingsInbox,
-  test,
-  failureToast,
-  forward,
-  toast,
-  tooltip,
-  ME,
-  requestsTo,
-} from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, param, path, pointAt, tooltip } from './wait.ts';
+import { choose, senderCard, section } from './parts.ts';
+import { back, reader, readerHeading } from './reader.ts';
+import { forReviewLink, inboxLink, senderPage } from './navigation.ts';
+import { dismiss, putAway, failureToast, toast } from './toast.ts';
+import { patchJson, forward, requestsTo } from './network.ts';
+import { mailWindow, settings, settingsInbox } from './settings.ts';
+import { ME } from './mailboxes.ts';
+import { proposedRule, inboxRow, inboxRows, inboxSearch } from './inbox.ts';
 import { ruleDialog } from './rule.ts';
 
 // Run in the page, which e2e is typed without: as text.

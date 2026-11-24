@@ -1,25 +1,13 @@
 import type { Page } from '@playwright/test';
 import { STARTUP_SCREENS, startupImage } from '../web/src/lib/startup-images.ts';
-import {
-  back,
-  boxOf,
-  closeSettings,
-  composer,
-  messageQuery,
-  expect,
-  forward,
-  PHONE,
-  patchJson,
-  path,
-  putAway,
-  query,
-  settings,
-  settingsFromMenu,
-  test,
-  SENDER,
-  phoneMenu,
-  sections,
-} from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, path, query } from './wait.ts';
+import { back } from './reader.ts';
+import { messageQuery, SENDER, phoneMenu, sections } from './navigation.ts';
+import { putAway } from './toast.ts';
+import { forward, patchJson } from './network.ts';
+import { composer } from './composer.ts';
+import { closeSettings, settings, settingsFromMenu } from './settings.ts';
 
 // The installed app: what the phone's own edges, its Back and its network do to the page.
 

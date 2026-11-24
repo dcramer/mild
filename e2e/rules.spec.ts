@@ -1,22 +1,13 @@
 import { addRule, fact, openRule, removeQuestion, removeRule, ruleDialog, ruleId, rulePanel, ruleRows, writeRule } from './rule.ts';
-import {
-  back,
-  expect,
-  forReviewLink,
-  reader,
-  readerHeading,
-  param,
-  path,
-  pointAt,
-  query,
-  row,
-  settingsActive,
-  test,
-  throughChatGPT,
-  toast,
-  tooltip,
-  ME,
-} from './sift.ts';
+import { expect, test } from './fixture.ts';
+import { param, path, pointAt, query, tooltip } from './wait.ts';
+import { row } from './parts.ts';
+import { back, reader, readerHeading } from './reader.ts';
+import { forReviewLink } from './navigation.ts';
+import { toast } from './toast.ts';
+import { throughChatGPT } from './network.ts';
+import { settingsActive } from './settings.ts';
+import { ME } from './mailboxes.ts';
 
 test.describe('Rules', () => {
   test('a label is named with its tag, on Rules, Labels and a sender’s page, and Leave in inbox, which is not one, without', async ({ page }) => {

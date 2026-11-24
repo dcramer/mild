@@ -1,22 +1,12 @@
-import {
-  PHONE,
-  addLabelsDialog,
-  boxOf,
-  choose,
-  expect,
-  openMessage,
-  reader,
-  patchJson,
-  query,
-  reviewRows,
-  reviewSearch,
-  row,
-  toast,
-  settings,
-  sideScroll,
-  test,
-  writeLabel,
-} from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, query, sideScroll } from './wait.ts';
+import { choose, row } from './parts.ts';
+import { openMessage, reader } from './reader.ts';
+import { reviewRows, reviewSearch } from './review.ts';
+import { toast } from './toast.ts';
+import { patchJson } from './network.ts';
+import { settings } from './settings.ts';
+import { addLabelsDialog, writeLabel } from './labels.ts';
 import { addRule, ruleDialog, writeRule } from './rule.ts';
 
 test.describe('For review', () => {
