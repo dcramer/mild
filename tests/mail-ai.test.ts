@@ -7,12 +7,11 @@ import { recordSync } from '../src/store/messages.ts';
 import { ASK_TOOL, type MailAsker, readMailFilter } from '../src/prompts/mail-ask.ts';
 import { FIND_TOOL } from '../src/prompts/rule-draft.ts';
 import { personWith, raw, fauxModel } from './fixtures.ts';
-import { SAMPLE_LABELS, facts, toolReply, email } from './helpers.ts';
+import { SAMPLE_LABELS, facts, toolReply, email, ACCOUNT } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
 
-const ACCOUNT = 'me@example.com';
 const KEYS = loadKeyring({ MILD_KEY: 'mail-ai-key' });
 const LABELS = SAMPLE_LABELS.filter((l) => l.id === 'newsletter' || l.id === 'marketing');
 const TODAY = '2026-11-19';

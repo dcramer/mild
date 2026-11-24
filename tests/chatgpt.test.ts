@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { chatgptPending, checkChatGPT, finishChatGPT, forgetChatGPT, startChatGPT } from '../src/sift/chatgpt.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { memorySignIns } from './helpers.ts';
+import { memorySignIns, DEVICE } from './helpers.ts';
 
-const DEVICE = '00000000-0000-4000-8000-000000000001';
 const access = `x.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-1' } })).toString('base64url')}.y`;
 
 describe('a ChatGPT sign-in between requests', () => {

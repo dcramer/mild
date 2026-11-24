@@ -8,14 +8,14 @@ import { recordSync } from '../src/store/messages.ts';
 import { credentials } from '../src/store/credentials.ts';
 import { setActive, setMail } from '../src/store/preferences.ts';
 import type { Judge } from '../src/triage/stages/model.ts';
-import { type RunOptions, runOnce } from '../src/work/run.ts';
+import { runOnce } from '../src/work/run.ts';
 import { copyMail } from '../src/work/copy.ts';
 import { ruleInbox } from '../src/work/apply.ts';
 import { readingOnce } from '../src/work/bodies.ts';
 import { continueInboxRun, continueRuleRun } from '../src/work/inbox-runs.ts';
 import { goingInboxRuns, startInboxRuns } from '../src/store/inbox-runs.ts';
 import { addRule } from '../src/store/rules.ts';
-import { ACCOUNT, tempDir, testModel } from './helpers.ts';
+import { ACCOUNT, tempDir, testModel, HOUR, runOptions } from './helpers.ts';
 import { connectGmail, fakeGoogle, onePerson, raw, startDashboard } from './fixtures.ts';
 import { type FakeGmail, SECRETS } from './google.ts';
 import { buildControls } from '../src/sift/controls.ts';
@@ -23,7 +23,6 @@ import { installClient } from '../src/gmail/auth.ts';
 import { loadConfig } from '../src/config.ts';
 
 const NOW = Date.UTC(2026, 10, 19, 12);
-const HOUR = 3_600_000;
 
 const fake = fakeGoogle();
 
@@ -63,13 +62,7 @@ function mail(
   };
 }
 
-const options = (judge?: Judge): RunOptions => ({
-  ephemeral: memoryEphemeral(),
-  connect: () => gmail,
-  ...(judge ? { model: async () => testModel(judge) } : {}),
-  log: () => {},
-  now: () => NOW,
-});
+const options = (judge?: Judge) => runOptions({ connect: () => gmail, ...(judge ? { model: async () => testModel(judge) } : {}), now: () => NOW });
 
 const decided = async () => await raw(db).all('SELECT message_id, label_id FROM decisions ORDER BY id');
 

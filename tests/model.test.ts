@@ -15,7 +15,7 @@ import { contactOf, contacts, domainFacts, rememberCorrespondent, senderFacts } 
 import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type JudgeFailure, type Verdict, modelStage } from '../src/triage/stages/model.ts';
-import { ACCOUNT, DAY, b64, facts, memorySignIns, SAMPLE_LABELS, toolReply, email } from './helpers.ts';
+import { ACCOUNT, DAY, b64, facts, memorySignIns, SAMPLE_LABELS, toolReply, email, DEVICE } from './helpers.ts';
 import { RATE_LIMITED } from './google.ts';
 
 function evidence(overrides: Partial<Evidence['sender']> = {}, body: string | null = 'Our autumn sale starts today.'): Evidence {
@@ -630,7 +630,6 @@ function stubFetch(answer: (url: string, body: string) => Response) {
   return asked;
 }
 
-const DEVICE = '00000000-0000-4000-8000-000000000001';
 const TOKENS = {
   access_token: 'synthetic-access',
   refresh_token: 'synthetic-refresh',

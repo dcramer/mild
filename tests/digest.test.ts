@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
@@ -9,16 +8,15 @@ import { addRule } from '../src/store/rules.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';
 import type { Highlighter } from '../src/prompts/digest.ts';
-import { type RunOptions, type Work, dueWork, runOnce, runWork } from '../src/work/run.ts';
+import { type Work, dueWork, runOnce, runWork } from '../src/work/run.ts';
 import { syncAccount, syncWants } from '../src/work/sync.ts';
 import { setMail } from '../src/store/preferences.ts';
 import { digestShown } from '../src/store/digests.ts';
 import { plain } from '../src/plain.ts';
 import { connectGmail, fakeGoogle, onePerson, raw } from './fixtures.ts';
-import { ACCOUNT, UNSURE, facts } from './helpers.ts';
+import { ACCOUNT, UNSURE, facts, HOUR, runOptions } from './helpers.ts';
 
 const WORK = 'work@example.com';
-const HOUR = 3_600_000;
 /** 07:00 UTC, the default digest hour with no zone said. */
 const SEVEN = Date.UTC(2026, 10, 18, 7);
 const DIGEST: Work = { kind: 'digest', person: 1 };
@@ -34,20 +32,20 @@ let highlight: Highlighter;
 
 const boxOf = (account = ACCOUNT) => fake.google.mailbox(account);
 
-const options = (): RunOptions => ({
-  ephemeral: memoryEphemeral(),
-  connect: (_db, account) => connectGmail(fake.google, account.id),
-  model: async () => ({
-    judge: async () => UNSURE,
-    highlight: async (input) => {
-      asked++;
-      return await highlight(input);
-    },
-    model: 'test/model',
-  }),
-  log: (line) => logs.push(line),
-  now: () => clock,
-});
+const options = () =>
+  runOptions({
+    connect: (_db, account) => connectGmail(fake.google, account.id),
+    model: async () => ({
+      judge: async () => UNSURE,
+      highlight: async (input) => {
+        asked++;
+        return await highlight(input);
+      },
+      model: 'test/model',
+    }),
+    log: (line) => logs.push(line),
+    now: () => clock,
+  });
 
 /** New mail from the build server arriving in `account`, and a pass over it. */
 async function arrive(account: string, ...mail: [id: string, subject: string][]) {

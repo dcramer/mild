@@ -47,7 +47,7 @@ import type { JudgeInput } from '../../../../src/triage/stages/model.ts';
 import { LEAVE_IN_INBOX } from '../../../../src/triage/types.ts';
 import { copyQuery } from '../../../../src/work/copy.ts';
 import { type RunOptions, dueWork, runWork } from '../../../../src/work/run.ts';
-import { withSampleLabels } from '../../../../tests/helpers.ts';
+import { withSampleLabels, HOUR, DAY } from '../../../../tests/helpers.ts';
 import { type FakeGmail, FakeGoogle, type Mail, SECRETS, serveGoogle } from '../../../../tests/google.ts';
 import { plain } from '../../../../src/plain.ts';
 
@@ -65,8 +65,6 @@ process.env['SIFT_HOME'] = resolve(home);
 const config = loadConfig();
 if (existsSync(config.databaseDir)) throw new Error(`${config.databaseDir} already exists. Seed an empty home.`);
 
-const HOUR = 3_600_000;
-const DAY = 24 * HOUR;
 const now = Date.now();
 let n = 0;
 const mail = (from: string, subject: string, text: string, headers: Record<string, string> = {}, labelIds: string[] = []): Mail => ({

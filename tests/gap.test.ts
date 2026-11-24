@@ -1,7 +1,6 @@
 import { expect, it } from 'vitest';
 import { lookGap } from '../src/work/gap.ts';
-
-const MINUTE = 60_000;
+import { MINUTE } from './helpers.ts';
 
 it('looks every minute while mail is recent, a tenth of the quiet after that, and at most every ten minutes', () => {
   const gaps = [null, -MINUTE, 0, 5 * MINUTE, 10 * MINUTE, 20 * MINUTE, 30 * MINUTE, 60 * MINUTE, 100 * MINUTE, 24 * 60 * MINUTE].map((quiet) => [

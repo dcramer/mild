@@ -2,6 +2,7 @@ import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type Scope, scopeFor } from '../src/dashboard/scope.ts';
 import type { SignIn } from '../src/dashboard/controls.ts';
 import type { Sql } from '../src/store/sql.ts';
@@ -20,7 +21,9 @@ import type { Store } from '../src/store/store.ts';
 
 /** The mailbox a test's person signs in with, unless it needs another. */
 export const ACCOUNT = 'me@example.org';
-export const DAY = 86_400_000;
+export const MINUTE = 60_000;
+export const HOUR = 60 * MINUTE;
+export const DAY = 24 * HOUR;
 
 export const tempDir = () => mkdtempSync(join(tmpdir(), 'sift-'));
 
@@ -33,6 +36,19 @@ export const UNSURE: Verdict = { label: 'unsure', reason: 'cannot tell', confide
 /** The model's answer that calls `tool` with `args`, as pi-ai's faux provider replies. */
 export const toolReply = (tool: string, args: Parameters<typeof fauxToolCall>[1]) =>
   fauxAssistantMessage([fauxToolCall(tool, args)], { stopReason: 'toolUse' });
+
+/** A label the model proposes, as its tool records it: Cold outreach, archived and unsubscribed from. */
+export const PITCHES = {
+  why: 'fewer pitches',
+  name: 'Cold outreach',
+  description: 'Pitches from strangers.',
+  action: 'archive',
+  markRead: false,
+  unsubscribe: true,
+};
+
+/** The id an install names itself by when it signs in to ChatGPT. */
+export const DEVICE = '00000000-0000-4000-8000-000000000001';
 
 /** The model tier, with calls recorded as `test/model`. */
 export const testModel = (judge: Judge = async () => UNSURE) => ({ model: 'test/model', judge });
@@ -55,6 +71,12 @@ export function rawMessage(
     ...overrides,
   };
 }
+
+/** What a pass or a tick runs with in a test: its own ephemeral store and no log, unless `more` says otherwise. */
+export const runOptions = (more: Pick<RunOptions, 'connect'> & Partial<RunOptions>): RunOptions => ({ ephemeral: memoryEphemeral(), log: () => {}, ...more });
+
+/** A model that places nothing: what it is asked about is left for review. With no model, nothing is asked. */
+export const unsureModel = async () => testModel();
 
 /** A Google sign-in whose code stands in for the Google account that came back. */
 export const codeSignIn: SignIn = {

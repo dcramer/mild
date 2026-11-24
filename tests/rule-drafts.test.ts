@@ -8,12 +8,11 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { senderDirectory } from '../src/store/senders.ts';
 import { FILL_TOOL, FIND_TOOL, type FoundSender, MAX_LOOKUPS, type RuleDrafter, readRuleDraft, searchSenders } from '../src/prompts/rule-draft.ts';
 import { personWith, raw, fauxModel } from './fixtures.ts';
-import { SAMPLE_LABELS, facts, toolReply, email } from './helpers.ts';
+import { SAMPLE_LABELS, facts, toolReply, email, ACCOUNT } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
 
-const ACCOUNT = 'me@example.com';
 const KEYS = loadKeyring({ MILD_KEY: 'draft-key' });
 const LABELS = SAMPLE_LABELS.filter((l) => l.id === 'newsletter' || l.id === 'marketing');
 const DOMAIN = [{ by: 'from', value: 'example.org' }];
