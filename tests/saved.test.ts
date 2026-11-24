@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Sql } from '../src/store/sql.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import { usage } from '../src/dashboard/queries/usage.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { digestInserted, startDigest } from '../src/store/digests.ts';

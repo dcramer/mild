@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
-import { recordSync } from '../src/store/accounts.ts';
 import { connectGmail, fakeGoogle, openUserDb, raw } from './fixtures.ts';
-import { storedFacts } from '../src/store/messages.ts';
+import { storedFacts, recordSync } from '../src/store/messages.ts';
 import { gatherEvidence } from '../src/work/evidence.ts';
 import { FACT_FILTERS as FACT_FILTER_CONDITIONS } from '../src/dashboard/types.ts';
 import { RULE_FACTS, deriveFacts, describeFacts, factCondition, matchesFacts, threadFacts } from '../src/triage/facts.ts';

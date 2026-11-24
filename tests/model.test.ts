@@ -17,7 +17,7 @@ import {
   startChatGPTRedirect,
   shortlistModels,
 } from '../src/model/models.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { connectGmail, fakeGoogle, openUserDb, raw } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';

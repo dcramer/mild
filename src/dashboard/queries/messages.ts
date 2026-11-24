@@ -4,7 +4,7 @@ import type { Sql } from '../../store/sql.ts';
 import { unsubscribedAt, openPayload } from '../../store/actions.ts';
 import { storedFacts } from '../../store/messages.ts';
 import { digestShown } from '../../store/digests.ts';
-import { labelNames } from '../../store/accounts.ts';
+import { gmailLabelNames } from '../../store/accounts.ts';
 import { openEnvelope, openPart } from '../../store/content.ts';
 import { bulkSignals, passedDmarc } from '../../triage/features.ts';
 import { Refusal } from '../../refusal.ts';
@@ -85,7 +85,7 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
     .where(and(eq(actions.accountId, accountId), eq(actions.messageId, messageId)))
     .orderBy(asc(actions.id));
 
-  const names = changes.length === 0 ? {} : await labelNames(db, accountId);
+  const names = changes.length === 0 ? {} : await gmailLabelNames(db, accountId);
   const body = await storedBody(db, accountId, messageId);
   const files = facts.hasAttachments === false ? [] : await keptAttachments(db, accountId, messageId);
   return {

@@ -1,11 +1,10 @@
 import { and, count, eq, inArray, isNull, lt, mailBodies, messages, notExists, or, preferences, readBodies, sql } from './query.ts';
 import type { Sql } from './sql.ts';
-import { openEnvelope, openPart, sealFacts, sealMessage, sealPart } from './content.ts';
+import { openEnvelope, openPart, sealPart } from './content.ts';
 import { type Searched, searchIndex } from './search.ts';
 import { plain } from '../plain.ts';
-import { mailboxAliases } from './accounts.ts';
-import { rememberMail } from './addresses.ts';
-import { type ContentFacts, deriveFacts } from '../triage/facts.ts';
+import { insertMessages } from './messages.ts';
+import type { ContentFacts } from '../triage/facts.ts';
 import { type Attachment, heldContent } from '../gmail/body.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
@@ -63,25 +62,9 @@ async function envelopeOf(db: Sql, accountId: string, messageId: string): Promis
  * decides what of it is in the inbox. Only while Inbox is on. Safe to repeat. Returns false when Inbox was off.
  */
 export async function recordKept(db: Sql, accountId: string, mail: { facts: MessageFacts; text: Text }, now: number): Promise<boolean> {
-  const aliases = await mailboxAliases(db, accountId);
   const { facts: m } = mail;
-  const facts = deriveFacts(m, mail.text.read, aliases);
   const kept = await whileInboxOn(db, async (tx) => {
-    await tx
-      .insert(messages)
-      .values({
-        accountId,
-        id: m.messageId,
-        threadId: m.threadId,
-        receivedAt: m.receivedAt,
-        ...sealMessage(tx, accountId, m.messageId, m),
-        labelIds: [...m.labelIds],
-        syncedAt: now,
-        facts: sealFacts(facts),
-        decided: true,
-      })
-      .onConflictDoNothing();
-    await rememberMail(tx, accountId, [{ message: m, facts }], aliases);
+    await insertMessages(tx, accountId, [m], now, { decided: true, read: mail.text.read });
     await tx
       .insert(mailBodies)
       .values(bodyOf(tx, accountId, m.messageId, mail.text, { fromName: m.from.name ?? null, fromAddress: m.from.address, subject: m.subject }, now))

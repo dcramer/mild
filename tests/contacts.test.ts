@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type Kind, nextOf } from '../src/dashboard/queries/contacts.ts';
 import type { ContactPage, SenderPage } from '../src/dashboard/types.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { people } from '../src/store/people.ts';
 import { addRule } from '../src/store/rules.ts';

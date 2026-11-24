@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type ActionDeps, archiveEarlier, execute, reconcile, undo } from '../src/actions/executor.ts';
 import { planAction } from '../src/actions/plan.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { getAction } from '../src/store/actions.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';

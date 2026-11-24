@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { gatherEvidence } from '../src/work/evidence.ts';
 import { readContent } from '../src/gmail/body.ts';
-import { recordSync } from '../src/store/accounts.ts';
 import { connectGmail, fakeGoogle, openUserDb } from './fixtures.ts';
-import { storedFacts } from '../src/store/messages.ts';
+import { storedFacts, recordSync } from '../src/store/messages.ts';
 import { describeFacts } from '../src/triage/facts.ts';
 import { htmlFacts } from '../src/triage/html.ts';
 import { ACCOUNT, b64, facts } from './helpers.ts';
