@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposals, labels, or, rules, sql } from './query.ts';
+import { costOf } from './runs.ts';
 import { labelProposalName, openJson, sealJson } from './content.ts';
 import type { LabelDraft } from '../triage/proposal.ts';
 import type { Usage } from '../triage/stages/model.ts';
@@ -232,7 +233,7 @@ export async function finishLabelProposal(
             ...(outcome.note ? { note: sealJson(db, labelProposalName(db, accountId, 'note'), outcome.note) } : {}),
           }
         : { error: outcome.error }),
-      ...(outcome.usage ? { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, costUsd: outcome.usage.costUsd } : {}),
+      ...costOf(outcome.usage),
     })
     .where(eq(labelProposals.id, id));
 }

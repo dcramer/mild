@@ -1,9 +1,8 @@
-import { Refusal } from '../refusal.ts';
 import { listLabels } from '../store/labels.ts';
 import { finishAsk, startAsk } from '../store/mail-calls.ts';
 import type { Sql } from '../store/sql.ts';
-import { invokeAgent, reportError } from '../telemetry.ts';
 import type { MailAnswer, MailAsker } from '../triage/mail-ask.ts';
+import { recordedAsk } from './recorded.ts';
 import { senderLookup } from './rules.ts';
 
 /**
@@ -20,21 +19,14 @@ export async function askMail(
   const id = await startAsk(db, { accountId: request.accountId, words: request.words, model: deps.model, now: now() });
   const labels = await listLabels(db);
   const find = senderLookup(db);
-  const answer = await invokeAgent('ask', [db.person, id], { 'sift.ask': id }, async () => {
-    try {
-      return await deps.ask({ words: request.words, today: request.today, labels }, find);
-    } catch (error) {
-      await finishAsk(db, request.accountId, id, { error: error instanceof Error ? error.message : String(error), lookups: 0, now: now() });
-      throw error;
-    }
+  return await recordedAsk<MailAnswer>({
+    agent: 'ask',
+    conversation: [db.person, id],
+    attributes: { 'sift.ask': id },
+    ask: () => deps.ask({ words: request.words, today: request.today, labels }, find),
+    finish: (outcome, spent) => finishAsk(db, request.accountId, id, { ...('error' in outcome ? outcome : { answer: outcome }), ...spent }),
+    report: 'Asking failed',
+    refusal: (failed) => `The model could not make a filter (${failed}). Try again, or use Filters.`,
+    now,
   });
-  const { usage, lookups, ...said } = answer;
-  const spent = { lookups, ...(usage ? { usage } : {}), now: now() };
-  if ('failed' in said) {
-    await finishAsk(db, request.accountId, id, { error: said.failed, ...spent });
-    reportError(new Error(`Asking failed: ${said.failed}`));
-    throw new Refusal(`The model could not make a filter (${said.failed}). Try again, or use Filters.`);
-  }
-  await finishAsk(db, request.accountId, id, { answer: said, ...spent });
-  return said;
 }

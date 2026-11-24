@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { type RULE_SOURCES, and, asc, eq, ne, proposals, ruleDrafts, rules, sql } from './query.ts';
+import { costOf } from './runs.ts';
 import type { Sql } from './sql.ts';
 import { conditionsHash, openJson, ruleDraftName, ruleName, sealJson } from './content.ts';
 import type { RuleDraft } from '../triage/rule-draft.ts';
@@ -297,7 +298,7 @@ export async function finishRuleDraft(
       finishedAt: outcome.now,
       lookups: outcome.lookups,
       ...('draft' in outcome ? { rule: sealJson(db, ruleDraftName(db, accountId, 'rule'), outcome.draft) } : { error: outcome.error }),
-      ...(outcome.usage ? { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, costUsd: outcome.usage.costUsd } : {}),
+      ...costOf(outcome.usage),
     })
     .where(eq(ruleDrafts.id, id));
 }
