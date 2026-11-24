@@ -259,7 +259,7 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
         <>
           {/* Most people start off, so the room is held for it. Drawn once usage is in too, as its line arriving after
               would push the list down under a reader whose place a reload just gave back. */}
-          <Reserve id="home-off" ready={manage.data !== null && !usage.loading} room="min-h-[449px] lg:min-h-[243px]">
+          <Reserve id="home-off" ready={manage.data !== null && !usage.loading} room="min-h-[448.83px] lg:min-h-[243.27px]">
             {manage.data && !manage.data.active && !nothing ? (
               <Callout title="Mild is off" action={<Button href="?settings=1">Turn Mild on…</Button>}>
                 <p>

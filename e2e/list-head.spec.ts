@@ -21,15 +21,18 @@ test.describe('A list on a desktop', () => {
     expect(Math.abs((await middle(add)) - (await middle(search)))).toBeLessThan(4);
   });
 
-  test('with something before its search holds its action at the top, over that too', async ({ page }) => {
+  test('with something before its rows still starts with its search, its action ending the bar, and that under it', async ({ page }) => {
     await page.goto('/activity');
     const period = page.getByRole('combobox', { name: 'Period' });
     await expect(period).toHaveCount(1);
     const search = page.getByRole('searchbox', { name: 'Search subject or sender' });
     const name = await boxOf(page.getByRole('link', { name: 'Mild', exact: true }).first());
-    const above = await boxOf(period);
-    expect(above.y).toBeLessThan(name.y + name.height);
-    expect(above.y + above.height).toBeLessThan((await boxOf(search)).y);
+    const [bar, press] = [await boxOf(search), await boxOf(period)];
+    expect(bar.y).toBeLessThan(name.y + name.height);
+    expect(press.x).toBeGreaterThan(bar.x + bar.width);
+    expect(Math.abs((await middle(period)) - (await middle(search)))).toBeLessThan(4);
+    // The chart the period governs comes under the bar.
+    expect((await boxOf(page.getByRole('listitem', { name: /: \d+ / }).first())).y).toBeGreaterThan(bar.y + bar.height);
   });
 
   test('with no search holds its action on a line over the list', async ({ page }) => {
