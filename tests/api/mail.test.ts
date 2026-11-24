@@ -1,25 +1,19 @@
 import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DRAFT_QUIET_MS } from '../../src/actions/drafts.ts';
 import { SETTLE_MS } from '../../src/actions/send.ts';
 import { ASK_TOOL } from '../../src/prompts/mail-ask.ts';
 import { FIND_TOOL } from '../../src/prompts/rule-draft.ts';
-import { fakeGoogle, fauxModel, startSift } from '../fixtures.ts';
+import { type Browser, fauxModel } from '../fixtures.ts';
 import { DAY } from '../helpers.ts';
+import { AT, ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const fake = fakeGoogle();
-const ME = 'me@example.org';
-const OTHER = 'other@example.com';
-const AT = Date.UTC(2026, 10, 18, 12);
-
-beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: AT, shouldAdvanceTime: true }));
-afterEach(() => void vi.useRealTimers());
+const { fake, start, withInbox } = theApp();
 
 type Thread = { threadId: string; subject: string; messageIds: string[]; unread: boolean; place: string; preview: string | null };
 const threadsOf = (reply: { body: Record<string, unknown> }) => reply.body['threads'] as Thread[];
 
-/** Signed in with a label of their own and Inbox on, its copy of their mail made. */
 /** The files of a message as sent: each one's name, type and bytes. */
 function filesOf(raw: string): { name: string; type: string; data: Buffer }[] {
   const boundary = /boundary="([^"]+)"/.exec(raw)?.[1];
@@ -37,27 +31,9 @@ function filesOf(raw: string): { name: string; type: string; data: Buffer }[] {
     });
 }
 
-type Sift = Awaited<ReturnType<typeof startSift>>;
-type Me = Awaited<ReturnType<Sift['settled']>>;
-
-async function withInbox(model?: ReturnType<typeof fauxModel>) {
-  const sift = await startSift(fake.google, model ? { model: model.chosen } : {});
-  const box = fake.google.mailbox(ME);
-  const me = await sift.settled(ME);
-  expect((await me.call('POST', '/api/mail/on', { on: true })).status).toBe(200);
-  await sift.work();
-  return { sift, box, me };
-}
-
-/** New mail, as the next pass brings it. */
-async function arrives(sift: Awaited<ReturnType<typeof startSift>>, me: Awaited<ReturnType<typeof withInbox>>['me']) {
-  expect((await me.call('POST', '/api/check', {})).status).toBe(200);
-  await sift.work();
-}
-
 describe('Inbox, turned on and off', () => {
   it('says how much each window would copy from Gmail’s counts, and asks Gmail again only after a while', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const box = fake.google.mailbox(ME);
     box.deliver({ from: 'ada@example.com', at: AT - 2 * DAY }, { quietly: true });
     box.deliver({ from: 'bo@example.com', at: AT - 400 * DAY, labelIds: [] }, { quietly: true });
@@ -73,7 +49,7 @@ describe('Inbox, turned on and off', () => {
   });
 
   it('copies the inbox and the window chosen, each message read whole once, and lets go of the text when turned off', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const box = fake.google.mailbox(ME);
     const lunch = box.deliver({ from: 'Ada <ada@example.com>', subject: 'Lunch?', text: 'Lunch on Friday?', at: AT - 2 * DAY }, { quietly: true });
     const archived = box.deliver({ from: 'bo@example.com', subject: 'Old news', at: AT - 30 * DAY, labelIds: [] }, { quietly: true });
@@ -96,7 +72,7 @@ describe('Inbox, turned on and off', () => {
 
 describe('reading mail', () => {
   it('lists the inbox’s conversations newest first, and gives one oldest first with each message’s text and HTML', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const first = box.deliver({
       from: 'Ada <ada@example.com>',
       subject: 'Lunch?',
@@ -106,7 +82,7 @@ describe('reading mail', () => {
     });
     const reply = box.deliver({ from: 'Ada <ada@example.com>', subject: 'Re: Lunch?', threadId: first, text: 'Or Saturday.', at: AT - 60_000 });
     const older = box.deliver({ from: 'Bo <bo@example.com>', subject: 'Tea?', at: AT - 2 * DAY });
-    await arrives(sift, me);
+    await arrives();
 
     const threads = await me.call('GET', '/api/mail/threads');
     expect(threadsOf(threads).map((t) => ({ threadId: t.threadId, subject: t.subject, messageIds: t.messageIds, place: t.place }))).toEqual([
@@ -138,13 +114,13 @@ describe('reading mail', () => {
   });
 
   it('gives a message’s file to save, fetched from Gmail as it is asked for, never shown at Mild’s address', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const id = box.deliver({
       from: 'Ada <ada@example.com>',
       subject: 'Plans',
       attachments: [{ filename: 'Dachplan für Ada.html', mimeType: 'text/html', data: '<script>alert(1)</script>' }],
     });
-    await arrives(sift, me);
+    await arrives();
     const [file] = ((await me.call('GET', `/api/message?id=${id}`)).body as { attachments: { part: string }[] }).attachments;
     const reads = box.asked('users.messages.get').filter((r) => r.id === id).length;
 
@@ -167,9 +143,9 @@ describe('reading mail', () => {
   });
 
   it('shows someone else none of it', async () => {
-    const { sift, box, me } = await withInbox();
+    const { sift, box, arrives } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com', subject: 'Lunch?', html: '<p>Lunch</p>' });
-    await arrives(sift, me);
+    await arrives();
     const other = await sift.settled(OTHER);
     expect(threadsOf(await other.call('GET', '/api/mail/threads'))).toEqual([]);
     expect((await other.call('GET', `/api/mail/thread?thread=${id}`)).status).toBe(404);
@@ -182,10 +158,10 @@ describe('reading mail', () => {
 
 describe('changing mail', () => {
   it('archives and marks read in Gmail, as the record then says, and Undo puts it back', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const a = box.deliver({ from: 'ada@example.com', subject: 'One' });
     const b = box.deliver({ from: 'bo@example.com', subject: 'Two' });
-    await arrives(sift, me);
+    await arrives();
 
     const read = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [a], change: 'read' });
     expect(read.body).toMatchObject({ actions: [expect.any(Number)], missed: 0 });
@@ -205,9 +181,9 @@ describe('changing mail', () => {
   });
 
   it('marks a conversation spam as the person’s own press, taken back by Undo', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const deal = box.deliver({ from: 'deals@example.com', subject: 'Deal' });
-    await arrives(sift, me);
+    await arrives();
 
     const spam = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [deal], change: 'spam' });
     expect(spam.body).toMatchObject({ actions: [expect.any(Number)], missed: 0 });
@@ -221,19 +197,19 @@ describe('changing mail', () => {
   });
 
   it('leaves mail no longer in the inbox as it is', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com' });
-    await arrives(sift, me);
+    await arrives();
     box.change(id, { remove: ['INBOX'] });
     expect((await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'read' })).body).toEqual({ actions: [], missed: 0 });
     expect(box.message(id)!.labelIds).toEqual(['UNREAD']);
   });
 
   it('returns what landed when a message’s Gmail call throws, with that one counted missed, so Undo still takes the rest back', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const a = box.deliver({ from: 'ada@example.com' });
     const b = box.deliver({ from: 'bo@example.com' });
-    await arrives(sift, me);
+    await arrives();
     // Gmail's client tries a read four times before it gives up.
     box.fail('users.messages.get', ...Array.from({ length: 4 }, () => ({ status: 503 })));
 
@@ -250,9 +226,9 @@ describe('changing mail', () => {
   });
 
   it('offers Undo for a change whose answer was lost, which takes it back once Gmail shows it landed', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com' });
-    await arrives(sift, me);
+    await arrives();
     box.fail('users.messages.modify', 'lost');
 
     const changed = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' });
@@ -262,14 +238,14 @@ describe('changing mail', () => {
 
     expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
     expect(box.message(id)!.labelIds).toContain('INBOX');
-    await arrives(sift, me);
+    await arrives();
     expect(threadsOf(await me.call('GET', '/api/mail/threads'))).toHaveLength(1);
   });
 
   it('offers Undo for a change Gmail never got, which then has nothing to take back', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com' });
-    await arrives(sift, me);
+    await arrives();
     box.fail('users.messages.modify', 'network');
 
     const { actions } = (await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' })).body as { actions: number[] };
@@ -281,9 +257,9 @@ describe('changing mail', () => {
   });
 
   it('refuses an Undo Gmail refuses, leaving the change in place to be undone again', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com' });
-    await arrives(sift, me);
+    await arrives();
     const { actions } = (await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' })).body as { actions: number[] };
     box.fail('users.messages.modify', { status: 500 });
 
@@ -294,9 +270,9 @@ describe('changing mail', () => {
   });
 
   it('changes and undoes nothing of someone else’s', async () => {
-    const { sift, box, me } = await withInbox();
+    const { sift, box, me, arrives } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com' });
-    await arrives(sift, me);
+    await arrives();
     const { actions } = (await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'read' })).body as { actions: number[] };
     const other = await sift.settled(OTHER);
     const asked = box.requests.length;
@@ -310,16 +286,16 @@ describe('changing mail', () => {
 
 describe('a press that says what the mail is', () => {
   type Example = { messageId: string; labelId: string };
-  const examplesOf = async (me: Me) => (await me.call('GET', '/api/examples')).body['examples'] as Example[];
-  const archive = async (me: Me, id: string) =>
+  const examplesOf = async (me: Browser) => (await me.call('GET', '/api/examples')).body['examples'] as Example[];
+  const archive = async (me: Browser, id: string) =>
     (await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' })).body as { actions: number[] };
 
   /** Receipts set to Digest, and a receipt in the inbox the model read as `labelId`, Mild off. */
   async function placed(labelId: string, disposition: 'archive' | 'keep' = 'archive') {
-    const { sift, box, me } = await withInbox();
+    const { sift, box, me, arrives } = await withInbox();
     expect((await me.call('POST', '/api/labels', { id: 'receipts', disposition: 'digest' })).status).toBe(200);
     const id = box.deliver({ from: 'Shop <shop@example.com>', subject: 'Your receipt' });
-    await arrives(sift, me);
+    await arrives();
     await sift.judged(ME, id, labelId, disposition);
     return { sift, box, me, id };
   }
@@ -366,9 +342,9 @@ describe('a press that says what the mail is', () => {
   });
 
   it('is only the press for mail Mild never placed', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com' });
-    await arrives(sift, me);
+    await arrives();
     await archive(me, id);
     expect(box.message(id)!.labelIds).toEqual(['UNREAD']);
     expect(await examplesOf(me)).toEqual([]);
@@ -411,9 +387,9 @@ describe('sending mail', () => {
   });
 
   it('answers a message in its conversation, naming the one it answers', async () => {
-    const { sift, box, me } = await canSend();
+    const { box, me, arrives } = await canSend();
     const asked = box.deliver({ from: 'Ada <ada@example.com>', subject: 'Lunch?' });
-    await arrives(sift, me);
+    await arrives();
     const sent = await me.call('POST', '/api/mail/send', { ...written('<re.1@example.org>'), replyTo: { messageId: asked } });
     expect(sent.status).toBe(200);
     const went = box.message((sent.body as { id: string }).id)!;
@@ -530,7 +506,7 @@ describe('sending mail', () => {
   });
 
   it('forwards a message with the files left on it, fetched from Gmail as it goes, the message itself not read again', async () => {
-    const { sift, box, me } = await canSend();
+    const { box, me, arrives } = await canSend();
     const asked = box.deliver({
       from: 'Ada <ada@example.com>',
       subject: 'Plans',
@@ -540,7 +516,7 @@ describe('sending mail', () => {
         { filename: 'notes.txt', mimeType: 'text/plain', data: 'notes' },
       ],
     });
-    await arrives(sift, me);
+    await arrives();
     const detail = (await me.call('GET', `/api/message?id=${asked}`)).body as { attachments: { part: string; name: string; size: number }[] };
     expect(detail.attachments.map((a) => a.name)).toEqual(['roof.pdf', 'notes.txt']);
     const reads = box.asked('users.messages.get').filter((r) => r.id === asked).length;
@@ -564,13 +540,13 @@ describe('sending mail', () => {
   });
 
   it('sends a reply under a subject of its own as a conversation of its own, and with the files of the message it answers', async () => {
-    const { sift, box, me } = await canSend();
+    const { box, me, arrives } = await canSend();
     const asked = box.deliver({
       from: 'Ada <ada@example.com>',
       subject: 'Plans',
       attachments: [{ filename: 'roof.pdf', mimeType: 'application/pdf', data: 'roof' }],
     });
-    await arrives(sift, me);
+    await arrives();
     const [file] = ((await me.call('GET', `/api/message?id=${asked}`)).body as { attachments: { part: string }[] }).attachments;
     const reply = { ...written('<re.2@example.org>'), replyTo: { messageId: asked } };
 
@@ -584,19 +560,19 @@ describe('sending mail', () => {
 
     // Only the message answered gives its files.
     const other = box.deliver({ from: 'Bo <bo@example.com>', subject: 'Other' });
-    await arrives(sift, me);
+    await arrives();
     expect((await me.call('POST', '/api/mail/send', { ...reply, id: '<re.3@example.org>', forwarding: { messageId: other, parts: ['1'] } })).status).toBe(400);
   });
 
   it('suggests, as an address is typed, whom the person wrote to, then who wrote to them, never a list', async () => {
-    const { sift, box, me } = await canSend();
+    const { box, me, arrives } = await canSend();
     box.deliver({ from: 'Ada Lovelace <ada@example.com>', subject: 'Hello' });
     box.deliver({
       from: 'Adverts <ads@example.net>',
       subject: 'Sale',
       headers: { 'List-Id': '<offers.example.net>', 'List-Unsubscribe': '<https://example.net/u>' },
     });
-    await arrives(sift, me);
+    await arrives();
     expect((await me.call('POST', '/api/mail/send', mail('<adam.1@example.org>', { to: [{ address: 'adam@example.org', name: 'Adam Smith' }] }))).status).toBe(
       200,
     );
@@ -635,26 +611,26 @@ describe('drafts', () => {
     at: Date.now(),
     ...more,
   });
-  const save = (me: Me, id: string, more: Record<string, unknown> = {}) =>
+  const save = (me: Browser, id: string, more: Record<string, unknown> = {}) =>
     me.call('POST', '/api/mail/drafts/save', { id, accountId: ME, writing: writing(more) });
-  const listed = async (me: Me) =>
+  const listed = async (me: Browser) =>
     ((await me.call('GET', '/api/mail/drafts')).body as { drafts: { id: string; writing: { text: string }; inGmail: boolean }[] }).drafts;
   /** A pass, once the draft has been left alone long enough for Gmail to hear of it. */
-  const quiet = async (sift: Sift, me: Me) => {
+  const quiet = async (arrives: () => Promise<void>) => {
     vi.setSystemTime(Date.now() + DRAFT_QUIET_MS);
-    await arrives(sift, me);
+    await arrives();
   };
 
   it('are kept as they are written, the newer of two copies, and given to Gmail once left alone a while, in place of what it had', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     expect((await save(me, 'd1')).status).toBe(200);
     // An older copy, from a device that had not heard of the newer.
     expect((await save(me, 'd1', { text: 'Older.', at: Date.now() - 1000 })).status).toBe(200);
     expect(await listed(me)).toMatchObject([{ id: 'd1', writing: { text: 'Half written.' }, inGmail: false }]);
 
-    await arrives(sift, me);
+    await arrives();
     expect(box.draftsHeld().size).toBe(0);
-    await quiet(sift, me);
+    await quiet(arrives);
     const [gmailId, held] = [...box.draftsHeld()][0]!;
     expect(held.header('to')).toBe('"Ada" <ada@example.com>');
     expect(held.labelIds).toEqual(['DRAFT']);
@@ -663,17 +639,17 @@ describe('drafts', () => {
     expect(box.asked('users.messages.get').filter((r) => r.id === held.id)).toEqual([]);
 
     expect((await save(me, 'd1', { text: 'Written.', at: Date.now() })).status).toBe(200);
-    await quiet(sift, me);
+    await quiet(arrives);
     expect([...box.draftsHeld().keys()]).toEqual([gmailId]);
     expect(box.draftsHeld().get(gmailId)!.raw).toContain(Buffer.from('Written.').toString('base64'));
   });
 
   it('go once sent, here and in Gmail, and once discarded', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     await me.signIn(ME, { send: true });
     await save(me, 'd1');
     await save(me, 'd2', { subject: 'Other' });
-    await quiet(sift, me);
+    await quiet(arrives);
     expect(box.draftsHeld().size).toBe(2);
 
     const press = {
@@ -696,58 +672,58 @@ describe('drafts', () => {
 
   describe('scheduled', () => {
     const HOUR = 3_600_000;
-    const schedule = (me: Me, id: string, sendAt: number, more: Record<string, unknown> = {}) =>
+    const schedule = (me: Browser, id: string, sendAt: number, more: Record<string, unknown> = {}) =>
       me.call('POST', '/api/mail/drafts/save', { id, accountId: ME, writing: writing({ id: `<${id}@example.org>`, ...more }), sendAt });
 
     it('go at their time, once, as the press of Send would have sent them, and then are no draft', async () => {
-      const { sift, box, me } = await withInbox();
+      const { box, me, arrives } = await withInbox();
       await me.signIn(ME, { send: true });
       expect((await schedule(me, 's1', Date.now() + HOUR)).status).toBe(200);
-      await quiet(sift, me);
+      await quiet(arrives);
       expect(box.sent()).toEqual([]);
       expect(await listed(me)).toMatchObject([{ id: 's1', sendAt: Date.now() - DRAFT_QUIET_MS + HOUR, inGmail: true }]);
 
       vi.setSystemTime(Date.now() + HOUR);
-      await arrives(sift, me);
-      await arrives(sift, me);
+      await arrives();
+      await arrives();
       expect(box.sent().map((m) => m.header('message-id'))).toEqual(['<s1@example.org>']);
       expect(await listed(me)).toEqual([]);
       expect(box.draftsHeld().size).toBe(0);
     });
 
     it('sent or deleted in Gmail first are not sent, and what cannot go is a draft again, saying why', async () => {
-      const { sift, box, me } = await withInbox();
+      const { box, me, arrives } = await withInbox();
       await me.signIn(ME, { send: true });
       await schedule(me, 's1', Date.now() + HOUR);
       await schedule(me, 's2', Date.now() + HOUR, { to: [{ address: 'nope', wrong: true }] });
       expect(await schedule(me, 's3', Date.now() + HOUR, { to: [] })).toMatchObject({ status: 409, body: { error: 'Say who the mail is to.' } });
-      await quiet(sift, me);
+      await quiet(arrives);
       box.dropDraft([...box.draftsHeld().keys()][0]!);
 
       vi.setSystemTime(Date.now() + HOUR);
-      await arrives(sift, me);
+      await arrives();
       expect(box.sent()).toEqual([]);
       expect(await listed(me)).toEqual([]);
     });
 
     it('a draft scheduled while Inbox is on, sent once it is off, waits as a draft, saying why', async () => {
-      const { sift, box, me } = await withInbox();
+      const { box, me, arrives } = await withInbox();
       await me.signIn(ME, { send: true });
       await schedule(me, 's1', Date.now() + HOUR);
       expect((await me.call('POST', '/api/mail/on', { on: false })).status).toBe(200);
       vi.setSystemTime(Date.now() + HOUR);
-      await arrives(sift, me);
+      await arrives();
       expect(box.sent()).toEqual([]);
       expect(await listed(me)).toMatchObject([{ id: 's1', sendAt: null, sendError: 'Turn Inbox on to send mail from Mild.' }]);
     });
   });
 
   it('give Gmail a reply in its conversation, to nobody yet if so', async () => {
-    const { sift, box, me } = await withInbox();
+    const { box, me, arrives } = await withInbox();
     const asked = box.deliver({ from: 'Ada <ada@example.com>', subject: 'Lunch?' });
-    await arrives(sift, me);
+    await arrives();
     await save(me, `reply/${asked}`, { of: { kind: 'reply', messageId: asked, all: false }, to: [], subject: '' });
-    await quiet(sift, me);
+    await quiet(arrives);
     const [held] = [...box.draftsHeld().values()];
     expect(held).toMatchObject({ threadId: asked });
     expect(held!.header('subject')).toBe('Re: Lunch?');
@@ -757,9 +733,9 @@ describe('drafts', () => {
 describe('asking Inbox in words', () => {
   it('turns the words into a filter on the list, naming only senders Mild has recorded', async () => {
     const model = fauxModel();
-    const { sift, box, me } = await withInbox(model);
+    const { box, me, arrives } = await withInbox(model);
     box.deliver({ from: 'Vendor <billing@vendor.example.com>', subject: 'Your invoice' });
-    await arrives(sift, me);
+    await arrives();
     const blank = { reading: '', from: [], domains: [], label: '', view: '', unread: false, since: '', words: [], note: '' };
     model.answers(
       fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'vendor' })], { stopReason: 'toolUse' }),

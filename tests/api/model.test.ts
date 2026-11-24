@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type Browser, fakeGoogle, startSift } from '../fixtures.ts';
+import type { Browser } from '../fixtures.ts';
+import { ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const fake = fakeGoogle();
-const ME = 'me@example.org';
-const OTHER = 'other@example.com';
+const { start } = theApp();
 const CALLBACK = 'http://127.0.0.1:1455/auth/callback';
 
 const modelOf = async (b: Browser) => (await b.call('GET', '/api/manage')).body['model'] as Record<string, unknown>;
@@ -25,7 +24,7 @@ function openAI() {
 
 describe('a model by API key', () => {
   it('is signed in to with a key, offers that provider’s models, and is chosen, tuned and signed out of', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const me = await sift.settled(ME);
     expect((await me.call('GET', '/api/models')).body).toEqual({ models: [], shortlist: {}, costs: {} });
 
@@ -49,7 +48,7 @@ describe('a model by API key', () => {
   });
 
   it('is refused for a provider that takes no key', async () => {
-    const me = await (await startSift(fake.google)).settled(ME);
+    const me = await (await start()).settled(ME);
     expect(await me.call('POST', '/api/model/key', { provider: 'openai-codex', key: 'sk-test' })).toMatchObject({
       status: 409,
       body: { error: 'That provider does not take an API key.' },
@@ -57,7 +56,7 @@ describe('a model by API key', () => {
   });
 
   it('is each person’s own', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const me = await sift.settled(ME);
     await me.call('POST', '/api/model/key', { provider: 'anthropic', key: 'sk-ant-test' });
     await me.call('POST', '/api/model', { model: 'anthropic/claude-sonnet-4-5' });
@@ -72,7 +71,7 @@ describe('a model by API key', () => {
 describe('ChatGPT', () => {
   it('signs in by a device code, which Settings shows while it waits', async () => {
     const asked = openAI();
-    const me = await (await startSift(fake.google)).settled(ME);
+    const me = await (await start()).settled(ME);
     const started = await me.call('POST', '/api/model/chatgpt', {});
     expect(started).toMatchObject({ status: 200, body: { code: 'ABCD-1234', url: expect.stringMatching(/^https:\/\/auth\.openai\.com\//) } });
     expect(asked).toEqual(['/api/accounts/deviceauth/usercode']);
@@ -85,7 +84,7 @@ describe('ChatGPT', () => {
 
   it('signs in by the address ChatGPT sends the browser back to, and says what is wrong with one that is not it', async () => {
     const asked = openAI();
-    const sift = await startSift(fake.google, { env: { MILD_CHATGPT_SIGN_IN: 'redirect' } });
+    const sift = await start({ env: { MILD_CHATGPT_SIGN_IN: 'redirect' } });
     const me = await sift.settled(ME);
     const started = await me.call('POST', '/api/model/chatgpt', {});
     expect(started.status).toBe(200);

@@ -1,34 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { SyncPage } from '../../src/dashboard/types.ts';
-import { fakeGoogle, startSift } from '../fixtures.ts';
+import type { Browser } from '../fixtures.ts';
 import { DAY } from '../helpers.ts';
 import { LEAVE_IN_INBOX } from '../../src/triage/types.ts';
+import { AT, ME, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const fake = fakeGoogle();
-const ME = 'me@example.org';
-const AT = Date.UTC(2026, 10, 18, 12);
-
-beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: AT, shouldAdvanceTime: true }));
-afterEach(() => void vi.useRealTimers());
-
-type Me = Awaited<ReturnType<Awaited<ReturnType<typeof startSift>>['settled']>>;
-
-async function withInbox() {
-  const sift = await startSift(fake.google);
-  const box = fake.google.mailbox(ME);
-  const me = await sift.settled(ME);
-  expect((await me.call('POST', '/api/mail/on', { on: true })).status).toBe(200);
-  await sift.work();
-  const arrives = async () => {
-    expect((await me.call('POST', '/api/check', {})).status).toBe(200);
-    await sift.work();
-  };
-  return { sift, box, me, arrives };
-}
+const { start, withInbox } = theApp();
 
 /** Every page from `since` on, as the page reads them: what each said, and where it ended. */
-async function pull(me: Me, since?: string) {
+async function pull(me: Browser, since?: string) {
   const pages: SyncPage[] = [];
   let cursor = since;
   do {
@@ -138,7 +119,7 @@ describe('the copy the page keeps', () => {
 
 describe('the key of the copy in this browser', () => {
   it('is made once for the browser, given back while it is signed in, and gone at sign-out with what the browser kept', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const me = await sift.settled(ME);
     expect((await me.call('GET', '/api/device')).body).toEqual({ key: null });
     const made = await me.call('POST', '/api/device', {});
@@ -153,7 +134,7 @@ describe('the key of the copy in this browser', () => {
   });
 
   it('is made for nobody signed out', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const stranger = sift.browser();
     expect((await stranger.call('POST', '/api/device', {})).status).toBe(401);
     expect((await stranger.call('GET', '/api/device')).status).toBe(401);

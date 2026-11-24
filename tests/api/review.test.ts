@@ -1,17 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type Browser, fakeGoogle, startSift } from '../fixtures.ts';
+import { describe, expect, it } from 'vitest';
+import type { Browser } from '../fixtures.ts';
 import { recordDecision } from '../../src/store/decisions.ts';
+import { ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const fake = fakeGoogle();
-const ME = 'me@example.org';
-const OTHER = 'other@example.com';
+const { settled } = theApp();
 const SHOP = 'shop@example.com';
 const NEWS = 'news@example.com';
-const AT = Date.UTC(2026, 10, 18, 12);
-
-beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: AT, shouldAdvanceTime: true }));
-afterEach(() => void vi.useRealTimers());
 
 type Item = { messageId: string; decisionId: number; sender: string; labelId: string; disposition: string };
 type Row = {
@@ -29,13 +24,10 @@ const rowsOf = async (b: Browser, query = '') => (await b.call('GET', `/api/deci
 
 /** Signed in, with a receipt from `SHOP` and a newsletter from `NEWS`, which the model read as Receipts and Leave in inbox. */
 async function waiting() {
-  const sift = await startSift(fake.google);
-  const box = fake.google.mailbox(ME);
-  const me = await sift.settled(ME);
+  const { sift, box, me, arrives } = await settled();
   const receipt = box.deliver({ from: `Shop <${SHOP}>`, subject: 'Your receipt', text: 'Thanks for your order.' });
   const news = box.deliver({ from: `News <${NEWS}>`, subject: 'This week', headers: { 'List-Id': '<weekly.example.com>' } });
-  await me.call('POST', '/api/check', {});
-  await sift.work();
+  await arrives();
   const decision = await sift.judged(ME, receipt, 'receipts');
   await sift.judged(ME, news, 'everything_else', 'keep');
   return { sift, box, me, receipt, news, decision };

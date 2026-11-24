@@ -1,34 +1,26 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type Browser, fakeGoogle, modelRun, startSift } from '../fixtures.ts';
+import { describe, expect, it } from 'vitest';
+import { type Browser, modelRun } from '../fixtures.ts';
 import { DAY } from '../helpers.ts';
+import { AT, ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const fake = fakeGoogle();
-const ME = 'me@example.org';
+const { fake, start, settled } = theApp();
 const WORK = 'me@work.example.com';
-const OTHER = 'other@example.com';
 const SHOP = 'shop@example.com';
-const AT = Date.UTC(2026, 10, 18, 12);
-
-beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: AT, shouldAdvanceTime: true }));
-afterEach(() => void vi.useRealTimers());
 
 const manage = async (b: Browser) => (await b.call('GET', '/api/manage')).body;
 
 /** Signed in, with a rule that says mail from `SHOP` is a receipt. */
 async function withRule() {
-  const sift = await startSift(fake.google);
-  const box = fake.google.mailbox(ME);
-  const me = await sift.settled(ME);
-  await me.call('POST', '/api/rules', { match: { from: [SHOP] }, label: 'receipts' });
-  /** Mail from `SHOP`, as the next pass, begun by Check now, brings it. */
+  const app = await settled();
+  await app.me.call('POST', '/api/rules', { match: { from: [SHOP] }, label: 'receipts' });
+  /** Mail from `SHOP`, as the next pass brings it. */
   const receipt = async () => {
-    const id = box.deliver({ from: `Shop <${SHOP}>`, subject: 'Your receipt' });
-    expect((await me.call('POST', '/api/check', {})).status).toBe(200);
-    await sift.work();
+    const id = app.box.deliver({ from: `Shop <${SHOP}>`, subject: 'Your receipt' });
+    await app.arrives();
     return id;
   };
-  return { sift, box, me, receipt };
+  return { ...app, receipt };
 }
 
 describe('Mild on and off', () => {
@@ -96,7 +88,7 @@ describe('the digest', () => {
 
 describe('going through the inbox', () => {
   it('says what it would take from Gmail’s count, asked once a while', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const box = fake.google.mailbox(ME);
     for (let i = 0; i < 3; i++) box.deliver({ from: `sender${i}@example.com` }, { quietly: true });
     box.deliver({ from: 'archived@example.com', labelIds: [] }, { quietly: true });
@@ -133,7 +125,7 @@ describe('going through the inbox', () => {
 
 describe('mailboxes', () => {
   it('are added by signing in, made primary, and removed with their access revoked at Google', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const me = await sift.settled(ME);
     await me.signIn(WORK, { add: true });
     expect((await manage(me))['accounts']).toMatchObject([
@@ -158,7 +150,7 @@ describe('mailboxes', () => {
   });
 
   it('are nobody else’s to change', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const me = await sift.settled(ME);
     await me.signIn(WORK, { add: true });
     const other = await sift.settled(OTHER);
@@ -171,7 +163,7 @@ describe('mailboxes', () => {
 
 describe('deleting the account', () => {
   it('takes confirming with one of its addresses, revokes every mailbox at Google and ends the session', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const me = await sift.settled(ME);
     await me.signIn(WORK, { add: true });
     expect(await me.call('POST', '/api/account/delete', { address: OTHER })).toMatchObject({ status: 409 });
