@@ -27,6 +27,7 @@ import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts
 import { labelNames, listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
 import { plain } from '../plain.ts';
+import type { CONTACTS } from './states.ts';
 import { isCurrent, ofMessage } from './decisions.ts';
 
 const CORRESPONDENT_TTL_MS = 7 * 86_400_000;
@@ -52,11 +53,8 @@ export async function rememberCorrespondent(db: Sql, accountId: string, address:
     });
 }
 
-/**
- * How the owner and a sender know each other, from the mail alone: their first message, someone the owner
- * writes to, or someone who keeps writing and has never been written back to. Null for everyone else.
- */
-export type Contact = 'new' | 'mutual' | 'one-way';
+/** How the owner and a sender know each other (`CONTACTS`). Null for everyone else. */
+type Contact = (typeof CONTACTS)[number];
 
 /** Messages from someone never written to before they count as one-way. */
 const ONE_WAY_AFTER = 5;

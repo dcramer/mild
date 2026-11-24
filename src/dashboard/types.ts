@@ -1,23 +1,24 @@
 /**
  * What the dashboard API sends, and the bodies the page sends it, as schemas the server parses them
- * with. The web app imports only their types, so zod stays out of the page; keep this file's imports to
- * zod and the pure triage types.
+ * with. The page imports only their types, so zod stays out of it, but the page's type check reads every
+ * module this file imports: keep them to zod and modules that import nothing of the server's (the triage
+ * types, src/store/states.ts, src/mail-window.ts, src/model/reasoning.ts).
  *
  * What Mild stores encrypted is `held` here: a string in the JSON, `Confidential` to the type checker
  * (src/confidential.ts), so the page draws it only through `reveal`, in the browser.
  */
 import { z } from 'zod';
 import type { Confidential, Sealed } from '../confidential.ts';
-import { RULE_FACTS, type RuleFacts as Conditions, factCondition } from '../triage/facts.ts';
+import { type Facts, RULE_FACTS, type RuleFacts as Conditions, factCondition } from '../triage/facts.ts';
 import { GIVEN } from '../triage/standing.ts';
 import { DRAFT_ACTIONS } from '../triage/proposal.ts';
 import { REASONING } from '../model/reasoning.ts';
 import { MAIL_WINDOWS } from '../mail-window.ts';
-import { DECIDED } from '../triage/types.ts';
+import { DECIDED, STAGE_NAMES, type StageName } from '../triage/types.ts';
+import { CONTACTS, EVAL_STATUSES, EXAMPLE_STATUSES, FILTER_STATES, REACHES } from '../store/states.ts';
 
-export const STAGES = ['rules', 'classifier', 'model', 'fallback'] as const;
-export type StageKey = (typeof STAGES)[number];
-const stage = z.enum(STAGES);
+export type StageKey = StageName;
+const stage = z.enum(STAGE_NAMES);
 
 const LABEL_ID = /^[a-z0-9_-]{1,40}$/;
 /** Text a person typed or the page sent, not empty and not long. */
@@ -122,7 +123,7 @@ export const DecisionRow = z.object({
 export type DecisionRow = z.infer<typeof DecisionRow>;
 
 /** How the owner and a sender know each other (`contactOf`, src/store/senders.ts). Null for everyone in between. */
-const Contact = z.enum(['new', 'mutual', 'one-way']).nullable();
+const Contact = z.enum(CONTACTS).nullable();
 export type Contact = z.infer<typeof Contact>;
 
 /** A decision in a list, with how its sender and the owner know each other. */
@@ -208,7 +209,7 @@ export type DecisionPage = z.infer<typeof DecisionPage>;
 
 const authentication = z.enum(['pass', 'fail', 'none']);
 
-/** What Mild checked about one message. Mirrors `Facts` in src/triage/facts.ts, which says what each means. */
+/** What Mild checked about one message: `Facts` (src/triage/facts.ts, which says what each means), checked against it. */
 const MessageFactSet = z.object({
   unsubscribe: z.enum(['none', 'header', 'one-click']),
   listId: held.nullable(),
@@ -233,10 +234,9 @@ const MessageFactSet = z.object({
   /** Known only for a reply a model has been asked about. */
   earlierInThread: z.number().optional(),
   ownerInThread: z.boolean().optional(),
-});
+}) satisfies z.ZodType<Omit<Facts, 'listId'> & { listId: Confidential | null }>;
 type MessageFactSet = z.infer<typeof MessageFactSet>;
 
-/** What Mild knows about one sender, or about everyone at one domain, to judge their mail by. */
 /** A file a message carries, by its part. Its name came in the mail. */
 export const MessageAttachment = z.object({ part: z.string(), name: held, type: held, size: z.int() });
 export type MessageAttachment = z.infer<typeof MessageAttachment>;
@@ -245,6 +245,7 @@ export type MessageAttachment = z.infer<typeof MessageAttachment>;
 export const Given = z.enum(GIVEN);
 export type Given = z.infer<typeof Given>;
 
+/** What Mild knows about one sender, or about everyone at one domain, to judge their mail by. */
 export const SenderProfile = z.object({
   /** An address, or for a domain's profile the domain. */
   address: held,
@@ -435,7 +436,7 @@ export const RuleFilter = z.object({
    * and Mild leaves it alone. `gone`: it was deleted in Gmail. `outdated`: the rule no longer says what the
    * filter does; Mild replaces or removes it once it is on. `RuleSummary.filterId` says whether Gmail still has one.
    */
-  state: z.enum(['none', 'active', 'changed', 'gone', 'outdated']),
+  state: z.enum(['none', ...FILTER_STATES]),
   /** Whether the rule as it stands can be written as a filter. */
   possible: z.boolean(),
   /** Why not, in a sentence. */
@@ -913,7 +914,7 @@ export const MailAsk = z.union([
       from: heldValues,
       domain: heldValues,
       label: held.optional(),
-      view: z.enum(['needs', 'sorted']).optional(),
+      view: z.enum(MAIL_VIEWS).exclude(['all']).optional(),
       unread: z.literal(true).optional(),
       /** `YYYY-MM-DD`, in the reader's days. */
       since: held.optional(),
@@ -928,7 +929,7 @@ export const MailAsk = z.union([
 export type MailAsk = z.infer<typeof MailAsk>;
 
 /** Which of the newest messages a press goes through: the whole inbox, or enough to teach with. */
-export const InboxReach = z.enum(['inbox', 'recent']);
+export const InboxReach = z.enum(REACHES);
 
 /** How far back Inbox keeps the viewer's mail. */
 export const MailWindow = z.enum(MAIL_WINDOWS);
@@ -1047,7 +1048,7 @@ const EvalRun = z.object({
   accountId: z.string(),
   startedAt: z.number(),
   finishedAt: z.number().nullable(),
-  status: z.enum(['running', 'done', 'failed']),
+  status: z.enum(EVAL_STATUSES),
   error: z.string().nullable(),
   /** What it ran with. Runs that agree on all of these were asked the same question the same way. */
   model: z.string(),
@@ -1125,7 +1126,7 @@ export const Examples = z.object({
       labelId: z.string().nullable(),
       markedAt: z.number(),
       /** `pending`: not fetched yet. `gone`: the message no longer existed, so only the answer is held. */
-      status: z.enum(['pending', 'captured', 'gone']),
+      status: z.enum(EXAMPLE_STATUSES),
     }),
   ),
   /** How many are held per account, including any beyond the list. */

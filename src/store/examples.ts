@@ -1,4 +1,5 @@
-import { type EXAMPLE_STATUSES, type SQL, and, asc, count, desc, eq, examples, inArray, isNotNull, lt, lte, messages, sql } from './query.ts';
+import { type SQL, and, asc, count, desc, eq, examples, inArray, isNotNull, lt, lte, messages, sql } from './query.ts';
+import type { EXAMPLE_STATUSES } from './states.ts';
 import type { Sql } from './sql.ts';
 import { exampleKeys, hashOf, openEnvelope, openFacts, openPart } from './content.ts';
 import { type Candidate, PER_LOOKUP, type Shot, excerptOf, nameKey, pickShots, withinBudget } from '../triage/fewshot.ts';

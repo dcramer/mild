@@ -1,18 +1,5 @@
 import { createHash } from 'node:crypto';
-import {
-  type EVAL_STATUSES,
-  and,
-  correspondents,
-  count,
-  desc,
-  eq,
-  evalResults,
-  evalRuns,
-  examples as exampleRows,
-  isNotNull,
-  lte,
-  messages,
-} from '../store/query.ts';
+import { and, correspondents, count, desc, eq, evalResults, evalRuns, examples as exampleRows, isNotNull, lte, messages } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { mailboxAliases } from '../store/accounts.ts';
 import { examplesFor } from '../store/examples.ts';
@@ -22,12 +9,12 @@ import { hashOf, openEnvelope, openPart, traceIds } from '../store/content.ts';
 import { invokeAgent } from '../telemetry.ts';
 import { deriveFacts } from '../triage/facts.ts';
 import { PROMPT_TEMPLATE } from '../triage/prompt.ts';
-import { type Scorecard, score } from '../triage/score.ts';
+import { score } from '../triage/score.ts';
 import { type Evidence, type Judge, type JudgeFailure, describeFailure } from '../triage/stages/model.ts';
 import type { MessageFacts } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
 import { plain, seal } from '../plain.ts';
-import type { Confidential } from '../confidential.ts';
+import type { EvalDetail } from '../dashboard/types.ts';
 
 /** Every example judged is a model call the user pays for, so one run is bounded. */
 export const MAX_EVAL_EXAMPLES = 200;
@@ -197,45 +184,8 @@ export async function continueEval(deps: EvalDeps, runId: number, until: number)
   return next < left.length ? false : await finish('done', null);
 }
 
-export interface EvalRun {
-  id: number;
-  accountId: string;
-  startedAt: number;
-  finishedAt: number | null;
-  status: (typeof EVAL_STATUSES)[number];
-  error: string | null;
-  /** What it ran with. Two runs with the same values here differ only by chance and by the examples stored since. */
-  model: string;
-  promptHash: string;
-  labelsHash: string;
-  labels: { id: string; name: string; description: string }[];
-  fewShot: boolean;
-  /** Examples in the run. `score.total` is how many have been judged so far. */
-  total: number;
-  score: Scorecard;
-  /**
-   * Of the answers, those given with an example from the same sender in the prompt: how much of the score is
-   * senders the user had already answered for, which are easier than a new one.
-   */
-  withSenderExample: { answered: number; right: number };
-}
-
-interface EvalResult {
-  messageId: string;
-  fromAddress: Confidential;
-  subject: Confidential;
-  expected: string;
-  got: string | null;
-  /** Why the call failed, when `got` is null. */
-  error: string | null;
-  confidence: number | null;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-  durationMs: number;
-  shots: number;
-  senderShots: number;
-}
+export type EvalRun = EvalDetail['run'];
+type EvalResult = EvalDetail['results'][number];
 
 const RUN = {
   id: evalRuns.id,
