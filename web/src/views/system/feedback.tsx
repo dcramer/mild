@@ -56,7 +56,7 @@ export function Feedback() {
                 ],
                 [
                   'To the digest',
-                  '3 conversations',
+                  'Build #4182 passed on main',
                   [
                     { action: 'archive', word: 'Archived' },
                     { action: 'label', word: 'Build results' },
@@ -80,6 +80,7 @@ export function Feedback() {
                   ],
                 ],
                 ['No label', 'Lunch on Thursday?', [{ action: 'archive', word: 'Archived' }]],
+                ['Several', '12 conversations', [{ action: 'archive', word: 'Archived 12 conversations' }]],
               ] as const
             ).map(([press, subject, did]) => (
               <Button key={press} onClick={() => toast(subject, { did, undo: () => toast('Back in the inbox') })}>
