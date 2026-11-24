@@ -19,10 +19,9 @@ import type { MessageRef } from '@/lib/open-messages.ts';
 import { messageKey, useParam } from '@/lib/params.ts';
 import { AT_API_PRICES, usePlan } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
-import { type RuleStart, keepStart, messageStart, standingStart } from '@/lib/rule-start.ts';
+import { keepStart, messageStart, standingStart } from '@/lib/rule-start.ts';
 import { useStarted } from '@/system/started.ts';
 import { InlineComposer } from '@/views/composer.tsx';
-import { AddLabelsDialog } from '@/views/label-panel.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import {
   Ago,
@@ -60,6 +59,7 @@ import {
 } from '@/system';
 import { useManage, useMessage, readMessageAhead, useSuggestion } from '@/lib/api/reads.ts';
 import { keys } from '@/lib/api/keys.ts';
+import { useLabelEnding } from './label-ending.tsx';
 
 type Decision = MessageDetail['decisions'][number];
 type Action = MessageDetail['actions'][number];
@@ -463,9 +463,6 @@ function OpenedMessage({
   const [composeAs] = useParam('compose');
   const [answering] = useParam('answering');
   const root = useRef<HTMLElement>(null);
-  const [adding, setAdding] = useState(false);
-  // The rule dialog, opened in place on what this message shows: its sender and label, or one thing Mild saw in it.
-  const [ruling, setRuling] = useState<RuleStart | null>(null);
   const current = detail.decisions.at(-1);
   // What the message is, as every list shows it: the user's answer where they gave one, else Mild's.
   const shownLabel = current?.answer ? current.answer.labelId : (current?.labelId ?? null);
@@ -538,13 +535,21 @@ function OpenedMessage({
       ) : null}
     </p>
   ) : null;
+  // The rule dialog, opened in place on what this message shows: its sender and label, or one thing Mild saw in it.
+  const { ending, openRule, dialogs } = useLabelEnding(
+    labels,
+    () => messageStart(reveal(detail.fromAddress), shownLabel),
+    (match, rule) => {
+      if (rule.whenLabel !== undefined && rule.whenLabel === current?.labelId && rule.disposition === 'keep' && covers(match)) keepThis(rule.whenLabel);
+    },
+  );
   const why =
     said || keepable || (inInbox && history) ? (
       <>
         {said}
         {keepable ? (
           <div className="-ml-3">
-            <Button variant="quiet" onClick={() => setRuling(keepStart(reveal(detail.fromAddress), keepable.id))}>
+            <Button variant="quiet" onClick={() => openRule(keepStart(reveal(detail.fromAddress), keepable.id))}>
               Keep as {keepable.name}…
             </Button>
           </div>
@@ -552,7 +557,6 @@ function OpenedMessage({
         {inInbox ? <History detail={detail} onUndone={onUndone} /> : null}
       </>
     ) : null;
-  const ending = { onAdd: () => setAdding(true), onRule: () => setRuling(messageStart(reveal(detail.fromAddress), shownLabel)) };
   // A reply answers the newest in the inbox, or another message of its conversation.
   const answered = conversation?.messages.some((m) => m.messageId === answering) ? answering : detail.messageId;
   const written = compose ? writing(composeAs, answered) : null;
@@ -600,7 +604,7 @@ function OpenedMessage({
       side={
         inInbox ? undefined : (
           <>
-            <SeenFacts detail={detail} onRule={setRuling} />
+            <SeenFacts detail={detail} onRule={openRule} />
             <Section title="Sender" action={<TextLink href={senderHref(reveal(detail.fromAddress))}>All their mail</TextLink>}>
               <SenderFacts profile={detail.sender} />
             </Section>
@@ -671,17 +675,7 @@ function OpenedMessage({
           ending={ending}
         />
       ) : null}
-      {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
-      {ruling ? (
-        <RuleDialog
-          labels={labels}
-          start={ruling}
-          onClose={() => setRuling(null)}
-          onAdded={(match, rule) => {
-            if (rule.whenLabel !== undefined && rule.whenLabel === current?.labelId && rule.disposition === 'keep' && covers(match)) keepThis(rule.whenLabel);
-          }}
-        />
-      ) : null}
+      {dialogs}
     </Reader>
   );
 }

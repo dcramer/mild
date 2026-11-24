@@ -1,14 +1,6 @@
 'use client';
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { ago, arrived, heard } from '@/lib/format.ts';
-
-const MINUTE = 60_000;
-const everyHalfMinute = (tick: () => void) => {
-  const timer = setInterval(tick, MINUTE / 2);
-  return () => clearInterval(timer);
-};
-const thisMinute = () => Math.floor(Date.now() / MINUTE);
-const onServer = () => null;
 
 /**
  * How long ago `at` was ("just now", "5 min ago", a date). Drawn only once the page runs in the browser: the
@@ -31,8 +23,19 @@ export function Heard({ at }: { at: number }) {
   return now === null ? null : <time dateTime={new Date(at).toISOString()}>{heard(at, now)}</time>;
 }
 
-/** The time in the browser to the minute, kept current; null on the server, whose clock and zone are not the reader's. */
-export function useNow(): number | null {
-  const minute = useSyncExternalStore(everyHalfMinute, thisMinute, onServer);
-  return minute === null ? null : minute * MINUTE;
+/**
+ * The time in the browser to the `ms`, kept current, so what is drawn from it ("1 min ago", the time left) keeps up with
+ * nothing loaded. Null on the server, whose clock and zone are not the reader's. Looked at twice an `ms`, so it is never
+ * more than half of one behind.
+ */
+export function useNow(ms = 60_000): number | null {
+  const every = useCallback(
+    (tick: () => void) => {
+      const timer = setInterval(tick, ms / 2);
+      return () => clearInterval(timer);
+    },
+    [ms],
+  );
+  return useSyncExternalStore(every, () => Math.floor(Date.now() / ms) * ms, onServer);
 }
+const onServer = () => null;

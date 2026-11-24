@@ -3,10 +3,9 @@ import { Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { GoThroughInbox, InboxRow, timeLeft } from '@/components/inbox.tsx';
-import { useNow } from '@/components/status.tsx';
 import { count } from '@/lib/format.ts';
 import { MailWindowDialog, TurnInboxOn, windowName } from '@/components/inbox-switch.tsx';
-import { ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
+import { ProviderList, pressOf, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { costLine, spentLine, usePlan, providerOf } from '@/lib/prices.ts';
 import { type ManageState, type Removed, api } from '@/lib/api/endpoints.ts';
 import { forgetHere } from '@/lib/sign-out.ts';
@@ -33,6 +32,7 @@ import {
   setShortcutsOn,
   useShortcutsOn,
   useToast,
+  useNow,
 } from '@/system';
 import { useSession, useManage, useModels } from '@/lib/api/reads.ts';
 
@@ -262,12 +262,7 @@ function Switch({
       footer={
         <>
           {next ? (
-            <Button
-              variant="ink"
-              busy={next.busy ?? false}
-              onClick={next.onPress}
-              {...(next.href !== undefined && !next.disabled ? { href: next.href, target: '_blank', rel: 'noreferrer' } : { disabled: next.disabled ?? false })}
-            >
+            <Button variant="ink" {...pressOf(next)}>
               {next.label}
             </Button>
           ) : (

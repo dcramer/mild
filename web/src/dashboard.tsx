@@ -1,10 +1,12 @@
 'use client';
 import { useIsFetching } from '@tanstack/react-query';
 import { ActivityIcon, ContactRoundIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SetUp } from '@/components/set-up.tsx';
-import { SiftStatus, UsageDetail, useNow } from '@/components/status.tsx';
+import { SiftStatus, UsageDetail } from '@/components/status.tsx';
+import type { ManageState } from '@/lib/api/endpoints.ts';
 import { useOnline } from '@/lib/api/query.ts';
 import { useKeptPlace } from '@/lib/place.ts';
 import { signOut } from '@/lib/sign-out.ts';
@@ -19,11 +21,10 @@ import { useHidden } from '@/lib/action.ts';
 import { ahead, plural } from '@/lib/format.ts';
 import { useOutbox, useOutboxFailures } from '@/lib/waiting.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
-import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing } from '@/system';
+import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing, useNow } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { useSession, useManage, useUsage } from '@/lib/api/reads.ts';
-import dynamic from 'next/dynamic';
 import { usePlan } from '@/lib/prices.ts';
 import { useDeviceFrame } from '@/lib/frame.ts';
 
@@ -192,27 +193,17 @@ const firstLoad = {
     query.state.data === undefined && query.meta?.['ahead'] !== true,
 };
 
-function Frame({ signedInAs, children }: { signedInAs: string | null; children: ReactNode }) {
-  usePanelsAhead();
-  useKeptPlace();
-  const pathname = usePathname();
-  const [, page] = pathname.split('/');
-  // A sender's and a domain's page are a contact's.
-  const section = page === 'sender' || page === 'domain' ? 'contacts' : page;
-  // The reader, in the screen's place. Which message is open is in the address, so it can be linked to and Back
-  // returns to the list; the list it was opened from, for previous and next, is only known when it was opened from one here.
+/**
+ * The reader, in the screen's place. Which message is open is in the address, so it can be linked to and Back returns
+ * to the list; the list it was opened from, for previous and next, is only known when it was opened from one here.
+ */
+function useReader() {
   const [list, setList] = useState<MessageRef[]>([]);
   // The address names the message alone: the server finds which mailbox holds it.
   const [messageId] = useParam('message');
   // A conversation, opened on its newest message; the server finds which mailbox holds it, as it does a message.
   const [threadId] = useParam('thread');
-  const [compose] = useParam('compose');
-  // A rule Mild proposes, opened from Inbox in its place, as a message is.
-  const [proposal] = useParam('proposal');
-  const [to] = useParam('to');
-  const [draftParam] = useParam('draft');
   useEffect(() => void (messageId && panelOpened('Message')), [messageId]);
-  useEffect(() => void (compose && panelOpened('Composer')), [compose]);
   const listed = list.findIndex((item) => item.messageId === messageId);
   const open =
     messageId === ''
@@ -222,26 +213,6 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
         : { items: list, index: listed };
   const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) =>
     setParams({ message: item?.messageId ?? '', thread: item?.threadId ?? '' }, push);
-  const online = useOnline();
-  const waitingPresses = useOutbox().waiting;
-  useOutboxFailures();
-  // Drawn above the `Mailbox` it provides, so for all of them: whose mailboxes these are, and whose sign-in expired.
-  const manage = useManage();
-  const mailboxes = (manage.data?.accounts ?? []).map((a) => a.email);
-  const mailbox = useChosenMailbox(mailboxes);
-  const inMailbox = useManage({ mailbox });
-  const expired = manage.data?.activity.expired ?? [];
-  const now = useNow(60_000);
-  // The soonest sign-in Google will end within the warning, so it is renewed before Mild stops reading that mailbox.
-  const ending =
-    now === null
-      ? undefined
-      : (manage.data?.accounts ?? [])
-          .flatMap((a) =>
-            a.signInEnds !== null && a.signInEnds > now && a.signInEnds - now < SIGN_IN_WARNING_MS ? [{ email: a.email, at: a.signInEnds }] : [],
-          )
-          .toSorted((a, b) => a.at - b.at)[0];
-  const here = useHere();
   // Each opening is a reader of its own, with a history entry of its own, so Back returns to the list.
   const [opened, setOpened] = useState(0);
   // Where the list was, and the row of the message last shown, for Back to return to.
@@ -266,6 +237,63 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const shown = useCallback((row: string) => {
     place.current.row = row;
   }, []);
+  return { open, opened, openMessages, show, shown };
+}
+
+/**
+ * What is true of Mild on every screen, over it: Mild cannot be reached, or a Google sign-in has expired or soon will.
+ * Signing in again is what renews Mild's access; Google asks which account. Named when it is one that is not the
+ * viewer's own (`name`).
+ */
+function useNotice(accounts: ManageState['accounts'], expired: readonly string[], name: string | null): ReactNode {
+  const online = useOnline();
+  const waiting = useOutbox().waiting;
+  const now = useNow();
+  const here = useHere();
+  if (!online) return <Notice>Mild cannot be reached{waiting > 0 ? `: ${plural(waiting, 'change')} will go once it is back` : ''}</Notice>;
+  // The soonest sign-in Google will end within the warning, so it is renewed before Mild stops reading that mailbox.
+  const ending =
+    now === null
+      ? undefined
+      : accounts
+          .flatMap((a) =>
+            a.signInEnds !== null && a.signInEnds > now && a.signInEnds - now < SIGN_IN_WARNING_MS ? [{ email: a.email, at: a.signInEnds }] : [],
+          )
+          .toSorted((a, b) => a.at - b.at)[0];
+  const reconnect =
+    expired.length > 0
+      ? `Google sign-in expired${expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}`
+      : ending && now !== null
+        ? `Google sign-in${ending.email === name ? '' : ` for ${ending.email}`} ends ${ahead(ending.at, now)}`
+        : null;
+  return reconnect ? (
+    <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
+      {reconnect}
+    </Notice>
+  ) : null;
+}
+
+function Frame({ signedInAs, children }: { signedInAs: string | null; children: ReactNode }) {
+  usePanelsAhead();
+  useKeptPlace();
+  const pathname = usePathname();
+  const [, page] = pathname.split('/');
+  // A sender's and a domain's page are a contact's.
+  const section = page === 'sender' || page === 'domain' ? 'contacts' : page;
+  const { open, opened, openMessages, show, shown } = useReader();
+  const [compose] = useParam('compose');
+  // A rule Mild proposes, opened from Inbox in its place, as a message is.
+  const [proposal] = useParam('proposal');
+  const [to] = useParam('to');
+  const [draftParam] = useParam('draft');
+  useEffect(() => void (compose && panelOpened('Composer')), [compose]);
+  const online = useOnline();
+  useOutboxFailures();
+  // Drawn above the `Mailbox` it provides, so for all of them: whose mailboxes these are, and whose sign-in expired.
+  const manage = useManage();
+  const mailboxes = (manage.data?.accounts ?? []).map((a) => a.email);
+  const mailbox = useChosenMailbox(mailboxes);
+  const inMailbox = useManage({ mailbox });
   const accounts = manage.data?.accounts ?? [];
   // Who they are, not which mailbox they happened to sign in with.
   const name = accounts.find((a) => a.primary)?.email ?? signedInAs;
@@ -284,18 +312,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
     ...s,
     ...(s.to === (inbox ? 'inbox' : '') && waiting ? { count: waiting } : {}),
   }));
-  const notice = !online ? (
-    <Notice>Mild cannot be reached{waitingPresses > 0 ? `: ${plural(waitingPresses, 'change')} will go once it is back` : ''}</Notice>
-  ) : expired.length > 0 ? (
-    // Signing in again is what renews Mild's access; Google asks which account. Named when it is one that is not the viewer's own.
-    <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
-      Google sign-in expired{expired.length > 1 ? ` for ${expired.length} accounts` : expired[0] === name ? '' : ` for ${expired[0]}`}
-    </Notice>
-  ) : ending && now !== null ? (
-    <Notice tone="look" href={`/auth/login?to=${encodeURIComponent(here)}`} action="Reconnect">
-      Google sign-in{ending.email === name ? '' : ` for ${ending.email}`} ends {ahead(ending.at, now)}
-    </Notice>
-  ) : null;
+  const notice = useNotice(accounts, manage.data?.activity.expired ?? [], name);
   const status = (stacked: boolean) => (manage.data ? <SiftStatus accounts={accounts} usage={usage.data} plan={plan} stacked={stacked} /> : null);
   const account = name
     ? {

@@ -2,9 +2,8 @@
 import { type InboxEstimate, type ManageState, api } from '@/lib/api/endpoints.ts';
 import { useAction } from '@/lib/action.ts';
 import { count, money, plural } from '@/lib/format.ts';
-import { Ago, Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share } from '@/system';
+import { Ago, Blank, Button, Dialog, Failure, Figure, Figures, SettingRow, Share, useNow } from '@/system';
 import { costOfMessages, priceNote, usePlan } from '@/lib/prices.ts';
-import { useNow } from '@/components/status.tsx';
 import { useInboxEstimate } from '@/lib/api/reads.ts';
 
 /** How many messages, how many need the model, and about what that costs on the model in use. */
