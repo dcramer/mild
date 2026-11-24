@@ -108,14 +108,14 @@ export const openAddress = (db: Sql, accountId: string, hash: string, who: strin
 
 const FILL_BATCH = 500;
 
-/** Whether mail recorded before the address book waits to be added to it. */
+/** Whether the address book waits to be filled from the record, as it does after a new key empties it. */
 export async function addressesDue(db: Sql, accountId: string): Promise<boolean> {
   const [row] = await db.select({ from: mailboxes.addressesFrom }).from(mailboxes).where(eq(mailboxes.id, accountId));
   return row?.from != null;
 }
 
 /**
- * Add mail recorded before the address book to it, oldest first, up to `most` messages or until `over`, from where the
+ * Add recorded mail to the address book, oldest first, up to `most` messages or until `over`, from where the
  * last pass got to. Safe to repeat. Returns how many it went through.
  */
 export async function fillAddresses(db: Sql, accountId: string, most: number, over: () => boolean): Promise<number> {

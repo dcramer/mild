@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { unsubscribe } from '../actions/unsubscribe.ts';
 import type { Config } from '../config.ts';
-import { type PassResult, type RunOptions, type Work, describeWork, dueWork, runWork } from '../work/run.ts';
+import { type RunOptions, type Work, describeWork, dueWork, runWork } from '../work/run.ts';
+import { type PassResult } from '../work/pass.ts';
 import { createDashboard } from '../dashboard/server.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { listAccounts, personOf } from '../store/accounts.ts';
