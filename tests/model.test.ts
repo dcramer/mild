@@ -4,19 +4,8 @@ import { gatherEvidence } from '../src/work/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
 import { credentialStore } from '../src/model/credentials.ts';
 import { createJudge } from '../src/model/judge.ts';
-import {
-  finishChatGPTRedirect,
-  modelChoices,
-  priceOf,
-  offerModel,
-  openModels,
-  pollChatGPTDeviceCode,
-  resolveModel,
-  saveApiKey,
-  startChatGPTDeviceCode,
-  startChatGPTRedirect,
-  shortlistModels,
-} from '../src/model/models.ts';
+import { modelChoices, priceOf, offerModel, openModels, resolveModel, saveApiKey, shortlistModels } from '../src/model/models.ts';
+import { finishChatGPTRedirect, pollChatGPTDeviceCode, startChatGPTDeviceCode, startChatGPTRedirect } from '../src/model/chatgpt-sign-in.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { connectGmail, fakeGoogle, openUserDb, raw } from './fixtures.ts';

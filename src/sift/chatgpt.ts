@@ -6,7 +6,7 @@ import {
   pollChatGPTDeviceCode,
   startChatGPTDeviceCode,
   startChatGPTRedirect,
-} from '../model/models.ts';
+} from '../model/chatgpt-sign-in.ts';
 import type { SignIns } from '../model/credentials.ts';
 import { Refusal } from '../refusal.ts';
 
