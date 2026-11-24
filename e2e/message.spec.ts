@@ -2,30 +2,14 @@ import type { Locator, Page } from '@playwright/test';
 import { mailDocument } from '../src/dashboard/mail-html.ts';
 import { FRAME_POLICY } from '../src/dashboard/policy.ts';
 import { addRule, ruleDialog, ruleFromMessage, rulePanel, writeRule } from './rule.ts';
-import {
-  addLabelsDialog,
-  boxOf,
-  choose,
-  expect,
-  forReviewLink,
-  messageQuery,
-  addressed,
-  openMessage,
-  back,
-  reader,
-  readerHeading,
-  toast,
-  param,
-  path,
-  PHONE,
-  query,
-  reviewRows,
-  row,
-  senderPage,
-  sideScroll,
-  test,
-  writeLabel,
-} from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, param, path, query, sideScroll } from './wait.ts';
+import { choose, row } from './parts.ts';
+import { addressed, openMessage, back, reader, readerHeading } from './reader.ts';
+import { forReviewLink, messageQuery, senderPage } from './navigation.ts';
+import { reviewRows } from './review.ts';
+import { toast } from './toast.ts';
+import { addLabelsDialog, writeLabel } from './labels.ts';
 
 const DEALS = `/?${messageQuery('m4')}`;
 

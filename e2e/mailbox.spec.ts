@@ -1,5 +1,8 @@
 import type { Page } from '@playwright/test';
-import { closeSettings, expect, param, path, query, settings, settingsFromMenu, test, ME } from './sift.ts';
+import { expect, test } from './fixture.ts';
+import { param, path, query } from './wait.ts';
+import { closeSettings, settings, settingsFromMenu } from './settings.ts';
+import { ME } from './mailboxes.ts';
 
 /** Confirms a removal in the open dialog `title` by typing `address`. */
 async function confirmRemoval(page: Page, title: string, address: string, action: string) {

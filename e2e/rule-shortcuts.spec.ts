@@ -1,5 +1,10 @@
 import { addRule, fact, makeRule, proposal, ruleDialog, ruleFromMessage, rulePanel, seededRulesOnly, standing } from './rule.ts';
-import { domainPage, expect, messageQuery, reader, param, path, query, row, senderPage, test, toast } from './sift.ts';
+import { expect, test } from './fixture.ts';
+import { param, path, query } from './wait.ts';
+import { row } from './parts.ts';
+import { reader } from './reader.ts';
+import { domainPage, messageQuery, senderPage } from './navigation.ts';
+import { toast } from './toast.ts';
 
 /** The store's Winter sale starts now, open. */
 const STORE = `?${messageQuery('m8')}`;

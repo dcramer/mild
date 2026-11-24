@@ -1,5 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
-import { choose, expect, path } from './sift.ts';
+import { expect } from './fixture.ts';
+import { path } from './wait.ts';
+import { choose } from './parts.ts';
 
 export const ruleDialog = (page: Page) => page.getByRole('dialog', { name: 'Add a rule' });
 

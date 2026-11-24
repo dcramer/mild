@@ -1,5 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
-import { PHONE, addressed, boxOf, expect, forward, param, patchJson, path, reader, sideScroll, test, toast, ME, phoneMenu, sections } from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, param, path, sideScroll } from './wait.ts';
+import { addressed, reader } from './reader.ts';
+import { phoneMenu, sections } from './navigation.ts';
+import { toast } from './toast.ts';
+import { forward, patchJson } from './network.ts';
+import { ME } from './mailboxes.ts';
 
 /** The phone's top bar. */
 const bar = (page: Page) => page.getByRole('banner');

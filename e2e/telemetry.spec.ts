@@ -1,4 +1,9 @@
-import { SENTRY_DSN, expect, openMessage, path, senderPage, settingsFromMenu, test, ME } from './sift.ts';
+import { SENTRY_DSN, expect, test } from './fixture.ts';
+import { path } from './wait.ts';
+import { openMessage } from './reader.ts';
+import { senderPage } from './navigation.ts';
+import { settingsFromMenu } from './settings.ts';
+import { ME } from './mailboxes.ts';
 
 test.describe('What the page sends Sentry', () => {
   test.use({ sentry: true });

@@ -1,5 +1,7 @@
 import type { Locator } from '@playwright/test';
-import { PHONE, boxOf, expect, test, sections } from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf } from './wait.ts';
+import { sections } from './navigation.ts';
 
 const middle = async (target: Locator) => {
   const box = await boxOf(target);

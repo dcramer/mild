@@ -1,20 +1,10 @@
-import {
-  addLabelsDialog,
-  boxOf,
-  choose,
-  expect,
-  messageQuery,
-  openMessage,
-  back,
-  reader,
-  readerHeading,
-  param,
-  query,
-  reviewRows,
-  reviewSearch,
-  row,
-  test,
-} from './sift.ts';
+import { expect, test } from './fixture.ts';
+import { boxOf, param, query } from './wait.ts';
+import { choose, row } from './parts.ts';
+import { openMessage, back, reader, readerHeading } from './reader.ts';
+import { messageQuery } from './navigation.ts';
+import { reviewRows, reviewSearch } from './review.ts';
+import { addLabelsDialog } from './labels.ts';
 
 test.describe('For review, narrowed', () => {
   test('search matches senders’ names, addresses and subjects', async ({ page }) => {

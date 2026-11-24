@@ -1,4 +1,10 @@
-import { TOUCH, boxOf, dismiss, edgeSwipe, expect, fingerOver, hold, path, reader, swipe, test, toast, ME, phoneMenu, sections } from './sift.ts';
+import { expect, test } from './fixture.ts';
+import { boxOf, path } from './wait.ts';
+import { TOUCH, edgeSwipe, fingerOver, hold, swipe } from './touch.ts';
+import { reader } from './reader.ts';
+import { phoneMenu, sections } from './navigation.ts';
+import { dismiss, toast } from './toast.ts';
+import { ME } from './mailboxes.ts';
 import type { Page } from '@playwright/test';
 import { ruleDialog } from './rule.ts';
 

@@ -1,4 +1,6 @@
-import { expect, inboxRow, inboxRows, inboxSearch, param, test } from './sift.ts';
+import { expect, test } from './fixture.ts';
+import { param } from './wait.ts';
+import { inboxRow, inboxRows, inboxSearch } from './inbox.ts';
 
 test.describe('Inbox, with the model', () => {
   test.use({ variant: 'inbox' });

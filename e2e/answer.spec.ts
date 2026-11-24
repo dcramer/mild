@@ -1,28 +1,13 @@
 import type { Page } from '@playwright/test';
 import { makeRule, proposal, ruleDialog, ruleFromMessage, seededRulesOnly } from './rule.ts';
-import {
-  boxOf,
-  choose,
-  expect,
-  failureToast,
-  forReviewLink,
-  messageQuery,
-  openMessage,
-  back,
-  reader,
-  readerHeading,
-  param,
-  PHONE,
-  putAway,
-  query,
-  refused,
-  reviewRows,
-  reviewSearch,
-  row,
-  test,
-  toast,
-  requestsTo,
-} from './sift.ts';
+import { expect, refused, test, PHONE } from './fixture.ts';
+import { boxOf, param, query } from './wait.ts';
+import { choose, row } from './parts.ts';
+import { openMessage, back, reader, readerHeading } from './reader.ts';
+import { forReviewLink, messageQuery } from './navigation.ts';
+import { reviewRows, reviewSearch } from './review.ts';
+import { failureToast, putAway, toast } from './toast.ts';
+import { requestsTo } from './network.ts';
 
 test.describe('Answering mail', () => {
   test('agreeing from a row answers it, opens nothing and makes no rule', async ({ page }) => {

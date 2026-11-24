@@ -1,6 +1,11 @@
 import type { Page } from '@playwright/test';
 import type { ManageState } from '../src/dashboard/types.ts';
-import { boxOf, expect, PHONE, patchJson, path, pointAt, senderPage, settings, sideScroll, test, tooltip, ME, phoneMenu, sections } from './sift.ts';
+import { expect, test, PHONE } from './fixture.ts';
+import { boxOf, path, pointAt, sideScroll, tooltip } from './wait.ts';
+import { senderPage, phoneMenu, sections } from './navigation.ts';
+import { patchJson } from './network.ts';
+import { settings } from './settings.ts';
+import { ME } from './mailboxes.ts';
 
 test.describe('When a Google sign-in expired', () => {
   // A service worker's page is out of reach of page.route.

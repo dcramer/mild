@@ -1,30 +1,13 @@
 import type { Page } from '@playwright/test';
-import {
-  addALabelDialog,
-  addLabelsDialog,
-  choose,
-  closeSettings,
-  expect,
-  messageQuery,
-  openMessage,
-  back,
-  reader,
-  param,
-  path,
-  PHONE,
-  query,
-  refused,
-  row,
-  section,
-  settingsActive,
-  settled,
-  suggestLabels,
-  test,
-  toast,
-  writeLabel,
-  ME,
-  askForLabels,
-} from './sift.ts';
+import { expect, refused, test, PHONE } from './fixture.ts';
+import { param, path, query, settled } from './wait.ts';
+import { choose, row, section } from './parts.ts';
+import { openMessage, back, reader } from './reader.ts';
+import { messageQuery } from './navigation.ts';
+import { toast } from './toast.ts';
+import { closeSettings, settingsActive } from './settings.ts';
+import { addALabelDialog, addLabelsDialog, suggestLabels, writeLabel, askForLabels } from './labels.ts';
+import { ME } from './mailboxes.ts';
 
 /** The label's panel on the Labels screen. Not the toast saying it was removed, a dialog named by the label too, which is never modal. */
 const labelPanel = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true }).and(page.locator(':not([aria-modal="false"])'));

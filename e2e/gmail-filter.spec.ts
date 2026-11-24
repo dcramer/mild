@@ -1,5 +1,9 @@
 import { addRule, openRule, removeRule, rulePanel, ruleRows, writeRule } from './rule.ts';
-import { expect, row, test, toast, turnOn, ME } from './sift.ts';
+import { expect, test } from './fixture.ts';
+import { row } from './parts.ts';
+import { toast } from './toast.ts';
+import { turnOn } from './settings.ts';
+import { ME } from './mailboxes.ts';
 
 const CI = 'anyone at ci.example.org';
 

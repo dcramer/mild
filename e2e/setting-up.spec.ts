@@ -1,5 +1,8 @@
 import type { Page } from '@playwright/test';
-import { closeSettings, expect, param, path, PHONE, query, refused, settings, sideScroll, suggestLabels, test, WANT } from './sift.ts';
+import { expect, refused, test, PHONE } from './fixture.ts';
+import { param, path, query, sideScroll } from './wait.ts';
+import { closeSettings, settings } from './settings.ts';
+import { suggestLabels, WANT } from './labels.ts';
 
 const steps = (page: Page) => page.locator('ol > li');
 const current = (page: Page) => page.locator('[aria-current="step"]');
