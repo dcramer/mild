@@ -128,6 +128,6 @@ describe('making a rule from the dashboard', () => {
   it('always goes through the rule dialog, so the user sees the rule and agrees before it is added', () => {
     const pages = globSync('web/src/**/*.{ts,tsx}').filter((file) => file !== 'web/src/lib/api/endpoints.ts');
     const adding = pages.filter((file) => readFileSync(file, 'utf8').includes('api.addRule('));
-    expect(adding).toEqual(['web/src/views/rule-dialog.tsx']);
+    expect(adding).toEqual(['web/src/components/rule-dialog.tsx']);
   });
 });

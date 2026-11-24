@@ -8,7 +8,7 @@ import { MessageBody, SeenFacts, useMessageView } from '@/components/message-par
 import { DigestBody } from '@/components/digest.tsx';
 import { useMailPress } from '@/components/mail.tsx';
 import { ContactHint, SenderFacts, SenderLink, senderHref } from '@/components/sender.tsx';
-import { useAction } from '@/lib/action.ts';
+import { useAction } from '@/components/action.ts';
 import { saveFile, useFiles } from '@/lib/attachments.ts';
 import { type Confidential, type MailConversation, type MessageDetail, type RuleMatch, api } from '@/lib/api/endpoints.ts';
 import { changeLoaded, useLoaded } from '@/lib/api/query.ts';
@@ -20,9 +20,9 @@ import { messageKey, useParam } from '@/lib/params.ts';
 import { AT_API_PRICES, usePlan } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { keepStart, messageStart, standingStart } from '@/lib/rule-start.ts';
-import { useStarted } from '@/system/started.ts';
+import { useStarted } from '@/lib/started.ts';
 import { InlineComposer } from '@/views/composer.tsx';
-import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { RuleDialog } from '@/components/rule-dialog.tsx';
 import {
   Ago,
   AnswerPicker,
@@ -59,7 +59,7 @@ import {
 } from '@/system';
 import { useManage, useMessage, readMessageAhead, useSuggestion } from '@/lib/api/reads.ts';
 import { keys } from '@/lib/api/keys.ts';
-import { useLabelEnding } from './label-ending.tsx';
+import { useLabelEnding } from '@/components/label-ending.tsx';
 
 type Decision = MessageDetail['decisions'][number];
 type Action = MessageDetail['actions'][number];

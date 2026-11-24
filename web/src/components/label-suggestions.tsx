@@ -3,7 +3,7 @@ import type { LabelProposal } from '@/lib/api/endpoints.ts';
 import { ACTIONS } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
 import { Heads, Button, Check, Does, OnPhone, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
-import type { LabelDraft } from '@/views/label-panel.tsx';
+import type { LabelDraft } from './label-fields.tsx';
 import { reveal } from '@/lib/reveal.ts';
 
 /** A label the model suggested, as the person is shaping it: kept unless unticked. */

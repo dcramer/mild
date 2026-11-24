@@ -4,7 +4,7 @@ import { NamedLabel } from '@/components/bits.tsx';
 import { useState } from 'react';
 import { useOpenRule, useOpened } from '@/lib/params.ts';
 import { type LabelSummary, type RuleBody, type RuleDraft, type RuleFilter, type RuleMatch, type RuleSummary, api } from '@/lib/api/endpoints.ts';
-import { useAction } from '@/lib/action.ts';
+import { useAction } from './action.ts';
 import { type By, type Condition, type RuleStart, addedWords, conditionsOf, matchOf, replacedBy, startWords } from '@/lib/rule-start.ts';
 import {
   FACTS,
@@ -21,7 +21,7 @@ import {
   outcomeName,
 } from '@/lib/format.ts';
 import { Button, Check, Dialog, Does, Failure, Field, FieldGroup, Form, Input, Note, Select, useToast } from '@/system';
-import { useFilterOffer } from '@/views/gmail-filter.tsx';
+import { useFilterOffer } from './gmail-filter.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
 import { reveal } from '@/lib/reveal.ts';
 import { useRules } from '@/lib/api/reads.ts';

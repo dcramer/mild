@@ -2,7 +2,7 @@
 import { type Confidential, type Given, type MailThread, api } from '@/lib/api/endpoints.ts';
 import { Fragment, useState } from 'react';
 import { SenderName } from '@/components/sender.tsx';
-import { useAction } from '@/lib/action.ts';
+import { useAction } from './action.ts';
 import { press as outbox } from '@/lib/outbox.ts';
 import { outcomeName, sureness } from '@/lib/format.ts';
 import { threadKey } from '@/lib/params.ts';
@@ -37,7 +37,7 @@ function didOf(threads: readonly Pressed[], what: 'archive' | 'spam', first: Did
  * each shows at once. Archive and Spam say so with Undo, and go once the toast does, so Undo sends nothing; read and
  * unread go at once. Block gives each sender the Blocked standing and marks their conversation spam, with one Undo for
  * both; where a sender's own rule says more than Block would, nothing is given and `ruling` names them, for the rule
- * dialog. What comes back is said by `useOutboxFailures` (`web/src/lib/waiting.ts`).
+ * dialog. What comes back is said by `onOutboxFailed` (`web/src/lib/waiting.ts`).
  */
 export function useMailPress(): {
   press: (threads: readonly Pressed[], what: Press, then?: () => void) => void;

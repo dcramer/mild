@@ -1,6 +1,6 @@
 'use client';
 import { type LabelSummary, type RuleMatch, type RuleSummary, api } from '@/lib/api/endpoints.ts';
-import { useAction } from '@/lib/action.ts';
+import { useAction } from '@/components/action.ts';
 import {
   HANDLED,
   INBOX_NAME,
@@ -26,8 +26,8 @@ import { NamedLabel, Verdict } from '@/components/bits.tsx';
 import { messageKey, useParam } from '@/lib/params.ts';
 import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/lib/open-messages.ts';
-import { GmailFilter } from '@/views/gmail-filter.tsx';
-import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { GmailFilter } from '@/components/gmail-filter.tsx';
+import { RuleDialog } from '@/components/rule-dialog.tsx';
 import { type ReactNode, useState } from 'react';
 import {
   Ago,

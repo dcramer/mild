@@ -1,7 +1,7 @@
 'use client';
 import { CheckIcon, CopyIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useStarted } from './started.ts';
+import { useStarted } from '@/lib/started.ts';
 
 /** A value the reader has to carry somewhere else, whole: a command to run, an address to register. */
 export function Copyable({ value, label }: { value: string; label: string }) {

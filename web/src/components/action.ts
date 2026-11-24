@@ -2,7 +2,7 @@
 import { type QueryClient, useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useToast } from '@/system';
-import { isModels } from './api/keys.ts';
+import { isModels } from '@/lib/api/keys.ts';
 
 interface Change {
   work: () => Promise<unknown>;
