@@ -18,7 +18,8 @@ function sources(dir: string): string[] {
 const ALL = sources(WEB);
 const SYSTEM = new Set(ALL.filter((path) => relative(WEB, path).startsWith('system/')));
 // The specimen page shows the tokens themselves, so it may name them.
-const SCREENS = ALL.filter((path) => !SYSTEM.has(path) && relative(WEB, path) !== 'views/system.tsx');
+const SPECIMEN = ALL.filter((path) => relative(WEB, path).startsWith('views/system/'));
+const SCREENS = ALL.filter((path) => !SYSTEM.has(path) && !SPECIMEN.includes(path));
 
 interface Word {
   file: string;
@@ -193,7 +194,7 @@ describe('red is also deleting, always through DeleteButton', () => {
   test('a press that removes or deletes is a DeleteButton, and nothing else draws its red', () => {
     // One question for every deletion: a Button or ConfirmButton saying Remove or Delete is one built by hand.
     const failures: string[] = [];
-    for (const path of [...SCREENS, join(WEB, 'views/system.tsx')]) {
+    for (const path of [...SCREENS, ...SPECIMEN]) {
       const source = readFileSync(path, 'utf8');
       const file = `web/src/${relative(WEB, path)}`;
       const at = (index: number | undefined) => source.slice(0, index).split('\n').length;
@@ -207,7 +208,7 @@ describe('red is also deleting, always through DeleteButton', () => {
 });
 
 test('a screen is as wide as the window; only a page with one thing on it centres a column', () => {
-  const centred = new Set(['system/splash.tsx', 'system/entry.tsx', 'system/onboarding.tsx', 'system/document.tsx', 'views/system.tsx']);
+  const centred = new Set(['system/splash.tsx', 'system/entry.tsx', 'system/onboarding.tsx', 'system/document.tsx', 'views/system/index.tsx']);
   const failures = ALL.filter((path) => !centred.has(relative(WEB, path)))
     .flatMap((path) => words(path))
     .filter(({ word }) => utility(word) === 'mx-auto')
@@ -268,9 +269,9 @@ test('every part is on the specimen page', () => {
     .map((name) => name.trim())
     .filter((name) => /^[A-Z]/.test(name));
   // Toaster is mounted once by the app; the specimen page shows toasts through useToast.
-  const specimen = readFileSync(join(WEB, 'views/system.tsx'), 'utf8');
+  const specimen = SPECIMEN.map((path) => readFileSync(path, 'utf8')).join('\n');
   const missing = parts.filter((name) => name !== 'Toaster' && !new RegExp(`<${name}\\b`).test(specimen));
-  expect(missing, 'add each to web/src/views/system.tsx, in its states (docs/design.md)').toEqual([]);
+  expect(missing, 'add each to the specimen page, web/src/views/system/, in its states (docs/design.md)').toEqual([]);
 });
 
 test('keys are for working through a list, and screens bind none of their own', () => {

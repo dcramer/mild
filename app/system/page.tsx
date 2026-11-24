@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { SystemView } from '@/views/system.tsx';
+import { SystemView } from '@/views/system/index.tsx';
 
 export const metadata: Metadata = { title: 'System' };
 
