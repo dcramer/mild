@@ -4,7 +4,7 @@ import { Fragment, type ReactNode, type Ref, createContext, useContext, useEffec
 import { cn } from '@/lib/utils.ts';
 import { Button } from './button.tsx';
 import { keyName, useShortcut } from './keys.tsx';
-import { Menu } from './menu.tsx';
+import { Avatar, Menu } from './menu.tsx';
 import { type Thumb, ThumbBar } from './thumbs.tsx';
 import { Tooltip } from './tooltip.tsx';
 import { Kbd } from './type.tsx';
@@ -198,7 +198,7 @@ interface Listed {
   /** The first line of its text. */
   preview: string | null;
   at: ReactNode;
-  /** Its folded line is bold, as a mail app marks what is not read. */
+  /** Its folded line's first line of text is in full ink, as a mail app marks what is not read. */
   unread?: boolean;
 }
 
@@ -246,7 +246,10 @@ export function MessageStack({
     <div className="flex min-w-0 flex-col">
       {items.map((item) =>
         'open' in item ? (
-          <article key={item.open.id} className="row flex min-w-0 flex-col gap-4 py-5 first:pt-1">
+          <article key={item.open.id} className={GUTTERED}>
+            <span data-avatar className="pointer-events-none relative z-1 col-start-1 row-start-1 -mt-1.5">
+              <Avatar name={item.open.from} />
+            </span>
             <Opened value={{ from: item.open.from, fold: alone ? null : () => onToggle(item.open.id) }}>{children(item.open.id)}</Opened>
           </article>
         ) : 'folded' in item || item.more.length === 1 ? (
@@ -270,18 +273,30 @@ export function MessageStack({
   );
 }
 
-/** A folded message: one line, which a press opens in place. */
+/**
+ * An open message: its sender's `Avatar` in a gutter, the head and text beside it, as Gmail sets each message apart. On
+ * a phone the text takes the gutter's width too, under the head.
+ */
+const GUTTERED =
+  'row grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-4 py-5 first:pt-1 [--gutter:calc(var(--control)_+_1rem)] [&>:not([data-avatar])]:col-start-2 phone:[&>:not([data-avatar],header)]:col-span-2 phone:[&>:not([data-avatar],header)]:col-start-1';
+
+/** A folded message: its sender's `Avatar`, their name and when over its first line, which a press opens in place. */
 function Folded({ message, onToggle }: { message: Listed; onToggle: (id: string) => void }) {
   return (
     <button
       type="button"
       aria-expanded={false}
       onClick={() => onToggle(message.id)}
-      className="row -mx-(--bleed) flex min-w-0 cursor-pointer items-baseline gap-3 px-(--bleed) py-3 text-left [--inset:var(--bleed)] hover:bg-(--fill)"
+      className="row -mx-(--bleed) flex min-w-0 cursor-pointer items-start gap-4 px-(--bleed) py-3 text-left [--inset:var(--bleed)] hover:bg-(--fill)"
     >
-      <span className={cn('shrink-0', message.unread ? 'font-semibold' : 'text-foreground/80')}>{message.from}</span>
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">{message.preview}</span>
-      <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{message.at}</span>
+      <Avatar name={message.from} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex items-baseline gap-3">
+          <span className="name min-w-0 flex-1 truncate">{message.from}</span>
+          <span className="shrink-0 text-sm text-muted-foreground tabular-nums">{message.at}</span>
+        </span>
+        <span className={cn('min-w-0 truncate', message.unread ? 'text-foreground' : 'text-muted-foreground')}>{message.preview}</span>
+      </span>
     </button>
   );
 }
@@ -333,7 +348,7 @@ export function MessageHead({
           aria-expanded
           aria-label={`Fold the message from ${opened.from}`}
           onClick={opened.fold}
-          className="absolute -inset-x-(--bleed) -inset-y-2 cursor-pointer hover:bg-(--fill)"
+          className="absolute -inset-y-2 -right-(--bleed) left-[calc(-1*var(--bleed)_-_var(--gutter,0px))] cursor-pointer hover:bg-(--fill)"
         />
       ) : null}
       <div className={cn('flex items-center gap-x-3', through)}>
@@ -371,7 +386,7 @@ export function MessageHead({
           {to.map((row) => (
             <Fragment key={row.label}>
               <dt className="text-muted-foreground">{row.label}</dt>
-              <dd className="min-w-0 text-foreground/85">{row.who}</dd>
+              <dd className="min-w-0 text-muted-foreground">{row.who}</dd>
             </Fragment>
           ))}
         </dl>

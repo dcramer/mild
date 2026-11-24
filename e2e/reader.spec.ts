@@ -382,4 +382,26 @@ test.describe('A long conversation', () => {
     await expect(folded).toHaveCount(6);
     await expect(conversation.getByRole('article')).toHaveCount(1);
   });
+
+  test('sets each message beside its sender’s initial', async ({ page }) => {
+    await page.goto('/system');
+    await page.getByRole('button', { name: 'Open a message' }).click();
+    const message = page.getByRole('region', { name: 'Lunch on Thursday?' }).getByRole('article');
+    const initial = message.locator('[data-avatar]');
+    await expect(initial).toHaveText('A');
+    const text = message.getByText('Noon it is. I will bring the plans.');
+    const gutter = await boxOf(initial);
+    expect((await boxOf(text)).x).toBeGreaterThan(gutter.x + gutter.width);
+  });
+});
+
+test.describe('On a phone, a message', () => {
+  test.use({ viewport: PHONE });
+
+  test('takes the width under its sender’s initial', async ({ page }) => {
+    await page.goto('/');
+    const open = await openMessage(page, 'Notes from the review');
+    const text = await boxOf(open.getByText('Attached are my notes.'));
+    expect(Math.abs(text.x - (await boxOf(open.getByRole('article').locator('[data-avatar]'))).x)).toBeLessThanOrEqual(1);
+  });
 });
