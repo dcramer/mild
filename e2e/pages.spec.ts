@@ -20,9 +20,9 @@ import {
   sideScroll,
   test,
   toast,
+  SENDER,
 } from './sift.ts';
 
-const SENDER = senderPage('notifications@code.example.com');
 const DOMAIN = domainPage('code.example.com');
 
 /** The rows of the page's lists, or of one table, that hold mail: not the headers or the day headings between them. */

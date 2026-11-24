@@ -20,14 +20,14 @@
     "mild": "node --disable-warning=ExperimentalWarning src/cli/main.ts",
     "typecheck": "tsc --noEmit && next typegen && tsc --noEmit -p tsconfig.web.json",
     "lint": "oxlint",
-    "format": "oxlint --fix && oxfmt src tests web/src app proxy.ts instrumentation.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
-    "format:check": "oxfmt --check src tests web/src app proxy.ts instrumentation.ts next.config.js vitest.config.ts playwright.config.ts e2e .claude/skills/verify-sift/scripts",
+    "format": "oxlint --fix && oxfmt src tests web/src app proxy.ts instrumentation.ts next.config.js vitest.config.ts playwright.config.ts e2e scripts .claude/skills/verify-sift/scripts",
+    "format:check": "oxfmt --check src tests web/src app proxy.ts instrumentation.ts next.config.js vitest.config.ts playwright.config.ts e2e scripts .claude/skills/verify-sift/scripts",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "measure": "node --disable-warning=ExperimentalWarning e2e/measure.ts",
-    "scale": "node --disable-warning=ExperimentalWarning e2e/scale.ts",
-    "startup-images": "node --disable-warning=ExperimentalWarning e2e/startup-images.ts",
+    "measure": "node --disable-warning=ExperimentalWarning scripts/measure.ts",
+    "scale": "node --disable-warning=ExperimentalWarning scripts/scale.ts",
+    "startup-images": "node --disable-warning=ExperimentalWarning scripts/startup-images.ts",
     "knip": "knip",
     "check:fast": "pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check",
     "check": "pnpm check:fast && pnpm test && pnpm e2e",
@@ -94,7 +94,7 @@
     "pre-commit": "pnpm exec lint-staged && pnpm knip"
   },
   "lint-staged": {
-    "{src,tests,e2e,app,web/src,.claude/skills/verify-sift/scripts}/**/*.{ts,tsx}": [
+    "{src,tests,e2e,scripts,app,web/src,.claude/skills/verify-sift/scripts}/**/*.{ts,tsx}": [
       "oxlint --fix",
       "oxfmt"
     ],

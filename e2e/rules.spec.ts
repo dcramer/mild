@@ -15,6 +15,7 @@ import {
   throughChatGPT,
   toast,
   tooltip,
+  ME,
 } from './sift.ts';
 
 test.describe('Rules', () => {
@@ -447,6 +448,6 @@ test.describe('Apply to your inbox, with what is due begun', () => {
 
     await page.goto('/?settings=1');
     await settingsActive(page).getByRole('button', { name: 'Check now' }).click();
-    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf('m8')).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox(ME).labelsOf('m8')).not.toContain('INBOX');
   });
 });

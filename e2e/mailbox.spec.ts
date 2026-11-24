@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { closeSettings, expect, param, path, query, settings, settingsFromMenu, test } from './sift.ts';
+import { closeSettings, expect, param, path, query, settings, settingsFromMenu, test, ME } from './sift.ts';
 
 /** Confirms a removal in the open dialog `title` by typing `address`. */
 async function confirmRemoval(page: Page, title: string, address: string, action: string) {
@@ -18,14 +18,14 @@ test.describe('Removing a mailbox', () => {
     const remove = confirm.getByRole('button', { name: 'Remove mailbox' });
     await expect(remove).toBeDisabled();
     const typed = confirm.getByRole('textbox', { name: 'Type me@work.example.org to confirm' });
-    await typed.fill('me@example.org');
+    await typed.fill(ME);
     await expect(remove).toBeDisabled();
     await typed.fill('me@work.example.org');
     await remove.click();
 
     await expect(confirm).toHaveCount(0);
     await expect(settings(page).getByText('me@work.example.org')).toHaveCount(0);
-    const only = settings(page).getByRole('button', { name: 'Remove me@example.org' });
+    const only = settings(page).getByRole('button', { name: `Remove ${ME}` });
     await expect(only).toBeDisabled();
     await expect(only).toHaveAccessibleDescription('You cannot delete your only remaining mailbox.');
     await param(page, 'settings').toBe('1');
@@ -53,9 +53,11 @@ test.describe('Removing a mailbox', () => {
 
   test('removing the one signed in as signs out', async ({ page }) => {
     await page.goto('/?settings=1');
-    await settings(page).getByRole('button', { name: 'Remove me@example.org' }).click();
-    await expect(page.getByRole('dialog', { name: 'Remove me@example.org' })).toContainText('You are signed in as it, so you will be signed out.');
-    await confirmRemoval(page, 'Remove me@example.org', 'me@example.org', 'Remove mailbox');
+    await settings(page)
+      .getByRole('button', { name: `Remove ${ME}` })
+      .click();
+    await expect(page.getByRole('dialog', { name: `Remove ${ME}` })).toContainText('You are signed in as it, so you will be signed out.');
+    await confirmRemoval(page, `Remove ${ME}`, ME, 'Remove mailbox');
     await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible();
     expect((await page.request.get('/api/manage', { headers: { 'x-sift': '1' } })).status()).toBe(401);
   });
@@ -75,7 +77,7 @@ test.describe('The primary mailbox', () => {
   test('is chosen in Settings, names the account at the top, and passes on when it is removed', async ({ page }) => {
     await page.goto('/?settings=1');
     const primary = settings(page).getByRole('combobox', { name: 'Primary mailbox' });
-    await expect(primary).toContainText('me@example.org');
+    await expect(primary).toContainText(ME);
     await primary.click();
     await page.getByRole('option', { name: 'me@work.example.org', exact: true }).click();
     await expect(primary).toContainText('me@work.example.org');
@@ -89,7 +91,7 @@ test.describe('The primary mailbox', () => {
     // With one mailbox left there is nothing to choose.
     await expect(primary).toHaveCount(0);
     await closeSettings(page);
-    await expect(page.getByRole('button', { name: 'Account, me@example.org' })).toBeVisible();
+    await expect(page.getByRole('button', { name: `Account, ${ME}` })).toBeVisible();
   });
 });
 
@@ -109,7 +111,7 @@ test.describe('Deleting the account', () => {
     await page.goto('/?settings=1');
     await settings(page).getByRole('button', { name: 'Delete account…' }).click();
     await expect(page.getByRole('dialog', { name: 'Delete your account' }).getByRole('button', { name: 'Delete everything' })).toBeDisabled();
-    await confirmRemoval(page, 'Delete your account', 'me@example.org', 'Delete everything');
+    await confirmRemoval(page, 'Delete your account', ME, 'Delete everything');
 
     await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible();
     expect((await page.request.get('/api/manage', { headers: { 'x-sift': '1' } })).status()).toBe(401);
@@ -126,7 +128,7 @@ test.describe('Deleting the account', () => {
       if (pathname === '/api/account/delete') deleted = true;
     });
     page.on('framenavigated', (frame) => void (frame === page.mainFrame() && (deleted = false)));
-    await confirmRemoval(page, 'Delete your account', 'me@example.org', 'Delete everything');
+    await confirmRemoval(page, 'Delete your account', ME, 'Delete everything');
     await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible();
     expect(asked).toEqual([]);
   });

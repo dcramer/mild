@@ -1,13 +1,13 @@
 import type { Page } from '@playwright/test';
 import type { ManageState } from '../src/dashboard/types.ts';
-import { boxOf, expect, PHONE, patchJson, path, pointAt, senderPage, settings, sideScroll, test, tooltip } from './sift.ts';
+import { boxOf, expect, PHONE, patchJson, path, pointAt, senderPage, settings, sideScroll, test, tooltip, ME, phoneMenu, sections } from './sift.ts';
 
 test.describe('When a Google sign-in expired', () => {
   // A service worker's page is out of reach of page.route.
   test.use({ serviceWorkers: 'block' });
 
   test('Reconnect signs in again and comes back to the same page', async ({ page }) => {
-    await patchJson(page, '**/api/manage*', (manage) => ({ ...manage, activity: { ...manage.activity, expired: ['me@example.org'] } }));
+    await patchJson(page, '**/api/manage*', (manage) => ({ ...manage, activity: { ...manage.activity, expired: [ME] } }));
     await page.clock.install();
     await page.goto('/rules/r-1');
     const heading = page.getByRole('heading', { name: 'Rules', level: 1 });
@@ -84,10 +84,10 @@ test.describe("Mild's line", () => {
     await sideScroll(page).toBe(0);
 
     await page.getByRole('button', { name: 'Menu' }).click();
-    const menu = page.getByRole('dialog', { name: 'Menu' });
+    const menu = phoneMenu(page);
     await expect(menu.getByRole('link', { name: /30D$/ })).toHaveText('$0 30D');
     for (const window of ['24H', '7D', '30D']) await expect(menu.getByRole('term').filter({ hasText: window })).toBeVisible();
-    await expect(menu.getByText('me@example.org')).toBeVisible();
+    await expect(menu.getByText(ME)).toBeVisible();
     await expect(menu.getByRole('button', { name: 'Sign out' })).toBeVisible();
     await menu.getByRole('button', { name: 'Settings' }).click();
     await expect(settings(page)).toBeVisible();
@@ -100,19 +100,19 @@ test.describe('The sections', () => {
 
   test('on a desktop they run down the left of the page, the current one marked', async ({ page }) => {
     await page.goto('/activity');
-    const sections = page.getByRole('navigation', { name: 'Sections' });
-    const [rail, title] = [await boxOf(sections), await boxOf(page.getByRole('heading', { name: 'Activity', level: 1 }))];
+    const links = sections(page);
+    const [rail, title] = [await boxOf(links), await boxOf(page.getByRole('heading', { name: 'Activity', level: 1 }))];
     expect(rail.x + rail.width).toBeLessThanOrEqual(title.x);
     expect(rail.height).toBeGreaterThan(rail.width);
-    await expect(sections.getByRole('link', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
-    await expect(sections.getByRole('link', { name: 'Labels' })).not.toHaveAttribute('aria-current');
+    await expect(links.getByRole('link', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
+    await expect(links.getByRole('link', { name: 'Labels' })).not.toHaveAttribute('aria-current');
     await expect(page.getByRole('button', { name: 'Menu' })).toHaveCount(0);
   });
 
   test('on a phone they run along the foot of the screen, the current one marked, and the menu lists them too', async ({ page }) => {
     await page.setViewportSize(PHONE);
     await page.goto('/activity');
-    const tabs = page.getByRole('navigation', { name: 'Sections' });
+    const tabs = sections(page);
     await expect(tabs.getByRole('link', { name: 'Activity' })).toHaveAttribute('aria-current', 'page');
     const foot = await boxOf(tabs);
     expect(foot.y + foot.height).toBeGreaterThanOrEqual(PHONE.height - 1);
@@ -124,11 +124,11 @@ test.describe('The sections', () => {
     await expect(tabs.getByRole('link', { name: 'Labels' })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Menu' }).click();
-    const listed = page.getByRole('dialog', { name: 'Menu' }).getByRole('navigation', { name: 'Sections' });
+    const listed = sections(phoneMenu(page));
     await expect(listed.getByRole('link', { name: 'Rules' })).toHaveAttribute('aria-current', 'page');
     await listed.getByRole('link', { name: 'Labels' }).click();
     await path(page).toBe('/labels');
-    await expect(page.getByRole('dialog', { name: 'Menu' })).toHaveCount(0);
+    await expect(phoneMenu(page)).toHaveCount(0);
   });
 
   test('each opens as it is pressed, without waiting on the server', async ({ page }) => {
@@ -146,10 +146,10 @@ test.describe('The sections', () => {
     await page.goto('/');
     await expect.poll(() => ['/activity', '/labels', '/rules'].filter((screen) => !ahead.has(screen))).toEqual([]);
 
-    const sections = page.getByRole('navigation', { name: 'Sections' }).first();
+    const links = sections(page).first();
     // For review last: the router keeps nothing of the screen the page opened on, so going back asks again, behind it.
     for (const name of ['Activity', 'Labels', 'Rules', 'For review']) {
-      await sections.getByRole('link', { name }).click();
+      await links.getByRole('link', { name }).click();
       await expect(page.getByRole('heading', { name, level: 1 })).toBeVisible();
     }
     answer();
@@ -161,7 +161,7 @@ test.describe('While the reader waits', () => {
   test.use({ serviceWorkers: 'block' });
 
   /** Holds every request matching `url` until the returned function is called. */
-  async function hold(page: Page, url: string) {
+  async function holdRequests(page: Page, url: string) {
     let release = () => {};
     const released = new Promise<void>((done) => (release = done));
     await page.route(url, async (route) => {
@@ -176,8 +176,8 @@ test.describe('While the reader waits', () => {
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
     await expect(page.locator('.loading-bar')).toHaveCount(0);
 
-    const release = await hold(page, '**/api/decisions?*');
-    await page.getByRole('navigation', { name: 'Sections' }).first().getByRole('link', { name: 'Activity' }).click();
+    const release = await holdRequests(page, '**/api/decisions?*');
+    await sections(page).first().getByRole('link', { name: 'Activity' }).click();
     await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
     await expect(page.locator('.loading-bar')).toHaveCount(1);
     release();
@@ -185,10 +185,10 @@ test.describe('While the reader waits', () => {
   });
 
   test("a sender's page is drawn with the name and the loading bar before the browser knows who is signed in", async ({ page }) => {
-    const release = await hold(page, '**/api/session?*');
+    const release = await holdRequests(page, '**/api/session?*');
     await page.goto(senderPage('ada@example.org'));
     await expect(page.getByRole('link', { name: 'Mild' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(0);
+    await expect(sections(page)).toHaveCount(0);
     await expect(page.locator('.loading-bar')).toHaveCount(1);
     release();
     await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();

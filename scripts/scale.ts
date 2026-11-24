@@ -3,7 +3,7 @@
  * How long every read the page makes takes when there is a lot of mail, on verify-sift's seed at scale (`--inbox
  * --scale`: the signed-in person's messages, from about one sender in 25, and 20 other people a tenth as many each):
  *
- *   node e2e/scale.ts [--messages 5000] [--runs 5] [--root <checkout>]
+ *   node scripts/scale.ts [--messages 5000] [--runs 5] [--root <checkout>]
  *
  * Each route is asked `runs` times one after another, after one ask that warms it, and printed slowest first by p95, as
  * the server answered it (the time to the last byte, on this machine, over PGlite). Gmail's counts (`/api/inbox`,

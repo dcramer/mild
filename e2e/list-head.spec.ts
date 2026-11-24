@@ -1,5 +1,5 @@
 import type { Locator } from '@playwright/test';
-import { PHONE, boxOf, expect, test } from './sift.ts';
+import { PHONE, boxOf, expect, test, sections } from './sift.ts';
 
 const middle = async (target: Locator) => {
   const box = await boxOf(target);
@@ -49,7 +49,7 @@ test.describe('A list on a phone', () => {
 
   test('is named by the tab bar, and its action floats just above it at the right', async ({ page }) => {
     await page.goto('/rules');
-    const tabs = page.getByRole('navigation', { name: 'Sections' });
+    const tabs = sections(page);
     await expect(tabs.getByRole('link', { name: 'Rules' })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('heading', { name: 'Rules', level: 1 })).toBeAttached();
     const add = page.getByRole('button', { name: 'Add a rule' });

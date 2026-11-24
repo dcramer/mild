@@ -22,6 +22,8 @@ import {
   test,
   toast,
   tooltip,
+  ME,
+  sections,
 } from './sift.ts';
 
 test.describe('The reader, from For review', () => {
@@ -29,7 +31,7 @@ test.describe('The reader, from For review', () => {
     await page.goto('/');
     await openMessage(page, 'Lunch on Thursday?');
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toHaveCount(0);
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+    await expect(sections(page)).toBeVisible();
     await expect(reader(page).getByText('2 of 12')).toBeVisible();
 
     await back(page).click();
@@ -92,7 +94,7 @@ test.describe('The reader, from Inbox', () => {
   test('names the mailbox a message came to while there is more than one, and Cc on a row of its own', async ({ page }) => {
     await page.goto('/inbox');
     await inboxRow(page, 'Notes from the review').getByRole('cell').nth(2).click();
-    await expect(addressed(reader(page), 'To')).toHaveText('me@example.org');
+    await expect(addressed(reader(page), 'To')).toHaveText(ME);
     await expect(addressed(reader(page), 'Cc')).toHaveText(/^reviewer1@example\.net, .* and 9 more$/);
 
     await page.goto('/inbox?settings=1');
@@ -134,7 +136,7 @@ test.describe('The reader, from Inbox', () => {
     await reader(page).getByRole('button', { name: 'Block sender' }).click();
     await dismiss(page, 'Winter sale starts now');
     await expect(readerHeading(page, 'Winter sale starts now')).toHaveCount(0);
-    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).toContain('SPAM');
+    await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).toContain('SPAM');
   });
 
   test('a rule is made from what the message is: Make a rule… is last in its list, and opens the rule dialog', async ({ page }) => {

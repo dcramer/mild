@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { PHONE, addressed, boxOf, expect, forward, param, patchJson, path, reader, sideScroll, test, toast } from './sift.ts';
+import { PHONE, addressed, boxOf, expect, forward, param, patchJson, path, reader, sideScroll, test, toast, ME, phoneMenu, sections } from './sift.ts';
 
 /** The phone's top bar. */
 const bar = (page: Page) => page.getByRole('banner');
@@ -8,7 +8,7 @@ const conversations = (page: Page) => page.getByRole('row').filter({ hasText: /\
 
 /** What `lengthened` puts in front of a sender's domain: a list's sending host, with nowhere to break a line. */
 const LONG = 'em7731.bounces.notifications-mailer.';
-const MINE = new Set(['me@example.org', 'me@work.example.org', 'example.org', 'work.example.org']);
+const MINE = new Set([ME, 'me@work.example.org', 'example.org', 'work.example.org']);
 
 /** `json` with every sender's address and domain as long as a mailing list's (a bounce address, a sending host); the account's own are left. */
 function lengthened(json: unknown): unknown {
@@ -69,7 +69,7 @@ test.describe('On a phone', () => {
     await expect(filters.getByRole('group', { name: 'Label' })).toBeVisible();
     // Nothing else of the page around it.
     await expect(page.getByRole('radiogroup', { name: 'Show' })).toBeHidden();
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeHidden();
+    await expect(sections(page)).toBeHidden();
     await expect(page.getByRole('button', { name: 'Compose' })).toBeHidden();
     await expect(suggestion).toBeHidden();
 
@@ -79,7 +79,7 @@ test.describe('On a phone', () => {
     await leave.click();
     await expect(search).toHaveValue('');
     await expect(bar(page).getByRole('button', { name: 'Menu' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+    await expect(sections(page)).toBeVisible();
     await expect(suggestion).toBeVisible();
 
     // The browser's Back leaves it as well, and stays on Inbox.
@@ -138,8 +138,8 @@ test.describe('On a phone', () => {
     await page.goto('/inbox');
     await expect(bar(page).getByRole('searchbox', { name: 'Search mail' })).toBeVisible();
     // The tab bar's: the rail is not drawn.
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toHaveCount(1);
-    await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
+    await expect(sections(page)).toHaveCount(1);
+    await expect(sections(page).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
     await sideScroll(page).toBe(0);
   });
 
@@ -148,7 +148,7 @@ test.describe('On a phone', () => {
     await patchJson(page, '**/api/message?*', (detail) => ({
       ...detail,
       to: [
-        { address: 'me@example.org', name: null },
+        { address: ME, name: null },
         { address: 'grace@example.net', name: null },
       ],
     }));
@@ -160,7 +160,7 @@ test.describe('On a phone', () => {
     await expect(bar(page)).toHaveCount(0);
     // Each head says when, short: no year this year.
     await expect(open.locator('header time').first()).toHaveText(/^([A-Z][a-z]{2} \d{1,2}, )?\d{1,2}:\d\d [AP]M$/);
-    await expect(addressed(open, 'To').first()).toHaveText('me@example.org, grace@example.net');
+    await expect(addressed(open, 'To').first()).toHaveText(`${ME}, grace@example.net`);
 
     // Measured once the conversation is drawn: the text of its first message.
     const text = open.getByRole('article').first().getByText('Your bill is ready.');
@@ -195,7 +195,7 @@ test.describe('On a phone, with Inbox off', () => {
     await expect(page.getByText('Nothing here has been done in Gmail.', { exact: false })).toBeVisible();
     await expect(bar(page).getByRole('link', { name: /30D$/ })).toHaveCount(0);
     await bar(page).getByRole('button', { name: 'Menu' }).click();
-    await expect(page.getByRole('dialog', { name: 'Menu' }).getByRole('link', { name: /30D$/ })).toBeVisible();
+    await expect(phoneMenu(page).getByRole('link', { name: /30D$/ })).toBeVisible();
     await page.keyboard.press('Escape');
 
     await page.goto('/activity');

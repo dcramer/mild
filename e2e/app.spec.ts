@@ -13,16 +13,16 @@ import {
   path,
   putAway,
   query,
-  senderPage,
   settings,
   settingsFromMenu,
   test,
+  SENDER,
+  phoneMenu,
+  sections,
 } from './sift.ts';
 
 // The installed app: what the phone's own edges, its Back and its network do to the page.
 
-const SENDER = senderPage('notifications@code.example.com');
-const menu = (page: Page) => page.getByRole('dialog', { name: 'Menu' });
 /** What this device keeps of the frame, by name, and whether it holds a key. */
 const kept = `new Promise((done) => {
   const opening = indexedDB.open('sift-device');
@@ -81,8 +81,8 @@ test.describe('On a phone with a notch', () => {
     expect((await boxOf(page.getByRole('button', { name: 'Menu' }))).y).toBeGreaterThanOrEqual(47 + 16);
 
     await page.getByRole('button', { name: 'Menu' }).click();
-    await below(menu(page).getByRole('button', { name: 'Close menu' }));
-    await menu(page).getByRole('button', { name: 'Settings' }).click();
+    await below(phoneMenu(page).getByRole('button', { name: 'Close menu' }));
+    await phoneMenu(page).getByRole('button', { name: 'Settings' }).click();
     await below(settings(page).getByRole('heading', { name: 'Settings' }));
     await below(settings(page).getByRole('button', { name: 'Close' }));
     await settings(page).getByRole('button', { name: 'Close' }).click();
@@ -107,17 +107,17 @@ test.describe("The phone's Back", () => {
     await page.goto('/');
     await page.goto('/activity');
     await page.getByRole('button', { name: 'Menu' }).click();
-    await expect(menu(page)).toBeVisible();
+    await expect(phoneMenu(page)).toBeVisible();
     await page.goBack();
-    await expect(menu(page)).toHaveCount(0);
+    await expect(phoneMenu(page)).toHaveCount(0);
     await path(page).toBe('/activity');
 
     await page.getByRole('button', { name: 'Menu' }).click();
-    await menu(page).getByRole('link', { name: 'Rules' }).click();
+    await phoneMenu(page).getByRole('link', { name: 'Rules' }).click();
     await expect(page.getByRole('heading', { name: 'Rules', level: 1 })).toBeVisible();
     await page.goBack();
     await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
-    await expect(menu(page)).toHaveCount(0);
+    await expect(phoneMenu(page)).toHaveCount(0);
     await page.goBack();
     await path(page).toBe('/');
   });
@@ -222,7 +222,7 @@ test.describe('After Mild is updated under an open page', () => {
     await expect.poll(() => page.evaluate<string>("performance.getEntriesByType('navigation')[0].type").catch(() => 'loading')).toBe('reload');
     await expect(page.getByRole('heading', { name: 'notifications@code.example.com' })).toBeVisible();
     await page.evaluate('window.stayed = true');
-    await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Rules' }).click();
+    await sections(page).getByRole('link', { name: 'Rules' }).click();
     await expect(page.getByRole('heading', { name: 'Rules', level: 1 })).toBeVisible();
     expect(await page.evaluate<boolean>("'stayed' in window")).toBe(false);
   });
@@ -231,7 +231,7 @@ test.describe('After Mild is updated under an open page', () => {
     await page.goto(SENDER);
     await expect(page.getByRole('heading', { name: 'notifications@code.example.com' })).toBeVisible();
     await page.evaluate('window.stayed = true');
-    await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Rules' }).click();
+    await sections(page).getByRole('link', { name: 'Rules' }).click();
     await expect(page.getByRole('heading', { name: 'Rules', level: 1 })).toBeVisible();
     expect(await page.evaluate<boolean>("'stayed' in window")).toBe(true);
   });
@@ -317,7 +317,7 @@ test.describe('The installed app', () => {
     const waiting: (() => Promise<void>)[] = [];
     await page.route('**/api/session*', (route) => void waiting.push(() => route.continue()));
     await page.reload();
-    await expect(page.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+    await expect(sections(page)).toBeVisible();
     await expect(page.getByRole('button', { name: /^Account, / })).toBeVisible();
     await expect.poll(() => waiting.length).toBeGreaterThan(0);
     await Promise.all(waiting.map((answer) => answer()));

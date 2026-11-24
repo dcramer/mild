@@ -1,17 +1,15 @@
-import { type ChildProcess, spawn } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { test as base, expect, type Locator, type Page, type Route } from '@playwright/test';
 import { FRAME_POLICY, IMAGES_FRAME_POLICY, PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import { FakeGoogle } from '../tests/google.ts';
+import { SCRIPTS, launch } from './launch.ts';
 
-const SCRIPTS = resolve(import.meta.dirname, '../.claude/skills/verify-sift/scripts');
 export const SEED = join(SCRIPTS, 'seed.ts');
 /** The environment variable, one per variant, global setup leaves each seeded home's place and cookie in. */
 export const TEMPLATES = 'MILD_E2E_TEMPLATE';
-/** Where global setup leaves what the `full` seed holds encrypted, decrypted (`heldValues`, e2e/held.ts). */
+/** Where global setup leaves what the `full` seed holds encrypted, decrypted (`heldValues`, e2e/global-setup.ts). */
 export const HELD = 'MILD_E2E_HELD';
 /**
  * `full` is verify-sift's seed (its SKILL.md says what is in it); `bare` leaves the work mailbox without labels, so the page is the setting-up steps;
@@ -19,17 +17,6 @@ export const HELD = 'MILD_E2E_HELD';
  * text of the inbox's mail, and may send from its first mailbox (`--inbox`).
  */
 export type Variant = 'full' | 'bare' | 'on' | 'chatgpt' | 'inbox';
-
-const freePort = () =>
-  new Promise<number>((done, fail) => {
-    const server = createServer().listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      server.close(() => (typeof address === 'object' && address ? done(address.port) : fail(new Error('no port'))));
-    });
-  });
-
-const withTimeout = <T>(work: Promise<T>, ms: number, what: string) =>
-  Promise.race([work, new Promise<never>((_, fail) => setTimeout(() => fail(new Error(`${what} in ${ms / 1000}s`)), ms).unref())]);
 
 const directives = (policy: string) => new Set(policy.split('; '));
 const onPage = directives(PAGE_HEADERS['content-security-policy']);
@@ -53,48 +40,15 @@ async function start(variant: Variant, cloud: boolean, listing: boolean, sentry:
   if (!template) throw new Error('e2e/global-setup.ts did not run');
   const dir = mkdtempSync(join(tmpdir(), 'sift-e2e-run-'));
   cpSync(template.dir, dir, { recursive: true });
-  // Another process can take the free port before the server binds it; then it tries another.
-  const serve = async (tries: number): Promise<{ port: number; child: ChildProcess }> => {
-    const port = await freePort();
-    const child = spawn(
-      'node',
-      [
-        '--disable-warning=ExperimentalWarning',
-        join(SCRIPTS, 'serve.ts'),
-        join(dir, 'home'),
-        String(port),
-        join(dir, 'google.json'),
-        ...(listing ? ['--listing'] : []),
-      ],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          MILD_CLOUD: String(cloud),
-          ...(sentry ? { SENTRY_DSN: SENTRY_DSN } : {}),
-        },
-        // A group of its own, with the Next.js server it starts, to end together.
-        detached: true,
-      },
-    );
-    let log = '';
-    const started = await new Promise<boolean>((ready, fail) => {
-      const read = (chunk: Buffer) => {
-        log += chunk.toString();
-        if (log.includes('Mild is running on the seeded home')) ready(true);
-      };
-      child.stdout.on('data', read);
-      child.stderr.on('data', read);
-      child.once('exit', (code) => (log.includes('already in use') && tries > 1 ? ready(false) : fail(new Error(`serve.ts exited ${code}:\n${log}`))));
-    });
-    return started ? { port, child } : serve(tries - 1);
-  };
-  const { port, child } = await withTimeout(serve(3), 30_000, 'serve.ts did not start');
+  const server = await launch(dir, {
+    args: listing ? ['--listing'] : [],
+    env: { MILD_CLOUD: String(cloud), ...(sentry ? { SENTRY_DSN } : {}) },
+  });
   /** Google as the server last wrote it back. */
   const google = () => FakeGoogle.restore(JSON.parse(readFileSync(join(dir, 'google.json'), 'utf8')) as ReturnType<FakeGoogle['save']>);
   const seeded = new Set([...google().mailboxes.values()].flatMap((m) => m.sent().map((s) => s.id)));
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: server.url,
     cookie: template.cookie,
     google,
     /** What Gmail was asked to send since the seed, oldest first. */
@@ -106,10 +60,7 @@ async function start(variant: Variant, cloud: boolean, listing: boolean, sentry:
           .map((s) => ({ mailbox: m.address, ...s })),
       ),
     stop: async () => {
-      const exited = new Promise((done) => child.once('exit', done));
-      // Not Next.js's own stop, which waits for a run's step under way: one may wait on Gmail for good (`listing`).
-      process.kill(-child.pid!, 'SIGKILL');
-      await exited;
+      await server.stop();
       rmSync(dir, { recursive: true, force: true });
     },
   };
@@ -301,6 +252,9 @@ export const messageQuery = (id: string) => `message=${id}`;
 /** A sender's page, by their address. */
 export const senderPage = (address: string) => `/sender/${encodeURIComponent(address)}`;
 
+/** The page of a sender the seed has mail from: the code host's notifications. */
+export const SENDER = senderPage('notifications@code.example.com');
+
 /** A domain's page. */
 export const domainPage = (domain: string) => `/domain/${domain}`;
 
@@ -309,8 +263,14 @@ export const reviewRows = (page: Page) => page.getByRole('row').filter({ has: pa
 
 export const reviewSearch = (page: Page) => page.getByRole('searchbox', { name: 'Search senders and subjects' });
 
+/** The links to each screen: the rail on a desktop, in the menu on a phone. */
+export const sections = (within: Page | Locator) => within.getByRole('navigation', { name: 'Sections' });
+
+/** A phone's menu, which the masthead's button and a swipe in from the edge open. */
+export const phoneMenu = (page: Page) => page.getByRole('dialog', { name: 'Menu' });
+
 /** The link to For review among the sections, whose name ends in how many messages wait. */
-export const forReviewLink = (page: Page) => page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: /^For review/ });
+export const forReviewLink = (page: Page) => sections(page).getByRole('link', { name: /^For review/ });
 
 /**
  * Hides the page and shows it again, as switching away and back does: an answer held until its toast goes is sent.
@@ -321,11 +281,11 @@ export const putAway = (page: Page) =>
     "for (const state of ['hidden', 'visible']) { Object.defineProperty(document, 'visibilityState', { value: state, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); } delete document.visibilityState",
   );
 
-/** Counts the answers the page sends. */
-export function answersSent(page: Page) {
+/** Counts the requests the page sends to `path` from now: `requestsTo(page, '/api/feedback')`, the answers it sends. */
+export function requestsTo(page: Page, path: string) {
   let sent = 0;
   page.on('request', (request) => {
-    if (new URL(request.url()).pathname === '/api/feedback') sent++;
+    if (new URL(request.url()).pathname === path) sent++;
   });
   return () => sent;
 }
@@ -421,6 +381,14 @@ export async function suggestLabels(page: Page, words: string) {
   await expect(page.getByRole('heading', { name: 'Your labels', level: 1 })).toBeVisible();
 }
 
+/** In the open Add labels, asks the model for labels for `words`. */
+export async function askForLabels(page: Page, words: string) {
+  const dialog = addLabelsDialog(page);
+  await dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' }).fill(words);
+  await dialog.getByRole('button', { name: 'Suggest labels' }).click();
+  return dialog;
+}
+
 /**
  * The server's reply to an intercepted request. Sent again once if the connection was reset: Playwright reuses a connection
  * the server may be closing as the request goes out, after it sat idle the server's 5 s, which a browser also sends again.
@@ -442,6 +410,9 @@ export async function throughChatGPT(page: Page) {
   const model = 'openai-codex/gpt-5.6-luna';
   await patchJson(page, '**/api/models*', (models) => ({ ...models, models: [model], shortlist: { 'openai-codex': [model] }, costs: { [model]: 0.4 } }));
 }
+
+/** The seed's first mailbox, the signed-in person's primary. */
+export const ME = 'me@example.org';
 
 /** The seed's second mailbox, which holds no mail. */
 export const WORK = 'me@work.example.org';
@@ -467,7 +438,7 @@ export function mailboxesAsked(page: Page, path: string) {
 }
 
 /** Inbox among the sections, there only while it is on. */
-export const inboxLink = (page: Page) => page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Inbox' });
+export const inboxLink = (page: Page) => sections(page).getByRole('link', { name: 'Inbox' });
 
 /** Settings' Inbox section. */
 export const settingsInbox = (page: Page) => section(settings(page), 'Inbox');

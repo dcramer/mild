@@ -21,9 +21,9 @@ import {
   test,
   toast,
   toasts,
+  ME,
 } from './sift.ts';
 
-const ME = 'me@example.org';
 const compose = (page: Page) => page.getByRole('button', { name: /Compose/ });
 
 test.describe('with Inbox on', () => {
@@ -665,7 +665,7 @@ test.describe('with Inbox on', () => {
     expect(headers).toMatchObject({ To: 'grace@example.net', Subject: 'Fwd: Lunch on Thursday?' });
     expect(headers['In-Reply-To']).toBeUndefined();
     expect(text).toMatch(/^Are you free too\?\r\n\r\n---------- Forwarded message ---------\r\nFrom: Ada Lovelace <ada@example\.org>\r\nDate: .+\r\n/);
-    expect(text).toContain('Subject: Lunch on Thursday?\r\nTo: Me <me@example.org>\r\n\r\nAre you free for lunch on Thursday?');
+    expect(text).toContain(`Subject: Lunch on Thursday?\r\nTo: Me <${ME}>\r\n\r\nAre you free for lunch on Thursday?`);
   });
 
   test('a reply turns into a forward or a reply to all with what was written, and its subject and the files it answers can go with it', async ({

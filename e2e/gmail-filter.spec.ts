@@ -1,5 +1,5 @@
 import { addRule, openRule, removeRule, rulePanel, ruleRows, writeRule } from './rule.ts';
-import { expect, row, test, toast, turnOn } from './sift.ts';
+import { expect, row, test, toast, turnOn, ME } from './sift.ts';
 
 const CI = 'anyone at ci.example.org';
 
@@ -69,7 +69,7 @@ test.describe('A rule as a Gmail filter', () => {
     // Written to each of the seed's two mailboxes, so each row says which.
     const added = news.getByRole('listitem').filter({ hasText: 'Filter added' });
     await expect(added).toHaveCount(2);
-    await expect(added.filter({ hasText: 'me@example.org' })).toHaveCount(1);
+    await expect(added.filter({ hasText: ME })).toHaveCount(1);
     await expect(added.filter({ hasText: 'me@work.example.org' })).toHaveCount(1);
 
     await news.getByRole('button', { name: 'Close' }).click();

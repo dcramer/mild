@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { PHONE, WORK, expect, mailboxChoice, mailboxesAsked, reviewRows, switchMailbox, test } from './sift.ts';
+import { PHONE, WORK, expect, mailboxChoice, mailboxesAsked, reviewRows, switchMailbox, test, phoneMenu } from './sift.ts';
 
 // A desktop and a phone each name it in a place of their own.
 const named = (page: Page) => page.getByRole('main').getByText(WORK, { exact: true }).filter({ visible: true });
@@ -50,7 +50,7 @@ test('on a phone the switch is in the menu, under the account, and choosing clos
   // A phone's row has no answer of its own: the panel it opens does.
   await expect(page.getByRole('cell', { name: /Lunch on Thursday\?/ })).toBeVisible();
   await page.getByRole('button', { name: 'Menu' }).click();
-  const menu = page.getByRole('dialog', { name: 'Menu' });
+  const menu = phoneMenu(page);
   await menu.getByRole('combobox', { name: 'Mailbox, All mailboxes' }).click();
   await page.getByRole('option', { name: WORK, exact: true }).click();
   await expect(menu).toHaveCount(0);

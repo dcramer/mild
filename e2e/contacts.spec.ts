@@ -18,6 +18,8 @@ import {
   test,
   toast,
   recipients,
+  ME,
+  sections,
 } from './sift.ts';
 
 /** The directory's rows, not its column heads. */
@@ -27,7 +29,6 @@ const contacts = (page: Page) =>
     .getByRole('row')
     .filter({ has: page.getByRole('cell') });
 const contact = (page: Page, name: string) => contacts(page).filter({ has: page.getByRole('link', { name, exact: true }) });
-const sections = (page: Page) => page.getByRole('navigation', { name: 'Sections' }).first();
 const filter = async (page: Page, choice: string) => {
   await page.getByRole('button', { name: /^Filters/ }).click();
   await page.getByRole('radio', { name: choice, exact: true }).click();
@@ -37,7 +38,7 @@ test.describe('Contacts', () => {
   test('lists everyone who writes, newest first, with what Mild does with their next mail, the reader’s answers counted', async ({ page }) => {
     await page.goto('/contacts');
     await expect(page.getByRole('heading', { name: 'Contacts', level: 1 })).toBeVisible();
-    await expect(sections(page).getByRole('link', { name: 'Contacts' })).toHaveAttribute('aria-current', 'page');
+    await expect(sections(page).first().getByRole('link', { name: 'Contacts' })).toHaveAttribute('aria-current', 'page');
     await expect(contacts(page)).toHaveCount(10);
     await expect(contacts(page).first()).toContainText('Weekly Digest');
     await expect(contact(page, 'Weekly Digest')).toContainText('Archive as Newsletters');
@@ -46,7 +47,7 @@ test.describe('Contacts', () => {
     await expect(contact(page, 'Utility')).toContainText('Keep as Receipts');
     await expect(contact(page, 'Dependabot')).toContainText('Usually Archive as Notifications');
     // Mail the person wrote is theirs, not a contact's.
-    await expect(contacts(page).filter({ hasText: 'me@example.org' })).toHaveCount(0);
+    await expect(contacts(page).filter({ hasText: ME })).toHaveCount(0);
   });
 
   test("a name's card says who it is: the address, how much they send, and the other names the address writes under", async ({ page }) => {
@@ -124,7 +125,7 @@ test.describe('Contacts', () => {
     await contact(page, 'Ada Lovelace').getByRole('cell').nth(1).click();
     await path(page).toBe(senderPage('ada@example.org'));
     await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 })).toBeVisible();
-    await expect(sections(page).getByRole('link', { name: 'Contacts' })).toHaveAttribute('aria-current', 'page');
+    await expect(sections(page).first().getByRole('link', { name: 'Contacts' })).toHaveAttribute('aria-current', 'page');
     // How they know each other is said once, under their name.
     await expect(page.getByRole('heading', { name: 'Ada Lovelace', level: 1 }).locator('xpath=ancestor::header[1]')).toContainText('You have written to them');
     await expect(page.getByRole('main').getByRole('term').filter({ hasText: 'You wrote' })).toHaveCount(0);
@@ -141,7 +142,7 @@ test.describe('Contacts', () => {
 
   test("a domain's page lists the people there, each opening their own", async ({ page }) => {
     await page.goto(domainPage('code.example.com'));
-    await expect(sections(page).getByRole('link', { name: 'Contacts' })).toHaveAttribute('aria-current', 'page');
+    await expect(sections(page).first().getByRole('link', { name: 'Contacts' })).toHaveAttribute('aria-current', 'page');
     const people = section(page, 'People here');
     await expect(people.getByRole('row').filter({ has: page.getByRole('cell') })).toHaveCount(1);
     await people.getByRole('row').filter({ hasText: 'Dependabot' }).getByRole('cell').nth(1).click();

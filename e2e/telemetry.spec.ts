@@ -1,4 +1,4 @@
-import { SENTRY_DSN, expect, openMessage, path, senderPage, settingsFromMenu, test } from './sift.ts';
+import { SENTRY_DSN, expect, openMessage, path, senderPage, settingsFromMenu, test, ME } from './sift.ts';
 
 test.describe('What the page sends Sentry', () => {
   test.use({ sentry: true });
@@ -28,7 +28,7 @@ test.describe('What the page sends Sentry', () => {
     await expect.poll(() => sent.join('\n')).toContain('/sender/:address');
 
     const all = sent.join('\n');
-    for (const named of ['ada@example.org', 'ada%40example.org', 'me@example.org', 'me%40example.org', 'Lunch on Thursday', '?message=', '?id=', 'account='])
+    for (const named of ['ada@example.org', 'ada%40example.org', ME, 'me%40example.org', 'Lunch on Thursday', '?message=', '?id=', 'account='])
       expect(all, named).not.toContain(named);
   });
 
