@@ -193,6 +193,33 @@ test.describe('On a phone', () => {
 });
 
 // With Inbox off, so For review, which says Mild is off, is what the page opens on: with it on, the page goes on to Inbox.
+/** Counts the page's view transitions in `window.moved`: the reader's slide on a phone. */
+const COUNT_MOVES = `window.moved = 0;
+const start = document.startViewTransition.bind(document);
+document.startViewTransition = (update) => (window.moved++, start(update));`;
+
+test.describe('The reader’s slide', () => {
+  test.use({ variant: 'inbox' });
+
+  for (const [where, viewport, reducedMotion, moves] of [
+    ['on a phone, slides in over the list and out on Back', PHONE, 'no-preference', 2],
+    ['on a phone that asks for less motion, does not move', PHONE, 'reduce', 0],
+    ['on a computer, does not move', { width: 1280, height: 800 }, 'no-preference', 0],
+  ] as const)
+    test(where, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await page.emulateMedia({ reducedMotion });
+      await page.addInitScript(COUNT_MOVES);
+      await page.goto('/inbox');
+      await conversations(page).filter({ hasText: 'Lunch on Thursday?' }).click();
+      await expect(reader(page).getByText('Are you free for lunch on Thursday?')).toBeVisible();
+      await reader(page).getByRole('button', { name: 'Back' }).first().click();
+      await expect(reader(page)).toHaveCount(0);
+      await expect(conversations(page).filter({ hasText: 'Lunch on Thursday?' })).toBeVisible();
+      expect(await page.evaluate('window.moved')).toBe(moves);
+    });
+});
+
 test.describe('On a phone, with Inbox off', () => {
   test.use({ viewport: PHONE });
 
