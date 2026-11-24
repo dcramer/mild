@@ -22,7 +22,7 @@ import type { Sql } from '../../store/sql.ts';
 import { openNewest } from '../../store/content.ts';
 import { outOfTries } from '../../store/runs.ts';
 import { noDecision } from '../../store/messages.ts';
-import { accuracy } from '../../learn/feedback.ts';
+import { accuracy } from '../../store/suggestions.ts';
 import { type Scope, within } from '../scope.ts';
 import { type DayChanges, type StageKey, type Summary } from '../types.ts';
 import { STAGE_NAMES } from '../../triage/types.ts';

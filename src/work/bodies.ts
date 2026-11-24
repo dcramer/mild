@@ -1,7 +1,7 @@
 import { and, desc, eq, mailBodies, messages, notExists, preferences, sql } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
-import { pendingSuggestions } from '../learn/feedback.ts';
+import { pendingSuggestions } from '../store/suggestions.ts';
 import { READ_KEEP_DAYS, type Text, heldText, keepRead, keepText, neverRead } from '../store/kept.ts';
 import { type MessageContent, heldContent } from '../gmail/body.ts';
 

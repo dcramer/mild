@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Sql } from '../src/store/sql.ts';
-import { pendingSuggestions } from '../src/learn/feedback.ts';
+import { pendingSuggestions } from '../src/store/suggestions.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { execute } from '../src/actions/executor.ts';

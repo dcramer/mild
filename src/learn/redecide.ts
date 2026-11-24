@@ -10,7 +10,7 @@ import { cachedCorrespondent } from '../store/senders.ts';
 import { SURE } from '../triage/stages/model.ts';
 import { rulesStage, settle } from '../triage/stages/rules.ts';
 import { type Decision, type Disposition, labelled } from '../triage/types.ts';
-import { type Suggestion, pendingSuggestions } from './feedback.ts';
+import { type Suggestion, pendingSuggestions } from '../store/suggestions.ts';
 import { plain } from '../plain.ts';
 
 const STANDING = {
