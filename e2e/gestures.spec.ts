@@ -54,11 +54,16 @@ test.describe('Inbox by touch, on a phone', () => {
   test('a row swiped away closes up, its height shrinking to nothing in the press’s colour, rather than vanishing', async ({ page }) => {
     await page.goto('/inbox');
     await expect(rowAbout(page, 'Your order has shipped')).toBeVisible();
-    // Every height the row takes on its way out, as the browser lays it out.
+    // Every height the row takes on its way out, as the browser lays it out, and how much of its message shows then.
     await page.evaluate(`(() => {
       const tr = [...document.querySelectorAll('tr')].find((r) => r.textContent.includes('Your order has shipped'));
+      const track = tr.querySelector('[data-swipe]');
       window.heights = [tr.offsetHeight];
-      new ResizeObserver(([entry]) => window.heights.push(entry.borderBoxSize[0].blockSize)).observe(tr);
+      window.showing = [];
+      new ResizeObserver(([entry]) => {
+        window.heights.push(entry.borderBoxSize[0].blockSize);
+        window.showing.push(track.scrollWidth - track.clientWidth - track.scrollLeft);
+      }).observe(tr);
     })()`);
     await swipe(rowAbout(page, 'Your order has shipped'), -380);
     await expect(rowAbout(page, 'Your order has shipped')).toHaveCount(0);
@@ -66,6 +71,8 @@ test.describe('Inbox by touch, on a phone', () => {
     const full = heights[0]!;
     expect(heights.some((h) => h > 1 && h < full / 2)).toBe(true);
     expect(Math.min(...heights)).toBeLessThan(2);
+    // It never slid back over the rows under it: past the first report, at rest, only the few pixels a swipe acts short of the edge.
+    expect((await page.evaluate<number[]>('window.showing')).slice(1).every((px) => px <= 8)).toBe(true);
     await dismiss(page, 'Your order has shipped');
   });
 

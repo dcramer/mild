@@ -37,7 +37,8 @@ const GIVE_BACK_MS = 1000;
  * nothing, then `done`, which takes the row away.
  */
 function closeRow(track: HTMLElement, done: () => void) {
-  const timing = { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : CLOSE_MS, easing: 'ease-in', fill: 'forwards' } as const;
+  // Quickest at first, so what is left when the list takes the row away, and React's draw holds the frame, is too little to see.
+  const timing = { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : CLOSE_MS, easing: 'ease-out', fill: 'forwards' } as const;
   const own = getComputedStyle(track);
   const runs = [
     track.animate(
@@ -95,12 +96,18 @@ export function Swipe({
   useLayoutEffect(() => {
     const el = track.current;
     if (!el) return;
+    let width = el.clientWidth;
     const place = () => {
       rest(el, content.current);
       if (opened) el.scrollBy({ left: (opened === 'end' ? 1 : -1) * PRESS_PX, behavior: 'instant' });
     };
     place();
-    const resized = new ResizeObserver(place);
+    // Only a new width moves where rest is: a row closing up changes its height, and must stay at the edge it was swiped to.
+    const resized = new ResizeObserver(() => {
+      if (el.clientWidth === width) return;
+      width = el.clientWidth;
+      place();
+    });
     resized.observe(el);
     return () => resized.disconnect();
   }, [opened]);
