@@ -276,6 +276,8 @@ test.describe('The history a reply quotes, as each mail program writes it', () =
     Outlook: `<div class="WordSection1"><p class="MsoNormal">${REPLIED}</p><div style="border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0in 0in 0in"><p class="MsoNormal"><b>From:</b> Ada<br><b>Sent:</b> Monday</p></div><p class="MsoNormal">${ASKED}</p></div>`,
     'Apple Mail': `<div dir="ltr">${REPLIED}</div><div dir="ltr"><br><blockquote type="cite">On Nov 2, 2026, at 09:14, Ada wrote:<br><br><div>${ASKED}</div></blockquote></div>`,
     Thunderbird: `<p>${REPLIED}</p><div class="moz-cite-prefix">On 02/11/2026 09:14, Ada wrote:<br></div><blockquote type="cite">${ASKED}</blockquote><br>`,
+    'Gmail, with a tracking pixel after it': `<div dir="ltr">${REPLIED}</div><br><div class="gmail_quote"><div dir="ltr" class="gmail_attr">On Mon, Ada wrote:<br></div><blockquote class="gmail_quote">${ASKED}</blockquote></div><div><img src="https://track.example.com/open.gif" width="1" height="1"></div>`,
+    'a program that marks nothing': `<div>${REPLIED}<br><br>On Sat, 7 Nov 2026 at 09:56, Ada &lt;<a href="mailto:ada@example.org">ada@example.org</a>&gt;\nwrote:<br><blockquote style="margin:0 0 0 .8ex">${ASKED}</blockquote></div>`,
   };
   for (const [program, html] of Object.entries(folded))
     test(`folds under a reply from ${program}`, async ({ page }) => {
@@ -290,6 +292,7 @@ test.describe('The history a reply quotes, as each mail program writes it', () =
 
   const open = {
     'a reply written between the lines it quotes': `<div>On Mon, Ada wrote:</div><blockquote type="cite">Lunch?</blockquote><div>${REPLIED}</div><blockquote type="cite">${ASKED}</blockquote><div>Yes.</div>`,
+    'a blockquote no one is said to have written': `<p>${REPLIED}</p><blockquote>${ASKED}</blockquote>`,
     'a forward': `<div dir="ltr">${REPLIED}<br><div class="gmail_quote"><div dir="ltr" class="gmail_attr">---------- Forwarded message ---------<br>From: Ada</div><div>${ASKED}</div></div></div>`,
   };
   for (const [kind, html] of Object.entries(open))
