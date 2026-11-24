@@ -128,7 +128,7 @@ test.describe('The reader, from Inbox', () => {
     await inboxRow(page, 'Winter sale starts now').getByRole('cell').nth(2).click();
     await expect(readerHeading(page, 'Winter sale starts now')).toBeVisible();
     await reader(page).getByRole('button', { name: 'Block sender' }).click();
-    await dismiss(page, 'Blocked sale@store.example.com');
+    await dismiss(page, 'Winter sale starts now');
     await expect(readerHeading(page, 'Winter sale starts now')).toHaveCount(0);
     await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
   });
