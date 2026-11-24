@@ -1,10 +1,9 @@
-import { wordsOf } from '../search.ts';
 import { type Facts, sentInBulk } from '../triage/facts.ts';
 import { envelopeOf, parseAddressList } from '../triage/features.ts';
 import type { Address, MessageFacts } from '../triage/types.ts';
 import { addressName, hashOf, openJson, openPart, sealJson } from './content.ts';
 import { addresses, and, asc, eq, mailboxes, messages, sql } from './query.ts';
-import { bloomOf } from './search.ts';
+import { bloomOf, wordsOf } from './search.ts';
 import type { Sql } from './sql.ts';
 import { plain } from '../plain.ts';
 
