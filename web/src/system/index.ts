@@ -30,7 +30,7 @@ export { ListPage, PageHeader, Section } from './page.tsx';
 export { Panel } from './panel.tsx';
 export { Popover } from './popover.tsx';
 export { Rail } from './rail.tsx';
-export { AnswerRow, MessageHead, MessageStack, Presses, Reader, ReaderBar } from './reader.tsx';
+export { MessageHead, MessageStack, Presses, Reader, ReaderBar } from './reader.tsx';
 export type { Thumb } from './thumbs.tsx';
 export { DiscardButton, DraftBlocked, DraftLine, DraftText, ReplyBox } from './draft.tsx';
 export { AttachButton, type DraftFile, DraftFiles, MessageFiles } from './attachments.tsx';

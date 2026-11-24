@@ -203,7 +203,9 @@ test.describe('A rule from For review', () => {
   test('closing the rule dialog over the panel leaves the panel on the same message', async ({ page }) => {
     await page.goto(`/?${messageQuery('m8')}`);
     await expect(readerHeading(page, 'Winter sale starts now')).toBeVisible();
-    await reader(page).getByRole('button', { name: 'Keep as Marketing…' }).click();
+    // Under Why, beside what Mild said.
+    await reader(page).getByRole('button', { name: 'Why' }).click();
+    await page.getByRole('button', { name: 'Keep as Marketing…' }).click();
     const dialog = ruleDialog(page);
     await expect(dialog.getByRole('textbox', { name: 'What should it do?' })).toHaveValue(
       'Mail from sale@store.example.com, once it is Marketing: leave it in the inbox.',

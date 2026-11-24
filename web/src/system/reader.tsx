@@ -1,20 +1,7 @@
 'use client';
 import { ArrowLeftIcon, ChevronDownIcon, ChevronUpIcon, EllipsisVerticalIcon, ReplyIcon } from 'lucide-react';
-import {
-  type ComponentProps,
-  Fragment,
-  type ReactNode,
-  type Ref,
-  createContext,
-  useContext,
-  useEffect,
-  useId,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react';
+import { Fragment, type ReactNode, type Ref, createContext, useContext, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { AnswerPicker } from './answer-picker.tsx';
 import { Button } from './button.tsx';
 import { keyName, useShortcut } from './keys.tsx';
 import { Menu } from './menu.tsx';
@@ -24,7 +11,7 @@ import { Kbd } from './type.tsx';
 
 /**
  * One message or conversation, opened from a list in the list's place, inside the frame: the bar (`ReaderBar`), the
- * subject as the page's heading, Mild's part (`AnswerRow`), then the conversation and whatever answers it. `side` is a
+ * subject as the page's heading, `answer` under it (a proposal's why), then the conversation and whatever answers it. `side` is a
  * column beside the conversation on a wide screen, and under it narrower, for what is said about the message rather
  * than in it. On a phone `thumbs` are its presses along the bottom of the screen (`ThumbBar`), in place of the bar's and
  * those under the conversation. It takes the focus as it opens, so Enter presses nothing and the keys are its own.
@@ -200,44 +187,6 @@ function Named({ label, keys, children }: { label: string; keys: string; childre
     >
       {children}
     </Tooltip>
-  );
-}
-
-/**
- * Mild's part of the reader, on one line under the title: what the message is (an `AnswerPicker`, agreed in one
- * press), Why, and the presses that make a rule (`children`). Why opens what Mild said under the line; `whyOpen` starts
- * it open, where answering is the job (For review). On a phone the picker takes what the presses leave.
- */
-export function AnswerRow({
-  picker,
-  why,
-  whyOpen = false,
-  children,
-}: {
-  picker: ComponentProps<typeof AnswerPicker>;
-  why?: ReactNode;
-  whyOpen?: boolean;
-  children?: ReactNode;
-}) {
-  const [open, setOpen] = useState(whyOpen);
-  const said = useId();
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex min-w-0 items-center gap-1">
-        <AnswerPicker {...picker} className={cn('min-w-0 phone:flex-1 md:w-72', picker.className)} />
-        {why ? (
-          <Button variant="quiet" className="ml-1" aria-expanded={open} aria-controls={said} onClick={() => setOpen(!open)}>
-            Why
-          </Button>
-        ) : null}
-        {children}
-      </div>
-      {why && open ? (
-        <div id={said} className="flex flex-col gap-3 text-muted-foreground">
-          {why}
-        </div>
-      ) : null}
-    </div>
   );
 }
 

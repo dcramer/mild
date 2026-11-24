@@ -103,7 +103,6 @@ import {
   PageHeader,
   Panel,
   Popover,
-  AnswerRow,
   MessageHead,
   MessageStack,
   Presses,
@@ -1580,8 +1579,8 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                 : []
             }
             label={
-              inbox ? (
-                <>
+              <>
+                {inbox ? (
                   <LabelPick
                     size="toolbar"
                     label="What this message is"
@@ -1590,9 +1589,20 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                     onSubmit={async (id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
                     ending={{ onAdd: () => toast('Opens adding a label'), onRule: () => toast('Opens the rule dialog') }}
                   />
-                  <Popover label="Why">{said}</Popover>
-                </>
-              ) : undefined
+                ) : (
+                  <AnswerPicker
+                    key={from}
+                    size="toolbar"
+                    label="What this message is"
+                    value={INBOX}
+                    groups={groups}
+                    empty={outcomeName('review')}
+                    onSubmit={(id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`)}
+                    ending={{ onAdd: () => toast('Opens adding a label'), onRule: () => toast('Opens the rule dialog') }}
+                  />
+                )}
+                <Popover label="Why">{said}</Popover>
+              </>
             }
             position="2 of 3"
             onPrevious={() => toast('The one before')}
@@ -1609,23 +1619,6 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             : []
         }
         title="Lunch on Thursday?"
-        answer={
-          inbox ? undefined : (
-            <AnswerRow
-              key={from}
-              picker={{
-                label: 'What this message is',
-                value: INBOX,
-                groups,
-                empty: outcomeName('review'),
-                onSubmit: (id) => toast(`Answered: ${LABELS.find(([key]) => key === id)?.[1] ?? id}`),
-                ending: { onAdd: () => toast('Opens adding a label'), onRule: () => toast('Opens the rule dialog') },
-              }}
-              why={said}
-              whyOpen
-            />
-          )
-        }
         side={
           inbox ? undefined : (
             <Section title="Sender">

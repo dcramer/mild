@@ -54,8 +54,8 @@ interface ActiveFilter {
 }
 
 /**
- * The standard way to show many of one thing, inside a `ListPage`: `intro` (anything the page shows before its
- * list), then one outlined bar holding the search and the filter button, then the rows. With `search.ask`, words in the
+ * The standard way to show many of one thing, inside a `ListPage`: one outlined bar holding the search and the filter
+ * button, at the top of the page as on a phone, then `intro` (anything the page shows before its list), then the rows. With `search.ask`, words in the
  * search can be put to the model, which answers with filters that then show as any others do. While rows are selected
  * (`RowCheck`), the bar holds what to do with them in place of the search (`selected`): how many, the presses, and a
  * way to select none, so the rows do not move.
@@ -65,7 +65,7 @@ interface ActiveFilter {
  * box with a way to clear it, so a narrowed list never looks like the whole of it.
  *
  * A desktop names the page only in its rail: the page's own action, and the mailbox it is narrowed to, end the bar,
- * or sit on a line of their own at the top where `intro` comes before the bar or the list has none.
+ * or sit on a line of their own at the top where the list has none.
  *
  * On a phone the search is the top bar (`ToBar`) and the views are tabs under it (`ListHead`). Pressing the search
  * makes it a screen of its own: Back in place of the menu, the filters until something is typed, then what it finds,
@@ -79,7 +79,7 @@ export function ListView({
   selected,
   children,
 }: {
-  /** What the page shows between its header and its list. */
+  /** What the page shows between its bar and its list. */
   intro?: ReactNode;
   /** `ask`: what is typed can also be put to the model (Inbox), by a press at the end of the box or Enter. */
   search?: { value: string; onChange: (value: string) => void; placeholder: string; ask?: { onAsk: () => void; busy: boolean } };
@@ -101,9 +101,8 @@ export function ListView({
   useBackCloses(searching, () => setSearching(false));
   const panel = open || (searching && search?.value.trim() === '');
   const mailbox = useContext(Mailbox);
-  // A desktop's only head: the mailbox and the page's action, at the top of the page. Beside the search when it comes
-  // first; on a line of their own over what the page shows before it, which they govern too (Activity's period), or over
-  // a list with no search.
+  // A desktop's only head: the mailbox and the page's action, at the top of the page, beside the search, or on a line of
+  // their own over a list with none.
   const aside =
     actions || mailbox ? (
       <div className="hidden shrink-0 items-center justify-end gap-2 md:flex">
@@ -131,8 +130,6 @@ export function ListView({
           </div>
         </ToViews>
       ) : null}
-      {intro ? aside : null}
-      {searching ? null : intro}
       {/* On a phone the search is the top bar; while rows are selected, how many, and what to do with them along the bottom. */}
       {selected && selected.count > 0 ? (
         <>
@@ -273,7 +270,7 @@ export function ListView({
                   </button>
                 ) : null}
               </div>
-              {intro ? null : aside}
+              {aside}
             </div>
             {on > 0 && !panel ? (
               <ul className="flex flex-wrap items-center gap-1.5" aria-label="Filters that are on">
@@ -293,9 +290,10 @@ export function ListView({
               </ul>
             ) : null}
           </div>
-        ) : intro ? null : (
+        ) : (
           aside
         )}
+        {searching ? null : intro}
 
         <div className={cn('grid grid-cols-[minmax(0,1fr)] gap-4', open && 'md:grid-cols-[minmax(0,1fr)_15rem]')}>
           <div className="flex min-w-0 flex-col gap-3 md:order-1">
