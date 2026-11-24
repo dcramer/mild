@@ -1,7 +1,7 @@
 'use client';
 import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
+import { type Next, ProviderList, pressOf, providerName, useProviderConnect } from '@/components/model-connect.tsx';
 import { type LabelProposal, type ManageState, api } from '@/lib/api/endpoints.ts';
 import { signOut } from '@/lib/sign-out.ts';
 import { useAction } from '@/lib/action.ts';
@@ -339,12 +339,9 @@ function Onward({
   error: string | null;
   waiting?: string | null;
 }) {
-  const disabled = next.disabled ?? false;
-  // A link while it can be followed; a disabled button until then, since a link cannot be disabled.
-  const link = next.href !== undefined && !disabled ? { href: next.href, target: '_blank', rel: 'noreferrer' } : { disabled };
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-3 pt-2">
-      <Button variant="mark" size="lg" busy={next.busy ?? false} onClick={next.onPress} {...link}>
+      <Button variant="mark" size="lg" {...pressOf(next)}>
         {next.label}
         {next.href ? <ArrowUpRightIcon aria-hidden /> : <ArrowRightIcon aria-hidden />}
       </Button>

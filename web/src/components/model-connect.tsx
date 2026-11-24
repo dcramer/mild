@@ -74,6 +74,13 @@ export interface Next {
   onPress?: () => void;
 }
 
+/** A `Next` as a `Button`'s props: a link while it can be followed, a disabled button until then, since a link cannot be disabled. */
+export const pressOf = (next: Next) => ({
+  busy: next.busy ?? false,
+  onClick: next.onPress,
+  ...(next.href !== undefined && !next.disabled ? { href: next.href, target: '_blank', rel: 'noreferrer' } : { disabled: next.disabled ?? false }),
+});
+
 /**
  * Signing in to one provider and choosing its model, a step at a time: `title` says what to do now, `body`
  * holds it, and `next` is the press that does it, until the provider is connected and `next` is null.

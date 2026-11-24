@@ -1,10 +1,9 @@
 'use client';
 import { RefreshCwIcon } from 'lucide-react';
-import { useCallback, useSyncExternalStore } from 'react';
 import { type ManageState, type Usage } from '@/lib/api/endpoints.ts';
 import { approx, atApiPrices, usePlan } from '@/lib/prices.ts';
 import { dateTime, duration, money } from '@/lib/format.ts';
-import { Ago, Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';
+import { Ago, Figure, Figures, HoverCard, Spark, Tooltip, useNow } from '@/system';
 import { useManage, useUsage } from '@/lib/api/reads.ts';
 
 type Accounts = ManageState['accounts'];
@@ -12,27 +11,11 @@ type Accounts = ManageState['accounts'];
 type Plan = ManageState['model']['choices'][number] | null;
 
 /**
- * The time, moved on every `ms`, so what is drawn from it ("1 min ago", the time left) keeps up with nothing loaded.
- * Null until the page runs in the browser, as with `Ago`: the server's clock and time zone are not the reader's.
- */
-export function useNow(ms: number): number | null {
-  const every = useCallback(
-    (tick: () => void) => {
-      const timer = setInterval(tick, ms);
-      return () => clearInterval(timer);
-    },
-    [ms],
-  );
-  return useSyncExternalStore(every, () => Math.floor(Date.now() / ms) * ms, onServer);
-}
-const onServer = () => null;
-
-/**
  * What Mild saved the reader over each window, with its shape over the 30 days, then what the model cost: the hover
  * card, and on a phone the menu. Until Mild has taken anything out of the inbox, only the cost, with its shape.
  */
 export function UsageDetail({ usage, plan }: { usage: Usage; plan: Plan }) {
-  const now = useNow(60_000);
+  const now = useNow();
   const first = now === null ? '' : new Date(now - (usage.daily.length - 1) * 86_400_000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const { saved } = usage;
   const savedAny = saved.month.messages > 0;
