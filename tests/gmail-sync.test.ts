@@ -277,6 +277,23 @@ describe('syncAccount', () => {
     expect(report.skipped).toBe(0);
   });
 
+  it('takes mail Gmail deleted for good out of the inbox, keeping its row, and reads none that was deleted before it was read', async () => {
+    const { api, gmail: box, arrive } = gmail();
+    const db = await synced(box);
+    arrive('a');
+    await syncAccount(db, api, await firstAccount(db));
+    box.delete('a');
+    arrive('brief');
+    box.delete('brief');
+    expect(await syncWants(db, api, await firstAccount(db))).toBe(true);
+
+    const report = await syncAccount(db, api, await firstAccount(db), () => 5 * HOUR);
+    expect(report.skipped).toBe(1);
+    expect(box.asked('users.messages.get', 'brief')).toEqual([]);
+    expect(await raw(db).all('SELECT id, label_ids, gone_at FROM messages')).toEqual([{ id: 'a', label_ids: [], gone_at: 5 * HOUR }]);
+    expect(await syncWants(db, api, await firstAccount(db))).toBe(false);
+  });
+
   it('looks no further for a stray it has recorded', async () => {
     const { api, gmail: box, arrive } = gmail();
     const db = await synced(box);

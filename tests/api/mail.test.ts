@@ -249,6 +249,22 @@ describe('changing mail', () => {
     expect(box.labelsOf(id)).toEqual(['UNREAD']);
   });
 
+  it('takes a conversation out of Inbox when Gmail no longer has the message pressed, with the rest of it still listed', async () => {
+    const { box, me, arrives } = await withInbox();
+    const first = box.deliver({ from: 'ada@example.com', subject: 'Plans' });
+    const reply = box.deliver({ from: 'ada@example.com', subject: 'Re: Plans', threadId: first });
+    const deal = box.deliver({ from: 'deals@example.com', subject: 'Deal' });
+    await arrives();
+    box.delete(deal);
+    box.delete(reply);
+
+    const spam = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [deal], change: 'spam' });
+    expect(spam.body).toEqual({ actions: [], missed: 0 });
+    expect((await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [reply], change: 'archive' })).body).toEqual({ actions: [], missed: 0 });
+    expect(threadsOf(await me.call('GET', '/api/mail/threads')).map((t) => [t.threadId, t.messageIds])).toEqual([[first, [first]]]);
+    expect(threadsOf(await me.call('GET', '/api/mail/threads?q=deal'))).toEqual([]);
+  });
+
   it('returns what landed when a message’s Gmail call throws, with that one counted missed, so Undo still takes the rest back', async () => {
     const { box, me, arrives } = await withInbox();
     const a = box.deliver({ from: 'ada@example.com' });

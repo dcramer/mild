@@ -13,7 +13,7 @@ import {
   setActionStatus,
   standingAlongside,
 } from '../store/actions.ts';
-import { earlierInInbox, recordLabels } from '../store/messages.ts';
+import { earlierInInbox, recordGone, recordLabels } from '../store/messages.ts';
 import { cachedCorrespondent, rememberCorrespondent } from '../store/senders.ts';
 import { rememberLabelName } from '../store/accounts.ts';
 import type { Mailbox } from './mailbox.ts';
@@ -49,11 +49,13 @@ const applied = (labels: string[], change: LabelChange) => change.add.every((l) 
 
 /**
  * The message's labels as Gmail gives them now, written to the record as they are read. Sync begins no pass for Mild's own
- * changes, so without this Inbox would list mail Mild archived until other mail arrived.
+ * changes, so without this Inbox would list mail Mild archived until other mail arrived. Null, and recorded gone, when Gmail
+ * no longer has it: otherwise Inbox would list it however often it was pressed.
  */
 async function labelsNow(deps: ActionDeps, accountId: string, messageId: string): Promise<string[] | null> {
   const labels = await deps.mailbox.getLabelIds(messageId);
   if (labels) await recordLabels(deps.db, accountId, messageId, labels);
+  else await recordGone(deps.db, accountId, [messageId], clock(deps));
   return labels;
 }
 

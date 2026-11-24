@@ -91,6 +91,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
     .where(
       and(
         within(scope, messages.accountId),
+        isNull(messages.goneAt),
         everywhere
           ? not(junk(messages.labelIds))
           : exists(
@@ -297,7 +298,7 @@ async function threadMessages(db: Sql, scope: Scope, threads: readonly (readonly
       labelIds: messages.labelIds,
     })
     .from(messages)
-    .where(and(within(scope, messages.accountId), inArray(messages.threadId, [...new Set(threads.map(([, thread]) => thread))])))
+    .where(and(within(scope, messages.accountId), isNull(messages.goneAt), inArray(messages.threadId, [...new Set(threads.map(([, thread]) => thread))])))
     .orderBy(asc(messages.receivedAt), asc(messages.id));
   for (const r of rows) {
     const key = `${r.accountId}\n${r.threadId}`;
