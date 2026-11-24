@@ -1,4 +1,4 @@
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage, fauxText } from '@earendil-works/pi-ai';
 import { describe, expect, it, vi } from 'vitest';
 import { proposeLabels } from '../src/learn/labels.ts';
 import { createProposer } from '../src/model/propose.ts';
@@ -6,7 +6,8 @@ import { loadKeyring } from '../src/secrets.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { latestLabelProposal } from '../src/store/labels.ts';
 import { MAX_DRAFTS, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../src/prompts/proposal.ts';
-import { freshStore, raw } from './fixtures.ts';
+import { freshStore, raw, fauxModel } from './fixtures.ts';
+import { toolReply } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
@@ -65,19 +66,16 @@ describe('what the model suggests', () => {
   });
 
   it('comes from one call with no tool but the one that records it', async () => {
-    const faux = fauxProvider();
-    const models = createModels();
-    models.setProvider(faux.provider);
-    const complete = vi.spyOn(models, 'completeSimple');
-    const propose = createProposer(models, faux.getModel(), 'low');
-    faux.setResponses([fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES] })], { stopReason: 'toolUse' })]);
+    const { models, model, complete, answers } = fauxModel();
+    const propose = createProposer(models, model, 'low');
+    answers(toolReply(PROPOSAL_TOOL, { labels: [PITCHES] }));
     expect(await propose({ goal: 'Fewer pitches', labels: [] })).toMatchObject({
       drafts: [{ name: 'Cold outreach', disposition: 'archive', unsubscribe: true }],
       usage: { model: expect.stringContaining('/') },
     });
     expect(complete.mock.calls[0]?.[1].tools?.map((t) => t.name)).toEqual([PROPOSAL_TOOL]);
 
-    faux.setResponses([fauxAssistantMessage([fauxText('Try a Marketing label.')])]);
+    answers(fauxAssistantMessage([fauxText('Try a Marketing label.')]));
     expect(await propose({ goal: 'Fewer pitches', labels: [] })).toMatchObject({ failed: 'the model did not suggest any usable labels' });
   });
 });

@@ -1,8 +1,10 @@
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
-import { describe, expect, it, vi } from 'vitest';
+import { fauxAssistantMessage, fauxText } from '@earendil-works/pi-ai';
+import { describe, expect, it } from 'vitest';
 import { createHighlighter } from '../src/model/digest.ts';
 import { knownZone, scheduledBefore } from '../src/digest/schedule.ts';
 import { HIGHLIGHT_TOOL, MAX_HIGHLIGHTS, buildHighlightPrompt, readHighlights } from '../src/prompts/digest.ts';
+import { toolReply } from './helpers.ts';
+import { fauxModel } from './fixtures.ts';
 
 const at = (iso: string) => Date.parse(iso);
 const before = (iso: string, hour: number, zone: string) => new Date(scheduledBefore(at(iso), hour, zone)).toISOString();
@@ -79,20 +81,17 @@ describe('what the model is asked about a digest', () => {
 
 describe('asking the model about a digest', () => {
   it('is one call with no tool but the one that records its picks', async () => {
-    const faux = fauxProvider();
-    const models = createModels();
-    models.setProvider(faux.provider);
-    const complete = vi.spyOn(models, 'completeSimple');
-    const highlight = createHighlighter(models, faux.getModel(), 'low');
+    const { models, model, complete, answers } = fauxModel();
+    const highlight = createHighlighter(models, model, 'low');
     const input = {
       label: { name: 'Builds', description: 'CI results.' },
       lines: [{ fromAddress: 'ci@example.org', subject: 'Failed', received: 'Wed 6:00 AM' }],
     };
-    faux.setResponses([fauxAssistantMessage([fauxToolCall(HIGHLIGHT_TOOL, { picks: [{ item: 1, why: 'The only failure.' }] })], { stopReason: 'toolUse' })]);
+    answers(toolReply(HIGHLIGHT_TOOL, { picks: [{ item: 1, why: 'The only failure.' }] }));
     expect(await highlight(input)).toMatchObject({ picks: [{ item: 1, why: 'The only failure.' }], usage: { model: expect.stringContaining('/') } });
     expect(complete.mock.calls[0]?.[1].tools?.map((t) => t.name)).toEqual([HIGHLIGHT_TOOL]);
 
-    faux.setResponses([fauxAssistantMessage([fauxText('Run 1 failed.')])]);
+    answers(fauxAssistantMessage([fauxText('Run 1 failed.')]));
     expect(await highlight(input)).toMatchObject({ failed: 'the model did not return usable picks' });
   });
 });

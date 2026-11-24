@@ -1,4 +1,4 @@
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { describe, expect, it, vi } from 'vitest';
 import { askMail } from '../src/learn/mail.ts';
 import { createMailAsker } from '../src/model/ask.ts';
@@ -6,8 +6,8 @@ import { loadKeyring } from '../src/secrets.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { ASK_TOOL, type MailAsker, readMailFilter } from '../src/prompts/mail-ask.ts';
 import { FIND_TOOL } from '../src/prompts/rule-draft.ts';
-import { personWith, raw } from './fixtures.ts';
-import { SAMPLE_LABELS, facts } from './helpers.ts';
+import { personWith, raw, fauxModel } from './fixtures.ts';
+import { SAMPLE_LABELS, facts, toolReply } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
@@ -19,13 +19,6 @@ const TODAY = '2026-11-19';
 const BLANK = { reading: '', from: [], domains: [], label: '', view: '', unread: false, since: '', words: [], note: '' };
 const FOUND = [{ address: 'billing@vendor.example.org', name: 'Vendor', listId: null, messages: 3, label: null, subject: 'Your invoice' }];
 const usage = { model: 'p/m', inputTokens: 10, outputTokens: 20, costUsd: 0.01 };
-
-function faux() {
-  const provider = fauxProvider();
-  const models = createModels();
-  models.setProvider(provider.provider);
-  return { provider, complete: vi.spyOn(models, 'completeSimple'), models, model: provider.getModel() };
-}
 
 describe('the filter the model makes', () => {
   const read = (args: Record<string, unknown>, found = FOUND) => {
@@ -79,11 +72,8 @@ describe('the model turning words into a filter', () => {
   const input = { words: 'invoices from vendors this month', today: TODAY, labels: LABELS };
 
   it('looks senders up, is given today and their labels, and narrows to what it found', async () => {
-    const { provider, complete, models, model } = faux();
-    provider.setResponses([
-      fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'invoice' })], { stopReason: 'toolUse' }),
-      fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...BLANK, domains: ['vendor.example.org'], since: '2026-11-01' })], { stopReason: 'toolUse' }),
-    ]);
+    const { complete, models, model, answers } = fauxModel();
+    answers(toolReply(FIND_TOOL, { query: 'invoice' }), toolReply(ASK_TOOL, { ...BLANK, domains: ['vendor.example.org'], since: '2026-11-01' }));
     const asked: string[] = [];
     const answer = await createMailAsker(models, model, 'low')(input, async (query) => (asked.push(query), FOUND));
     expect(answer).toMatchObject({ filter: { domain: ['vendor.example.org'], since: '2026-11-01' }, lookups: 1 });
@@ -95,12 +85,9 @@ describe('the model turning words into a filter', () => {
   });
 
   it('sends back a sender it made up, once, and fails when it makes one up again', async () => {
-    const { provider, complete, models, model } = faux();
+    const { complete, models, model, answers } = fauxModel();
     const invented = fauxToolCall(ASK_TOOL, { ...BLANK, from: ['ap@vendor.example.org'] });
-    provider.setResponses([
-      fauxAssistantMessage([invented], { stopReason: 'toolUse' }),
-      fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...BLANK, from: ['ap@vendor.example.org'] })], { stopReason: 'toolUse' }),
-    ]);
+    answers(fauxAssistantMessage([invented], { stopReason: 'toolUse' }), toolReply(ASK_TOOL, { ...BLANK, from: ['ap@vendor.example.org'] }));
     expect(await createMailAsker(models, model, 'low')(input, async () => FOUND)).toMatchObject({
       failed: expect.stringContaining('did not return ap@vendor.example.org'),
     });
@@ -108,11 +95,8 @@ describe('the model turning words into a filter', () => {
   });
 
   it('asks once more when the model answers in words', async () => {
-    const { provider, models, model } = faux();
-    provider.setResponses([
-      fauxAssistantMessage([fauxText('You want invoices.')]),
-      fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...BLANK, words: ['invoice'] })], { stopReason: 'toolUse' }),
-    ]);
+    const { models, model, answers } = fauxModel();
+    answers(fauxAssistantMessage([fauxText('You want invoices.')]), toolReply(ASK_TOOL, { ...BLANK, words: ['invoice'] }));
     expect(await createMailAsker(models, model, 'low')(input, async () => [])).toMatchObject({ filter: { words: ['invoice'] }, lookups: 0 });
   });
 });

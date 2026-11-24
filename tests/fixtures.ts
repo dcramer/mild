@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import { PGlite } from '@electric-sql/pglite';
 import { type FauxResponseStep, createModels, fauxProvider } from '@earendil-works/pi-ai';
-import { afterAll, afterEach, beforeAll, beforeEach, inject, onTestFinished } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, inject, onTestFinished, vi } from 'vitest';
 import { type DashboardOptions, createDashboard } from '../src/dashboard/server.ts';
 import type { People } from '../src/store/people.ts';
 import { PARSERS, pglite } from '../src/store/db.ts';
@@ -388,12 +388,17 @@ const SITE = 'http://localhost:3000';
 /** Every `/api/` route a `startSift` browser in this test file was answered 200 by, as `GET /api/rules`. */
 export const answeredRoutes = new Set<string>();
 
-/** pi-ai's faux provider as the person's model, for `startSift`: `answers` queues what its next calls reply, one a call. */
-export function fauxModel(): { chosen: ChosenModel; answers: (...replies: FauxResponseStep[]) => void } {
+/**
+ * pi-ai's faux provider as a model: `answers` queues what its next calls reply, one a call, and `complete` sees each call
+ * made through `models`. `chosen` is it as the person's model, for `startSift`.
+ */
+export function fauxModel() {
   const faux = fauxProvider();
   const models = createModels();
   models.setProvider(faux.provider);
-  return { chosen: { spec: 'faux/model', models, model: faux.getModel(), reasoning: 'low' }, answers: (...replies) => faux.setResponses(replies) };
+  const model = faux.getModel();
+  const chosen: ChosenModel = { spec: 'faux/model', models, model, reasoning: 'low' };
+  return { models, model, chosen, complete: vi.spyOn(models, 'completeSimple'), answers: (...replies: FauxResponseStep[]) => faux.setResponses(replies) };
 }
 export type FauxModel = ReturnType<typeof fauxModel>;
 

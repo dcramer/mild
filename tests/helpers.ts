@@ -1,3 +1,4 @@
+import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,6 +29,10 @@ export const b64 = (text: string) => Buffer.from(text).toString('base64url');
 
 /** A verdict that places nothing: the model was not sure. */
 export const UNSURE: Verdict = { label: 'unsure', reason: 'cannot tell', confidence: 0.2 };
+
+/** The model's answer that calls `tool` with `args`, as pi-ai's faux provider replies. */
+export const toolReply = (tool: string, args: Parameters<typeof fauxToolCall>[1]) =>
+  fauxAssistantMessage([fauxToolCall(tool, args)], { stopReason: 'toolUse' });
 
 /** The model tier, with calls recorded as `test/model`. */
 export const testModel = (judge: Judge = async () => UNSURE) => ({ model: 'test/model', judge });

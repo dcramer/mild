@@ -1,9 +1,10 @@
-import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage, fauxText } from '@earendil-works/pi-ai';
 import { describe, expect, it } from 'vitest';
 import { PROPOSAL_TOOL } from '../../src/prompts/proposal.ts';
 import { type Browser, fauxModel } from '../fixtures.ts';
 import { ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
+import { toolReply } from '../helpers.ts';
 
 const { fake, start } = theApp();
 
@@ -26,7 +27,7 @@ describe('setting up labels', () => {
     const box = fake.google.mailbox(ME);
     const me = await sift.signedIn(ME);
     await sift.work();
-    model.answers(fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES, BUILDS], note: '' })], { stopReason: 'toolUse' }));
+    model.answers(toolReply(PROPOSAL_TOOL, { labels: [PITCHES, BUILDS], note: '' }));
 
     const proposed = await me.call('POST', '/api/labels/propose', { goal: 'Fewer sales pitches, and builds only when they fail' });
     expect(proposed).toMatchObject({
@@ -89,7 +90,7 @@ describe('setting up labels', () => {
     const model = fauxModel();
     const sift = await start({ model: model.chosen });
     const me = await sift.signedIn(ME);
-    model.answers(fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES], note: '' })], { stopReason: 'toolUse' }));
+    model.answers(toolReply(PROPOSAL_TOOL, { labels: [PITCHES], note: '' }));
     await me.call('POST', '/api/labels/propose', { goal: 'Fewer pitches' });
     const other = await sift.signedIn(OTHER);
     expect((await other.call('GET', '/api/labels/proposal')).body).toEqual({ proposal: null });

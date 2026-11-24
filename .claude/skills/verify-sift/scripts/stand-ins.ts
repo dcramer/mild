@@ -17,12 +17,13 @@
  *   covers receipts already when they name receipts; words naming none of these are an unusable answer. A pass is given no model.
  */
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
+import { createModels, fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
 import type { StandIns } from '../../../../src/sift/sift.ts';
 import { PROPOSAL_TOOL } from '../../../../src/prompts/proposal.ts';
 import { FILL_TOOL, FIND_TOOL } from '../../../../src/prompts/rule-draft.ts';
 import { ASK_TOOL } from '../../../../src/prompts/mail-ask.ts';
 import { FakeGoogle, serveGoogle } from '../../../../tests/google.ts';
+import { toolReply } from '../../../../tests/helpers.ts';
 
 const file = process.env['MILD_STAND_INS'];
 if (!file) throw new Error('MILD_STAND_INS names no file of what Google holds');
@@ -88,10 +89,7 @@ const answer = (context: Context) => {
   if (tools.has(PROPOSAL_TOOL)) {
     const words = typed(context).toLowerCase();
     const note = words.includes('receipt') ? 'Your Receipts and transactions label covers receipts already.' : '';
-    return fauxAssistantMessage(
-      [fauxToolCall(PROPOSAL_TOOL, { labels: [...(words.includes('pitch') ? [PITCHES] : []), ...(words.includes('build') ? [BUILDS] : [])], note })],
-      { stopReason: 'toolUse' },
-    );
+    return toolReply(PROPOSAL_TOOL, { labels: [...(words.includes('pitch') ? [PITCHES] : []), ...(words.includes('build') ? [BUILDS] : [])], note });
   }
   const found = () => [...JSON.stringify(context.messages.at(-1)?.content).matchAll(/<([^>\s]+@[^>\s]+)>|- ([^\s,<]+@[^\s,]+)/g)].map((m) => m[1] ?? m[2]);
   if (tools.has(ASK_TOOL) && context.messages.at(-1)?.role === 'toolResult') {
@@ -99,20 +97,14 @@ const answer = (context: Context) => {
     const words = about(context);
     const narrow = { reading: '', from: sender ? [sender] : [], domains: [], label: '', view: '', unread: false, since: '', words };
     const note = sender || words.length > 0 ? '' : 'Mild cannot tell which mail you have answered.';
-    return fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...narrow, note })], { stopReason: 'toolUse' });
+    return toolReply(ASK_TOOL, { ...narrow, note });
   }
   if (tools.has(FILL_TOOL) && context.messages.at(-1)?.role === 'toolResult') {
     const [first, second] = found();
     const note = second ? `Add another rule for ${second}.` : '';
-    return fauxAssistantMessage(
-      [fauxToolCall(FILL_TOOL, { ...blank, conditions: [{ by: 'from', value: first ?? 'nobody@example.com' }], action: 'archive', note })],
-      { stopReason: 'toolUse' },
-    );
+    return toolReply(FILL_TOOL, { ...blank, conditions: [{ by: 'from', value: first ?? 'nobody@example.com' }], action: 'archive', note });
   }
-  if (tools.has(FIND_TOOL))
-    return fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: tools.has(ASK_TOOL) ? typed(context).split(' about ')[0]! : typed(context) })], {
-      stopReason: 'toolUse',
-    });
+  if (tools.has(FIND_TOOL)) return toolReply(FIND_TOOL, { query: tools.has(ASK_TOOL) ? typed(context).split(' about ')[0]! : typed(context) });
   return fauxAssistantMessage('The stand-in model answers only for labels, rules and Ask.', { stopReason: 'error', errorMessage: 'stand-in' });
 };
 faux.setResponses([answer, answer]);
