@@ -280,7 +280,7 @@ export function TabBar({ items, current, compose }: { items: readonly NavItem[];
   return (
     <>
       <div aria-hidden className="h-[calc(4rem+var(--safe-bottom))] md:hidden [html:has([data-searching])_&]:hidden" />
-      <AboveToasts className="fixed inset-x-0 bottom-0 z-20 border-t border-(--rule) bg-background pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) md:hidden [html:has([data-searching])_&]:hidden">
+      <AboveToasts className="fixed inset-x-0 bottom-0 z-20 bg-rail pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) md:hidden [html:has([data-searching])_&]:hidden">
         <nav aria-label="Sections" className="grid h-16 auto-cols-fr grid-flow-col">
           {items.map(({ to, label, icon: Icon, count }, index) => [
             index === middle && compose ? (

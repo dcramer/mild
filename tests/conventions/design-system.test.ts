@@ -113,8 +113,9 @@ describe('one type scale', () => {
 });
 
 describe('as little chrome as it takes', () => {
-  // What floats over the page is filled so it can cover what is under it. Nothing else is.
+  // What floats over the page is filled so it can cover what is under it, and the sections are on the rail's fill. Nothing else is.
   const FLOATING = new Set([
+    'rail.tsx',
     'dialog.tsx',
     'layer.tsx',
     'panel.tsx',
@@ -137,7 +138,10 @@ describe('as little chrome as it takes', () => {
   test('only a part that floats has a surface', () => {
     const grounded = [...SYSTEM].filter((path) => !FLOATING.has(relative(join(WEB, 'system'), path)));
     const failures = check(grounded, [
-      [/^bg-(card|popover|background)\b/, 'only what floats (a panel, a dialog, a menu, a toast) is filled; a sheet, a table or a list sits on the page.'],
+      [
+        /^bg-(card|popover|background|rail)\b/,
+        'only what floats (a panel, a dialog, a menu, a toast) and the sections are filled; a sheet, a table or a list sits on the page.',
+      ],
     ]);
     expect(failures, failures.join('\n')).toEqual([]);
   });

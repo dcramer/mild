@@ -44,7 +44,7 @@ export function Rail({
   account?: { name: string; items: readonly MenuItem[] } | undefined;
 }) {
   return (
-    <header className="sticky top-0 hidden h-svh max-h-full w-[calc(4.5rem+var(--safe-left))] shrink-0 flex-col items-center border-r border-(--rule) pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))] pl-(--safe-left) md:flex">
+    <header className="sticky top-0 hidden h-svh max-h-full w-[calc(4.5rem+var(--safe-left))] shrink-0 flex-col items-center bg-rail pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))] pl-(--safe-left) md:flex">
       {/* The page's top and its search bar's height, so the icon sits level with the bar beside it. */}
       <Anchor href={`/${items[0]?.to ?? ''}`} aria-label="Mild" className="flex h-9.5 items-center">
         <Emblem />

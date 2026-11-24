@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', colorScheme: 'dark', themeColor: '#111110' };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', colorScheme: 'dark', themeColor: '#181817' };
 
 /** Every page, the same for everyone who opens it: what is theirs the page fetches from /api/. */
 export default function Layout({ children }: { children: ReactNode }) {

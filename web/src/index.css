@@ -45,6 +45,7 @@
   --color-faint: var(--faint);
   --color-popover: var(--popover);
   --color-card: var(--card);
+  --color-rail: var(--rail);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
 }
@@ -63,21 +64,23 @@
   --face-text: var(--typeface-text), 'Karla Variable', ui-sans-serif, system-ui, sans-serif;
   --face-mono: var(--typeface-mono), 'IBM Plex Mono', ui-monospace, monospace;
 
-  /* The dashboard is dark only: ink-black paper, off-white ink. */
-  --background: #111110;
+  /* The dashboard is dark only: charcoal paper, off-white ink. Not black, which reads as a hole in the screen. */
+  --background: #181817;
   --foreground: #f0eee8;
-  /* What floats is a step lighter than the page, so it stands off what it covers. */
-  --card: #1e1e1b;
-  --popover: #232320;
+  /* The rail's own fill, between the page and what floats: it frames the page without a line. */
+  --rail: #1f1f1d;
+  /* What floats is a step lighter than the page and the rail, so it stands off what it covers. */
+  --card: #262623;
+  --popover: #2a2a27;
   /* What the nearest layer is drawn on: the page, or a panel or dialog, which set it to theirs. Something laid over its own layer (a question covering a row) takes it. */
   --surface: var(--background);
   /* Ink at three strengths: `--foreground`, then what supports it, then what only places it (when, an address, a count, a
      day's heading), which a row sets as its quiet ink (`Table`). `--muted-foreground` is the quiet ink where it is drawn. */
   --supporting: #a3a198;
-  --faint: #85837a;
+  --faint: #8d8b82;
   --muted-foreground: var(--supporting);
   --destructive: #ff7a6b;
-  --border: #2b2b27;
+  --border: #32322d;
   --ring: #f0eee8;
 
   /* The one colour: a highlighter pen, for what the reader should look at. Text on it is always dark. */
@@ -126,13 +129,13 @@
   /* Tiers are an ordered cascade, cheapest first, so they share one ink that thins as cost rises.
      Mail no tier could decide gets the highlighter. Checked as an ordinal ramp against the card. */
   --tier-rules: #f0eee8;
-  --tier-classifier: #74726a;
-  --tier-model: #4e4c46;
+  --tier-classifier: #78766e;
+  --tier-model: #57554e;
   --tier-fallback: var(--highlight);
 
   /* What became of mail sift handled, in Activity's chart: ink at two strengths, with a failure in red. */
   --handled-changed: #a8a69d;
-  --handled-left: #4e4c46;
+  --handled-left: #57554e;
   /* With a label chosen, that label's share of the mail: what the reader asked to look at. */
   --handled-label: var(--highlight);
 }
