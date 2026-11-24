@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 
 /**
  * A group of settings that belong together, set apart by a frame alone: it has no fill of its own, so

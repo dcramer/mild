@@ -6,7 +6,7 @@ import { type LabelProposal, type ManageState, api } from '@/lib/api/endpoints.t
 import { signOut } from '@/lib/sign-out.ts';
 import { useAction } from '@/components/action.ts';
 import { count } from '@/lib/format.ts';
-import { InboxFigures } from '@/components/inbox.tsx';
+import { InboxFigures } from '@/components/go-through-inbox.tsx';
 import { Button, Dialog, Failure, Form, Note, Onboarding, TextArea } from '@/system';
 import { type LabelDraft, LabelFields } from '@/components/label-fields.tsx';
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';

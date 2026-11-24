@@ -1,15 +1,17 @@
 'use client';
 import { WorkflowIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { SenderCell } from '@/components/sender.tsx';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
-import { messageKey, proposalKey, useParam } from '@/lib/params.ts';
+import { messageKey, proposalKey } from '@/lib/rows.ts';
+import { useParam } from '@/lib/params.ts';
 import { type SuggestionItem, api } from '@/lib/api/endpoints.ts';
 import { useAction, useHidden } from '@/components/action.ts';
-import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, duration, factFilterName, outcomeName, period, plural, sureness } from '@/lib/format.ts';
+import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, factFilterName, outcomeName, sureness } from '@/lib/words.ts';
+import { count, duration, period, plural } from '@/lib/format.ts';
 import {
   Arrived,
   Heads,

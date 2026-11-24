@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { Tooltip } from './tooltip.tsx';
 
 const NAMES = ['', 'Unsure', 'Fairly sure', 'Sure'] as const;

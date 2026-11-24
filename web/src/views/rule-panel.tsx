@@ -1,29 +1,11 @@
 'use client';
 import { type LabelSummary, type RuleMatch, type RuleSummary, api } from '@/lib/api/endpoints.ts';
 import { useAction } from '@/components/action.ts';
-import {
-  HANDLED,
-  INBOX_NAME,
-  saidOf,
-  count,
-  doesName,
-  describeMatch,
-  factAnswers,
-  factWords,
-  longDay,
-  madeBy,
-  duration,
-  money,
-  moneyTick,
-  outcomeName,
-  plural,
-  roughly,
-  shortDate,
-  shortDay,
-  willBe,
-} from '@/lib/format.ts';
+import { HANDLED, INBOX_NAME, saidOf, doesName, describeMatch, factAnswers, factWords, madeBy, outcomeName, willBe } from '@/lib/words.ts';
+import { count, longDay, duration, money, moneyTick, plural, roughly, shortDate, shortDay } from '@/lib/format.ts';
 import { NamedLabel, Verdict } from '@/components/bits.tsx';
-import { messageKey, useParam } from '@/lib/params.ts';
+import { messageKey } from '@/lib/rows.ts';
+import { useParam } from '@/lib/params.ts';
 import { MatchValue } from '@/components/sender.tsx';
 import type { OpenMessages } from '@/lib/open-messages.ts';
 import { GmailFilter } from '@/components/gmail-filter.tsx';

@@ -7,7 +7,7 @@
  */
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
-import { STARTUP_SCREENS, startupImage } from '../web/src/lib/startup.ts';
+import { STARTUP_SCREENS, startupImage } from '../web/src/lib/startup-images.ts';
 import { serveSeed } from './seeded.ts';
 
 const ROOT = join(import.meta.dirname, '..');

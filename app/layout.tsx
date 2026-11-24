@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import '@/index.css';
 import { display, mono, text, wordmark } from '@/fonts.ts';
 import { BEFORE_PAINT } from '@/lib/before-paint.ts';
-import { STARTUP_SCREENS, startupImage, startupMedia } from '@/lib/startup.ts';
+import { STARTUP_SCREENS, startupImage, startupMedia } from '@/lib/startup-images.ts';
 import { Providers } from '@/providers.tsx';
 
 export const metadata: Metadata = {

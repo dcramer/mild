@@ -2,8 +2,8 @@
 import { Combobox } from '@base-ui/react/combobox';
 import { XIcon } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { type Party, type Recipient, readRecipients, sameAddress, typed } from '@/lib/addresses';
-import { cn } from '@/lib/utils';
+import { type Party, type Recipient, readRecipients, sameAddress, typed } from '@/lib/addresses.ts';
+import { cn } from '@/lib/utils.ts';
 import { Tooltip } from './tooltip.tsx';
 
 /** `list` and what was typed after it, each address once. */

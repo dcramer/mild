@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { Tooltip } from './tooltip.tsx';
 import { Anchor } from './anchor.tsx';
 

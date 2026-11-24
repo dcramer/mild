@@ -1,7 +1,7 @@
 'use client';
 import { ArrowLeftIcon, ChevronDownIcon, ChevronUpIcon, EllipsisVerticalIcon, ReplyIcon } from 'lucide-react';
 import { Fragment, type ReactNode, type Ref, createContext, useContext, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { Button } from './button.tsx';
 import { keyName, useShortcut } from './keys.tsx';
 import { Menu } from './menu.tsx';

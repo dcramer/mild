@@ -1,6 +1,6 @@
 'use client';
 import { type ComponentProps, type ReactNode, useId, useRef } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { Anchor } from './anchor.tsx';
 import { ariaKeys, useShortcut } from './keys.tsx';
 import { Tooltip } from './tooltip.tsx';

@@ -3,7 +3,7 @@ import { ArrowLeftIcon, CheckIcon, SearchIcon, SlidersHorizontalIcon, XIcon } fr
 import { type ReactNode, createContext, useContext, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { count } from '@/lib/format.ts';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { useBackCloses } from '@/lib/params.ts';
 import { Button } from './button.tsx';
 import { useShortcut } from './keys.tsx';

@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { type LabelSummary, api } from '@/lib/api/endpoints.ts';
 import { useAction } from '@/components/action.ts';
-import { type ActionKey, count, percent, plural } from '@/lib/format.ts';
+import { type ActionKey } from '@/lib/words.ts';
+import { count, percent, plural } from '@/lib/format.ts';
 import { Button, DeleteButton, Failure, Figure, Figures, Form, Panel, useToast } from '@/system';
 import { LabelFields } from '@/components/label-fields.tsx';
 

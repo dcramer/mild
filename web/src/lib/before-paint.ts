@@ -1,4 +1,4 @@
-import { START } from './start.ts';
+import { START } from './opens-on.ts';
 
 /**
  * Which `Reserve`s held nothing the last time they filled in, in this browser, read by a script in the page's head

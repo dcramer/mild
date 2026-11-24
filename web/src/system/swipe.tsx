@@ -1,6 +1,6 @@
 'use client';
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 
 /** What a swipe does, said where it shows. */
 export interface SwipePress {

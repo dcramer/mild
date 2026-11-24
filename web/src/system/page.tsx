@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { Narrowed } from './mailbox.tsx';
 import { Blank } from './state.tsx';
 import { ListHead } from './list-view.tsx';

@@ -1,7 +1,7 @@
 'use client';
 import type { LabelProposal } from '@/lib/api/endpoints.ts';
-import { ACTIONS } from '@/lib/format.ts';
-import { cn } from '@/lib/utils';
+import { ACTIONS } from '@/lib/words.ts';
+import { cn } from '@/lib/utils.ts';
 import { Heads, Button, Check, Does, OnPhone, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
 import type { LabelDraft } from './label-fields.tsx';
 import { reveal } from '@/lib/reveal.ts';

@@ -2,7 +2,7 @@
 import { Toast as Base } from '@base-ui/react/toast';
 import { XIcon } from 'lucide-react';
 import { type FocusEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { useShortcut } from './keys.tsx';
 import { ActionIcon } from './does.tsx';
 import { LabelChip } from './label.tsx';

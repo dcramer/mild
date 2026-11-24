@@ -1,7 +1,7 @@
 'use client';
 import { Tooltip as Base } from '@base-ui/react/tooltip';
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { useTouch } from './touch.ts';
 
 /**

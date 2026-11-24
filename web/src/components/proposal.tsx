@@ -2,7 +2,8 @@
 import { MatchWords } from '@/components/sender.tsx';
 import { NamedLabel } from '@/components/bits.tsx';
 import type { Suggestions } from '@/lib/api/endpoints.ts';
-import { count, outcomeName } from '@/lib/format.ts';
+import { count } from '@/lib/format.ts';
+import { outcomeName } from '@/lib/words.ts';
 import { reveal } from '@/lib/reveal.ts';
 
 /** A rule Mild proposes: where the person keeps doing something other than what a label does. */

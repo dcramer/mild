@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { DecisionRow } from '@/lib/api/endpoints.ts';
-import { INBOX, INBOX_NAME, type Status, STATUS_NAMES, doesName, outcomeName, status } from '@/lib/format.ts';
+import { INBOX, INBOX_NAME, type Status, STATUS_NAMES, doesName, outcomeName, status } from '@/lib/words.ts';
 import { Does, LabelName, Note, Sub, Tooltip } from '@/system';
 
 /** A label named by its id: with its tag, but for Leave in inbox, which is not a label and is its words alone. */

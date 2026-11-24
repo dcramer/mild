@@ -3,26 +3,12 @@ import { MegaphoneIcon, ReplyIcon, SparkleIcon } from 'lucide-react';
 import { NamedLabel } from '@/components/bits.tsx';
 import { Fragment, type ReactNode } from 'react';
 import { type Contact, type RuleMatch, type SenderProfile } from '@/lib/api/endpoints.ts';
-import {
-  CONTACT_SAYS,
-  INBOX,
-  MATCH_WORDS,
-  type Said,
-  count,
-  describeMatch,
-  doesName,
-  duration,
-  factAnswers,
-  factWords,
-  outcomeName,
-  plural,
-  saidOf,
-  shortDate,
-} from '@/lib/format.ts';
+import { CONTACT_SAYS, INBOX, MATCH_WORDS, type Said, describeMatch, doesName, factAnswers, factWords, outcomeName, saidOf } from '@/lib/words.ts';
+import { count, duration, plural, shortDate } from '@/lib/format.ts';
 import { rulePath } from '@/lib/params.ts';
 import { Ago, Blank, Fact, Facts, Failure, Hint, HoverCard, Marked, Sub, Td, TextLink, LabelName } from '@/system';
 import { reveal } from '@/lib/reveal.ts';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { useWhoCard } from '@/lib/api/reads.ts';
 
 /** A sender's page; with `name`, their mail under that name. */

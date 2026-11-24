@@ -1,6 +1,6 @@
 'use client';
 import { type ComponentProps, type ReactNode, useId } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 
 /** Somewhere to type is outlined and empty, like the search bar; something to press is filled. The outline darkens in use. */
 const FIELD =

@@ -10,12 +10,13 @@ import type { ManageState } from '@/lib/api/endpoints.ts';
 import { useOnline } from '@/lib/api/query.ts';
 import { useKeptPlace } from '@/lib/place.ts';
 import { signOut } from '@/lib/sign-out.ts';
-import { keepStart, startsOnInbox } from '@/lib/start.ts';
+import { keepStart, startsOnInbox } from '@/lib/opens-on.ts';
 import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
-import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
+import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
-import { goBack, isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
+import { goBack, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
+import { isMessageKey } from '@/lib/rows.ts';
 import { useStarted } from '@/lib/started.ts';
 import { useHidden } from '@/components/action.ts';
 import { ahead, plural } from '@/lib/format.ts';
@@ -151,7 +152,7 @@ function Opening() {
 }
 
 /**
- * Where the installed app opens, kept for the next start (`web/src/lib/start.ts`) as soon as it is known whether Inbox
+ * Where the installed app opens, kept for the next start (`web/src/lib/opens-on.ts`) as soon as it is known whether Inbox
  * is on; on a start this browser knew nothing of, it goes there now.
  */
 function useStartsOn(inbox: boolean | null) {

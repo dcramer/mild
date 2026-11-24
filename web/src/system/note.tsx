@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 
 /**
  * Something said to the reader outside the flow of the page. `look` needs them to do something;

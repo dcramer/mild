@@ -6,10 +6,12 @@ import { ErrorNote, NamedLabel, StatusWord, Verdict } from '@/components/bits.ts
 import { ContactHint, DomainNamed, NameCell, RuleWords, SenderCell, SenderFacts, senderHref } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api } from '@/lib/api/endpoints.ts';
 import { useAction } from '@/components/action.ts';
-import { STANDINGS, count, dateTime, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
+import { STANDINGS, doesName, outcomeName } from '@/lib/words.ts';
+import { count, dateTime, longDay, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { useCompose } from '@/lib/compose.ts';
-import { messageKey, rulePath, useGo, useOpenRule, useParam } from '@/lib/params.ts';
+import { messageKey } from '@/lib/rows.ts';
+import { rulePath, useGo, useOpenRule, useParam } from '@/lib/params.ts';
 import { RuleDialog } from '@/components/rule-dialog.tsx';
 import {
   Ago,

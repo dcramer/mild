@@ -21,7 +21,8 @@ import { ContactHint } from '@/components/sender.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { type Recipient, wrongAddresses } from '@/lib/addresses.ts';
-import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, money, moneyTick, outcomeName } from '@/lib/format.ts';
+import { ACTIONS, INBOX, INBOX_NAME, STATUS_NAMES, TIERS, inboxFirst, outcomeName } from '@/lib/words.ts';
+import { money, moneyTick } from '@/lib/format.ts';
 import {
   Ago,
   Arrived,
@@ -343,7 +344,7 @@ export function SystemView() {
           </Sheet>
         </Section>
 
-        <Section title="Words" meta="lib/format.ts: one name for each thing, everywhere">
+        <Section title="Words" meta="lib/words.ts: one name for each thing, everywhere">
           <Sheet>
             <Row label="Ago" note="How long since, drawn only in the browser: the server's clock and zone are not the reader's.">
               <Ago at={SYNCED} />

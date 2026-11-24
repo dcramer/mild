@@ -1,7 +1,7 @@
 'use client';
 import { PreviewCard as Base } from '@base-ui/react/preview-card';
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { Anchor } from './anchor.tsx';
 import { useTouch } from './touch.ts';
 
