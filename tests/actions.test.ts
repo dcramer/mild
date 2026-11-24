@@ -10,6 +10,7 @@ import { LEAVE_IN_INBOX } from '../src/triage/types.ts';
 import { connectGmail, fakeGoogle, openUserDb, raw } from './fixtures.ts';
 import type { FakeGmail } from './google.ts';
 import { ACCOUNT, facts } from './helpers.ts';
+import { RATE_LIMITED } from './google.ts';
 
 const fake = fakeGoogle();
 
@@ -18,10 +19,9 @@ let gmail: FakeGmail;
 let deps: ActionDeps;
 let mine: string;
 
-const labelsOf = (id: string) => gmail.message(id)?.labelIds;
 const labelId = (name: string) => gmail.labelId(name)!;
 /** The person leaves the message with exactly these labels in Gmail. */
-const setLabels = (id: string, labels: string[]) => gmail.change(id, { add: labels, remove: labelsOf(id) });
+const setLabels = (id: string, labels: string[]) => gmail.change(id, { add: labels, remove: gmail.labelsOf(id) });
 const modified = () => gmail.asked('users.messages.modify').length;
 
 beforeEach(async () => {
@@ -49,7 +49,7 @@ describe('execute', () => {
 
   it('adds the label for what the mail is when archiving, and no label for what Mild did', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'archive', labels: ['mild/newsletters'] });
-    expect(labelsOf('m1')).toEqual(['UNREAD', mine, labelId('mild/newsletters')]);
+    expect(gmail.labelsOf('m1')).toEqual(['UNREAD', mine, labelId('mild/newsletters')]);
     expect([...gmail.labels.values()].map((l) => l.name).filter((n) => n.startsWith('mild/'))).toEqual(['mild/newsletters']);
   });
 
@@ -67,7 +67,7 @@ describe('execute', () => {
 
   it('labels without moving the message', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'label', labels: ['mild/newsletters'] });
-    expect(labelsOf('m1')).toEqual(['INBOX', 'UNREAD', mine, labelId('mild/newsletters')]);
+    expect(gmail.labelsOf('m1')).toEqual(['INBOX', 'UNREAD', mine, labelId('mild/newsletters')]);
   });
 
   it('never touches a message that is not in the inbox or no longer exists', async () => {
@@ -86,7 +86,7 @@ describe('execute', () => {
 
   it('marks spam with no label of its own', async () => {
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'spam' })).toMatchObject({ status: 'done' });
-    expect(labelsOf('m1')).toEqual(['UNREAD', mine, 'SPAM']);
+    expect(gmail.labelsOf('m1')).toEqual(['UNREAD', mine, 'SPAM']);
   });
 
   it('refuses spam for a sender the user has written to, an unknown sender, or a failed lookup', async () => {
@@ -94,7 +94,7 @@ describe('execute', () => {
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'spam' })).toMatchObject({ status: 'skipped', reason: expect.stringContaining('written to') });
 
     gmail.delete(written);
-    gmail.fail('users.messages.list', { status: 403, reason: 'userRateLimitExceeded' });
+    gmail.fail('users.messages.list', RATE_LIMITED);
     expect(await execute(deps, ACCOUNT, 'm1', { type: 'spam' })).toMatchObject({ status: 'skipped', reason: expect.stringContaining('could not check') });
 
     gmail.deliver({ id: 'unsynced', from: 'news@example.com', labelIds: ['INBOX'] });
@@ -151,17 +151,17 @@ describe('execute', () => {
 describe('marking read', () => {
   it('marks read while archiving or keeping, and undo puts unread back', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'archive', labels: ['mild/newsletters'], markRead: true });
-    expect(labelsOf('m1')).toEqual([mine, labelId('mild/newsletters')]);
+    expect(gmail.labelsOf('m1')).toEqual([mine, labelId('mild/newsletters')]);
     await undo(deps, 1);
-    expect(labelsOf('m1')?.toSorted()).toEqual(['INBOX', mine, 'UNREAD'].toSorted());
+    expect(gmail.labelsOf('m1')?.toSorted()).toEqual(['INBOX', mine, 'UNREAD'].toSorted());
 
     await execute(deps, ACCOUNT, 'm1', { type: 'label', markRead: true });
-    expect(labelsOf('m1')?.toSorted()).toEqual(['INBOX', mine].toSorted());
+    expect(gmail.labelsOf('m1')?.toSorted()).toEqual(['INBOX', mine].toSorted());
   });
 
   it('never marks spam read', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'spam', markRead: true });
-    expect(labelsOf('m1')).toContain('UNREAD');
+    expect(gmail.labelsOf('m1')).toContain('UNREAD');
   });
 });
 
@@ -169,7 +169,7 @@ describe('undo', () => {
   it('restores the inbox and removes what was added', async () => {
     await execute(deps, ACCOUNT, 'm1', { type: 'spam' });
     expect(await undo(deps, 1)).toMatchObject({ status: 'done', actionId: 2 });
-    expect(labelsOf('m1')?.toSorted()).toEqual(['INBOX', mine, 'UNREAD'].toSorted());
+    expect(gmail.labelsOf('m1')?.toSorted()).toEqual(['INBOX', mine, 'UNREAD'].toSorted());
     expect((await getAction(db, 1))?.status).toBe('undone');
     expect(await getAction(db, 2)).toMatchObject({ type: 'undo', status: 'done', payload: { undoOf: 1 } });
   });
@@ -179,7 +179,7 @@ describe('undo', () => {
     const later = gmail.label('later');
     setLabels('m1', [labelId('mild/newsletters'), later]);
     await undo(deps, 1);
-    expect(labelsOf('m1')).toEqual([later, 'INBOX']);
+    expect(gmail.labelsOf('m1')).toEqual([later, 'INBOX']);
   });
 
   it('marks the action undone when the user already reversed it by hand', async () => {
@@ -220,10 +220,10 @@ describe('a conversation', () => {
     await earlier('m2', 10);
     const { id, archived } = await archiveNewest();
     expect(archived).toBe(2);
-    expect(labelsOf('m0')).toEqual(['UNREAD']);
-    expect(labelsOf('m00')).toEqual([]);
+    expect(gmail.labelsOf('m0')).toEqual(['UNREAD']);
+    expect(gmail.labelsOf('m00')).toEqual([]);
     // Newer mail is its own to decide.
-    expect(labelsOf('m2')).toEqual(['INBOX', 'UNREAD']);
+    expect(gmail.labelsOf('m2')).toEqual(['INBOX', 'UNREAD']);
     expect(await raw(db).all('SELECT message_id, decision_id, alongside FROM actions WHERE alongside IS NOT NULL ORDER BY id')).toEqual([
       { message_id: 'm0', decision_id: null, alongside: id },
       { message_id: 'm00', decision_id: null, alongside: id },
@@ -231,7 +231,7 @@ describe('a conversation', () => {
     expect(await raw(db).all('SELECT id FROM messages WHERE label_ids @> \'["INBOX"]\' ORDER BY id')).toEqual([{ id: 'm2' }]);
 
     await undo(deps, id);
-    for (const message of ['m0', 'm00', 'm1']) expect(labelsOf(message)).toContain('INBOX');
+    for (const message of ['m0', 'm00', 'm1']) expect(gmail.labelsOf(message)).toContain('INBOX');
     expect(await raw(db).all("SELECT DISTINCT status FROM actions WHERE type = 'archive'")).toEqual([{ status: 'undone' }]);
   });
 
@@ -244,15 +244,15 @@ describe('a conversation', () => {
     gmail.deliver({ from: ACCOUNT, to: 'colleague@example.com', labelIds: ['SENT'] });
     await earlier('newsletter', -10);
     expect((await archiveNewest()).archived).toBe(1);
-    expect(labelsOf('newsletter')).not.toContain('INBOX');
-    for (const message of ['answered', 'review', 'colleague']) expect(labelsOf(message)).toContain('INBOX');
+    expect(gmail.labelsOf('newsletter')).not.toContain('INBOX');
+    for (const message of ['answered', 'review', 'colleague']) expect(gmail.labelsOf(message)).toContain('INBOX');
   });
 
   it('leaves the whole of a conversation the owner wrote in', async () => {
     await earlier('m0', -20);
     await earlier('reply', -10, ACCOUNT, ['SENT']);
     expect((await archiveNewest()).archived).toBe(0);
-    expect(labelsOf('m0')).toContain('INBOX');
+    expect(gmail.labelsOf('m0')).toContain('INBOX');
   });
 });
 

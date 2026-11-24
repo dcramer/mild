@@ -121,7 +121,7 @@ describe('reading mail', () => {
     });
     await arrives();
     const [file] = ((await me.call('GET', `/api/message?id=${id}`)).body as { attachments: { part: string }[] }).attachments;
-    const reads = box.asked('users.messages.get').filter((r) => r.id === id).length;
+    const reads = box.asked('users.messages.get', id).length;
 
     const saved = await me.call('GET', `/api/message/file?id=${id}&part=${file!.part}`);
     expect(saved.status).toBe(200);
@@ -132,13 +132,13 @@ describe('reading mail', () => {
       'content-security-policy': "default-src 'none'; sandbox",
       'x-content-type-options': 'nosniff',
     });
-    expect(box.asked('users.messages.get').filter((r) => r.id === id)).toHaveLength(reads);
+    expect(box.asked('users.messages.get', id)).toHaveLength(reads);
     expect((await me.call('GET', `/api/message/file?id=${id}&part=9`)).status).toBe(404);
 
     // Gone from the message in Gmail since: it is read again once, for the ids it has now, and then refused.
     box.renewAttachmentIds();
     expect((await me.call('GET', `/api/message/file?id=${id}&part=${file!.part}`)).body['text']).toBe('<script>alert(1)</script>');
-    expect(box.asked('users.messages.get').filter((r) => r.id === id)).toHaveLength(reads + 1);
+    expect(box.asked('users.messages.get', id)).toHaveLength(reads + 1);
   });
 
   it('shows someone else none of it', async () => {
@@ -164,18 +164,18 @@ describe('changing mail', () => {
 
     const read = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [a], change: 'read' });
     expect(read.body).toMatchObject({ actions: [expect.any(Number)], missed: 0 });
-    expect(box.message(a)!.labelIds).toEqual(['INBOX']);
+    expect(box.labelsOf(a)).toEqual(['INBOX']);
 
     const archived = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [a, b], change: 'archive' });
     expect(archived.status).toBe(200);
     const { actions } = archived.body as { actions: number[] };
     expect(actions).toHaveLength(2);
-    expect(box.message(a)!.labelIds).not.toContain('INBOX');
-    expect(box.message(b)!.labelIds).not.toContain('INBOX');
+    expect(box.labelsOf(a)).not.toContain('INBOX');
+    expect(box.labelsOf(b)).not.toContain('INBOX');
     expect(threadsOf(await me.call('GET', '/api/mail/threads'))).toEqual([]);
 
     expect(await me.call('POST', '/api/undo', { id: actions[1] })).toMatchObject({ status: 200, body: { message: null } });
-    expect(box.message(b)!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(b)).toContain('INBOX');
     expect(threadsOf(await me.call('GET', '/api/mail/threads')).map((t) => t.threadId)).toEqual([b]);
   });
 
@@ -186,13 +186,13 @@ describe('changing mail', () => {
 
     const spam = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [deal], change: 'spam' });
     expect(spam.body).toMatchObject({ actions: [expect.any(Number)], missed: 0 });
-    expect(box.message(deal)!.labelIds).toContain('SPAM');
-    expect(box.message(deal)!.labelIds).not.toContain('INBOX');
+    expect(box.labelsOf(deal)).toContain('SPAM');
+    expect(box.labelsOf(deal)).not.toContain('INBOX');
     expect(threadsOf(await me.call('GET', '/api/mail/threads'))).toEqual([]);
 
     expect((await me.call('POST', '/api/undo', { id: (spam.body as { actions: number[] }).actions[0] })).status).toBe(200);
-    expect(box.message(deal)!.labelIds).toContain('INBOX');
-    expect(box.message(deal)!.labelIds).not.toContain('SPAM');
+    expect(box.labelsOf(deal)).toContain('INBOX');
+    expect(box.labelsOf(deal)).not.toContain('SPAM');
   });
 
   it('leaves mail no longer in the inbox as it is', async () => {
@@ -201,7 +201,7 @@ describe('changing mail', () => {
     await arrives();
     box.change(id, { remove: ['INBOX'] });
     expect((await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'read' })).body).toEqual({ actions: [], missed: 0 });
-    expect(box.message(id)!.labelIds).toEqual(['UNREAD']);
+    expect(box.labelsOf(id)).toEqual(['UNREAD']);
   });
 
   it('returns what landed when a message’s Gmail call throws, with that one counted missed, so Undo still takes the rest back', async () => {
@@ -217,11 +217,11 @@ describe('changing mail', () => {
     const { actions, missed } = changed.body as { actions: number[]; missed: number };
     expect(missed).toBe(1);
     expect(actions).toHaveLength(1);
-    expect(box.message(a)!.labelIds).toContain('INBOX');
-    expect(box.message(b)!.labelIds).not.toContain('INBOX');
+    expect(box.labelsOf(a)).toContain('INBOX');
+    expect(box.labelsOf(b)).not.toContain('INBOX');
 
     expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
-    expect(box.message(b)!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(b)).toContain('INBOX');
   });
 
   it('offers Undo for a change whose answer was lost, which takes it back once Gmail shows it landed', async () => {
@@ -233,10 +233,10 @@ describe('changing mail', () => {
     const changed = await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' });
     const { actions } = changed.body as { actions: number[] };
     expect(changed.body).toEqual({ actions: [expect.any(Number)], missed: 0 });
-    expect(box.message(id)!.labelIds).not.toContain('INBOX');
+    expect(box.labelsOf(id)).not.toContain('INBOX');
 
     expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
-    expect(box.message(id)!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(id)).toContain('INBOX');
     await arrives();
     expect(threadsOf(await me.call('GET', '/api/mail/threads'))).toHaveLength(1);
   });
@@ -249,10 +249,10 @@ describe('changing mail', () => {
 
     const { actions } = (await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' })).body as { actions: number[] };
     expect(actions).toHaveLength(1);
-    expect(box.message(id)!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(id)).toContain('INBOX');
     expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
     expect(box.asked('users.messages.modify')).toHaveLength(1);
-    expect(box.message(id)!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(id)).toContain('INBOX');
   });
 
   it('refuses an Undo Gmail refuses, leaving the change in place to be undone again', async () => {
@@ -263,9 +263,9 @@ describe('changing mail', () => {
     box.fail('users.messages.modify', { status: 500 });
 
     expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(409);
-    expect(box.message(id)!.labelIds).not.toContain('INBOX');
+    expect(box.labelsOf(id)).not.toContain('INBOX');
     expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
-    expect(box.message(id)!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(id)).toContain('INBOX');
   });
 
   it('changes and undoes nothing of someone else’s', async () => {
@@ -279,7 +279,7 @@ describe('changing mail', () => {
     expect((await other.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'archive' })).status).toBe(404);
     expect(await other.call('POST', '/api/undo', { id: actions[0] })).toMatchObject({ status: 409, body: { error: `There is no change #${actions[0]}.` } });
     expect(box.requests).toHaveLength(asked);
-    expect(box.message(id)!.labelIds).toEqual(['INBOX']);
+    expect(box.labelsOf(id)).toEqual(['INBOX']);
   });
 });
 
@@ -303,7 +303,7 @@ describe('a press that says what the mail is', () => {
     const { box, me, id } = await placed('receipts');
     const { actions } = await archive(me, id);
     expect(actions).toHaveLength(1);
-    expect(box.message(id)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
+    expect(box.labelsOf(id)).toEqual(['UNREAD', box.labelId('mild/receipts')]);
     expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'receipts' }]);
     expect(((await me.call('GET', '/api/decisions')).body['rows'] as unknown[])[0]).toMatchObject({
       messageId: id,
@@ -314,29 +314,29 @@ describe('a press that says what the mail is', () => {
     });
 
     expect((await me.call('POST', '/api/undo', { id: actions[0] })).status).toBe(200);
-    expect(box.message(id)!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(id)).toContain('INBOX');
   });
 
   it('does it for an answer that was only said, in Inbox’s reader', async () => {
     const { box, me, id } = await placed('everything_else', 'keep');
     const said = await me.call('POST', '/api/feedback', { accountId: ME, sender: 'shop@example.com', label: 'receipts', messageId: id, carryOut: false });
     expect(said.status).toBe(200);
-    expect(box.message(id)!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(id)).toContain('INBOX');
     await archive(me, id);
-    expect(box.message(id)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
+    expect(box.labelsOf(id)).toEqual(['UNREAD', box.labelId('mild/receipts')]);
   });
 
   it('only records the label when the press does something else, and the press goes ahead', async () => {
     const { box, me, id } = await placed('everything_else', 'keep');
     await archive(me, id);
-    expect(box.message(id)!.labelIds).toEqual(['UNREAD']);
+    expect(box.labelsOf(id)).toEqual(['UNREAD']);
     expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'everything_else' }]);
   });
 
   it('records a label that archives on mail marked spam, which is still spam', async () => {
     const { box, me, id } = await placed('receipts');
     await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'spam' });
-    expect(box.message(id)!.labelIds).toEqual(['UNREAD', 'SPAM']);
+    expect(box.labelsOf(id)).toEqual(['UNREAD', 'SPAM']);
     expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'receipts' }]);
   });
 
@@ -345,7 +345,7 @@ describe('a press that says what the mail is', () => {
     const id = box.deliver({ from: 'ada@example.com' });
     await arrives();
     await archive(me, id);
-    expect(box.message(id)!.labelIds).toEqual(['UNREAD']);
+    expect(box.labelsOf(id)).toEqual(['UNREAD']);
     expect(await examplesOf(me)).toEqual([]);
   });
 });
@@ -518,24 +518,24 @@ describe('sending mail', () => {
     await arrives();
     const detail = (await me.call('GET', `/api/message?id=${asked}`)).body as { attachments: { part: string; name: string; size: number }[] };
     expect(detail.attachments.map((a) => a.name)).toEqual(['roof.pdf', 'notes.txt']);
-    const reads = box.asked('users.messages.get').filter((r) => r.id === asked).length;
+    const reads = box.asked('users.messages.get', asked).length;
 
     const forward = { ...mail('<fwd.1@example.org>', { subject: 'Fwd: Plans' }), forwarding: { messageId: asked, parts: [detail.attachments[0]!.part] } };
     const sent = await me.call('POST', '/api/mail/send', forward);
     expect(sent.status).toBe(200);
     expect(filesOf(box.message((sent.body as { id: string }).id)!.raw).map((f) => [f.name, f.data.toString()])).toEqual([['roof.pdf', 'roof']]);
-    expect(box.asked('users.messages.get').filter((r) => r.id === asked)).toHaveLength(reads);
+    expect(box.asked('users.messages.get', asked)).toHaveLength(reads);
 
     // Ids Gmail gave at the first read that it no longer takes: the message is read again once, for the ids it has now.
     box.renewAttachmentIds();
     const again = await me.call('POST', '/api/mail/send', { ...forward, id: '<fwd.2@example.org>' });
     expect(again.status).toBe(200);
     expect(filesOf(box.message((again.body as { id: string }).id)!.raw).map((f) => f.name)).toEqual(['roof.pdf']);
-    expect(box.asked('users.messages.get').filter((r) => r.id === asked)).toHaveLength(reads + 1);
+    expect(box.asked('users.messages.get', asked)).toHaveLength(reads + 1);
     expect((await me.call('POST', '/api/mail/attachments', { accountId: ME, messageId: asked })).body).toMatchObject({
       attachments: [{ name: 'roof.pdf' }, { name: 'notes.txt' }],
     });
-    expect(box.asked('users.messages.get').filter((r) => r.id === asked)).toHaveLength(reads + 1);
+    expect(box.asked('users.messages.get', asked)).toHaveLength(reads + 1);
   });
 
   it('sends a reply under a subject of its own as a conversation of its own, and with the files of the message it answers', async () => {
@@ -635,7 +635,7 @@ describe('drafts', () => {
     expect(held.labelIds).toEqual(['DRAFT']);
     expect(await listed(me)).toMatchObject([{ inGmail: true }]);
     // Gmail's Drafts are not mail: nothing of them is recorded, so nothing triages them.
-    expect(box.asked('users.messages.get').filter((r) => r.id === held.id)).toEqual([]);
+    expect(box.asked('users.messages.get', held.id)).toEqual([]);
 
     expect((await save(me, 'd1', { text: 'Written.', at: Date.now() })).status).toBe(200);
     await quiet(arrives);

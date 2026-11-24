@@ -8,6 +8,7 @@ import { RULE_FACTS, deriveFacts, describeFacts, factCondition, matchesFacts, th
 import { sealFacts } from '../src/store/content.ts';
 import { FACTS, FACT_FILTER_WORDS } from '../web/src/lib/words.ts';
 import { ACCOUNT, everything, facts, email } from './helpers.ts';
+import { RATE_LIMITED } from './google.ts';
 
 const fake = fakeGoogle();
 const me = { address: ACCOUNT, domain: 'example.org' };
@@ -239,7 +240,7 @@ describe('thread context', () => {
 
   it('leaves the thread unknown when it cannot be read', async () => {
     const reply = await setup({ references: '<mine@example.org>' });
-    reply.gmail.fail('users.threads.get', { status: 403, reason: 'userRateLimitExceeded' });
+    reply.gmail.fail('users.threads.get', RATE_LIMITED);
     const failed = await gatherEvidence(reply.sources, reply.message);
     expect(failed.known).not.toHaveProperty('ownerInThread');
 

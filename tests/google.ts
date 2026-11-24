@@ -69,7 +69,7 @@ export type Failure = { status: number; reason?: string } | 'network' | 'lost' |
 
 /** One request Mild made of Gmail, as the API's name for its method and what it asked for. */
 export interface Asked {
-  method: string;
+  method: GmailMethod;
   id?: string;
   format?: string;
   q?: string;
@@ -350,9 +350,9 @@ export class FakeGmail {
   private historyId = 1000;
   private oldestHistory = 1000;
   /** Each method's next calls in turn: a failure, or `null` for one answered as usual. */
-  private readonly failures = new Map<string, (Failure | null)[]>();
-  private readonly meanwhiles = new Map<string, (() => void)[]>();
-  private readonly arrivals = new Map<string, (() => unknown)[]>();
+  private readonly failures = new Map<GmailMethod, (Failure | null)[]>();
+  private readonly meanwhiles = new Map<GmailMethod, (() => void)[]>();
+  private readonly arrivals = new Map<GmailMethod, (() => unknown)[]>();
   private readonly unindexed = new Set<string>();
   private made = 0;
 
@@ -448,7 +448,6 @@ export class FakeGmail {
     );
   }
 
-  /** What was sent from it, oldest first. */
   /** A draft sent or deleted in Gmail itself. */
   dropDraft(draftId: string): void {
     const was = this.drafts.get(draftId);
@@ -461,6 +460,7 @@ export class FakeGmail {
     return new Map([...this.drafts].map(([id, messageId]) => [id, this.message(messageId)!]));
   }
 
+  /** What was sent from it, oldest first. */
   sent() {
     return [...this.messages.values()].filter((m) => m.labelIds.includes('SENT')).map((m) => this.message(m.id)!);
   }
@@ -470,23 +470,28 @@ export class FakeGmail {
     return this.newest().map((m) => this.message(m.id)!);
   }
 
+  /** The labels a message has in Gmail now. */
+  labelsOf(id: string): string[] {
+    return [...this.must(id).labelIds];
+  }
+
   /** The next calls of `method` (Gmail's name for it, `users.messages.send`) fail, one each. */
-  fail(method: string, ...failures: Failure[]): void {
+  fail(method: GmailMethod, ...failures: Failure[]): void {
     this.failures.set(method, [...(this.failures.get(method) ?? []), ...failures]);
   }
 
   /** The calls of `method` after the next `answered` fail, one each: Gmail refusing part-way through Mild's work. */
-  failLater(method: string, answered: number, ...failures: Failure[]): void {
+  failLater(method: GmailMethod, answered: number, ...failures: Failure[]): void {
     this.failures.set(method, [...(this.failures.get(method) ?? []), ...Array<null>(answered).fill(null), ...failures]);
   }
 
   /** `change` happens in Gmail right after the next call of `method` is answered, before Mild asks again: mail arriving while Mild pages. */
-  meanwhile(method: string, change: () => void): void {
+  meanwhile(method: GmailMethod, change: () => void): void {
     this.meanwhiles.set(method, [...(this.meanwhiles.get(method) ?? []), change]);
   }
 
   /** `happening` is awaited when the next call of `method` reaches Gmail, before it is carried out: what goes on while Mild waits on it. */
-  whileAsked(method: string, happening: () => unknown): void {
+  whileAsked(method: GmailMethod, happening: () => unknown): void {
     this.arrivals.set(method, [...(this.arrivals.get(method) ?? []), happening]);
   }
 
@@ -501,8 +506,13 @@ export class FakeGmail {
   }
 
   /** The requests for `method`, or for a message by id: `asked('users.messages.get', id)`. */
-  asked(method: string, id?: string): Asked[] {
+  asked(method: GmailMethod, id?: string): Asked[] {
     return this.requests.filter((r) => r.method === method && (id === undefined || r.id === id));
+  }
+
+  /** The id of each message read, in order; given `format`, of each read at it (`full`, `metadata`). */
+  reads(format?: string): string[] {
+    return this.asked('users.messages.get').flatMap((r) => (r.id !== undefined && (format === undefined || r.format === format) ? [r.id] : []));
   }
 
   private newId(): string {
@@ -577,7 +587,7 @@ export class FakeGmail {
   }
 
   /** Answers one request to `method`, or the failure queued for it. */
-  async answer(method: string, asked: Omit<Asked, 'method'>, run: () => Response | Promise<Response>): Promise<Response> {
+  async answer(method: GmailMethod, asked: Omit<Asked, 'method'>, run: () => Response | Promise<Response>): Promise<Response> {
     this.requests.push({ method, ...asked });
     await this.arrivals.get(method)?.shift()?.();
     const response = await this.answerOnce(method, asked, run);
@@ -585,7 +595,7 @@ export class FakeGmail {
     return response;
   }
 
-  private async answerOnce(method: string, asked: Omit<Asked, 'method'>, run: () => Response | Promise<Response>): Promise<Response> {
+  private async answerOnce(method: GmailMethod, asked: Omit<Asked, 'method'>, run: () => Response | Promise<Response>): Promise<Response> {
     const failure = this.failures.get(method)?.shift();
     if (failure === undefined || failure === null) return await run();
     if (failure === 'network') return HttpResponse.error();
@@ -608,7 +618,7 @@ export class FakeGmail {
   }
 
   /** Gmail's API, for this mailbox. */
-  respond(method: string, request: Request, params: Record<string, string>, body: Record<string, unknown>): Response | Promise<Response> {
+  respond(method: GmailMethod, request: Request, params: Record<string, string>, body: Record<string, unknown>): Response | Promise<Response> {
     const url = new URL(request.url);
     const q = url.searchParams;
     const id = params['id'];
@@ -789,14 +799,12 @@ export class FakeGmail {
         this.filters = this.filters.filter((f) => f.id !== id);
         return new HttpResponse(null, { status: 204 });
       }
-      default:
-        throw new Error(`The fake Gmail does not answer ${method}`);
     }
   }
 }
 
 /** Each Gmail method Mild calls: how it is sent and its path, as `src/gmail/call.ts` names them. */
-const ROUTES: [method: string, verb: 'get' | 'post' | 'patch' | 'delete', path: string][] = [
+const ROUTES = [
   ['users.getProfile', 'get', '/profile'],
   ['users.history.list', 'get', '/history'],
   ['users.messages.list', 'get', '/messages'],
@@ -816,7 +824,18 @@ const ROUTES: [method: string, verb: 'get' | 'post' | 'patch' | 'delete', path: 
   ['users.settings.filters.delete', 'delete', '/settings/filters/:id'],
   ['users.drafts.delete', 'delete', '/drafts/:id'],
   ['users.drafts.get', 'get', '/drafts/:id'],
-];
+] as const;
+/** Mail sent and drafts saved through the upload address, as Mild sends them: the JSON and the message, as parts of one body. */
+const UPLOADS = [
+  ['users.messages.send', 'post', '/messages/send'],
+  ['users.drafts.create', 'post', '/drafts'],
+  ['users.drafts.update', 'put', '/drafts/:id'],
+] as const;
+/** Gmail's name for a method Mild calls: `users.messages.get`. */
+export type GmailMethod = (typeof ROUTES)[number][0] | (typeof UPLOADS)[number][0];
+
+/** A call refused for asking too often: Gmail's per-user quota. */
+export const RATE_LIMITED = { status: 403, reason: 'userRateLimitExceeded' } satisfies Failure;
 
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/:user';
 const GMAIL_UPLOAD = 'https://gmail.googleapis.com/upload/gmail/v1/users/:user';
@@ -958,14 +977,7 @@ export class FakeGoogle {
           return answered;
         }),
       ),
-      // Mail sent and drafts saved through the upload address, as Mild sends them: the JSON and the message, as parts of one body.
-      ...(
-        [
-          ['users.messages.send', 'post', '/messages/send'],
-          ['users.drafts.create', 'post', '/drafts'],
-          ['users.drafts.update', 'put', '/drafts/:id'],
-        ] as const
-      ).map(([method, verb, path]) =>
+      ...UPLOADS.map(([method, verb, path]) =>
         http[verb](`${GMAIL_UPLOAD}${path}`, async ({ request, params }) => {
           const mailbox = this.mailboxOf(request);
           if (!mailbox) return refused(401, 'Request had invalid authentication credentials.', 'unauthenticated');

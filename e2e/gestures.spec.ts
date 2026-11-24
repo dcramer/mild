@@ -21,11 +21,11 @@ test.describe('Inbox by touch, on a phone', () => {
     await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'Compose' })).toBeVisible();
     await toast(page, 'Your order has shipped').getByRole('button', { name: /^Undo/ }).tap();
     await expect(row(page, 'Your order has shipped')).toBeVisible();
-    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
+    expect(sift.google().mailbox('me@example.org').labelsOf(id)).toContain('INBOX');
 
     await swipe(row(page, 'Your order has shipped'), -380);
     await dismiss(page, 'Your order has shipped');
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
     await expect(row(page, 'Your order has shipped')).toHaveCount(0);
   });
 
@@ -133,7 +133,7 @@ test.describe('Inbox by touch, on a phone', () => {
     await expect(lunch).toHaveCount(0);
     await expect(toast(page, 'Lunch on Thursday?')).toContainText('Receipts');
     await dismiss(page, 'Lunch on Thursday?');
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
   });
 
   test('a finger held on a row selects it; then a press selects or lets go, and the bar along the bottom archives them', async ({ page }) => {

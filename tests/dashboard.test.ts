@@ -108,7 +108,7 @@ describe('tracking', () => {
     gmail.deliver({ id: 'a', from: 'news@example.com', labelIds: ['INBOX'] });
     await execute({ db, mailbox, now: () => NOW }, ACCOUNT, 'a', { type: 'archive' }, 1);
     expect(await raw(db).get('SELECT decision_id, status FROM actions')).toEqual({ decision_id: 1, status: 'done' });
-    expect(gmail.message('a')!.labelIds).not.toContain('INBOX');
+    expect(gmail.labelsOf('a')).not.toContain('INBOX');
     expect((await summarize(db, await everything(db), 7, NOW)).recent.find((r) => r.id === 1)).toMatchObject({
       actionId: 1,
       actionStatus: 'done',

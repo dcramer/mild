@@ -162,7 +162,7 @@ describe('applying a rule to the inbox', () => {
     expect(await me.call('POST', '/api/rules/apply', { id })).toMatchObject({ status: 409, body: { error: 'Mild is already applying this rule.' } });
     await sift.work();
     await sift.tick();
-    for (const message of [before, after]) expect(box.message(message)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
+    for (const message of [before, after]) expect(box.labelsOf(message)).toEqual(['UNREAD', box.labelId('mild/receipts')]);
   });
 
   it('names each label it changed in the message’s history: its own by the name it gave them, Gmail’s in words', async () => {
@@ -171,7 +171,7 @@ describe('applying a rule to the inbox', () => {
     await me.call('POST', '/api/rules/apply', { id });
     await sift.work();
     await sift.tick();
-    expect(box.message(news)!.labelIds).toContain(box.labelId('mild/receipts'));
+    expect(box.labelsOf(news)).toContain(box.labelId('mild/receipts'));
 
     const history = async () => (await me.call('GET', `/api/message?id=${news}`)).body['actions'] as { id: number }[];
     const [archived] = await history();
@@ -187,7 +187,7 @@ describe('applying a rule to the inbox', () => {
     expect((await me.call('POST', '/api/inbox/stop', { rule: id })).status).toBe(200);
     await sift.work();
     await sift.tick();
-    expect(box.message(news)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    expect(box.labelsOf(news)).toEqual(['INBOX', 'UNREAD']);
     expect(box.asked('users.messages.modify')).toEqual([]);
   });
 });

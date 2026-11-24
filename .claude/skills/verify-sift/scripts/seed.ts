@@ -314,7 +314,7 @@ if (variant === '--on') {
   // As Check now begins it: the timed tick, moments after the last pass, would wait out the gap between looks.
   await pass([user]);
   const [lin, sale, news] = later.map((m) => m.id!);
-  if ((await currentDecision(db, ACCOUNT, lin!))?.decision.disposition !== 'review' || !gmail.message(lin!)?.labelIds.includes('INBOX'))
+  if ((await currentDecision(db, ACCOUNT, lin!))?.decision.disposition !== 'review' || !gmail.labelsOf(lin!).includes('INBOX'))
     throw new Error('the pass with Mild on did not leave Lin for the user');
   const archived = await lastStandingChange(db, ACCOUNT, sale!);
   if (archived?.type !== 'archive') throw new Error('the pass with sift on did not archive the sale');

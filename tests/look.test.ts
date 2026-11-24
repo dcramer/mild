@@ -272,7 +272,7 @@ describe('Mild’s own changes to the mailbox', () => {
     await recordDecision(db, ACCOUNT, 'news', decision('archive'), { carryOut: true, now: clock });
     expect(await timedTickPasses()).toBe(true);
     await workDue(store, options(), Infinity);
-    expect(gmail.message('news')!.labelIds).not.toContain('INBOX');
+    expect(gmail.labelsOf('news')).not.toContain('INBOX');
   }
 
   it('begin no other pass', async () => {
@@ -420,7 +420,7 @@ describe('going through an inbox, applying a rule to it, and a test run', () => 
     expect(await raw(db).all('SELECT message_id, carry_out, by_user FROM decisions')).toEqual([{ message_id: 'news', carry_out: true, by_user: true }]);
     expect(await timedTickPasses()).toBe(true);
     await workDue(store, options(), Infinity);
-    expect(gmail.message('news')!.labelIds).not.toContain('INBOX');
+    expect(gmail.labelsOf('news')).not.toContain('INBOX');
     expect(await timedTickPasses()).toBe(false);
   });
 

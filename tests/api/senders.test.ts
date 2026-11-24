@@ -86,11 +86,11 @@ describe('a standing', () => {
     expect((await me.call('GET', `/api/sender?address=${BO}`)).body).toMatchObject({ profile: { given: 'unwanted' } });
     expect((await contactsOf(me, '?standing=unwanted')).rows).toMatchObject([{ address: BO, given: 'unwanted', rules: 1 }]);
     expect((await me.call('GET', '/api/rules')).body).toMatchObject({ rules: [{ match: { from: [BO] }, disposition: 'archive' }] });
-    expect(box.message(await arrivesFrom(`Bo <${BO}>`))!.labelIds).not.toContain('INBOX');
+    expect(box.labelsOf(await arrivesFrom(`Bo <${BO}>`))).not.toContain('INBOX');
 
     expect(await me.call('POST', '/api/standing', { address: BO, standing: 'trusted' })).toMatchObject({ status: 200, body: { was: 'unwanted' } });
     expect((await me.call('GET', '/api/rules')).body['rules']).toHaveLength(1);
-    expect(box.message(await arrivesFrom(`Bo <${BO}>`))!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(await arrivesFrom(`Bo <${BO}>`))).toContain('INBOX');
   });
 
   it('is given to a whole domain, and never replaces a rule of theirs that says more', async () => {
@@ -115,7 +115,7 @@ describe('a standing', () => {
     expect(box.filters).toEqual([]);
     expect((await me.call('GET', '/api/rules')).body).toEqual({ rules: [] });
     expect((await me.call('GET', `/api/sender?address=${BO}`)).body).toMatchObject({ profile: { given: null } });
-    expect(box.message(await arrivesFrom(`Bo <${BO}>`))!.labelIds).toContain('INBOX');
+    expect(box.labelsOf(await arrivesFrom(`Bo <${BO}>`))).toContain('INBOX');
     expect((await me.call('POST', '/api/standing/clear', { domain: 'example.com' })).status).toBe(200);
   });
 

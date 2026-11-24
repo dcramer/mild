@@ -167,7 +167,7 @@ describe('changing the mailbox', () => {
     const { historyId } = await api.getProfile();
     const id = box.deliver({ from: 'ada@example.com' }, { quietly: true });
     expect(await mailbox.modifyLabels(id, { add: [], remove: ['INBOX', 'UNREAD'] })).toEqual([]);
-    expect(box.message(id)!.labelIds).toEqual([]);
+    expect(box.labelsOf(id)).toEqual([]);
     expect((await api.listHistory(historyId)).labelChanges).toEqual([{ messageId: id, added: [], removed: ['INBOX', 'UNREAD'] }]);
   });
 
@@ -175,7 +175,7 @@ describe('changing the mailbox', () => {
     const { mailbox, gmail: box } = gmail();
     const id = box.deliver({ from: 'ada@example.com' });
     await expect(mailbox.modifyLabels(id, { add: ['Label_404'], remove: [] })).rejects.toMatchObject({ status: 400 });
-    expect(box.message(id)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    expect(box.labelsOf(id)).toEqual(['INBOX', 'UNREAD']);
   });
 
   it('makes a label once, and finds one made meanwhile by another hand', async () => {
@@ -261,9 +261,9 @@ describe('when Gmail fails', () => {
     const id = box.deliver({ from: 'ada@example.com' });
     box.fail('users.messages.modify', { status: 500 }, 'lost');
     await expect(mailbox.modifyLabels(id, { add: [], remove: ['UNREAD'] })).rejects.toMatchObject({ status: 500 });
-    expect(box.message(id)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    expect(box.labelsOf(id)).toEqual(['INBOX', 'UNREAD']);
     await expect(mailbox.modifyLabels(id, { add: [], remove: ['UNREAD'] })).rejects.toThrow();
-    expect(box.message(id)!.labelIds).toEqual(['INBOX']);
+    expect(box.labelsOf(id)).toEqual(['INBOX']);
   });
 
   it('cannot read a mailbox whose sign-in Google ended', async () => {

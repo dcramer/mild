@@ -119,7 +119,7 @@ describe('with Inbox off, each message is read from Gmail once', () => {
       db,
       options(async () => ({ label: 'newsletter', reason: 'a newsletter', confidence: 0.95 })),
     );
-    expect(gmail.gmail.message('news')!.labelIds).not.toContain('INBOX');
+    expect(gmail.gmail.labelsOf('news')).not.toContain('INBOX');
 
     gmail.gmail.change('news', { add: ['INBOX'] });
     await runOnce(db, options());

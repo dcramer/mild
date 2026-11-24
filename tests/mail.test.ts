@@ -18,7 +18,6 @@ let gmail: ReturnType<typeof connectGmail>;
 
 const textOf = (id: string) => `${id} `.repeat(MAX_BODY_CHARS);
 /** Every whole read of a message, by id. */
-const read = () => gmail.gmail.asked('users.messages.get').flatMap((r) => (r.format === 'full' && r.id ? [r.id] : []));
 
 const labelsOf = async (id: string) => (await raw(db).get<{ label_ids: string[] }>('SELECT label_ids FROM messages WHERE id = ?', id))?.label_ids;
 const sync = async () => await syncAccount(db, gmail.api, await firstAccount(db), () => NOW);
@@ -74,14 +73,14 @@ describe('the text Inbox keeps', () => {
 
   it('is all of the text of mail in the inbox, read only while Inbox is on, and goes when it is turned off', async () => {
     await runOnce(db, options());
-    expect(read()).toEqual([]);
+    expect(gmail.gmail.reads('full')).toEqual([]);
     await setMail(db, true, { now: NOW, window: 'year' });
     gmail.gmail.change('b', { remove: ['INBOX'] });
     await runOnce(db, options());
-    expect(read()).toEqual(['a']);
+    expect(gmail.gmail.reads('full')).toEqual(['a']);
     expect(await kept()).toEqual([{ id: 'a', text: textOf('a').trim() }]);
     await runOnce(db, options());
-    expect(read()).toEqual(['a']);
+    expect(gmail.gmail.reads('full')).toEqual(['a']);
     await setMail(db, false);
     expect(await kept()).toEqual([]);
   });
@@ -89,7 +88,7 @@ describe('the text Inbox keeps', () => {
   it('reads new mail once, whole, for the model and for Inbox alike', async () => {
     await setMail(db, true, { now: NOW, window: 'year' });
     await runOnce(db, options({ model: async () => testModel() }));
-    expect(read().toSorted()).toEqual(['a', 'b']);
+    expect(gmail.gmail.reads('full').toSorted()).toEqual(['a', 'b']);
     expect((await kept()).map((k) => k.id)).toEqual(['a', 'b']);
   });
 });

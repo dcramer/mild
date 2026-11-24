@@ -62,7 +62,7 @@ describe('an answer', () => {
     const answered = await me.call('POST', '/api/feedback', { accountId: ME, sender: SHOP, label: 'receipts', decisionId: decision, messageId: receipt });
     expect(answered).toMatchObject({ status: 200, body: { notFixed: null } });
     await sift.work();
-    expect(box.message(receipt)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
+    expect(box.labelsOf(receipt)).toEqual(['UNREAD', box.labelId('mild/receipts')]);
     expect(await itemsOf(me)).toEqual([]);
     expect((await rowsOf(me))[0]).toMatchObject({ messageId: receipt, byUser: true, carryOut: true, actionStatus: 'done' });
     expect((await me.call('GET', '/api/examples')).body).toMatchObject({
@@ -84,7 +84,7 @@ describe('an answer', () => {
       });
       expect(answered).toMatchObject({ status: 200, body: { notFixed: null } });
       await sift.work();
-      expect(box.message(receipt)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+      expect(box.labelsOf(receipt)).toEqual(['INBOX', 'UNREAD']);
     }
     expect(await itemsOf(me)).toEqual([]);
     expect((await rowsOf(me))[0]).toMatchObject({ messageId: receipt, labelId: 'everything_else', byUser: true, carryOut: false, actionId: null });
@@ -103,7 +103,7 @@ describe('an answer', () => {
     );
     expect((await me.call('POST', '/api/feedback', { accountId: ME, sender: SHOP, label: 'everything_else', messageId: receipt })).status).toBe(200);
     await sift.work();
-    expect(box.message(receipt)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    expect(box.labelsOf(receipt)).toEqual(['INBOX', 'UNREAD']);
     expect((await rowsOf(me)).find((r) => r.id === mild)).toMatchObject({ actionId: null });
   });
 
@@ -114,13 +114,13 @@ describe('an answer', () => {
     const deal = box.deliver({ from: 'deals@example.com', subject: 'A deal' });
     await me.call('POST', '/api/check', {});
     await sift.work();
-    expect(box.message(deal)!.labelIds).not.toContain('INBOX');
+    expect(box.labelsOf(deal)).not.toContain('INBOX');
 
     expect((await me.call('POST', '/api/feedback', { accountId: ME, sender: 'deals@example.com', label: 'everything_else', messageId: deal })).body).toEqual({
       notFixed: null,
     });
     await sift.work();
-    expect(box.message(deal)!.labelIds).toEqual(['UNREAD', 'INBOX']);
+    expect(box.labelsOf(deal)).toEqual(['UNREAD', 'INBOX']);
     expect(await rowsOf(me, '?status=undone')).toMatchObject([{ messageId: deal, stage: 'rules' }]);
   });
 
@@ -136,7 +136,7 @@ describe('an answer', () => {
     const answered = await me.call('POST', '/api/feedback', { accountId: ME, sender: 'deals@example.com', label: 'everything_else', messageId: deal });
     expect(answered).toMatchObject({ status: 200, body: { notFixed: expect.stringContaining('Backend Error') } });
     await sift.work();
-    expect(box.message(deal)!.labelIds).not.toContain('INBOX');
+    expect(box.labelsOf(deal)).not.toContain('INBOX');
     expect((await rowsOf(me))[0]).toMatchObject({ messageId: deal, byUser: true, labelId: 'everything_else' });
   });
 

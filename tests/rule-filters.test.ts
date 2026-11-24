@@ -13,6 +13,7 @@ import { filterFor } from '../src/triage/filter.ts';
 import type { Rule } from '../src/triage/rule.ts';
 import { validateFilter } from '../src/actions/filters.ts';
 import { ACCOUNT, SAMPLE_LABELS } from './helpers.ts';
+import { RATE_LIMITED, type GmailMethod } from './google.ts';
 
 const rule = (overrides: Partial<Rule> = {}): Rule => ({
   id: 'r1',
@@ -137,11 +138,6 @@ describe('whether a rule can be a Gmail filter', () => {
 
 const fake = fakeGoogle();
 
-const CREATE = 'users.settings.filters.create';
-const DELETE = 'users.settings.filters.delete';
-const LIST = 'users.settings.filters.list';
-const LIMITED = { status: 403, reason: 'userRateLimitExceeded' };
-
 let db: Sql;
 let mailbox: Mailbox;
 let box: FakeGmail;
@@ -153,7 +149,7 @@ const actions = async () =>
     payload: JSON.parse(unmarked(r.payload)),
   }));
 /** Gmail cannot be reached for the next call of `method`, the client's own tries again included. */
-const unreachable = (method: string) => box.fail(method, 'network', 'network', 'network');
+const unreachable = (method: GmailMethod) => box.fail(method, 'network', 'network', 'network');
 const thrown = async (work: Promise<unknown>) =>
   (await work.then(
     () => null,
@@ -198,7 +194,7 @@ describe("a rule's Gmail filter", () => {
     const replies = await addRule(db, { match: { from: ['news@example.com'], facts: { isReply: false } }, labelId: 'newsletter' }, 'user');
     await expect(writeRuleFilter(deps(), replies, ACCOUNT)).rejects.toThrow('It asks what Mild found in the message, which Gmail filters cannot see.');
     expect(box.filters).toEqual([]);
-    expect(box.asked(CREATE)).toEqual([]);
+    expect(box.asked('users.settings.filters.create')).toEqual([]);
     expect(await actions()).toEqual([]);
   });
 
@@ -218,13 +214,13 @@ describe("a rule's Gmail filter", () => {
 
   it('asks Gmail at once whether a call that errored went through', async () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    box.fail(CREATE, 'lost');
+    box.fail('users.settings.filters.create', 'lost');
     await writeRuleFilter(deps(), id, ACCOUNT);
     expect(box.filters).toHaveLength(1);
     expect(await getRuleFilter(db, id, ACCOUNT)).toMatchObject({ filterId: box.filters[0]!.id, state: 'active' });
     expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done']);
 
-    box.fail(DELETE, 'lost', 'lost', 'lost');
+    box.fail('users.settings.filters.delete', 'lost', 'lost', 'lost');
     expect(await removeRuleFilter(deps(), id, ACCOUNT)).toBe(true);
     expect(box.filters).toEqual([]);
     expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter done', 'unfilter done']);
@@ -232,7 +228,7 @@ describe("a rule's Gmail filter", () => {
 
   it('records a call that errored and did not go through as failed, with its error', async () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    box.fail(CREATE, 'network');
+    box.fail('users.settings.filters.create', 'network');
     const error = await thrown(writeRuleFilter(deps(), id, ACCOUNT));
     expect(error).toBeInstanceOf(Error);
     expect(await raw(db).all('SELECT type, status, error FROM actions')).toEqual([{ type: 'filter', status: 'failed', error: error.message }]);
@@ -241,7 +237,7 @@ describe("a rule's Gmail filter", () => {
 
   it('is recorded as failed, and left off its rule, when Gmail does not list the filter it said it made', async () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    box.fail(CREATE, 'unchanged');
+    box.fail('users.settings.filters.create', 'unchanged');
     await expect(writeRuleFilter(deps(), id, ACCOUNT)).rejects.toThrow('Gmail did not keep the filter.');
     expect(await raw(db).all('SELECT type, status, error FROM actions')).toEqual([
       { type: 'filter', status: 'failed', error: 'the filter was not there when read back' },
@@ -253,7 +249,7 @@ describe("a rule's Gmail filter", () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id, ACCOUNT);
     const kept = box.filters[0]!.id;
-    box.fail(DELETE, 'unchanged');
+    box.fail('users.settings.filters.delete', 'unchanged');
     await expect(removeRuleFilter(deps(), id, ACCOUNT)).rejects.toThrow('Gmail still has the filter.');
     expect(await raw(db).all('SELECT type, status, error FROM actions ORDER BY id')).toEqual([
       { type: 'filter', status: 'done', error: null },
@@ -272,7 +268,7 @@ describe("a rule's Gmail filter", () => {
     }));
     await expect(writeRuleFilter(deps(), id, ACCOUNT)).rejects.toThrow('Gmail allows 1,000 filters and this account already has that many.');
     expect(box.filters).toHaveLength(1000);
-    expect(box.asked(CREATE)).toEqual([]);
+    expect(box.asked('users.settings.filters.create')).toEqual([]);
     expect(await actions()).toEqual([]);
 
     box.filters[999] = { id: 'same', criteria: { from: 'news@example.com' }, action: { addLabelIds: [news], removeLabelIds: ['INBOX'] } };
@@ -282,7 +278,7 @@ describe("a rule's Gmail filter", () => {
 
   it('is asked for again when Gmail did not take it, three times and no more', async () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    box.fail(CREATE, 'network', 'network', 'network');
+    box.fail('users.settings.filters.create', 'network', 'network', 'network');
     await expect(writeRuleFilter(deps(), id, ACCOUNT)).rejects.toThrow();
     for (let i = 0; i < 3; i++) await retryRuleFilters(deps(), ACCOUNT);
     expect(await raw(db).all('SELECT status FROM actions')).toEqual([{ status: 'failed' }, { status: 'failed' }, { status: 'failed' }]);
@@ -290,7 +286,7 @@ describe("a rule's Gmail filter", () => {
     expect(await getRuleFilter(db, id, ACCOUNT)).toMatchObject({ filterId: null });
 
     const other = await addRule(db, { match: { from: ['shop@example.com'] }, labelId: 'newsletter' }, 'user');
-    box.fail(CREATE, 'network');
+    box.fail('users.settings.filters.create', 'network');
     await expect(writeRuleFilter(deps(), other, ACCOUNT)).rejects.toThrow();
     await retryRuleFilters(deps(), ACCOUNT);
     expect((await getRuleFilter(db, other, ACCOUNT))?.filterId).not.toBeNull();
@@ -301,7 +297,7 @@ describe("a rule's Gmail filter", () => {
     beforeEach(async () => {
       id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
       // Reading back fails, and so does asking again at once.
-      box.failLater(LIST, 1, LIMITED, LIMITED);
+      box.failLater('users.settings.filters.list', 1, RATE_LIMITED, RATE_LIMITED);
       await expect(writeRuleFilter(deps(), id, ACCOUNT)).rejects.toMatchObject({ status: 403 });
       expect(box.filters).toHaveLength(1);
       expect(await getRuleFilter(db, id, ACCOUNT)).toMatchObject({ filterId: null });
@@ -327,7 +323,7 @@ describe("a rule's Gmail filter", () => {
     });
 
     it('stays open while Gmail cannot be reached, and is settled once it can', async () => {
-      unreachable(LIST);
+      unreachable('users.settings.filters.list');
       await expect(removeRuleFilter(deps(), id, ACCOUNT)).rejects.toThrow();
       expect((await actions()).map((a) => `${a.type} ${a.status}`)).toEqual(['filter unknown']);
       await setRule(db, { from: ['news@example.com'] }, { labelId: 'personal' }, 'user');
@@ -359,8 +355,8 @@ describe("a rule's Gmail filter", () => {
     });
     await writeRuleFilter(deps(), id, ACCOUNT);
     expect((await ruleFilterStatus(db)).get(id)?.history).toEqual([{ type: 'filter', status: 'done', error: null, at: clock, mailbox: ACCOUNT }]);
-    box.fail(DELETE, LIMITED);
-    box.fail(LIST, LIMITED);
+    box.fail('users.settings.filters.delete', RATE_LIMITED);
+    box.fail('users.settings.filters.list', RATE_LIMITED);
     const error = await thrown(removeRuleFilter(deps(), id, ACCOUNT));
     expect(error).toMatchObject({ status: 403 });
     expect((await ruleFilterStatus(db)).get(id)?.history.at(-1)).toMatchObject({ type: 'unfilter', status: 'unknown', error: error.message });
@@ -369,8 +365,8 @@ describe("a rule's Gmail filter", () => {
   it('keeps the rule marked as a filter when Gmail could not be reached to remove it', async () => {
     const id = await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await writeRuleFilter(deps(), id, ACCOUNT);
-    unreachable(DELETE);
-    unreachable(LIST);
+    unreachable('users.settings.filters.delete');
+    unreachable('users.settings.filters.list');
     await expect(removeRuleFilter(deps(), id, ACCOUNT)).rejects.toThrow();
     expect(await getRuleFilter(db, id, ACCOUNT)).toMatchObject({ state: 'active' });
     expect((await actions()).at(-1)).toMatchObject({ type: 'unfilter', status: 'unknown' });

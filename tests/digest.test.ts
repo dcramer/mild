@@ -33,7 +33,6 @@ let asked: number;
 let highlight: Highlighter;
 
 const boxOf = (account = ACCOUNT) => fake.google.mailbox(account);
-const labelsOf = (id: string, account = ACCOUNT) => boxOf(account).message(id)!.labelIds;
 
 const options = (): RunOptions => ({
   ephemeral: memoryEphemeral(),
@@ -96,8 +95,8 @@ describe('a daily digest', () => {
     await arrive(ACCOUNT, ['b1', 'Run 1 passed']);
     clock += HOUR;
     await arrive(WORK, ['w1', 'Run 2 failed']);
-    expect(labelsOf('b1')).not.toContain('INBOX');
-    expect(labelsOf('w1', WORK)).not.toContain('INBOX');
+    expect(boxOf(ACCOUNT).labelsOf('b1')).not.toContain('INBOX');
+    expect(boxOf(WORK).labelsOf('w1')).not.toContain('INBOX');
 
     clock = SEVEN + 6 * 60_000;
     expect(await digestsDue()).toEqual([DIGEST]);

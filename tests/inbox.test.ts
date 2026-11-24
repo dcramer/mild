@@ -140,7 +140,7 @@ describe('the reader’s own press', () => {
     // Not Mild's change, so correcting what Mild said does not take it back.
     expect(await lastStandingChange(db, ACCOUNT, 'reply')).toBeNull();
     expect((await undo(deps(), 1)).status).toBe('done');
-    expect(gmail.message('reply')!.labelIds).toEqual(['UNREAD', mine, 'INBOX']);
+    expect(gmail.labelsOf('reply')).toEqual(['UNREAD', mine, 'INBOX']);
     expect(await recorded('reply')).toEqual(['UNREAD', mine, 'INBOX']);
   });
 
