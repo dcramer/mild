@@ -414,7 +414,10 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
                 </main>
               </BarSlot>
               <PageFoot />
-              {open ? null : <TabBar current={section ?? ''} items={items} />}
+              {/* Labels is where Mild is set up, not where the day goes: it is in the menu, and Compose takes its place in the middle. */}
+              {open ? null : (
+                <TabBar current={section ?? ''} items={items.filter((i) => i.to !== 'labels')} compose={composer ? () => composer() : undefined} />
+              )}
             </div>
             {writingNew ? <Composer key={`${to}/${draftParam}`} to={to} draft={draftParam} onClose={closeComposer} /> : null}
           </div>

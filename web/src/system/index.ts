@@ -22,7 +22,7 @@ export { Quoted } from './quoted.tsx';
 export { MailboxSwitch } from './mailbox.tsx';
 export { Avatar, Menu } from './menu.tsx';
 export { Meter } from './meter.tsx';
-export { BarSlot, FloatingPress, Masthead, TabBar } from './nav.tsx';
+export { BarSlot, Masthead, TabBar } from './nav.tsx';
 export { Failure, Note } from './note.tsx';
 export { Callout, CalloutKey } from './callout.tsx';
 export { Notice } from './notice.tsx';

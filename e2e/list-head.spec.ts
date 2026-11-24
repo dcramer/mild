@@ -61,12 +61,13 @@ test.describe('A list on a phone', () => {
     await expect(page.getByRole('dialog', { name: 'Add a rule' })).toBeVisible();
   });
 
-  test('scrolls to its end clear of its floating action', async ({ page }) => {
+  test('has its own action over the list, and scrolls to its end clear of the tab bar', async ({ page }) => {
     await page.goto('/labels');
     const last = page.getByRole('row').last();
     await expect(last).toBeAttached();
+    expect((await boxOf(page.getByRole('button', { name: 'Add labels' }))).y).toBeLessThan((await boxOf(page.getByRole('row').first())).y);
     await page.evaluate('scrollTo(0, document.documentElement.scrollHeight)');
-    const [end, press] = [await boxOf(last), await boxOf(page.getByRole('button', { name: 'Add labels' }))];
-    expect(end.y + end.height).toBeLessThanOrEqual(press.y);
+    const [end, tabs] = [await boxOf(last), await boxOf(page.getByRole('navigation', { name: 'Sections' }))];
+    expect(end.y + end.height).toBeLessThanOrEqual(tabs.y);
   });
 });

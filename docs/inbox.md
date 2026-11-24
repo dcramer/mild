@@ -12,7 +12,7 @@ Mild's dashboard was built to answer what Mild could not decide. Inbox makes it 
 
 On a desktop the sections move from the masthead to a slim column on the left (`Rail`, `web/src/system/rail.tsx`): the wordmark at its top, with Inbox on Compose under it, then one icon per section with its name under it (Inbox, Activity, Labels, Rules), the current one marked in the highlighter. Inbox takes For review's place while it is on, carrying how many wait, and `/` goes to it (`useStartsOn`, `web/src/dashboard.tsx`, and before anything is drawn `BEFORE_PAINT`, `web/src/lib/before-paint.ts`): what waits on the reader is answered where they handle their mail. At its foot: Mild's line (sync and cost, opening the same card as before), the mailbox switcher, and the avatar's menu: the switcher sits with the account whose mailboxes it chooses between, under the line, which stays for all of them. The page title sits at the top of the page, where the masthead was, and a `Notice` over it.
 
-On a phone the sections run along the foot of the screen (`TabBar`), the menu keeps them with the switcher, and Compose floats over Inbox (`PhoneCompose`, `web/src/views/inbox.tsx`).
+On a phone the sections run along the foot of the screen (`TabBar`), with Compose in the middle while Inbox is on and Labels left to the menu, which keeps them all with the switcher.
 
 ## Mailboxes
 

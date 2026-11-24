@@ -117,15 +117,17 @@ test.describe('The sections', () => {
     const foot = await boxOf(tabs);
     expect(foot.y + foot.height).toBeGreaterThanOrEqual(PHONE.height - 1);
     expect(foot.width).toBeGreaterThan(foot.height);
-    await tabs.getByRole('link', { name: 'Labels' }).click();
-    await path(page).toBe('/labels');
-    await expect(tabs.getByRole('link', { name: 'Labels' })).toHaveAttribute('aria-current', 'page');
+    await tabs.getByRole('link', { name: 'Rules' }).click();
+    await path(page).toBe('/rules');
+    await expect(tabs.getByRole('link', { name: 'Rules' })).toHaveAttribute('aria-current', 'page');
+    // Labels is where Mild is set up: the menu has it, the bar does not.
+    await expect(tabs.getByRole('link', { name: 'Labels' })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Menu' }).click();
     const listed = page.getByRole('dialog', { name: 'Menu' }).getByRole('navigation', { name: 'Sections' });
-    await expect(listed.getByRole('link', { name: 'Labels' })).toHaveAttribute('aria-current', 'page');
-    await listed.getByRole('link', { name: 'Rules' }).click();
-    await path(page).toBe('/rules');
+    await expect(listed.getByRole('link', { name: 'Rules' })).toHaveAttribute('aria-current', 'page');
+    await listed.getByRole('link', { name: 'Labels' }).click();
+    await path(page).toBe('/labels');
     await expect(page.getByRole('dialog', { name: 'Menu' })).toHaveCount(0);
   });
 

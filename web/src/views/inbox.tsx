@@ -1,5 +1,5 @@
 'use client';
-import { ArchiveIcon, BanIcon, CircleHelpIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, SquarePenIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { ArchiveIcon, BanIcon, CircleHelpIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { messageStart, proposalStart, standingStart } from '@/lib/rule-start.ts';
@@ -19,7 +19,6 @@ import { useShown } from '@/lib/telemetry.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/system/started.ts';
 import { useAction, useHidden } from '@/lib/action.ts';
-import { useCompose } from '@/lib/compose.ts';
 import { MOVES_OUT, count, inboxFirst, period, sureness } from '@/lib/format.ts';
 import { messageKey, proposalKey, setParams, threadKey, useParam } from '@/lib/params.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
@@ -52,7 +51,6 @@ import {
   TrGroup,
   useNow,
   usePhone,
-  FloatingPress,
   type Ending,
 } from '@/system';
 
@@ -371,12 +369,6 @@ function ProposalRow({ proposal, labels }: { proposal: Proposal; labels: readonl
       ) : null}
     </Tr>
   );
-}
-
-/** Compose on a phone, which has no rail. Nothing while Inbox is off. */
-export function PhoneCompose() {
-  const compose = useCompose();
-  return compose ? <FloatingPress label="Compose" icon={<SquarePenIcon aria-hidden />} onPress={() => compose()} /> : null;
 }
 
 /** Inbox: the conversations in the inbox, as a mail app lists them, with what Mild thinks of each; a search looks through all the mail Mild keeps. */

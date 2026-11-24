@@ -9,7 +9,7 @@ import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { RemoveRule, RulePanel, Who, checked, whoText } from '@/views/rule-panel.tsx';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { INBOX, MADE_BY, count, dateTime, doesName, inboxFirst, outcomeName, plural } from '@/lib/format.ts';
-import { Ago, Heads, Button, Does, Empty, FilterGroup, FloatingPress, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
+import { Ago, Heads, Button, Does, Empty, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
 import { usePlan } from '@/components/model-connect.tsx';
 import { approx, atApiPrices } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -56,11 +56,10 @@ export function AddRule() {
   const [adding, setAdding] = useState(false);
   return (
     <>
-      <Button disabled={!manage.data} className="phone:hidden" onClick={() => setAdding(true)}>
+      <Button disabled={!manage.data} onClick={() => setAdding(true)}>
         <PlusIcon aria-hidden />
         Add a rule
       </Button>
-      <FloatingPress label="Add a rule" icon={<PlusIcon aria-hidden />} disabled={!manage.data} onPress={() => setAdding(true)} />
       {adding && manage.data ? <RuleDialog labels={manage.data?.labels ?? []} onClose={() => setAdding(false)} onAdded={rules.reload} /> : null}
     </>
   );

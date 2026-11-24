@@ -1,7 +1,7 @@
 'use client';
 import { Dialog } from '@base-ui/react/dialog';
-import { MenuIcon, XIcon } from 'lucide-react';
-import { type ReactNode, createContext, useContext, useEffect, useId, useState } from 'react';
+import { MenuIcon, SquarePenIcon, XIcon } from 'lucide-react';
+import { type ReactNode, createContext, useContext, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { handOver, useBackCloses } from '@/lib/params.ts';
 import { Anchor } from './anchor.tsx';
@@ -269,17 +269,33 @@ export function Masthead({
 
 /**
  * The sections along the bottom of a phone, where the thumb is: each its icon over its name, the current one's icon on a
- * fill as the rail's is, and a count on the icon's corner. The menu (`Masthead`) still holds everything, the sections
- * among it. It holds its own height at the end of the page, so nothing ends under it; a `ThumbBar` covers it while it shows.
+ * fill as the rail's is, and a count on the icon's corner; `compose` in the middle, its icon in ink, as the rail has it at
+ * its top. Nothing floats over the list, so a toast sits on the bar with nothing to move. The menu (`Masthead`) still
+ * holds everything, the sections among it. It holds its own height at the end of the page, so nothing ends under it; a
+ * `ThumbBar` covers it while it shows.
  */
-export function TabBar({ items, current }: { items: readonly NavItem[]; current: string }) {
+export function TabBar({ items, current, compose }: { items: readonly NavItem[]; current: string; compose?: (() => void) | undefined }) {
   if (items.length === 0) return null;
+  const middle = Math.floor(items.length / 2);
   return (
     <>
       <div aria-hidden className="h-[calc(4rem+var(--safe-bottom))] md:hidden [html:has([data-searching])_&]:hidden" />
       <AboveToasts className="fixed inset-x-0 bottom-0 z-20 border-t border-(--rule) bg-background pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) md:hidden [html:has([data-searching])_&]:hidden">
         <nav aria-label="Sections" className="grid h-16 auto-cols-fr grid-flow-col">
-          {items.map(({ to, label, icon: Icon, count }) => (
+          {items.map(({ to, label, icon: Icon, count }, index) => [
+            index === middle && compose ? (
+              <button
+                key="compose"
+                type="button"
+                onClick={compose}
+                className="flex cursor-pointer flex-col items-center justify-center gap-1 text-label font-medium text-foreground select-none"
+              >
+                <span className="flex h-8 w-14 items-center justify-center rounded-[8px] bg-foreground text-background active:bg-foreground/80">
+                  <SquarePenIcon aria-hidden className="size-5" strokeWidth={2} />
+                </span>
+                <span>Compose</span>
+              </button>
+            ) : null,
             <Anchor
               key={to}
               href={`/${to}`}
@@ -300,52 +316,10 @@ export function TabBar({ items, current }: { items: readonly NavItem[]; current:
               </span>
               <span>{label}</span>
               {count ? <span className="sr-only">{count}</span> : null}
-            </Anchor>
-          ))}
+            </Anchor>,
+          ])}
         </nav>
       </AboveToasts>
     </>
-  );
-}
-
-/**
- * A screen's one way to begin something new, on a phone: an icon in a square that floats in the bottom right, over the
- * list and clear of the `TabBar`, where the thumb rests. Wider, the screen has the same press where it puts it.
- */
-export function FloatingPress({
-  label,
-  icon,
-  onPress,
-  disabled,
-  why,
-}: {
-  label: string;
-  icon: ReactNode;
-  onPress: () => void;
-  disabled?: boolean;
-  /** Why it cannot be pressed now, read with it: a touch screen shows no tooltip. */
-  why?: string | undefined;
-}) {
-  const reason = useId();
-  const explained = disabled && why !== undefined;
-  return (
-    // A toast sits just above the tab bar, across the screen, so this rises over it while one shows, as a mail app's does.
-    <div className="pointer-events-none fixed right-[max(1rem,var(--safe-right))] bottom-[calc(5rem+var(--safe-bottom))] z-20 translate-y-[calc(-1*(var(--toasts-tall,0px)+min(var(--toasts-tall,0px),1rem)))] transition-transform duration-200 ease-out motion-reduce:transition-none md:hidden [html:has([data-searching])_&]:hidden">
-      <button
-        type="button"
-        aria-label={label}
-        disabled={disabled}
-        {...(explained ? { 'aria-describedby': reason } : {})}
-        onClick={onPress}
-        className="press sheet pointer-events-auto flex size-14 cursor-pointer items-center justify-center bg-popover text-foreground active:bg-(--fill-strong) disabled:opacity-35 [&_svg]:size-6"
-      >
-        {icon}
-      </button>
-      {explained ? (
-        <span id={reason} className="sr-only">
-          {why}
-        </span>
-      ) : null}
-    </div>
   );
 }

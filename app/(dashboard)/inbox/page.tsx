@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import { Blank, ListPage, Loading, OnPhone, Td } from '@/system';
-import { InboxView, PhoneCompose } from '@/views/inbox.tsx';
+import { InboxView } from '@/views/inbox.tsx';
 
 export const metadata: Metadata = { title: 'Inbox' };
 
 export default function Inbox() {
   return (
-    <ListPage title="Inbox" actions={<PhoneCompose />}>
+    <ListPage title="Inbox">
       <InboxView
         loading={
           <Loading dense>

@@ -14,7 +14,6 @@ import {
   TagIcon,
   Trash2Icon,
   WorkflowIcon,
-  SquarePenIcon,
 } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import { StatusWord, Verdict } from '@/components/bits.tsx';
@@ -91,7 +90,6 @@ import {
   MailboxSwitch,
   Masthead,
   TabBar,
-  FloatingPress,
   Menu,
   Meter,
   Note,
@@ -1312,9 +1310,8 @@ export function SystemView() {
             <Sheet className="px-4">
               <Masthead current="" items={[]} />
             </Sheet>
-            {/* Both are fixed to the foot of the screen, as they are on every phone screen. */}
-            <TabBar current="system" items={NAV} />
-            <FloatingPress label="Compose" icon={<SquarePenIcon aria-hidden />} onPress={() => {}} />
+            {/* Fixed to the foot of the screen, as it is on every phone screen. */}
+            <TabBar current="system" items={NAV} compose={() => toast('Opens the composer')} />
           </div>
         </Section>
 

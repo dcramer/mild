@@ -164,6 +164,15 @@
   .sheet[role='dialog'] {
     box-shadow: 6px 6px 0 0 var(--edge);
   }
+  /* A sheet only on a wide screen. On a phone what is one lies flush on what is at the foot of the screen, part of it
+     rather than floating over the list: a toast on the tab bar. */
+  @media (width >= 48rem) and (height >= 30rem) {
+    .sheet-wide {
+      border: 1px solid var(--frame);
+      border-radius: 2px;
+      box-shadow: 6px 6px 0 0 var(--edge);
+    }
+  }
 
   /* Headings, names and figures are set in the display face, bold; everything read is in the text face.
      The wordmark has a face of its own. */

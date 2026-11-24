@@ -13,7 +13,10 @@ export interface SwipePress {
 
 /** The content filling the row, the far end and the press before it scrolled out of sight. The track is what `offsetLeft` counts from. */
 function rest(track: HTMLElement | null, content: HTMLElement | null, smooth = false) {
-  if (track && content) track.scrollTo({ left: content.offsetLeft, behavior: smooth ? 'smooth' : 'instant' });
+  if (!track || !content) return;
+  // Where rest is, so a scroll that only puts the row back there is not taken for the list moving (`Tr`'s hold).
+  track.dataset.rest = String(content.offsetLeft);
+  track.scrollTo({ left: content.offsetLeft, behavior: smooth ? 'smooth' : 'instant' });
 }
 const isOpen = (track: HTMLElement | null, content: HTMLElement | null) => Math.abs((track?.scrollLeft ?? 0) - (content?.offsetLeft ?? 0)) > 1;
 

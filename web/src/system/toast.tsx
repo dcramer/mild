@@ -62,34 +62,22 @@ function Done({ did: [first, ...also] }: { did: readonly [Did, ...Did[]] }) {
 }
 
 /**
- * What a press did, said once, after the list it changed has moved on: the mail it was done to over what was done
- * ("Archived" to Marketing), or what was made ("Mail from shop.example.com: archive it") under what kind of thing it is
- * ("Rule added"). A slip: its
- * words in a block of their own, wrapping freely, and its presses on a row under a rule, so neither crowds
- * the other however long the words. A new one replaces the last, so Undo (and Z, Gmail's key for it) always
- * takes back the latest. It floats as a menu does, framed with the one shadow, and Undo is in the
- * highlighter: it is the one thing on it waiting on the reader. On a wide screen it sits in the bottom right,
- * and on a phone across the bottom, just above the tab bar, with Compose rising above it; while a panel or dialog is open
- * it rises above its footer (`AboveToasts`), so Previous, Next and Save stay pressable. Each has a close button. A failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in
- * `Toaster` once; call `useToast()` where something is done.
+ * What a press did, said once, after the list it changed has moved on, in one line: what was done ("Archived" to
+ * Marketing) with Undo, or what was made ("Mail from shop.example.com: archive it") after what kind of thing it is
+ * ("Rule added"). A press on mail names the mail only to a screen reader: on screen, the row that just left is the
+ * context. On a phone it is a strip flush on whatever is at the foot of the screen (the tab bar, a reader's presses, a
+ * dialog's footer, `AboveToasts`), so nothing floats over the list or moves to make room; wider, a sheet in the bottom
+ * right. A new one replaces the last, so Undo (and Z, Gmail's key for it) always takes back the latest; Undo is in the
+ * highlighter, the one thing on it waiting on the reader. Each has a close button and can be swiped away. A failure is a
+ * card on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in `Toaster` once; call
+ * `useToast()` where something is done.
  */
 export function Toaster({ children }: { children: ReactNode }) {
-  // How tall the toasts showing are, for what floats over the same corner to rise above them (`FloatingPress`, nav.tsx).
-  // A ref of its own, since the portal mounts the viewport after the Toaster.
-  const shown = (viewport: HTMLDivElement | null) => {
-    if (!viewport) return;
-    const observer = new ResizeObserver(() => document.documentElement.style.setProperty('--toasts-tall', `${viewport.offsetHeight}px`));
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  };
   return (
     <Base.Provider limit={3} timeout={0}>
       {children}
       <Base.Portal>
-        <Base.Viewport
-          ref={shown}
-          className="pointer-events-none fixed inset-x-4 bottom-[calc(max(var(--toasts-above,0px),var(--safe-bottom))+1rem)] z-[60] flex flex-col-reverse items-center gap-2 outline-none md:inset-x-auto md:right-6 md:bottom-[calc(max(var(--toasts-above,0px),var(--safe-bottom))+1.5rem)] md:items-end"
-        >
+        <Base.Viewport className="pointer-events-none fixed inset-x-0 bottom-[max(var(--toasts-above,0px),var(--safe-bottom))] z-[60] flex flex-col-reverse outline-none md:inset-x-auto md:right-6 md:bottom-[calc(max(var(--toasts-above,0px),var(--safe-bottom))+1.5rem)] md:items-end md:gap-2">
           <Receipts />
         </Base.Viewport>
       </Base.Portal>
@@ -216,62 +204,62 @@ function Receipt({ toast, front, close }: { toast: Base.Root.ToastObject<Own>; f
         ) : null}
       </>
     ) : null;
-  if (did) {
-    // Two rows, on a phone as on a desktop: the mail with its close button, then what was done with its presses at the end
-    // of its first line, where they stay however it wraps.
+  if (!failed)
     return (
-      <Base.Root toast={toast} swipeDirection={['down', 'right']} {...hold} className={ROOT}>
-        <div className="flex items-center gap-2 pt-1.5 pr-1.5 pl-4">
-          <Base.Title render={<span />} className="min-w-0 grow truncate text-base leading-snug font-medium" />
-          {dismiss}
-        </div>
-        <div className="flex items-start gap-2 pr-1.5 pb-1.5 pl-4">
-          {/* Padded to a press's height, so its first line is level with them. */}
-          <Base.Description render={<span />} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 py-1.5 text-sm text-muted-foreground">
-            <Done did={did} />
-          </Base.Description>
-          {presses ? <span className="flex shrink-0 items-center gap-1">{presses}</span> : null}
-        </div>
+      <Base.Root toast={toast} swipeDirection={['left', 'right', 'down']} {...hold} className={LINE}>
+        {did ? (
+          <>
+            {/* What it was done to, for a screen reader: on screen, the row that just left is the context. */}
+            <Base.Title render={<span />} className="sr-only" />
+            <Base.Description
+              render={<span />}
+              className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden py-2 text-sm whitespace-nowrap text-muted-foreground"
+            >
+              <Done did={did} />
+            </Base.Description>
+          </>
+        ) : (
+          // On a phone one line, its words cut short before the presses; wider, they wrap.
+          <span className="flex min-w-0 flex-1 items-baseline gap-x-2 py-2.5 text-sm whitespace-nowrap md:flex-wrap md:whitespace-normal">
+            <Base.Title render={<span />} className="min-w-0 truncate font-medium md:whitespace-normal" />
+            <Base.Description render={<span />} className={cn('shrink-0 text-muted-foreground', kind && 'order-first')} />
+          </span>
+        )}
+        {presses ? <span className="flex shrink-0 items-center">{presses}</span> : null}
+        {dismiss}
       </Base.Root>
     );
-  }
+  // A failure stays until dismissed, on red, its words free to wrap: what went wrong has to be read.
   return (
     <Base.Root
       toast={toast}
-      swipeDirection={['down', 'right']}
+      swipeDirection={['left', 'right', 'down']}
       {...hold}
       className={cn(
-        ROOT,
-        // On a phone a receipt is one line, its kind and then its words, with its presses at the end, so it covers as little of the list as it can.
-        !failed && 'phone:flex-row phone:items-center',
-        failed && 'border-destructive bg-destructive text-background',
+        MOTION,
+        'sheet-wide pointer-events-auto flex w-full items-start gap-2 bg-destructive p-1.5 pl-4 text-background md:w-[26rem] md:border-destructive',
       )}
     >
-      {/* On a phone its words, its presses and then its close button share the one row. */}
-      <div className={cn('flex items-start gap-2 p-1.5 pl-4', !failed && 'phone:contents')}>
-        <div
-          className={cn(
-            'flex min-h-(--control) min-w-0 grow flex-col justify-center gap-0.5 py-1',
-            !failed && 'phone:flex-row phone:items-baseline phone:gap-2 phone:py-2.5 phone:pl-4',
-          )}
-        >
-          <Base.Title render={<span />} className={cn('text-base leading-snug font-medium', failed ? 'font-semibold' : 'phone:min-w-0 phone:truncate')} />
-          <Base.Description
-            render={<span />}
-            className={cn('text-sm', kind && 'order-first', failed ? 'text-background/75' : 'text-muted-foreground phone:shrink-0')}
-          />
-        </div>
-        <span className={cn('flex', !failed && 'phone:order-last phone:mr-1.5')}>{dismiss}</span>
-      </div>
-      {presses ? (
-        <div className="flex shrink-0 items-center justify-end gap-1 border-t border-(--rule) p-1.5 phone:border-t-0 phone:pl-0">{presses}</div>
-      ) : null}
+      <span className="flex min-h-(--control) min-w-0 grow flex-col justify-center gap-0.5 py-1">
+        <Base.Title render={<span />} className="text-base leading-snug font-semibold" />
+        <Base.Description render={<span />} className={cn('text-sm text-background/75', kind && 'order-first')} />
+      </span>
+      {presses ? <span className="flex shrink-0 items-center">{presses}</span> : null}
+      {dismiss}
     </Base.Root>
   );
 }
 
-const ROOT =
-  'sheet pointer-events-auto flex w-full flex-col bg-popover md:w-[26rem] transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none';
+const MOTION =
+  'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none';
+/**
+ * One line. On a phone a strip flush on whatever is at the foot of the screen (the tab bar, a reader's presses, a
+ * dialog's footer), part of it rather than floating over the list; wider, a sheet in the bottom right.
+ */
+const LINE = cn(
+  MOTION,
+  'sheet-wide pointer-events-auto flex min-h-12 w-full items-center gap-2 border-t border-(--rule) bg-card pr-1 pl-4 md:min-h-11 md:w-auto md:max-w-[30rem] md:border-(--frame) md:bg-popover',
+);
 
 interface ToastOptions {
   description?: string;

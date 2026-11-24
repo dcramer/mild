@@ -14,13 +14,11 @@ test.describe('Inbox by touch, on a phone', () => {
     const id = await idOf(page, 'Your order has shipped');
     await swipe(row(page, 'Your order has shipped'), -380);
     await expect(row(page, 'Your order has shipped')).toHaveCount(0);
-    // Just above the tab bar, as a mail app's, and Compose rises over it rather than lifting it up the screen.
+    // Flush on the tab bar, part of the foot of the screen; Compose is in the bar, so nothing floats or moves for it.
     const note = await boxOf(toast(page, 'Your order has shipped'));
     const tabs = await boxOf(page.getByRole('navigation', { name: 'Sections' }));
-    expect(tabs.y - (note.y + note.height)).toBeGreaterThan(0);
-    expect(tabs.y - (note.y + note.height)).toBeLessThanOrEqual(17);
-    const compose = await boxOf(page.getByRole('button', { name: 'Compose' }));
-    expect(compose.y + compose.height).toBeLessThanOrEqual(note.y);
+    expect(Math.abs(tabs.y - (note.y + note.height))).toBeLessThanOrEqual(1);
+    await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'Compose' })).toBeVisible();
     await toast(page, 'Your order has shipped').getByRole('button', { name: /^Undo/ }).tap();
     await expect(row(page, 'Your order has shipped')).toBeVisible();
     expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');

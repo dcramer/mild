@@ -173,7 +173,10 @@ let scrolledAt = -Infinity;
 if (typeof window !== 'undefined')
   window.addEventListener(
     'scroll',
-    () => {
+    (event) => {
+      // A row's swipe put back at rest as it is drawn or resized (`Swipe`) is not the list moving.
+      const { target } = event;
+      if (target instanceof HTMLElement && target.dataset.rest !== undefined && Math.abs(target.scrollLeft - Number(target.dataset.rest)) <= 1) return;
       scrolledAt = Date.now();
     },
     { capture: true, passive: true },
