@@ -103,7 +103,8 @@ export function AboveToasts({ children, className = 'shrink-0' }: { children: Re
     observer.observe(element);
     return () => {
       observer.disconnect();
-      liftToasts();
+      // Next frame: it measures, which in the middle of what closed the footer would lay out the page before it is drawn.
+      requestAnimationFrame(liftToasts);
     };
   }, []);
   return (

@@ -128,8 +128,12 @@ export function Messages({
   useEffect(() => {
     if (marked.current || !conversation || unread.length === 0) return;
     marked.current = true;
-    press([{ accountId: conversation.accountId, threadId: conversation.threadId, messageIds: unread, subject: newest.subject }], 'read');
-    onRead();
+    // Once the conversation is on the screen: opened by a press, React runs this before it paints, and the write draws
+    // every list of the copy again.
+    setTimeout(() => {
+      press([{ accountId: conversation.accountId, threadId: conversation.threadId, messageIds: unread, subject: newest.subject }], 'read');
+      onRead();
+    });
   });
   const messages = [
     ...(conversation
