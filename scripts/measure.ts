@@ -2,7 +2,7 @@
 /**
  * How fast the page draws, on verify-sift's seed served by its `serve.ts` from the production build:
  *
- *   node e2e/measure.ts [--runs 5] [--root <checkout>] [--out <file.json>] [--shots <dir>]
+ *   node scripts/measure.ts [--runs 5] [--root <checkout>] [--out <file.json>] [--shots <dir>]
  *
  * Each sample is a fresh browser context (empty cache, no service worker). For `/`, `/rules` and a sender's page it
  * reads first and largest contentful paint, layout shift, the JavaScript fetched until the screen is ready (bytes on

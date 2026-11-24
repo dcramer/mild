@@ -22,6 +22,8 @@ import {
   test,
   toast,
   writeLabel,
+  ME,
+  askForLabels,
 } from './sift.ts';
 
 /** The label's panel on the Labels screen. Not the toast saying it was removed, a dialog named by the label too, which is never modal. */
@@ -30,14 +32,6 @@ const labelPanel = (page: Page, name: string) => page.getByRole('dialog', { name
 /** "12 of 30" beside `Add labels`: how many labels there are, of how many there may be. */
 // A desktop and a phone each draw the page's action in a place of their own.
 const labelCount = (page: Page) => page.getByText(/^\d+ of \d+$/).filter({ visible: true });
-
-/** In the open Add labels, asks the model for labels for `words`. */
-async function askForLabels(page: Page, words: string) {
-  const dialog = addLabelsDialog(page);
-  await dialog.getByRole('textbox', { name: 'What mail, and what should happen to it?' }).fill(words);
-  await dialog.getByRole('button', { name: 'Suggest labels' }).click();
-  return dialog;
-}
 
 async function openLabel(page: Page, name: string) {
   await page.getByText(name, { exact: true }).click();
@@ -113,7 +107,7 @@ test.describe('Labels', () => {
     // The label told Mild this browser's time zone, which the digest's hour is read in.
     const zone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
     await page.goto('/labels?settings=1');
-    await expect(settingsActive(page).getByText(`One email each for Newsletters, in me@example.org, on ${zone.split('/').at(-1)} time.`)).toBeVisible();
+    await expect(settingsActive(page).getByText(`One email each for Newsletters, in ${ME}, on ${zone.split('/').at(-1)} time.`)).toBeVisible();
     const hour = settingsActive(page).getByRole('combobox', { name: 'Digest time' });
     await expect(hour).toHaveText(/^7:00 AM/);
     await hour.click();

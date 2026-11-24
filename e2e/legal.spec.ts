@@ -1,4 +1,4 @@
-import { boxOf, expect, path, PHONE, test } from './sift.ts';
+import { boxOf, expect, path, PHONE, test, phoneMenu, sections } from './sift.ts';
 
 test.describe('A Mild run as a service', () => {
   test.use({ cloud: true });
@@ -38,8 +38,8 @@ test.describe('A Mild run as a service', () => {
     test('the menu has the terms, privacy and security under the sections', async ({ page }) => {
       await page.goto('/rules');
       await page.getByRole('button', { name: 'Menu' }).click();
-      const menu = page.getByRole('dialog', { name: 'Menu' });
-      const last = await boxOf(menu.getByRole('navigation', { name: 'Sections' }));
+      const menu = phoneMenu(page);
+      const last = await boxOf(sections(menu));
       const privacy = menu.getByRole('link', { name: 'Privacy' });
       expect((await boxOf(privacy)).y).toBeGreaterThan(last.y + last.height);
       await privacy.click();
@@ -66,8 +66,8 @@ test.describe("Someone's own copy", () => {
     test('the menu has no fine print', async ({ page }) => {
       await page.goto('/rules');
       await page.getByRole('button', { name: 'Menu' }).click();
-      const menu = page.getByRole('dialog', { name: 'Menu' });
-      await expect(menu.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+      const menu = phoneMenu(page);
+      await expect(sections(menu)).toBeVisible();
       await expect(menu.getByRole('link', { name: 'Privacy' })).toHaveCount(0);
     });
   });

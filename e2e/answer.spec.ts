@@ -1,7 +1,6 @@
 import type { Page } from '@playwright/test';
 import { makeRule, proposal, ruleDialog, ruleFromMessage, seededRulesOnly } from './rule.ts';
 import {
-  answersSent,
   boxOf,
   choose,
   expect,
@@ -22,6 +21,7 @@ import {
   row,
   test,
   toast,
+  requestsTo,
 } from './sift.ts';
 
 test.describe('Answering mail', () => {
@@ -265,7 +265,7 @@ test.describe('An answer on its way', () => {
   };
 
   test('is sent only once its toast goes', async ({ page }) => {
-    const sent = answersSent(page);
+    const sent = requestsTo(page, '/api/feedback');
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
     await expect(toast(page, 'Winter sale starts now')).toBeVisible();
@@ -283,7 +283,7 @@ test.describe('An answer on its way', () => {
   });
 
   test('is sent when its toast times out', async ({ page }) => {
-    const sent = answersSent(page);
+    const sent = requestsTo(page, '/api/feedback');
     await page.clock.install();
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
@@ -297,7 +297,7 @@ test.describe('An answer on its way', () => {
   });
 
   test('times out while the window has lost focus, as it does to a message being read in its frame', async ({ page }) => {
-    const sent = answersSent(page);
+    const sent = requestsTo(page, '/api/feedback');
     await page.clock.install();
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
@@ -324,7 +324,7 @@ test.describe('An answer on its way', () => {
   });
 
   test('is sent when its toast is dismissed', async ({ page }) => {
-    const sent = answersSent(page);
+    const sent = requestsTo(page, '/api/feedback');
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
     await toast(page, 'Winter sale starts now').getByRole('button', { name: 'Dismiss' }).click();
@@ -350,7 +350,7 @@ test.describe('An answer on its way', () => {
   }
 
   test('Undo puts the row back and sends nothing', async ({ page }) => {
-    const sent = answersSent(page);
+    const sent = requestsTo(page, '/api/feedback');
     await page.goto('/');
     await choose(row(page, 'Winter sale starts now'), 'Notifications');
     await toast(page, 'Winter sale starts now').getByRole('button', { name: 'Undo' }).click();
@@ -365,7 +365,7 @@ test.describe('An answer on its way', () => {
   });
 
   test('Z undoes only the latest, and the one before it is sent', async ({ page }) => {
-    const sent = answersSent(page);
+    const sent = requestsTo(page, '/api/feedback');
     await page.goto('/');
     await row(page, 'Winter sale starts now').getByRole('button', { name: 'Agree: Marketing' }).click();
     await choose(row(page, 'Notes from the review'), 'Notifications');

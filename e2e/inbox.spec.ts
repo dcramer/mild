@@ -1,6 +1,5 @@
 import {
   PHONE,
-  answersSent,
   back,
   boxOf,
   choose,
@@ -30,16 +29,10 @@ import {
   forward,
   toast,
   tooltip,
+  ME,
+  requestsTo,
 } from './sift.ts';
-import type { Page } from '@playwright/test';
 import { ruleDialog } from './rule.ts';
-
-/** How many mail changes the page has sent. */
-function changesSent(page: Page): () => number {
-  let sent = 0;
-  page.on('request', (request) => void (new URL(request.url()).pathname === '/api/mail/change' && sent++));
-  return () => sent;
-}
 
 // Run in the page, which e2e is typed without: as text.
 const OPEN_COPY = `new Promise((done) => (indexedDB.open('sift-copy').onsuccess = (event) => done(event.target.result)))`;
@@ -196,7 +189,7 @@ test.describe('Inbox', () => {
       // Opened again: one of the oldest, which the device holds past its first part, is gone.
       if (!feed.reset && gone) return feed;
       gone = true;
-      return { ...feed, conversations: [...feed.conversations, { accountId: 'me@example.org', threadId: 'many-200', conversation: null }] };
+      return { ...feed, conversations: [...feed.conversations, { accountId: ME, threadId: 'many-200', conversation: null }] };
     });
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(100);
@@ -229,7 +222,7 @@ test.describe('Inbox', () => {
     page,
     sift,
   }) => {
-    const sent = answersSent(page);
+    const sent = requestsTo(page, '/api/feedback');
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');
     // On the bar the row shows while pointed at.
@@ -241,7 +234,7 @@ test.describe('Inbox', () => {
       await (await label()).click();
       await page.getByRole('option', { name, exact: true }).click();
     };
-    const inGmail = () => sift.google().mailbox('me@example.org').labelsOf('m3');
+    const inGmail = () => sift.google().mailbox(ME).labelsOf('m3');
     await expect(await label()).toContainText('Receipts');
 
     // Personal keeps its mail: saved at once, and the row stays.
@@ -295,7 +288,7 @@ test.describe('Inbox', () => {
     await expect(page.getByRole('option', { name: 'Receipts', exact: true })).toBeVisible();
     // Said in another tab: the feed brings it to this row while its menu is open.
     await page.evaluate(
-      "fetch('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify({ accountId: 'me@example.org', sender: 'orders@shop.example.com', label: 'personal', messageId: 'm3', carryOut: false }) })",
+      `fetch('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json', 'x-sift': '1' }, body: JSON.stringify({ accountId: '${ME}', sender: 'orders@shop.example.com', label: 'personal', messageId: 'm3', carryOut: false }) })`,
     );
     // Coming back to the tab asks Mild what changed.
     await putAway(page);
@@ -322,7 +315,7 @@ test.describe('Inbox', () => {
   });
 
   test('Archive on a row says it is what its label says, and does what the label does', async ({ page, sift }) => {
-    const gmail = () => sift.google().mailbox('me@example.org');
+    const gmail = () => sift.google().mailbox(ME);
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');
     await pointAt(row);
@@ -340,7 +333,7 @@ test.describe('Inbox', () => {
   });
 
   test('Archive on a row whose label Mild is not sure of still gives that label, and its toast says so', async ({ page, sift }) => {
-    const gmail = () => sift.google().mailbox('me@example.org');
+    const gmail = () => sift.google().mailbox(ME);
     // Mild's answer about the shipping note, but unsure: it asks rather than archiving it itself.
     await patchJson(page, '**/api/sync*', (feed) => ({
       ...feed,
@@ -469,7 +462,7 @@ test.describe('Inbox', () => {
   });
 
   test('Spam is sent to Gmail once its toast goes, and Undo before then sends nothing', async ({ page, sift }) => {
-    const changes = changesSent(page);
+    const changes = requestsTo(page, '/api/mail/change');
     await page.goto('/inbox');
     const deal = inboxRow(page, '48 hours only: 30% off');
     const id = (await deal.getAttribute('data-holds'))!.split('/')[1]!;
@@ -479,13 +472,13 @@ test.describe('Inbox', () => {
     await toast(page, '48 hours only: 30% off').getByRole('button', { name: /^Undo/ }).click();
     await expect(deal).toBeVisible();
     expect(changes()).toBe(0);
-    expect(sift.google().mailbox('me@example.org').labelsOf(id)).toContain('INBOX');
+    expect(sift.google().mailbox(ME).labelsOf(id)).toContain('INBOX');
 
     await pointAt(deal);
     await deal.getByRole('button', { name: 'Spam' }).click();
     await dismiss(page, '48 hours only: 30% off');
-    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).toContain('SPAM');
-    expect(sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).toContain('SPAM');
+    expect(sift.google().mailbox(ME).labelsOf(id)).not.toContain('INBOX');
     await expect(deal).toHaveCount(0);
   });
 
@@ -533,7 +526,7 @@ test.describe('Inbox', () => {
       await pointAt(widgets);
       await widgets.getByRole('button', { name: 'Archive' }).click();
       await dismiss(page, 'This week in widgets');
-      await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
+      await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).not.toContain('INBOX');
       expect(refused).toBe(2);
       await expect(widgets).toHaveCount(0);
       await expect(failureToast(page, 'Could not archive it')).toHaveCount(0);
@@ -553,10 +546,10 @@ test.describe('Inbox', () => {
       await dismiss(page, 'This week in widgets');
       await expect(page.getByRole('status').filter({ hasText: 'Mild cannot be reached: 1 change will go once it is back' })).toBeVisible();
       await expect(widgets).toHaveCount(0);
-      expect(sift.google().mailbox('me@example.org').labelsOf(id)).toContain('INBOX');
+      expect(sift.google().mailbox(ME).labelsOf(id)).toContain('INBOX');
 
       await context.setOffline(false);
-      await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
+      await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).not.toContain('INBOX');
       await expect(widgets).toHaveCount(0);
       await expect(failureToast(page, 'Could not archive it')).toHaveCount(0);
     });
@@ -575,7 +568,7 @@ test.describe('Inbox', () => {
       await page.reload();
       await expect(inboxRows(page).first()).toBeVisible();
       await expect(widgets).toHaveCount(0);
-      await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
+      await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).not.toContain('INBOX');
     });
   });
 
@@ -599,7 +592,7 @@ test.describe('Inbox', () => {
     const idOf = async (subject: string) => (await inboxRow(page, subject).getAttribute('data-holds'))!.split('/')[1]!;
     const [digest, order, lunch] = [await idOf('This week in widgets'), await idOf('Your order has shipped'), await idOf('Lunch on Thursday?')];
     const listed = (messageId: string, subject: string, from: { address: string; name: string }) => ({
-      accountId: 'me@example.org',
+      accountId: ME,
       messageId,
       from,
       subject,
@@ -647,7 +640,7 @@ test.describe('Inbox', () => {
     await widgets.getByRole('button', { name: 'Archive' }).click();
     await expect(toast(page, 'Widgets, part two')).toBeVisible();
     await page.goto('/inbox?unread=1');
-    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).not.toContain('INBOX');
   });
 
   test('Block sender gives them Blocked and marks their conversation spam, with one Undo', async ({ page, sift }) => {
@@ -661,7 +654,7 @@ test.describe('Inbox', () => {
     await expect(blocked).toContainText('Blocked sale@store.example.com');
     await blocked.getByRole('button', { name: /^Undo/ }).click();
     await expect(sale).toBeVisible();
-    expect(sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('SPAM');
+    expect(sift.google().mailbox(ME).labelsOf(id)).not.toContain('SPAM');
     await page.goto('/sender/sale%40store.example.com');
     await expect(page.getByRole('button', { name: 'Block', pressed: true })).toHaveCount(0);
 
@@ -669,7 +662,7 @@ test.describe('Inbox', () => {
     await pointAt(sale);
     await sale.getByRole('button', { name: 'Block sender' }).click();
     await dismiss(page, 'Winter sale starts now');
-    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).toContain('SPAM');
+    await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).toContain('SPAM');
     await page.goto('/sender/sale%40store.example.com');
     await expect(page.getByRole('button', { name: 'Block', pressed: true })).toBeVisible();
   });

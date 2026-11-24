@@ -1,10 +1,10 @@
-import { TOUCH, boxOf, dismiss, edgeSwipe, expect, fingerOver, hold, path, reader, swipe, test, toast } from './sift.ts';
+import { TOUCH, boxOf, dismiss, edgeSwipe, expect, fingerOver, hold, path, reader, swipe, test, toast, ME, phoneMenu, sections } from './sift.ts';
 import type { Page } from '@playwright/test';
 import { ruleDialog } from './rule.ts';
 
 /** A conversation's row in Inbox on a phone, where it has no check to find it by. */
-const row = (page: Page, subject: string) => page.getByRole('row').filter({ hasText: subject });
-const idOf = async (page: Page, subject: string) => (await row(page, subject).getAttribute('data-holds'))!.split('/')[1]!;
+const rowAbout = (page: Page, subject: string) => page.getByRole('row').filter({ hasText: subject });
+const idOf = async (page: Page, subject: string) => (await rowAbout(page, subject).getAttribute('data-holds'))!.split('/')[1]!;
 
 test.describe('Inbox by touch, on a phone', () => {
   test.use({ variant: 'inbox', ...TOUCH });
@@ -12,21 +12,21 @@ test.describe('Inbox by touch, on a phone', () => {
   test('a row swiped left to the edge is archived once its toast goes, and Undo before then puts it back', async ({ page, sift }) => {
     await page.goto('/inbox');
     const id = await idOf(page, 'Your order has shipped');
-    await swipe(row(page, 'Your order has shipped'), -380);
-    await expect(row(page, 'Your order has shipped')).toHaveCount(0);
+    await swipe(rowAbout(page, 'Your order has shipped'), -380);
+    await expect(rowAbout(page, 'Your order has shipped')).toHaveCount(0);
     // Flush on the tab bar, part of the foot of the screen; Compose is in the bar, so nothing floats or moves for it.
     const note = await boxOf(toast(page, 'Your order has shipped'));
-    const tabs = await boxOf(page.getByRole('navigation', { name: 'Sections' }));
+    const tabs = await boxOf(sections(page));
     expect(Math.abs(tabs.y - (note.y + note.height))).toBeLessThanOrEqual(1);
-    await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'Compose' })).toBeVisible();
+    await expect(sections(page).getByRole('button', { name: 'Compose' })).toBeVisible();
     await toast(page, 'Your order has shipped').getByRole('button', { name: /^Undo/ }).tap();
-    await expect(row(page, 'Your order has shipped')).toBeVisible();
-    expect(sift.google().mailbox('me@example.org').labelsOf(id)).toContain('INBOX');
+    await expect(rowAbout(page, 'Your order has shipped')).toBeVisible();
+    expect(sift.google().mailbox(ME).labelsOf(id)).toContain('INBOX');
 
-    await swipe(row(page, 'Your order has shipped'), -380);
+    await swipe(rowAbout(page, 'Your order has shipped'), -380);
     await dismiss(page, 'Your order has shipped');
-    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
-    await expect(row(page, 'Your order has shipped')).toHaveCount(0);
+    await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).not.toContain('INBOX');
+    await expect(rowAbout(page, 'Your order has shipped')).toHaveCount(0);
   });
 
   test('the top edge is the page’s own colour, solid and fixed, so iOS extends it rather than blurring the search bar', async ({ page }) => {
@@ -47,15 +47,15 @@ test.describe('Inbox by touch, on a phone', () => {
 
   test('a row swiped away closes up, its height shrinking to nothing in the press’s colour, rather than vanishing', async ({ page }) => {
     await page.goto('/inbox');
-    await expect(row(page, 'Your order has shipped')).toBeVisible();
+    await expect(rowAbout(page, 'Your order has shipped')).toBeVisible();
     // Every height the row takes on its way out, as the browser lays it out.
     await page.evaluate(`(() => {
       const tr = [...document.querySelectorAll('tr')].find((r) => r.textContent.includes('Your order has shipped'));
       window.heights = [tr.offsetHeight];
       new ResizeObserver(([entry]) => window.heights.push(entry.borderBoxSize[0].blockSize)).observe(tr);
     })()`);
-    await swipe(row(page, 'Your order has shipped'), -380);
-    await expect(row(page, 'Your order has shipped')).toHaveCount(0);
+    await swipe(rowAbout(page, 'Your order has shipped'), -380);
+    await expect(rowAbout(page, 'Your order has shipped')).toHaveCount(0);
     const heights = await page.evaluate<number[]>('window.heights');
     const full = heights[0]!;
     expect(heights.some((h) => h > 1 && h < full / 2)).toBe(true);
@@ -65,19 +65,19 @@ test.describe('Inbox by touch, on a phone', () => {
 
   test('a finger drawn in from the left edge opens the menu, as the menu button does', async ({ page }) => {
     await page.goto('/inbox');
-    const shipped = await boxOf(row(page, 'Your order has shipped'));
+    const shipped = await boxOf(rowAbout(page, 'Your order has shipped'));
     await edgeSwipe(page, shipped.y + shipped.height / 2);
-    const menu = page.getByRole('dialog', { name: 'Menu' });
-    await expect(menu.getByRole('navigation', { name: 'Sections' })).toBeVisible();
+    const menu = phoneMenu(page);
+    await expect(sections(menu)).toBeVisible();
     await menu.getByRole('button', { name: 'Close menu' }).tap();
     await expect(menu).toHaveCount(0);
     // The row the finger crossed did not slide.
-    await expect(row(page, 'Your order has shipped').getByRole('button', { name: 'Read' })).not.toBeInViewport();
+    await expect(rowAbout(page, 'Your order has shipped').getByRole('button', { name: 'Read' })).not.toBeInViewport();
   });
 
   test('a short swipe stops with its press showing; a press on the row then closes it and opens nothing, and the press archives', async ({ page }) => {
     await page.goto('/inbox');
-    const shipped = row(page, 'Your order has shipped');
+    const shipped = rowAbout(page, 'Your order has shipped');
     const archive = shipped.getByRole('button', { name: 'Archive' });
     await expect(archive).not.toBeInViewport();
     await swipe(shipped, -110);
@@ -105,7 +105,7 @@ test.describe('Inbox by touch, on a phone', () => {
   }) => {
     await page.goto('/inbox');
     const id = await idOf(page, 'Lunch on Thursday?');
-    const lunch = row(page, 'Lunch on Thursday?');
+    const lunch = rowAbout(page, 'Lunch on Thursday?');
     const label = lunch.getByRole('button', { name: 'Label' });
     await swipe(lunch, 110);
     await expect(label).toBeInViewport({ ratio: 1 });
@@ -133,37 +133,37 @@ test.describe('Inbox by touch, on a phone', () => {
     await expect(lunch).toHaveCount(0);
     await expect(toast(page, 'Lunch on Thursday?')).toContainText('Receipts');
     await dismiss(page, 'Lunch on Thursday?');
-    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).not.toContain('INBOX');
   });
 
   test('a finger held on a row selects it; then a press selects or lets go, and the bar along the bottom archives them', async ({ page }) => {
     await page.goto('/inbox');
     const selected = page.getByText('1 selected').filter({ visible: true });
-    await hold(row(page, 'Your order has shipped'), selected);
+    await hold(rowAbout(page, 'Your order has shipped'), selected);
     await expect(reader(page)).toHaveCount(0);
 
-    await row(page, 'Lunch on Thursday?').tap();
+    await rowAbout(page, 'Lunch on Thursday?').tap();
     await expect(page.getByText('2 selected').filter({ visible: true })).toBeVisible();
     await expect(reader(page)).toHaveCount(0);
-    await row(page, 'Lunch on Thursday?').tap();
+    await rowAbout(page, 'Lunch on Thursday?').tap();
     await expect(selected).toBeVisible();
-    await row(page, 'Lunch on Thursday?').tap();
+    await rowAbout(page, 'Lunch on Thursday?').tap();
 
     await page.getByRole('button', { name: 'Archive', exact: true }).filter({ visible: true }).last().tap();
     await expect(toast(page, '2 conversations')).toBeVisible();
-    await expect(row(page, 'Your order has shipped')).toHaveCount(0);
-    await expect(row(page, 'Lunch on Thursday?')).toHaveCount(0);
+    await expect(rowAbout(page, 'Your order has shipped')).toHaveCount(0);
+    await expect(rowAbout(page, 'Lunch on Thursday?')).toHaveCount(0);
     await expect(page.getByText(/selected$/).filter({ visible: true })).toHaveCount(0);
 
     // A press on a row opens it again.
-    await row(page, 'Notes from the review').tap();
+    await rowAbout(page, 'Notes from the review').tap();
     await expect(reader(page)).toBeVisible();
   });
 
   test('a finger left on a row while the list scrolls under it selects nothing; one held still selects', async ({ page }) => {
     await page.goto('/inbox');
     const selected = page.getByText('1 selected').filter({ visible: true });
-    const [shipped, lunch] = [await fingerOver(row(page, 'Your order has shipped')), await fingerOver(row(page, 'Lunch on Thursday?'))];
+    const [shipped, lunch] = [await fingerOver(rowAbout(page, 'Your order has shipped')), await fingerOver(rowAbout(page, 'Lunch on Thursday?'))];
     await page.clock.install();
 
     await lunch.down();
@@ -184,7 +184,7 @@ test.describe('Inbox by touch, on a phone', () => {
   test('Select none lets go of every row, and nothing selected on a phone keeps its bar', async ({ page }) => {
     await page.goto('/inbox');
     const selected = page.getByText('1 selected').filter({ visible: true });
-    await hold(row(page, 'Your order has shipped'), selected);
+    await hold(rowAbout(page, 'Your order has shipped'), selected);
     await page.getByRole('button', { name: 'Select none' }).filter({ visible: true }).tap();
     await expect(selected).toHaveCount(0);
     await expect(page.getByRole('searchbox', { name: 'Search mail' }).filter({ visible: true })).toBeVisible();
