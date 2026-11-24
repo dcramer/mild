@@ -775,7 +775,7 @@ export function MessageReader({
           threadId: conversation.threadId,
           messageIds: conversation.messages.map((m) => m.messageId),
           subject,
-          thinks: label ? { labelName: label.name, disposition: label.disposition } : null,
+          label: label ? { name: label.name, does: label.disposition } : null,
         }
       : null;
   const listed = data && !picked ? messageKey(data) : null;

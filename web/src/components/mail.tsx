@@ -9,9 +9,12 @@ import { threadKey } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { type Did, Meter, useToast } from '@/system';
 
-/** A conversation as a press on it needs it, and the label its row shows, which Archive and Spam give it (`src/work/press.ts`). */
-export type Pressed = Pick<MailThread, 'accountId' | 'threadId' | 'messageIds' | 'subject'> & { thinks?: Shown | null };
-type Shown = { labelName: string | null; disposition: string };
+/**
+ * A conversation as a press on it needs it, and the label its row shows with that label's own action, which Archive and
+ * Spam give it however sure Mild was (`src/work/press.ts`).
+ */
+export type Pressed = Pick<MailThread, 'accountId' | 'threadId' | 'messageIds' | 'subject'> & { label?: Shown | null };
+type Shown = { name: string; does: string };
 type Press = 'archive' | 'spam' | 'read' | 'unread';
 
 /** What a press that takes conversations out of the inbox is said as. */
@@ -21,11 +24,11 @@ const MATCHES = { archive: ['archive', 'digest'], spam: ['spam', 'block'] } as c
 
 /** What a press did, for its toast: the press, the labels it gave, and the digest they go in. */
 function didOf(threads: readonly Pressed[], what: 'archive' | 'spam', first: Did = { action: what, word: DONE[what] }): [Did, ...Did[]] {
-  const given = threads.flatMap((t) => (t.thinks?.labelName && (MATCHES[what] as readonly string[]).includes(t.thinks.disposition) ? [t.thinks] : []));
+  const given = threads.flatMap((t) => (t.label && (MATCHES[what] as readonly string[]).includes(t.label.does) ? [t.label] : []));
   return [
     first,
-    ...[...new Set(given.map((t) => t.labelName!))].map((word) => ({ action: 'label', word })),
-    ...(given.some((t) => t.disposition === 'digest') ? [{ action: 'digest', word: 'In the digest' }] : []),
+    ...[...new Set(given.map((l) => l.name))].map((word) => ({ action: 'label', word })),
+    ...(given.some((l) => l.does === 'digest') ? [{ action: 'digest', word: 'In the digest' }] : []),
   ];
 }
 

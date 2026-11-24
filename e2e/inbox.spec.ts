@@ -339,6 +339,27 @@ test.describe('Inbox', () => {
     await expect(row).toHaveCount(0);
   });
 
+  test('Archive on a row whose label Mild is not sure of still gives that label, and its toast says so', async ({ page, sift }) => {
+    const gmail = () => sift.google().mailbox('me@example.org');
+    // Mild's answer about the shipping note, but unsure: it asks rather than archiving it itself.
+    await patchJson(page, '**/api/sync*', (feed) => ({
+      ...feed,
+      conversations: feed.conversations.map((c: { conversation: { thinks: object | null; messages: { messageId: string }[] } | null }) =>
+        c.conversation?.messages.some((m) => m.messageId === 'm3')
+          ? { ...c, conversation: { ...c.conversation, thinks: { ...c.conversation.thinks, disposition: 'review', confidence: 0.5 } } }
+          : c,
+      ),
+    }));
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    await pointAt(row);
+    await expect(row.getByRole('combobox', { name: 'What Your order has shipped is' })).toContainText('Receipts');
+    await row.getByRole('button', { name: 'Archive' }).click();
+    await expect(toast(page, 'Your order has shipped')).toContainText(/Archived\s*to\s*Receipts/);
+    await dismiss(page, 'Your order has shipped');
+    await expect.poll(() => gmail().message('m3')!.labelIds).toContain(gmail().labelId('mild/receipts'));
+  });
+
   test('a row’s label menu stays under its label while the pointer moves into it', async ({ page }) => {
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');
