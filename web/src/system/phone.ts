@@ -1,10 +1,9 @@
 'use client';
 import { useSyncExternalStore } from 'react';
+import { PHONE_LAYOUT } from '@/lib/motion.ts';
 
-// The `phone` variant in `web/src/index.css`.
-const PHONE = 'not ((width >= 48rem) and (height >= 30rem))';
 const subscribe = (changed: () => void) => {
-  const query = window.matchMedia(PHONE);
+  const query = window.matchMedia(PHONE_LAYOUT);
   query.addEventListener('change', changed);
   return () => query.removeEventListener('change', changed);
 };
@@ -13,6 +12,6 @@ const subscribe = (changed: () => void) => {
 export const usePhone = () =>
   useSyncExternalStore(
     subscribe,
-    () => window.matchMedia(PHONE).matches,
+    () => window.matchMedia(PHONE_LAYOUT).matches,
     () => false,
   );

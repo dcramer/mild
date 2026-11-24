@@ -15,7 +15,8 @@ import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
-import { goBack, panelEntry, paramNow, setParams, useHere, useParam } from '@/lib/params.ts';
+import { goBack, panelEntry, paramNow, setParams, useHere, useParam, whenSettled } from '@/lib/params.ts';
+import { moveReader } from '@/lib/motion.ts';
 import { isMessageKey } from '@/lib/rows.ts';
 import { useStarted } from '@/lib/started.ts';
 import { useHidden } from '@/components/action.ts';
@@ -243,12 +244,13 @@ function useReader() {
   const [opened, setOpened] = useState(0);
   // Where the list was, and the row of the message last shown, for Back to return to.
   const place = useRef<{ y: number; row: string | null }>({ y: 0, row: null });
-  const openMessages = (items: MessageRef[], index: number) => {
-    place.current = { y: window.scrollY, row: null };
-    setList(items);
-    setOpened((n) => n + 1);
-    show(items[index], { state: { panel: true } });
-  };
+  const openMessages = (items: MessageRef[], index: number) =>
+    moveReader('open', () => {
+      place.current = { y: window.scrollY, row: null };
+      setList(items);
+      setOpened((n) => n + 1);
+      show(items[index], { state: { panel: true } });
+    });
   const reading = open !== null;
   useLayoutEffect(() => {
     if (reading) return;
@@ -260,10 +262,19 @@ function useReader() {
     to?.focus({ preventScroll: true });
     to?.scrollIntoView({ block: 'nearest' });
   }, [reading]);
+  // Opened from a list here, the entry before this one is that list: go back to it, so Back here and the browser's agree.
+  const close = () =>
+    moveReader('back', () => {
+      if (!panelEntry()) return show(undefined);
+      return new Promise<void>((done) => {
+        goBack();
+        whenSettled(done);
+      });
+    });
   const shown = useCallback((row: string) => {
     place.current.row = row;
   }, []);
-  return { open, opened, openMessages, show, shown };
+  return { open, opened, openMessages, show, shown, close };
 }
 
 /**
@@ -306,7 +317,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const [, page] = pathname.split('/');
   // A sender's and a domain's page are a contact's.
   const section = page === 'sender' || page === 'domain' ? 'contacts' : page;
-  const { open, opened, openMessages, show, shown } = useReader();
+  const { open, opened, openMessages, show, shown, close } = useReader();
   const [compose] = useParam('compose');
   // A rule Mild proposes, opened from Inbox in its place, as a message is.
   const [proposal] = useParam('proposal');
@@ -406,11 +417,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
                       back={listName(pathname)}
                       onIndex={(index) => show(open.items[index])}
                       onShown={shown}
-                      // Opened from a list here, the entry before this one is that list: go back to it, so Back here and the browser's agree.
-                      onBack={() => {
-                        if (panelEntry()) goBack();
-                        else show(undefined);
-                      }}
+                      onBack={close}
                     />
                   ) : null}
                 </main>
