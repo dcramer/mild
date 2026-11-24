@@ -9,13 +9,13 @@ import { applyFeedback } from '../src/learn/feedback.ts';
 import { pendingSuggestions } from '../src/store/suggestions.ts';
 import { type ActionType, finishAction, insertPendingAction, unsubscribedAt } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
-import { deleteExamples } from '../src/store/examples.ts';
+import { EXAMPLE_KEEP_DAYS, deleteExamples } from '../src/store/examples.ts';
 import { listUndecided, recordSync } from '../src/store/messages.ts';
 import { addRule } from '../src/store/rules.ts';
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { modelRun, raw, onePerson, superuser } from './fixtures.ts';
-import { ACCOUNT, DAY, facts, workDue, runOptions } from './helpers.ts';
+import { ACCOUNT, DAY, facts, storeExample, workDue, runOptions } from './helpers.ts';
 import type { Store } from '../src/store/store.ts';
 
 const OLD = 10 * DAY;
@@ -150,6 +150,43 @@ describe('daily upkeep', () => {
     );
     await upkeep(db, { log: () => {}, now: () => NOW });
     expect(await left('read_bodies')).toEqual(['young']);
+  });
+
+  it('deletes examples a year after their answer, when it starts and once a day after', async () => {
+    await storeExample(db, ACCOUNT, { id: 'old', from: 'a@example.org', label: 'personal', markedAt: 0 });
+    await storeExample(db, ACCOUNT, { id: 'soon', from: 'd@example.org', label: 'personal', markedAt: 2 * DAY + DAY / 5 });
+    await storeExample(db, ACCOUNT, { id: 'mid', from: 'b@example.org', label: 'personal', markedAt: 5 * DAY });
+    await storeExample(db, ACCOUNT, { id: 'new', from: 'c@example.org', label: 'personal', markedAt: 12 * DAY });
+    const held = async () => (await raw(db).all<{ message_id: string }>('SELECT message_id FROM examples ORDER BY marked_at')).map((r) => r.message_id);
+    const logs: string[] = [];
+
+    /** Tick once at each of the given times. */
+    const ticksAt = async (times: number[]) => {
+      const ephemeral = memoryEphemeral();
+      for (const at of times)
+        await workDue(
+          store,
+          {
+            ephemeral,
+            connect: () => {
+              throw new Error('offline');
+            },
+            log: (line) => logs.push(line),
+            now: () => at,
+          },
+          Infinity,
+        );
+    };
+
+    await ticksAt([12 * DAY]);
+    expect(await held()).toEqual(['old', 'soon', 'mid', 'new']);
+
+    // A year and two days on, only `old` is past it. Half a day later `soon` is too, but upkeep has run
+    // today, so it waits; three days on, it goes with `mid`.
+    const year = EXAMPLE_KEEP_DAYS * DAY;
+    await ticksAt([year + 2 * DAY, year + 2.5 * DAY, year + 5.5 * DAY]);
+    expect(logs.filter((l) => l.startsWith('Deleted'))).toEqual(['Deleted 1 example older than 365 days', 'Deleted 2 examples older than 365 days']);
+    expect(await held()).toEqual(['new']);
   });
 });
 

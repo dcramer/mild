@@ -3,12 +3,13 @@ import { DRAFT_QUIET_MS } from '../../src/actions/drafts.ts';
 import { SETTLE_MS } from '../../src/actions/send.ts';
 import { ASK_TOOL } from '../../src/prompts/mail-ask.ts';
 import { FIND_TOOL } from '../../src/prompts/rule-draft.ts';
-import { type Browser, fauxModel } from '../fixtures.ts';
+import { recordDecision } from '../../src/store/decisions.ts';
+import { type Browser, fauxModel, modelRun } from '../fixtures.ts';
 import { DAY, toolReply } from '../helpers.ts';
 import { AT, ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const { fake, start, withInbox } = theApp();
+const { fake, start, settled, withInbox } = theApp();
 
 type Thread = { threadId: string; subject: string; messageIds: string[]; unread: boolean; place: string; preview: string | null };
 const threadsOf = (reply: { body: Record<string, unknown> }) => reply.body['threads'] as Thread[];
@@ -139,6 +140,35 @@ describe('reading mail', () => {
     box.renewAttachmentIds();
     expect((await me.call('GET', `/api/message/file?id=${id}&part=${file!.part}`)).body['text']).toBe('<script>alert(1)</script>');
     expect(box.asked('users.messages.get', id)).toHaveLength(reads + 1);
+  });
+
+  it('gives one message with what Mild decided about it, what its model call took, and the reader’s answer to that decision', async () => {
+    const { sift, box, me, arrives } = await settled();
+    const id = box.deliver({ from: 'cold@example.org', subject: '<img src=x onerror=alert(1)>' });
+    await arrives();
+    const db = await sift.db(ME);
+    const run = await modelRun(db, { messageId: id, at: AT, usage: { model: 'test/model', inputTokens: 900, outputTokens: 100, costUsd: 0.02 } });
+    const decision = await recordDecision(
+      db,
+      ME,
+      id,
+      { stage: 'model', disposition: 'review', subscription: 'preserve', reason: 'Could be either.', confidence: 0.4 },
+      { durationMs: 1500, runId: run },
+    );
+
+    const detail = await me.call('GET', `/api/message?id=${id}`);
+    expect(detail.body).toMatchObject({
+      subject: '<img src=x onerror=alert(1)>',
+      decisions: [{ id: decision, stage: 'model', inputTokens: 900, durationMs: 1500, answer: null }],
+      actions: [],
+    });
+    expect((await me.call('GET', '/api/message?id=nope')).status).toBe(404);
+
+    const answer = { accountId: ME, sender: 'cold@example.org', label: 'receipts', decisionId: decision, messageId: id, carryOut: false };
+    expect((await me.call('POST', '/api/feedback', answer)).status).toBe(200);
+    expect((await me.call('GET', `/api/message?id=${id}`)).body['decisions']).toMatchObject([
+      { id: decision, labelId: null, answer: { labelId: 'receipts', disposition: 'archive' } },
+    ]);
   });
 
   it('shows someone else none of it', async () => {
@@ -748,10 +778,21 @@ describe('asking Inbox in words', () => {
     box.deliver({ from: 'Vendor <billing@vendor.example.com>', subject: 'Your invoice' });
     await arrives();
     const blank = { reading: '', from: [], domains: [], label: '', view: '', unread: false, since: '', words: [], note: '' };
-    model.answers(toolReply(FIND_TOOL, { query: 'vendor' }), toolReply(ASK_TOOL, { ...blank, from: ['billing@vendor.example.com'], words: ['invoice'] }));
+    const note = 'Mild does not know what you answered.';
+    model.answers(
+      toolReply(FIND_TOOL, { query: 'vendor' }),
+      toolReply(ASK_TOOL, { ...blank, from: ['billing@vendor.example.com'], words: ['invoice'], since: '2026-11-01', note }),
+    );
 
-    const asked = await me.call('POST', '/api/mail/ask', { words: 'invoices from the vendor', today: '2026-11-18' });
-    expect(asked).toMatchObject({ status: 200, body: { filter: { from: ['billing@vendor.example.com'], words: ['invoice'] } } });
+    for (const bad of [{ words: 'x' }, { words: ' ', today: '2026-11-18' }, { words: 'x', today: 'today' }])
+      expect((await me.call('POST', '/api/mail/ask', bad)).status).toBe(400);
+    expect(model.complete).not.toHaveBeenCalled();
+    const asked = await me.call('POST', '/api/mail/ask', { words: ' invoices from the vendor this month ', today: '2026-11-18' });
+    expect(asked).toMatchObject({ status: 200 });
+    expect(asked.body).toEqual({ filter: { from: ['billing@vendor.example.com'], words: ['invoice'], since: '2026-11-01' }, note });
+    const prompt = JSON.stringify(model.complete.mock.calls[0]?.[1].messages[0]?.content);
+    expect(prompt).toContain('invoices from the vendor this month');
+    expect(prompt).toContain('2026-11-18');
     expect(threadsOf(await me.call('GET', '/api/mail/threads?from=billing@vendor.example.com&q=invoice')).map((t) => t.subject)).toEqual(['Your invoice']);
   });
 
@@ -763,6 +804,7 @@ describe('asking Inbox in words', () => {
       status: 409,
       body: { error: 'Turn Inbox on first.' },
     });
+    expect(model.complete).not.toHaveBeenCalled();
   });
 });
 

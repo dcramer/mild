@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { type Browser, modelRun } from '../fixtures.ts';
-import { DAY } from '../helpers.ts';
+import { describe, expect, it, vi } from 'vitest';
+import { REACH, goingInboxRuns } from '../../src/store/inbox-runs.ts';
+import { continueInboxRun } from '../../src/work/inbox-runs.ts';
+import { type Browser, connectGmail, firstAccount, modelRun, raw } from '../fixtures.ts';
+import { DAY, UNSURE, testModel } from '../helpers.ts';
 import { AT, ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
@@ -23,7 +25,37 @@ async function withRule() {
   return { ...app, receipt };
 }
 
+describe('how Mild is set up', () => {
+  it('shows whether it is on, its mailboxes and labels, and which mailbox’s Google sign-in has expired', async () => {
+    const { sift, me } = await settled();
+    const shown = await manage(me);
+    expect(shown).toMatchObject({ active: false, activity: { running: true, expired: [] }, accounts: [{ id: ME }] });
+    expect(shown['labels']).toContainEqual(
+      expect.objectContaining({ id: 'receipts', gmailLabel: 'mild/receipts', rules: 0, messages: 0, record: { reviewed: 0, right: 0 } }),
+    );
+
+    for (const [token, grant] of fake.google.save().grants) if (grant.address === ME) fake.google.expire(token);
+    await me.call('POST', '/api/check', {});
+    await sift.work();
+    expect(await manage(me)).toMatchObject({ activity: { running: true, expired: [ME] } });
+  });
+});
+
 describe('Mild on and off', () => {
+  it('checks Gmail each time it is turned on or off, and Suggestions says which it is, since that changes what its rows mean', async () => {
+    const { sift, box, me } = await settled();
+    for (const active of [true, false]) {
+      box.requests.length = 0;
+      expect((await me.call('POST', '/api/active', { active })).status).toBe(200);
+      await sift.work();
+      expect(box.asked('users.history.list')).not.toEqual([]);
+      expect(await manage(me)).toMatchObject({ active });
+      expect((await me.call('GET', '/api/suggestions')).body).toMatchObject({ active });
+    }
+    for (const bad of [{}, { active: 'yes' }, { active: true, interval: 60 }]) expect((await me.call('POST', '/api/active', bad)).status).toBe(400);
+    expect(await manage(me)).toMatchObject({ active: false });
+  });
+
   it('only suggests while off, and carries out what it decides in Gmail once on', async () => {
     const { box, me, receipt } = await withRule();
     const suggested = await receipt();
@@ -63,6 +95,11 @@ describe('Mild on and off', () => {
 
     const usage = (await me.call('GET', '/api/usage')).body;
     expect(usage).toMatchObject({ day: 0, week: 0.25, month: 0.25, saved: { day: { messages: 1 } } });
+
+    vi.setSystemTime(AT + 20 * DAY);
+    const recent = async (days: number) => (await me.call('GET', `/api/summary?days=${days}`)).body;
+    expect(await recent(30)).toMatchObject({ days: 30, recent: [{ messageId: id }] });
+    expect(await recent(7)).toMatchObject({ recent: [] });
   });
 
   it('shows nobody else what it decided, or what it cost', async () => {
@@ -87,17 +124,83 @@ describe('the digest', () => {
 });
 
 describe('going through the inbox', () => {
-  it('says what it would take from Gmail’s count, asked once a while', async () => {
+  it('says what it would take from Gmail’s count, as far as it was asked to reach, asked once a while', async () => {
     const sift = await start();
     const box = fake.google.mailbox(ME);
-    for (let i = 0; i < 3; i++) box.deliver({ from: `sender${i}@example.com` }, { quietly: true });
+    const inbox = REACH.recent + 1;
+    for (let i = 0; i < inbox; i++) box.deliver({ from: `sender${i}@example.com` }, { quietly: true });
     box.deliver({ from: 'archived@example.com', labelIds: [] }, { quietly: true });
     const me = await sift.settled(ME);
 
-    const estimate = await me.call('GET', '/api/inbox?reach=inbox');
-    expect(estimate).toMatchObject({ status: 200, body: { messages: 3, model: 3, cost: null } });
-    expect((await me.call('GET', '/api/inbox?reach=recent')).body).toEqual(estimate.body);
+    expect(await me.call('GET', '/api/inbox?reach=inbox')).toMatchObject({ status: 200, body: { messages: inbox, model: inbox, cost: null } });
+    expect((await me.call('GET', '/api/inbox?reach=recent')).body).toEqual({ messages: REACH.recent, model: REACH.recent, cost: null });
     expect(box.asked('users.labels.get')).toEqual([{ method: 'users.labels.get', id: 'INBOX' }]);
+  });
+
+  it('is started for each mailbox of the person, once at a time, and acts only if Mild was on at the press', async () => {
+    const { sift, me } = await settled();
+    await me.signIn(WORK, { add: true });
+    await sift.work();
+    const runs = async () => await raw(await sift.db(ME)).all('SELECT account_id, acts, most, stopped FROM inbox_runs ORDER BY id');
+
+    expect((await me.call('POST', '/api/inbox/start', { reach: 'recent' })).body).toEqual({ ok: true });
+    expect(new Set(sift.queued.flatMap((w) => (w.kind === 'inbox' ? [w.mailbox] : [])))).toHaveProperty('size', 2);
+    expect(await me.call('POST', '/api/inbox/start', { reach: 'inbox' })).toMatchObject({ status: 409 });
+    expect(await runs()).toEqual([
+      { account_id: ME, acts: false, most: REACH.recent, stopped: false },
+      { account_id: WORK, acts: false, most: REACH.recent, stopped: false },
+    ]);
+    expect((await me.call('POST', '/api/inbox/stop', {})).body).toEqual({ ok: true });
+
+    await me.call('POST', '/api/active', { active: true });
+    await me.call('POST', '/api/inbox/start', { reach: 'inbox' });
+    expect(await runs()).toEqual([
+      { account_id: ME, acts: false, most: REACH.recent, stopped: true },
+      { account_id: WORK, acts: false, most: REACH.recent, stopped: true },
+      { account_id: ME, acts: true, most: REACH.inbox, stopped: false },
+      { account_id: WORK, acts: true, most: REACH.inbox, stopped: false },
+    ]);
+  });
+
+  it('says where it has got, what it has spent, and that more suggestions are coming', async () => {
+    const { sift, box, me } = await settled();
+    const importing = async () => (await me.call('GET', '/api/suggestions')).body['importing'];
+    expect(await importing()).toBe(false);
+    for (let i = 0; i < 5; i++) box.deliver({ from: 'News <news@example.com>', subject: `Issue ${i}` }, { quietly: true });
+    const pressed = Date.now();
+    await me.call('POST', '/api/inbox/start', { reach: 'recent' });
+    expect(await importing()).toBe(true);
+
+    // A pass under startSift has no model, so its pieces of the run wait: the run goes on here as they would.
+    const db = await sift.db(ME);
+    const [run] = await goingInboxRuns(db);
+    const gmail = connectGmail(fake.google);
+    let clock = Date.now();
+    const goOn = async (until?: number) =>
+      await continueInboxRun(
+        {
+          db,
+          api: gmail.api,
+          mailbox: null,
+          answers: gmail.mailbox,
+          sources: gmail,
+          model: testModel(async () => ((clock += 10), UNSURE)),
+          now: () => clock,
+          ...(until === undefined ? {} : { until }),
+        },
+        await firstAccount(db),
+        run!.id,
+      );
+    await goOn(clock + 15);
+    await raw(db).run('UPDATE model_runs SET cost_usd = 0.01 WHERE id IN (SELECT id FROM model_runs ORDER BY id LIMIT 2)');
+    const { inbox } = (await manage(me)) as { inbox: { going: { startedAt: number } } };
+    expect(inbox).toMatchObject({ going: { listed: true, done: 4, total: 5, spent: 0.02 }, last: null });
+    expect(inbox.going.startedAt).toBeGreaterThanOrEqual(pressed);
+    expect(await importing()).toBe(true);
+
+    await goOn();
+    expect(await importing()).toBe(false);
+    expect(await manage(me)).toMatchObject({ inbox: { going: null, last: { total: 5, spent: 0.02, stopped: false } } });
   });
 
   it('starts once, shows how far it has gone, and stops when asked', async () => {
