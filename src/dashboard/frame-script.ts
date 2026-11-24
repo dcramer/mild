@@ -134,7 +134,9 @@ export const FRAME_SCRIPT = `(() => {
   };
   // Where each mail program starts the history under a reply. Outlook's own app marks it only by a rule over "From:".
   const MARKS = '.gmail_quote, .yahoo_quoted, .protonmail_quote, .moz-cite-prefix, #appendonsend, #divRplyFwdMsg, blockquote[type="cite"], div[style*="border-top"]';
-  const shows = (node) => node.nodeType === 3 ? node.textContent.trim() !== '' : node.nodeType === 1 && (node.textContent.trim() !== '' || node.matches('img') || node.querySelector('img') !== null);
+  const is = (node, selector) => node.nodeType === 1 && node.matches(selector);
+  // Words only: a sender's tracking pixel after the history, which Superhuman and mail trackers put last, is no reply.
+  const shows = (node) => (node.nodeType === 1 || node.nodeType === 3) && node.textContent.trim() !== '';
   // Outlook's history is the message it answers, unquoted, in the blocks after its head.
   const HEADS = '#appendonsend, #divRplyFwdMsg, div[style*="border-top"]';
   const after = (node) => {
@@ -142,12 +144,39 @@ export const FRAME_SCRIPT = `(() => {
     for (let next = node.nextSibling; next; next = next.nextSibling) if (shows(next)) rest.push(next);
     return rest;
   };
+  // A blockquote no program marked starts history only under "On …, Ada <ada@example.org> wrote:", the line before it
+  // back to the last break or block; its nodes, which may be text, a mailto link and text again.
+  const ATTRIBUTION = /^On\\s[\\s\\S]+\\swrote:$/;
+  const attribution = (quote) => {
+    const line = [];
+    for (let node = quote.previousSibling; node; node = node.previousSibling) {
+      if (is(node, 'br')) {
+        if (line.some(shows)) break;
+        continue;
+      }
+      if (node.nodeType !== 1 && node.nodeType !== 3) continue;
+      line.unshift(node);
+      if (node.nodeType === 1 && computed(node).display !== 'inline') break;
+    }
+    return ATTRIBUTION.test(line.map((node) => node.textContent).join('').replace(/\\s+/g, ' ').trim()) ? line : null;
+  };
+  // Where the history starts, and the line that says whose it is, which the quote under it follows.
+  const history = (body) => {
+    for (const mark of body.querySelectorAll(MARKS + ', blockquote')) {
+      if (!mark.matches(MARKS)) {
+        const line = attribution(mark);
+        if (line) return { start: line[0], line };
+      } else if (!mark.matches('div[style*="border-top"]') || /^\\s*From:/.test(mark.textContent)) return { start: mark, line: mark.matches('.moz-cite-prefix') ? [mark] : [] };
+    }
+    return null;
+  };
   const fold = (body) => {
-    const start = [...body.querySelectorAll(MARKS)].find((mark) => !mark.matches('div[style*="border-top"]') || /^\\s*From:/.test(mark.textContent));
-    if (!start) return;
+    const found = history(body);
+    if (!found) return;
+    const { start, line } = found;
     // Only history that ends the message: a reply written between quoted lines needs them.
-    const rest = after(start);
-    if (!start.matches(HEADS) && rest.some((next) => !(start.matches('.moz-cite-prefix') && next.nodeType === 1 && next.matches('blockquote')))) return;
+    const rest = after(start).filter((next) => !(line.length > 0 && (line.includes(next) || is(next, 'blockquote'))));
+    if (!is(start, HEADS) && rest.length > 0) return;
     for (let at = start.parentElement; at && at !== body && at !== root; at = at.parentElement) if (after(at).length > 0) return;
     const before = range();
     before.setStart(body, 0);
