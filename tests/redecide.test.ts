@@ -1,6 +1,7 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
+import { applyFeedback } from '../src/learn/feedback.ts';
+import { pendingSuggestions } from '../src/store/suggestions.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw, withReason } from './fixtures.ts';

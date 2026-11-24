@@ -3,7 +3,7 @@ import { noDecision } from '../../store/messages.ts';
 import { goingInboxRuns } from '../../store/inbox-runs.ts';
 import { outOfTries } from '../../store/runs.ts';
 import type { Sql } from '../../store/sql.ts';
-import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
+import { accuracy, pendingSuggestions } from '../../store/suggestions.ts';
 import { listLabels } from '../../store/labels.ts';
 import { preferences } from '../../store/preferences.ts';
 import { hashOf, openPart } from '../../store/content.ts';

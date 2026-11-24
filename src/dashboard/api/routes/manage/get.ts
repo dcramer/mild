@@ -3,7 +3,7 @@ import { canSend, lastSyncedAt, listAccounts, mailboxAliases, signInEnds } from 
 import { inboxProgress } from '../../../../store/inbox-runs.ts';
 import { copyProgress } from '../../../../store/copies.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
-import { waitingCount } from '../../../../learn/feedback.ts';
+import { waitingCount } from '../../../../store/suggestions.ts';
 import { preferences } from '../../../../store/preferences.ts';
 import { DAY_MS } from '../../../queries/decisions.ts';
 import { listLabelSummaries } from '../../../queries/labels.ts';

@@ -8,7 +8,8 @@ import { listSuggestions, suggestionDetail } from '../src/dashboard/queries/sugg
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { summarize } from '../src/dashboard/queries/summary.ts';
 import { people } from '../src/store/people.ts';
-import { accuracy, applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
+import { applyFeedback } from '../src/learn/feedback.ts';
+import { accuracy, pendingSuggestions } from '../src/store/suggestions.ts';
 import { listAccounts } from '../src/store/accounts.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { recordDecision } from '../src/store/decisions.ts';
