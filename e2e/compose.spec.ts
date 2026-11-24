@@ -481,6 +481,17 @@ test.describe('with Inbox on', () => {
     expect(await page.evaluate('composer')).toEqual({ closing: true, reopened: false });
   });
 
+  test('From lists every mailbox, one Mild may not send from yet too, so which one it goes from can always be seen and changed', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(inboxRows(page).first()).toBeVisible();
+    await page.keyboard.press('c');
+    const writing = composer(page, 'New message');
+    await expect(writing.getByRole('combobox', { name: 'From' })).toContainText(ME);
+    await writing.getByRole('combobox', { name: 'From' }).click();
+    await page.getByRole('option', { name: WORK, exact: true }).click();
+    await expect(writing.getByText(`Mild can’t send from ${WORK} yet`)).toBeVisible();
+  });
+
   test('from a mailbox Google has not let Mild send from, there is nothing to write in, only the press that asks', async ({ page, sift }) => {
     await page.goto('/inbox');
     await switchMailbox(page, WORK);
@@ -756,6 +767,31 @@ test.describe('with Inbox on', () => {
     await sendNow(page, 'Fwd: Notes from the review');
     await expect.poll(() => sift.sent().length).toBe(2);
     expect(sift.sent()[1]!.raw).not.toContain('review-notes.pdf');
+  });
+
+  test('on a phone each line’s name is level with the first of what it holds, and a file sits with the envelope over the text', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await page.goto('/inbox');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    const to = recipients(writing, 'To');
+    await to.input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
+    const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
+    const [label, chip, cc] = [
+      await boxOf(writing.getByRole('group', { name: 'To' }).getByText('To', { exact: true })),
+      await boxOf(to.chip('ada@example.org')),
+      await boxOf(writing.getByRole('button', { name: 'Cc', exact: true })),
+    ];
+    expect(Math.abs(middle(label) - middle(chip))).toBeLessThan(3);
+    expect(Math.abs(middle(cc) - middle(chip))).toBeLessThan(3);
+    const picked = page.waitForEvent('filechooser');
+    await writing.getByRole('button', { name: 'Attach files' }).click();
+    await (await picked).setFiles({ name: 'roof.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 roof') });
+    const files = writing.getByRole('list', { name: 'Attachments' });
+    await expect(files.getByRole('listitem')).toHaveText(['roof.pdf13 bytes']);
+    expect((await boxOf(files)).y).toBeGreaterThan((await boxOf(writing.getByRole('textbox', { name: 'Subject' }))).y);
+    expect((await boxOf(files)).y).toBeLessThan((await boxOf(writing.getByRole('textbox', { name: 'Message' }))).y);
   });
 
   test('on a phone Inbox has the press that writes, it covers the screen, the keyboard is for addresses, and nothing scrolls sideways', async ({ page }) => {

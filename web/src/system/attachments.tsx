@@ -44,13 +44,13 @@ export function AttachButton({ onFiles }: { onFiles: (files: File[]) => void }) 
 }
 
 /**
- * A draft's files, under its text: each its name, its size or how much has uploaded, and a press that takes it off. One
+ * A draft's files, with its envelope over its text: each its name, its size or how much has uploaded, and a press that takes it off. One
  * that failed says why, and is taken off to send.
  */
 export function DraftFiles({ files, onRemove }: { files: readonly DraftFile[]; onRemove: (key: string) => void }) {
   if (files.length === 0) return null;
   return (
-    <ul aria-label="Attachments" className="flex flex-wrap gap-1.5 px-(--gutter) pb-2">
+    <ul aria-label="Attachments" className="flex flex-wrap gap-1.5 px-(--gutter) py-2">
       {files.map((file) => (
         <li key={file.key} className="flex max-w-full flex-col">
           <span className="flex h-7 max-w-full items-center gap-1.5 rounded-(--corner) bg-(--fill) pr-0.5 pl-2 text-sm pointer-coarse:h-9">

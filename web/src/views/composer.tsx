@@ -56,7 +56,7 @@ const forwarding = (subject: string) => (/^fwd?:/i.test(subject.trim()) ? subjec
 const TITLES = { new: 'New message', reply: 'Reply', all: 'Reply to all', forward: 'Forward' } as const;
 
 /**
- * A new message, in a narrow panel over whatever is open: From (when there is more than one address to send as), To, Cc
+ * A new message, in a narrow panel over whatever is open: From (when there is more than one mailbox or address), To, Cc
  * on a press, a subject and the text. What is written is kept in this browser until it is sent or discarded, so closing
  * it, or a reload, loses nothing.
  */
@@ -90,7 +90,8 @@ export function Composer({ to, draft, onClose }: { to: string; draft: string; on
       what={what}
       saved={savedFor(saved.data, what)}
       title={TITLES.new}
-      choices={accounts.filter((a) => a.canSend || a === start).flatMap(addressesOf)}
+      // Every mailbox, so which one it goes from is always in view and can be changed; one Mild may not send from yet says so when chosen.
+      choices={accounts.flatMap(addressesOf)}
       start={emptyDraft(start.email, { to: readAddresses(to).parties })}
       onClose={onClose}
     />
@@ -703,6 +704,8 @@ function Writer({
           <Input bare aria-label="Subject" className="flex-1" value={draft.subject} onChange={(event) => change({ subject: event.target.value })} />
         </DraftLine>
       )}
+      {/* With the envelope, over the text, so they are in view however long the text is and never float under an empty one. */}
+      <DraftFiles files={shownFiles} onRemove={detach} />
       <DraftText
         ref={textField}
         aria-label="Message"
@@ -710,7 +713,6 @@ function Writer({
         value={draft.text}
         onChange={(event) => change({ text: event.target.value })}
       />
-      <DraftFiles files={shownFiles} onRemove={detach} />
     </div>
   );
   if (inline)
