@@ -70,11 +70,12 @@ export function DraftLine({ label, error, children }: { label: string; error?: s
   const id = useId();
   return (
     <div role="group" aria-labelledby={id} className="row group/line flex flex-col px-(--gutter) py-1">
-      <div className="flex min-h-(--control) items-center gap-3">
-        <span id={id} className="w-14 shrink-0 text-sm text-muted-foreground group-focus-within/line:text-foreground">
+      {/* The label and any presses keep to the first line, level with the first of what wraps (To's chips). */}
+      <div className="flex min-h-(--control) items-start gap-3">
+        <span id={id} className="flex min-h-(--control) w-14 shrink-0 items-center text-sm text-muted-foreground group-focus-within/line:text-foreground">
           {label}
         </span>
-        <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
+        <div className="flex min-h-(--control) min-w-0 flex-1 items-start gap-2 [&>*]:min-h-(--control)">{children}</div>
       </div>
       {error ? <p className="pb-1.5 pl-[4.25rem] text-sm text-destructive">{error}</p> : null}
     </div>
