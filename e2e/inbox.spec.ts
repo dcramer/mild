@@ -875,6 +875,36 @@ test.describe('Inbox', () => {
     await expect(inboxRow(page, 'This week in widgets')).toBeVisible();
   });
 
+  test('the check at the start of the bar selects every row and lets them all go, and Mark unread is in its More menu', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(19);
+    const checks = page.getByRole('checkbox', { name: /^Select (?!all$)/ });
+    const total = await checks.count();
+    await checks.first().check();
+    const bar = page.getByRole('toolbar', { name: 'Selected rows' });
+    await expect(bar).toContainText('1 selected');
+    await expect(bar.getByRole('button', { name: 'Mark unread' })).toHaveCount(0);
+
+    const all = bar.getByRole('checkbox', { name: 'Select all' });
+    await all.check();
+    await expect(bar).toContainText(`${total} selected`);
+    for (const check of await checks.all()) await expect(check).toBeChecked();
+
+    const unread = page.waitForResponse('**/api/mail/change');
+    await bar.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Mark unread' }).click();
+    await unread;
+    await expect(bar).toHaveCount(0);
+    await page.goto('/inbox?unread=1');
+    await expect(checks).toHaveCount(total);
+
+    await checks.first().check();
+    await all.check();
+    // The bar goes with the last row, so there is no check left to see unchecked.
+    await all.click();
+    await expect(bar).toHaveCount(0);
+  });
+
   test('when Gmail takes only some of what is selected, the page says the rest failed once it is sent', async ({ page }) => {
     await page.route('**/api/mail/change', async (route) => {
       const reply = (await (await forward(route)).json()) as { actions: number[] };

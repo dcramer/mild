@@ -181,6 +181,15 @@ test.describe('Inbox by touch, on a phone', () => {
     await expect(selected).toHaveCount(0);
   });
 
+  test('Select all on a phone selects every row, and goes once they all are', async ({ page }) => {
+    await page.goto('/inbox');
+    await hold(rowAbout(page, 'Your order has shipped'), page.getByText('1 selected').filter({ visible: true }));
+    const all = page.getByRole('button', { name: 'Select all' }).filter({ visible: true });
+    await all.tap();
+    await expect(page.getByText(/^(?!1 )\d+ selected$/).filter({ visible: true })).toBeVisible();
+    await expect(all).toHaveCount(0);
+  });
+
   test('Select none lets go of every row, and nothing selected on a phone keeps its bar', async ({ page }) => {
     await page.goto('/inbox');
     const selected = page.getByText('1 selected').filter({ visible: true });

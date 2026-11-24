@@ -206,7 +206,7 @@ export function Lists({
 
       <Section
         title="Rows to select"
-        meta="dense: a line of small type each; a check on each row (X on the one the keys are on), which fills it; what to do with them takes the search's place; pointed at, a row's presses take its time's place; more rows load as the end is reached; words typed can be asked"
+        meta="dense: a line of small type each; a check on each row (X on the one the keys are on), which fills it; what to do with them takes the search's place, with a check that selects every row and a menu for what is seldom wanted; pointed at, a row's presses take its time's place; more rows load as the end is reached; words typed can be asked"
       >
         <Sheet className="p-5">
           <ListPage title="Inbox">
@@ -220,9 +220,11 @@ export function Lists({
               selected={{
                 count: picked.size,
                 clear: () => setPicked(new Set()),
+                all: { total: ROWS.length, select: () => setPicked(new Set(ROWS.map((row) => row.address))) },
                 actions: [
                   { label: 'Archive', key: 'e', onPress: () => toast(`Archived ${picked.size}`) },
                   { label: 'Mark read', key: 'Shift+i', onPress: () => toast(`Marked ${picked.size} read`) },
+                  { label: 'Mark unread', key: 'Shift+u', onPress: () => toast(`Marked ${picked.size} unread`), tucked: true },
                 ],
               }}
             >
