@@ -1,5 +1,6 @@
 import type { Api, AssistantMessage, Context, Message, Model, Models } from '@earendil-works/pi-ai';
 import { type Attributes, type Traced, traced } from '../telemetry.ts';
+import type { Usage } from '../triage/stages/model.ts';
 import type { Reasoning } from './reasoning.ts';
 
 /** Why the model stopped, as OpenTelemetry says it. */
@@ -36,6 +37,14 @@ function answered(message: AssistantMessage): Attributes {
       : {}),
   };
 }
+
+/** What a call cost, as Mild records it. Cached tokens count in the input. */
+export const usageOf = (model: Model<Api>, message: AssistantMessage): Usage => ({
+  model: `${model.provider}/${model.id}`,
+  inputTokens: message.usage.input + message.usage.cacheRead + message.usage.cacheWrite,
+  outputTokens: message.usage.output,
+  costUsd: message.usage.cost.total,
+});
 
 /** A message in OpenTelemetry's GenAI form: its role, and its parts. */
 const otelMessage = (message: Message) => ({

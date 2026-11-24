@@ -1,7 +1,7 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
 import { DRAFT_ACTIONS, MAX_DRAFTS, PROPOSAL_PROMPT, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../triage/proposal.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
-import { chat, executeTool } from './chat.ts';
+import { chat, executeTool, usageOf } from './chat.ts';
 import type { Reasoning } from './reasoning.ts';
 
 /** One attempt, as for the judge; the person asks again. Longer, since it writes several labels. */
@@ -56,12 +56,7 @@ export function createProposer(models: Models, model: Model<Api>, reasoning: Rea
     } catch (error) {
       return { failed: failure(error) };
     }
-    const usage = {
-      model: `${model.provider}/${model.id}`,
-      inputTokens: message.usage.input + message.usage.cacheRead + message.usage.cacheWrite,
-      outputTokens: message.usage.output,
-      costUsd: message.usage.cost.total,
-    };
+    const usage = usageOf(model, message);
     if (message.stopReason === 'error' || message.stopReason === 'aborted') return { failed: failure(message.errorMessage ?? message.stopReason), usage };
     const proposed = message.content.find((block) => block.type === 'toolCall' && block.name === PROPOSAL_TOOL);
     return await executeTool(PROPOSAL_TOOL, proposed?.type === 'toolCall' ? proposed.id : undefined, async (span) => {

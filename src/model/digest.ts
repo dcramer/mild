@@ -1,7 +1,7 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
 import { HIGHLIGHT_PROMPT, HIGHLIGHT_TOOL, type Highlighter, MAX_HIGHLIGHTS, buildHighlightPrompt, readHighlights } from '../triage/digest.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
-import { chat, executeTool } from './chat.ts';
+import { chat, executeTool, usageOf } from './chat.ts';
 import type { Reasoning } from './reasoning.ts';
 
 /** One attempt, as for the judge: a digest that fails goes without highlights rather than wait. */
@@ -51,12 +51,7 @@ export function createHighlighter(models: Models, model: Model<Api>, reasoning: 
     } catch (error) {
       return { failed: failure(error) };
     }
-    const usage = {
-      model: `${model.provider}/${model.id}`,
-      inputTokens: message.usage.input + message.usage.cacheRead + message.usage.cacheWrite,
-      outputTokens: message.usage.output,
-      costUsd: message.usage.cost.total,
-    };
+    const usage = usageOf(model, message);
     if (message.stopReason === 'error' || message.stopReason === 'aborted') return { failed: failure(message.errorMessage ?? message.stopReason), usage };
     const call = message.content.find((block) => block.type === 'toolCall' && block.name === HIGHLIGHT_TOOL);
     return await executeTool(HIGHLIGHT_TOOL, call?.type === 'toolCall' ? call.id : undefined, async (span) => {
