@@ -18,7 +18,7 @@ import { period } from '@/lib/format.ts';
 import { proposalKey, threadKey } from '@/lib/rows.ts';
 import { useParam } from '@/lib/params.ts';
 import { Callout, Check, Empty, Failure, FilterGroup, Heads, ListView, More, Note, Table, Td, Th, TrGroup, useNow, Loading, Blank, OnPhone } from '@/system';
-import { useManage, useSuggestions, readScreenAhead } from '@/lib/api/reads.ts';
+import { useManage, useSuggestions, readTopAhead } from '@/lib/api/reads.ts';
 import { useConversations } from './conversations.ts';
 import { useHands } from './hands.ts';
 import { type Listed, newest, useRows } from './listed.ts';
@@ -34,9 +34,6 @@ const VIEWS = [
   ['sorted', 'Sorted'],
   ['drafts', 'Drafts'],
 ] as const satisfies readonly (readonly [Shown, string])[];
-
-/** The top of the inbox, whose text is read ahead in one call: about 40 ms of the server's time a message, so not all that is drawn. */
-const READ_AHEAD = 10;
 
 const NO_LABELS: readonly AnswerLabel[] = [];
 
@@ -90,7 +87,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const now = useNow();
   const periods = byPeriod(threads, now);
   const refs = threads.map((t) => ({ ...newest(t), subject: t.subject, threadId: t.threadId }));
-  useEffect(() => readScreenAhead(refs.slice(0, READ_AHEAD)));
+  useEffect(() => readTopAhead(refs));
   const { selected, setSelected, hands } = useHands({ threads, refs, press, block });
   const chosen = threads.filter((t) => selected.has(threadKey(t)));
   const act = (what: 'archive' | 'spam' | 'read' | 'unread') => press(chosen, what, () => setSelected(new Set()));

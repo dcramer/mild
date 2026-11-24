@@ -29,6 +29,24 @@ test.describe('For review', () => {
     await expect(ruleDialog(page)).toContainText('grace@example.net');
   });
 
+  test('a message at the top opens whole on its first draw, its text read ahead in one call', async ({ page }) => {
+    const ahead = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/messages');
+    await page.goto('/');
+    await expect(reviewRows(page).first()).toBeVisible();
+    expect((await ahead).status()).toBe(200);
+    // One opened and closed first, so the reader's code is here however busy the machine: it is loaded as the page starts.
+    // Not beside the one opened next, which the reader reads ahead.
+    await openMessage(page, 'Disk 91% full on db-2');
+    await page.keyboard.press('Escape');
+    await expect(reader(page)).toHaveCount(0);
+    await page.evaluate(
+      `window.drewLoading = false; new MutationObserver(() => { if (document.querySelector('[aria-label="Loading"]')) window.drewLoading = true; }).observe(document.body, { subtree: true, childList: true })`,
+    );
+    await row(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    await expect(reader(page).getByText('Are you free for lunch on Thursday?')).toBeVisible();
+    expect(await page.evaluate('window.drewLoading')).toBe(false);
+  });
+
   test('adding a label from a row opens only the dialog, and leaves the page as it was', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Notes from the review'), 'Add a label…');

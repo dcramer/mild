@@ -3,7 +3,7 @@ import { messageDetail } from '../../../queries/messages.ts';
 import { MessagesAhead } from '../../../types.ts';
 import { ok, read } from '../../route.ts';
 
-/** As many as Inbox reads ahead (`READ_AHEAD`, web/src/views/inbox/index.tsx), with room to grow. */
+/** As many as a list reads ahead (`READ_AHEAD`, web/src/lib/api/reads.ts), with room to grow. */
 const AT_MOST = 30;
 
 /** Messages read ahead of a press that opens one, in one call rather than one a row. One the person cannot read is left out. */

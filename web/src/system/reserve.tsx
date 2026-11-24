@@ -1,14 +1,15 @@
 'use client';
 import { type ReactNode, useEffect, useRef } from 'react';
-import { EMPTY } from '@/lib/before-paint.ts';
+import { ROOMS } from '@/lib/before-paint.ts';
 
-function remember(id: string, empty: boolean) {
+/** Kept as `{ id: [width, height] }`: the window's width when the height was measured. */
+function remember(id: string, height: number) {
   try {
-    const kept = new Set((window.localStorage.getItem(EMPTY) ?? '').split(',').filter(Boolean));
-    if (kept.has(id) === empty) return;
-    if (empty) kept.add(id);
-    else kept.delete(id);
-    window.localStorage.setItem(EMPTY, [...kept].join(','));
+    const rooms = JSON.parse(window.localStorage.getItem(ROOMS) ?? '{}') as Record<string, [number, number]>;
+    const [width, held] = rooms[id] ?? [];
+    if (width === window.innerWidth && held === height) return;
+    rooms[id] = [window.innerWidth, height];
+    window.localStorage.setItem(ROOMS, JSON.stringify(rooms));
   } catch {
     // Storage is a convenience: without it the next visit holds the usual room.
   }
@@ -20,9 +21,10 @@ function remember(id: string, empty: boolean) {
  * chart, a notice that may or may not be there.
  *
  * `room` is its usual height on a narrow and on a wide screen, as classes (`min-h-[386px] lg:min-h-[206px]`), so the
- * server's page holds it too. A part that held nothing the last time it filled in, in this browser, holds no room (Mild
- * is on, so there is no "Mild is off"): that is kept under `id`, and the page's head lets it go before anything is
- * drawn (`web/src/lib/before-paint.ts`). `placeholder` is drawn while waiting and must fit inside the room.
+ * server's page holds it too. Once it has filled in, in this browser, it holds the height it filled instead, kept under
+ * `id` and set by the page's head before anything is drawn (`web/src/lib/before-paint.ts`): none for a part that held
+ * nothing (Mild is on, so there is no "Mild is off"), and the exact height at the same width, so what is below it does
+ * not move when it fills in again. `placeholder` is drawn while waiting and must fit inside the room.
  */
 export function Reserve({
   id,
@@ -42,7 +44,7 @@ export function Reserve({
   useEffect(() => {
     const element = ref.current;
     if (!ready || !element) return;
-    const keep = () => remember(id, element.offsetHeight === 0);
+    const keep = () => remember(id, element.getBoundingClientRect().height);
     keep();
     const observer = new ResizeObserver(keep);
     observer.observe(element);

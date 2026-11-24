@@ -46,11 +46,15 @@ export const useMessage = (accountId: string, messageId: string | null) =>
 export const readMessageAhead = (accountId: string, messageId: string, onRest = false) =>
   (onRest ? readAheadOnRest : readAhead)(keys.message(accountId, messageId), (signal) => api.message(messageId, signal, accountId));
 
+/** How many messages at the top of a list are read ahead: about 40 ms of the server's time each, so not all a list draws. */
+const READ_AHEAD = 10;
+
 /**
- * The top of Inbox read ahead in one call, so opening any of it waits on nothing: each message is kept as
- * `useMessage` reads it. One asked for in the last minute is not asked for again, whatever came of it.
+ * The top of a list (Inbox, For review) read ahead in one call, so opening any of it waits on nothing: each message is
+ * kept as `useMessage` reads it. One asked for in the last minute is not asked for again, whatever came of it.
  */
-export function readScreenAhead(refs: readonly { accountId: string; messageId: string }[]): void {
+export function readTopAhead(list: readonly { accountId: string; messageId: string }[]): void {
+  const refs = list.slice(0, READ_AHEAD);
   const now = Date.now();
   const client = queryClientFor();
   const due = refs.filter(({ accountId, messageId }) => {
