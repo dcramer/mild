@@ -185,6 +185,15 @@ describe('a message opened from Inbox', () => {
 });
 
 describe('what Inbox says Mild thinks', () => {
+  it('is about the newest message still in the inbox, which keeps the conversation there', async () => {
+    await recordDecision(db, ACCOUNT, 'q', { ...base, disposition: 'review', labelId: 'newsletter', confidence: 0.95 }, { now: 310 });
+    await recordDecision(db, ACCOUNT, 'reply', { ...base, disposition: 'archive', labelId: 'newsletter', confidence: 0.95 }, { now: 320 });
+    await recordLabels(db, ACCOUNT, 'reply', []);
+    const [lunch] = (await list()).threads;
+    expect(lunch).toMatchObject({ threadId: 'lunch', thinks: { messageId: 'q', disposition: 'review', labelId: 'newsletter' } });
+    expect((await list({ view: 'sorted' })).threads.map((t) => t.threadId)).toEqual(['news']);
+  });
+
   it('is the reader’s own answer where they gave one', async () => {
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'ada@example.org', label: 'newsletter', disposition: 'keep', messageId: 'reply', via: 'gmail' }, 400);
     const [lunch] = (await list({ view: 'all', label: 'newsletter' })).threads;

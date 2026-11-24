@@ -146,7 +146,7 @@ function Place({ thread }: { thread: Listed }) {
 /** Mild looked at the newest message and could not say which label it is. */
 const unplaced = (t: Listed) => t.thinks?.disposition === 'review' && t.thinks.labelId === null;
 
-/** What Mild thinks the newest message is, as a dropdown that says it otherwise (`useListAnswer`). Mail Mild never placed is answered all the same. */
+/** What Mild thinks the conversation is, as a dropdown that says it otherwise (`useListAnswer`). Mail Mild never placed is answered all the same. */
 function Label({ thread, labels, ending }: { thread: Listed; labels: readonly AnswerLabel[]; ending: Ending }) {
   const answer = useListAnswer(labels);
   const { thinks } = thread;
@@ -155,7 +155,7 @@ function Label({ thread, labels, ending }: { thread: Listed; labels: readonly An
     threadId: thread.threadId,
     sender: reveal(thread.from),
     subject: reveal(thread.subject),
-    messageId: newest(thread).messageId,
+    messageId: thinks?.messageId ?? newest(thread).messageId,
     labelId: thinks?.labelId ?? null,
     ...(thinks ? { decisionId: thinks.decisionId } : {}),
   };
@@ -179,7 +179,7 @@ function LabelSheetFor({ thread, labels, ending, onClose }: { thread: Listed; la
     threadId: thread.threadId,
     sender: reveal(thread.from),
     subject: reveal(thread.subject),
-    messageId: newest(thread).messageId,
+    messageId: thinks?.messageId ?? newest(thread).messageId,
     labelId: thinks?.labelId ?? null,
     ...(thinks ? { decisionId: thinks.decisionId } : {}),
   };

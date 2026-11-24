@@ -5,7 +5,7 @@ import type { Account } from '../store/accounts.ts';
 import { currentDecision } from '../store/decisions.ts';
 import { isOwnDigest } from '../store/digests.ts';
 import { type InboxRun, addListed, advanceInboxRun, goingInboxRun, isGoing, stopInboxRuns } from '../store/inbox-runs.ts';
-import { queuedMessage, recordFromInbox, recordedInbox } from '../store/messages.ts';
+import { laterInInbox, queuedMessage, recordFromInbox, recordedInbox } from '../store/messages.ts';
 import { copied } from '../store/copies.ts';
 import type { Sql } from '../store/sql.ts';
 import { applyTo, inboxQuery, rulesWith } from './apply.ts';
@@ -106,7 +106,7 @@ export async function continueRuleRun(
   return await goThroughSlice(db, run, now, out, async (id) => (await applyTo(db, { api, mailbox }, given, id, now), false));
 }
 
-/** One message of a run, decided again unless it is left as it is. */
+/** One message of a run, decided again unless it is left as it is, or a later one of its conversation speaks for it. */
 async function goThrough(deps: Deps, decider: Awaited<ReturnType<typeof deciderFor>>, run: InboxRun, messageId: string): Promise<Decided | 'left'> {
   const { db } = deps;
   const prior = await currentDecision(db, run.accountId, messageId);
@@ -121,6 +121,8 @@ async function goThrough(deps: Deps, decider: Awaited<ReturnType<typeof deciderF
     listed = await queuedMessage(db, run.accountId, messageId);
     if (!listed) return 'left';
   }
+  // A conversation is decided once, by its newest message in the inbox, whose archive takes this one with it.
+  if (await laterInInbox(db, run.accountId, messageId)) return 'left';
   // The run's own word on whether to act: Mild was on at the press, and (through `deps.mailbox`) is still on.
   return await decider.decide(
     { ...listed, suggestOnly: !run.acts },

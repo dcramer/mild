@@ -280,6 +280,13 @@ test.describe('Inbox', () => {
   });
 
   test('a row’s label menu stays open while what Mild thinks of the row changes, and takes the pick', async ({ page }) => {
+    // The page reads the reply ahead, as it would a real one: it is the order's text.
+    await page.route('**/api/message**', (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('id') !== 'm3-reply') return route.fallback();
+      url.searchParams.set('id', 'm3');
+      return route.fallback({ url: url.toString() });
+    });
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');
     await pointAt(row);
@@ -354,6 +361,13 @@ test.describe('Inbox', () => {
   });
 
   test('a row’s label menu stays under its label while the pointer moves into it', async ({ page }) => {
+    // The page reads the reply ahead, as it would a real one: it is the order's text.
+    await page.route('**/api/message**', (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('id') !== 'm3-reply') return route.fallback();
+      url.searchParams.set('id', 'm3');
+      return route.fallback({ url: url.toString() });
+    });
     await page.goto('/inbox');
     const row = inboxRow(page, 'Your order has shipped');
     await pointAt(row);
@@ -366,6 +380,41 @@ test.describe('Inbox', () => {
     expect(list.y).toBeGreaterThanOrEqual(under.y + under.height);
     expect(list.x).toBeGreaterThanOrEqual(under.x);
     expect(list.x).toBeLessThan(under.x + under.width);
+  });
+
+  test('a row’s label answers for the newest message still in the inbox, not a newer one that has left it', async ({ page }) => {
+    type Copied = { messages: { messageId: string; receivedAt: number; labelIds: string[] }[] };
+    // A reply that has left the inbox, after the order that keeps the conversation there.
+    await patchJson(page, '**/api/sync*', (sync: { conversations: { conversation: Copied | null }[] }) => ({
+      ...sync,
+      conversations: sync.conversations.map((c) => {
+        const order = c.conversation?.messages.find((m) => m.messageId === 'm3');
+        if (!c.conversation || !order) return c;
+        return {
+          ...c,
+          conversation: {
+            ...c.conversation,
+            messages: [...c.conversation.messages, { ...order, messageId: 'm3-reply', receivedAt: order.receivedAt + 60_000, labelIds: [] }],
+          },
+        };
+      }),
+    }));
+    // The page reads the reply ahead, as it would a real one: it is the order's text.
+    await page.route('**/api/message**', (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('id') !== 'm3-reply') return route.fallback();
+      url.searchParams.set('id', 'm3');
+      return route.fallback({ url: url.toString() });
+    });
+    await page.goto('/inbox');
+    const row = inboxRow(page, 'Your order has shipped');
+    await pointAt(row);
+    const label = row.getByRole('combobox', { name: 'What Your order has shipped is' });
+    await expect(label).toContainText('Receipts');
+    const saved = page.waitForRequest('**/api/feedback');
+    await label.click();
+    await page.getByRole('option', { name: 'Personal', exact: true }).click();
+    expect((await saved).postDataJSON()).toMatchObject({ messageId: 'm3', label: 'personal' });
   });
 
   test('the reader’s answer is saved and the conversation stays open', async ({ page }) => {

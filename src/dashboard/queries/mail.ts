@@ -78,6 +78,11 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
       threadId: messages.threadId,
       newestAt: sql<number>`max(${messages.receivedAt})`.mapWith(Number).as('newest_at'),
       newestId: sql<string>`(array_agg(${messages.id} ORDER BY ${messages.receivedAt} DESC, ${messages.id} DESC))[1]`.as('newest_id'),
+      // What the row speaks for: the newest in the inbox, which keeps it there (`aboutOf`, queries/sync.ts).
+      aboutId: sql<string>`coalesce(
+        (array_agg(${messages.id} ORDER BY ${messages.receivedAt} DESC, ${messages.id} DESC) FILTER (WHERE ${has(messages.labelIds, 'INBOX')}))[1],
+        (array_agg(${messages.id} ORDER BY ${messages.receivedAt} DESC, ${messages.id} DESC))[1]
+      )`.as('about_id'),
       unread: sql<boolean>`bool_or(${has(messages.labelIds, 'UNREAD')})`.as('unread'),
       inInbox: sql<boolean>`bool_or(${has(messages.labelIds, 'INBOX')})`.as('in_inbox'),
       sent: sql<boolean>`bool_and(${has(messages.labelIds, 'SENT')})`.as('sent'),
@@ -133,6 +138,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
       unread: threads.unread,
       inInbox: threads.inInbox,
       sent: threads.sent,
+      aboutId: threads.aboutId,
       decisionId: decisions.id,
       answered: sql<boolean>`${answered}`,
       disposition,
@@ -145,7 +151,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
     .from(threads)
     .leftJoin(
       decisions,
-      and(eq(decisions.accountId, threads.accountId), eq(decisions.messageId, threads.newestId), isCurrent(db, threads.accountId, threads.newestId)),
+      and(eq(decisions.accountId, threads.accountId), eq(decisions.messageId, threads.aboutId), isCurrent(db, threads.accountId, threads.aboutId)),
     )
     .leftJoin(feedback, eq(feedback.decisionId, decisions.id))
     .where(
@@ -218,6 +224,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
             ? null
             : {
                 decisionId: r.decisionId,
+                messageId: r.aboutId,
                 disposition: r.answered ? r.disposition! : r.block ? 'block' : r.digest ? 'digest' : r.disposition!,
                 labelId: r.labelId,
                 labelName: (r.labelId && names.get(r.labelId)) ?? null,

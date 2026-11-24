@@ -114,34 +114,45 @@ export async function recordedThread(db: Sql, accountId: string, threadId: strin
     .orderBy(asc(messages.receivedAt), asc(messages.id));
 }
 
+/** The recorded messages of `messageId`'s conversation, oldest first as Inbox orders them, or null when it is not recorded. */
+async function conversationOf(db: Sql, accountId: string, messageId: string) {
+  const [self] = await db
+    .select({ threadId: messages.threadId })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
+  if (!self) return null;
+  const thread = await db
+    .select({ id: messages.id, labelIds: messages.labelIds, headers: messages.headers })
+    .from(messages)
+    .where(and(eq(messages.accountId, accountId), eq(messages.threadId, self.threadId)))
+    .orderBy(asc(messages.receivedAt), asc(messages.id));
+  const at = thread.findIndex((m) => m.id === messageId);
+  return { all: thread, earlier: thread.slice(0, at), later: thread.slice(at + 1) };
+}
+
+/** Whether a later message of `messageId`'s conversation is in the inbox: that one speaks for the conversation, and this goes with it. */
+export async function laterInInbox(db: Sql, accountId: string, messageId: string): Promise<boolean> {
+  return (await conversationOf(db, accountId, messageId))?.later.some((m) => m.labelIds.includes('INBOX')) ?? false;
+}
+
+/** The senders of the earlier messages of `messageId`'s conversation still in the inbox, which an archive of it would take too. */
+export async function earlierSenders(db: Sql, accountId: string, messageId: string): Promise<string[]> {
+  const earlier = (await conversationOf(db, accountId, messageId))?.earlier.filter((m) => m.labelIds.includes('INBOX')) ?? [];
+  return [...new Set(earlier.map((m) => plain(openEnvelope(db, accountId, m.id, { headers: m.headers }).fromAddress)))];
+}
+
 /**
  * The earlier messages of `messageId`'s conversation that Mild has recorded in the inbox and that may leave it with it, each
- * with its sender: not one the person answered for, nor one Mild left for review. None when the owner wrote in the
+ * with its sender: not one the person answered for, since an answer is theirs. None when the owner wrote in the
  * conversation, as the record or the thread's facts show, since the model may not hide such a conversation either.
  */
 export async function earlierInInbox(db: Sql, accountId: string, messageId: string): Promise<{ id: string; fromAddress: string }[]> {
-  const [self] = await db
-    .select({ threadId: messages.threadId, receivedAt: messages.receivedAt })
-    .from(messages)
-    .where(and(eq(messages.accountId, accountId), eq(messages.id, messageId)));
-  if (!self) return [];
-  const thread = await db
-    .select({ id: messages.id, receivedAt: messages.receivedAt, labelIds: messages.labelIds, headers: messages.headers })
-    .from(messages)
-    .where(and(eq(messages.accountId, accountId), eq(messages.threadId, self.threadId)));
-  if (thread.some((m) => m.labelIds.includes('SENT')) || (await storedFacts(db, accountId, messageId))?.ownerInThread) return [];
-  // Older as Inbox orders a conversation, whose newest it shows.
-  const earlier = thread.filter(
-    (m) => m.labelIds.includes('INBOX') && (m.receivedAt < self.receivedAt || (m.receivedAt === self.receivedAt && m.id < messageId)),
-  );
+  const conversation = await conversationOf(db, accountId, messageId);
+  if (!conversation) return [];
+  if (conversation.all.some((m) => m.labelIds.includes('SENT')) || (await storedFacts(db, accountId, messageId))?.ownerInThread) return [];
+  const earlier = conversation.earlier.filter((m) => m.labelIds.includes('INBOX'));
   if (earlier.length === 0) return [];
   const ids = earlier.map((m) => m.id);
-  const decided = await db
-    .select({ id: decisions.id, messageId: decisions.messageId, disposition: decisions.disposition })
-    .from(decisions)
-    .where(and(eq(decisions.accountId, accountId), inArray(decisions.messageId, ids)))
-    .orderBy(asc(decisions.id));
-  const latest = new Map(decided.map((d) => [d.messageId, d.disposition] as const));
   const answered = new Set(
     (
       await db
@@ -152,7 +163,7 @@ export async function earlierInInbox(db: Sql, accountId: string, messageId: stri
     ).map((r) => r.messageId),
   );
   return earlier
-    .filter((m) => latest.get(m.id) !== 'review' && !answered.has(m.id))
+    .filter((m) => !answered.has(m.id))
     .map((m) => ({ id: m.id, fromAddress: plain(openEnvelope(db, accountId, m.id, { headers: m.headers }).fromAddress) }));
 }
 

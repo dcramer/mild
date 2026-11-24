@@ -12,7 +12,7 @@ import { previewsOf } from './mail.ts';
  * The version of what a record holds. A cursor carries it, so a page holding records of another shape starts again: raise
  * it whenever `SyncedConversation` changes.
  */
-const SHAPE = 1;
+const SHAPE = 2;
 /** Changed conversations a reply carries at most. */
 const CHANGES = 500;
 /** Conversations a page of the whole copy carries: each is read whole, with its messages' headers opened. */
@@ -144,9 +144,10 @@ async function conversations(db: Sql, scope: Scope, wanted: readonly { accountId
     scope,
     held.flatMap((c) => c.all.map((m) => [c.accountId, m.id] as const)),
   );
+  const about = new Map(held.map((c) => [key(c.accountId, c.threadId), aboutOf(c.all)] as const));
   const thinks = await thinksOf(
     db,
-    held.map((c) => [c.accountId, c.all.at(-1)!.id] as const),
+    held.map((c) => [c.accountId, about.get(key(c.accountId, c.threadId))!] as const),
   );
   const values = new Map(
     held.map((c): [string, SyncedConversation] => [
@@ -166,12 +167,18 @@ async function conversations(db: Sql, scope: Scope, wanted: readonly { accountId
             preview: previews.get(key(m.accountId, m.id)) ?? null,
           };
         }),
-        thinks: thinks.get(key(c.accountId, c.all.at(-1)!.id)) ?? null,
+        thinks: thinks.get(key(c.accountId, about.get(key(c.accountId, c.threadId))!)) ?? null,
       },
     ]),
   );
   return wanted.map((w) => ({ accountId: w.accountId, threadId: w.threadId, conversation: values.get(key(w.accountId, w.threadId)) ?? null }));
 }
+
+/**
+ * The message a conversation's row speaks for: its newest in the inbox, which keeps it there. A newer one Mild archived
+ * has gone, and its decision would show a label whose action has happened while the conversation stays.
+ */
+const aboutOf = (all: readonly { id: string; labelIds: readonly string[] }[]) => (all.findLast((m) => m.labelIds.includes('INBOX')) ?? all.at(-1)!).id;
 
 /** What Mild thinks of each message: its latest decision, or the person's answer about it where they gave one. */
 async function thinksOf(db: Sql, newest: readonly (readonly [string, string])[]) {
@@ -207,6 +214,7 @@ async function thinksOf(db: Sql, newest: readonly (readonly [string, string])[])
     const answered = r.answerId !== null;
     thinks.set(key(r.accountId, r.messageId), {
       decisionId: r.decisionId,
+      messageId: r.messageId,
       disposition: answered ? r.answerDisposition! : r.block ? 'block' : r.digest ? 'digest' : r.disposition,
       labelId: answered ? r.answerLabelId : r.labelId,
       stage: r.stage,

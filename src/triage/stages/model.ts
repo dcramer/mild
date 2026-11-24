@@ -25,6 +25,11 @@ export interface Evidence {
   };
   /** The same for everyone at the sender's domain. Absent for a domain anyone can get an address at. */
   domain?: { messages: number; senders: number; standing: Standing; why: string; ownerLabels: { id: string; messages: number }[] };
+  /**
+   * The earlier messages of its conversation still in the inbox, which hiding it would take too: whether the owner has
+   * written to any of their other senders, null if that could not be checked. Absent when there are none.
+   */
+  conversation?: { writtenTo: boolean | null };
   /** What the owner's rule says this sender's mail usually is. The model may find this message is something else. */
   prior?: { labelId: string; labelName: string; when?: string };
 }
@@ -177,6 +182,21 @@ export function modelStage(deps: ModelStageDeps): Stage<Decision | Unfinished> {
           ...(label.gmailLabel ? { gmailLabel: label.gmailLabel } : {}),
           reason: `${unusual}${label.name}, but you have written in this thread: ${verdict.reason}`,
         };
+
+      // Nor one that would take with it earlier mail from someone the owner has written to.
+      if (hides && evidence.conversation && evidence.conversation.writtenTo !== false) {
+        const why =
+          evidence.conversation.writtenTo === null
+            ? 'could not check whether you have written to the senders of the earlier messages in this conversation'
+            : 'an earlier message in this conversation is from someone you have written to';
+        return {
+          ...base,
+          disposition: 'review',
+          labelId: label.id,
+          ...(label.gmailLabel ? { gmailLabel: label.gmailLabel } : {}),
+          reason: `${unusual}${label.name}, but ${why}: ${verdict.reason}`,
+        };
+      }
 
       if ((verdict.confidence ?? 0) < SURE)
         return {
