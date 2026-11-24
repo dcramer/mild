@@ -25,7 +25,7 @@ function savedFor(saved: ReturnType<typeof useDrafts>['data'], what: Writing): S
 }
 
 /**
- * A new message, in a narrow panel over whatever is open: From (when there is more than one address to send as), To, Cc
+ * A new message, in a narrow panel over whatever is open: From (when there is more than one mailbox or address), To, Cc
  * on a press, a subject and the text. What is written is kept in this browser until it is sent or discarded, so closing
  * it, or a reload, loses nothing. `to` someone already, from their page; `draft` names it, made as it opened.
  */
@@ -44,7 +44,8 @@ export function Composer({ to, draft, onClose }: { to: string; draft: string; on
       what={what}
       saved={savedFor(saved.data, what)}
       title={TITLES.new}
-      choices={accounts.filter((a) => a.canSend || a === start).flatMap(addressesOf)}
+      // Every mailbox, so which one it goes from is always in view and can be changed; one Mild may not send from yet says so when chosen.
+      choices={accounts.flatMap(addressesOf)}
       start={emptyDraft(start.email, { to: readAddresses(to).parties })}
       onClose={onClose}
     />
