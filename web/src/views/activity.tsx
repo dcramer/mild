@@ -3,7 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog } from '@/components/mail-log.tsx';
-import { type Days, type DecisionRow, type Summary, api, useLoaded } from '@/lib/api.ts';
+import { type Days, type DecisionRow, type Summary, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { paramNow, setParams, useParam } from '@/lib/params.ts';
 import {
   FACT_FILTER_OPTIONS,

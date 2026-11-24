@@ -1,5 +1,5 @@
 import { type DBSchema, type IDBPDatabase, deleteDB, openDB } from 'idb';
-import { api } from './api.ts';
+import { api } from './api/endpoints.ts';
 import { BUILT } from './build.ts';
 import { timed } from './trace.ts';
 

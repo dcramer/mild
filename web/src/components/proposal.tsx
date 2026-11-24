@@ -1,7 +1,7 @@
 'use client';
 import { MatchWords } from '@/components/sender.tsx';
 import { NamedLabel } from '@/components/bits.tsx';
-import type { Suggestions } from '@/lib/api.ts';
+import type { Suggestions } from '@/lib/api/endpoints.ts';
 import { count, outcomeName } from '@/lib/format.ts';
 import { reveal } from '@/lib/reveal.ts';
 

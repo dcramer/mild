@@ -1,5 +1,6 @@
 'use client';
-import { api, useLoaded } from '@/lib/api.ts';
+import { api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { type Writing, useCompose } from '@/lib/compose.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { dateTime } from '@/lib/format.ts';

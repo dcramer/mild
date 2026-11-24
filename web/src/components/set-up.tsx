@@ -2,7 +2,8 @@
 import { ArrowRightIcon, ArrowUpRightIcon, PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { type Next, ProviderList, providerName, useProviderConnect } from '@/components/model-connect.tsx';
-import { type LabelProposal, type ManageState, api, useLoaded } from '@/lib/api.ts';
+import { type LabelProposal, type ManageState, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { signOut } from '@/lib/sign-out.ts';
 import { useAction } from '@/lib/action.ts';
 import { count } from '@/lib/format.ts';

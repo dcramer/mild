@@ -1,7 +1,7 @@
 'use client';
 import { messageKey } from '@/lib/params.ts';
 import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
-import type { DecisionRow, ListedDecision } from '@/lib/api.ts';
+import type { DecisionRow, ListedDecision } from '@/lib/api/endpoints.ts';
 import { INBOX, clock, dateTime, dayName, happened, status } from '@/lib/format.ts';
 import { Heads, Blank, Button, Does, Loading, Marked, OnPhone, RowActions, Sub, Table, Td, Th, Tr, TrGroup, LabelName } from '@/system';
 import type { OpenMessages } from '@/lib/open-messages.ts';

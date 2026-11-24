@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { onBuild } from './api.ts';
+import { onBuild } from './api/client.ts';
 
 /** The build this page came with (next.config.js). */
 export const BUILT = process.env.MILD_BUILD ?? null;

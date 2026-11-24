@@ -1,7 +1,8 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect } from 'react';
-import { api, useLoaded } from '@/lib/api.ts';
+import { api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 
 /**
  * The terms, privacy policy and security page exist only on a Mild run as a service (`MILD_CLOUD`), which the page

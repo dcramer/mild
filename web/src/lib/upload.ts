@@ -1,4 +1,4 @@
-import { api } from './api.ts';
+import { api } from './api/endpoints.ts';
 import { holdReload } from './build.ts';
 
 /** A piece is sent again this many times before the file is said to have failed. */

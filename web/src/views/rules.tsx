@@ -2,7 +2,8 @@
 import { ArrowRightIcon, FunnelIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, NamedLabel } from '@/components/bits.tsx';
-import { type RuleSummary, api, useLoaded } from '@/lib/api.ts';
+import { type RuleSummary, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { useOpened, useParam } from '@/lib/params.ts';
 import { filterStanding } from '@/views/gmail-filter.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';

@@ -2,7 +2,8 @@
 import { PlusIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { ErrorNote, NamedLabel } from '@/components/bits.tsx';
-import { type LabelSummary, api, useLoaded } from '@/lib/api.ts';
+import { type LabelSummary, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { useOpened } from '@/lib/params.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { INBOX, count, percent } from '@/lib/format.ts';

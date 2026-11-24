@@ -1,5 +1,5 @@
 'use client';
-import { api } from '@/lib/api.ts';
+import { api } from '@/lib/api/endpoints.ts';
 import { useAction } from '@/lib/action.ts';
 import { copiedKey, leftInbox } from '@/lib/copy.ts';
 import { ACTIONS, INBOX, MOVES_OUT, labelDid, plural } from '@/lib/format.ts';

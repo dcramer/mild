@@ -1,6 +1,8 @@
 import { onlineManager } from '@tanstack/react-query';
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
-import { api, failure, queryClientFor } from './api.ts';
+import { api } from './api/endpoints.ts';
+import { failure } from './api/client.ts';
+import { queryClientFor } from './api/query.ts';
 import { changeCopied, copied, copiedKey, opened } from './copy.ts';
 import { type Sealed, device, seal, unseal } from './device.ts';
 import { reportError } from './telemetry.ts';

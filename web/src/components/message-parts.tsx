@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { type MessageDetail, api } from '@/lib/api.ts';
+import { type MessageDetail, api } from '@/lib/api/endpoints.ts';
 import { FACTS, type FactAnswer, capitalised, factWords } from '@/lib/format.ts';
 import { type RuleStart, factStart, listStart } from '@/lib/rule-start.ts';
 import { Button, Heads, MailFrame, Quoted, RowActions, Section, Sub, Table, Td, TextPress, Th, Tr } from '@/system';

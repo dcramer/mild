@@ -1,4 +1,4 @@
-import type { RuleMatch, RuleSummary } from './api.ts';
+import type { RuleMatch, RuleSummary } from './api/endpoints.ts';
 import { type FactAnswer, INBOX, factAnswers, factWords } from './format.ts';
 
 /** A kind of condition the rule dialog holds a value for. `from` takes an address or a domain. */

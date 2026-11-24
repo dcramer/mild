@@ -1,7 +1,8 @@
 'use client';
 import { RefreshCwIcon } from 'lucide-react';
 import { useCallback, useSyncExternalStore } from 'react';
-import { type ManageState, type Usage, api, useLoaded } from '@/lib/api.ts';
+import { type ManageState, type Usage, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { approx, atApiPrices, subscription } from '@/lib/prices.ts';
 import { dateTime, duration, money } from '@/lib/format.ts';
 import { Ago, Figure, Figures, HoverCard, Spark, Tooltip } from '@/system';

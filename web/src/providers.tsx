@@ -1,7 +1,7 @@
 'use client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, useEffect } from 'react';
-import { queryClientFor } from '@/lib/api.ts';
+import { queryClientFor } from '@/lib/api/query.ts';
 import { useQueryFollowsScreens } from '@/lib/params.ts';
 import { Toaster } from '@/system';
 import { ShortcutList } from '@/system/keys-help.tsx';

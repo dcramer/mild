@@ -2,7 +2,8 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { ErrorNote, Verdict } from '@/components/bits.tsx';
 import { SenderCell, senderHref } from '@/components/sender.tsx';
-import { type ContactPage, api, useLoaded } from '@/lib/api.ts';
+import { type ContactPage, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { CONTACT_FILTER, STANDINGS, count, dateTime, plural } from '@/lib/format.ts';
 import { paramNow, setParams, useGo, useParam } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';

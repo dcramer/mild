@@ -1,4 +1,4 @@
-import { api } from './api.ts';
+import { api } from './api/endpoints.ts';
 import { forgetDevice } from './device.ts';
 import { forgetDrafts } from './compose.ts';
 import { chooseMailbox } from './mailbox.ts';

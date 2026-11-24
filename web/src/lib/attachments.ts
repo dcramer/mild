@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { api } from './api.ts';
+import { api } from './api/endpoints.ts';
 import type { MessageAttachment, MessageDetail } from '../../../src/dashboard/types.ts';
 
 /** A message's files, as the record has them; read from Gmail once where it does not (mail Inbox kept before it kept these). */

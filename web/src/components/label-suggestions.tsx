@@ -1,5 +1,5 @@
 'use client';
-import type { LabelProposal } from '@/lib/api.ts';
+import type { LabelProposal } from '@/lib/api/endpoints.ts';
 import { ACTIONS } from '@/lib/format.ts';
 import { cn } from '@/lib/utils';
 import { Heads, Button, Check, Does, OnPhone, RowActions, Sub, Table, Td, Th, Tr } from '@/system';

@@ -1,5 +1,6 @@
 'use client';
-import { type LabelSummary, type RuleMatch, type RuleSummary, api, useLoaded } from '@/lib/api.ts';
+import { type LabelSummary, type RuleMatch, type RuleSummary, api } from '@/lib/api/endpoints.ts';
+import { useLoaded } from '@/lib/api/query.ts';
 import { useAction } from '@/lib/action.ts';
 import {
   HANDLED,
