@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { makeRule, proposal, ruleDialog, seededRulesOnly } from './rule.ts';
+import { makeRule, proposal, ruleDialog, ruleFromMessage, seededRulesOnly } from './rule.ts';
 import {
   answersSent,
   boxOf,
@@ -169,7 +169,7 @@ test.describe('A rule from For review', () => {
   test('“Make a rule…” in the panel opens the dialog over it, and Escape returns to the panel', async ({ page }) => {
     await page.goto('/');
     const open = await openMessage(page, 'Lunch on Thursday?');
-    const dialog = await makeRule(open);
+    const dialog = await ruleFromMessage(open);
     await expect(dialog.getByRole('textbox', { name: 'What should it do?' })).toHaveValue('Mail from ada@example.org: ');
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('ada@example.org');
@@ -189,7 +189,7 @@ test.describe('A rule from For review', () => {
 
   test('keys pressed in the rule dialog stay in it, and do not step the panel behind', async ({ page }) => {
     await page.goto('/');
-    const dialog = await makeRule(await openMessage(page, 'Notes from the review'));
+    const dialog = await ruleFromMessage(await openMessage(page, 'Notes from the review'));
     await dialog.getByRole('textbox', { name: 'What should it do?' }).pressSequentially(' jk');
     await dialog.getByRole('button', { name: 'Write it yourself' }).focus();
     await page.keyboard.press('j');

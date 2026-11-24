@@ -1,4 +1,4 @@
-import { addRule, fact, makeRule, proposal, ruleDialog, rulePanel, seededRulesOnly, standing } from './rule.ts';
+import { addRule, fact, makeRule, proposal, ruleDialog, ruleFromMessage, rulePanel, seededRulesOnly, standing } from './rule.ts';
 import { domainPage, expect, messageQuery, reader, param, path, query, row, senderPage, test, toast } from './sift.ts';
 
 /** The store's Winter sale starts now, open. */
@@ -63,7 +63,7 @@ test.describe('Rules from a shortcut', () => {
   test("a message's Make a rule… and Keep as… open over its panel, which closing the dialog leaves", async ({ page }) => {
     await page.goto(`/${STORE}`);
     const message = reader(page);
-    const dialog = await makeRule(message);
+    const dialog = await ruleFromMessage(message);
     await expect(dialog.getByRole('textbox', { name: 'What should it do?' })).toHaveValue('Mail from sale@store.example.com is Marketing.');
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await expect(dialog.getByRole('textbox', { name: 'Value 1' })).toHaveValue('sale@store.example.com');
@@ -86,7 +86,7 @@ test.describe('Rules from a shortcut', () => {
   test('a rule added from a message opens at its own address, and Back returns to the message', async ({ page }) => {
     await page.goto(`/${STORE}`);
     const message = reader(page);
-    const dialog = await makeRule(message);
+    const dialog = await ruleFromMessage(message);
     await dialog.getByRole('button', { name: 'Write it yourself' }).click();
     await addRule(dialog);
 

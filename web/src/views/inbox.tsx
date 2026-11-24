@@ -2,7 +2,8 @@
 import { ArchiveIcon, BanIcon, CircleHelpIcon, MailIcon, MailOpenIcon, ShieldAlertIcon, SquarePenIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
-import { proposalStart, standingStart } from '@/lib/rule-start.ts';
+import { messageStart, proposalStart, standingStart } from '@/lib/rule-start.ts';
+import { useLabelEnding } from '@/views/label-ending.tsx';
 import { eq, inArray, isNull, or, useLiveQuery } from '@tanstack/react-db';
 import { type ReactNode, memo, startTransition, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type AnswerLabel, answerChoices, useListAnswer, withDoes } from '@/components/answer.tsx';
@@ -52,6 +53,7 @@ import {
   useNow,
   usePhone,
   FloatingPress,
+  type Ending,
 } from '@/system';
 
 /** What Inbox shows: its conversations, narrowed or not, or the mail begun and not sent. */
@@ -142,7 +144,7 @@ function Place({ thread }: { thread: Listed }) {
 const unplaced = (t: Listed) => t.thinks?.disposition === 'review' && t.thinks.labelId === null;
 
 /** What Mild thinks the newest message is, as a dropdown that says it otherwise (`useListAnswer`). Mail Mild never placed is answered all the same. */
-function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabel[] }) {
+function Label({ thread, labels, ending }: { thread: Listed; labels: readonly AnswerLabel[]; ending: Ending }) {
   const answer = useListAnswer(labels);
   const { thinks } = thread;
   const target = {
@@ -160,12 +162,13 @@ function Label({ thread, labels }: { thread: Listed; labels: readonly AnswerLabe
       value={thinks?.labelId ?? null}
       groups={answerChoices(labels, target, thinks ? sureness(thinks) : 1, [])}
       onSubmit={(id) => answer(target, id)}
+      ending={ending}
     />
   );
 }
 
 /** On a phone, what the conversation swiped right is, picked from every label (`LabelSheet`), as `Label` says it on a computer. */
-function LabelSheetFor({ thread, labels, onClose }: { thread: Listed; labels: readonly AnswerLabel[]; onClose: () => void }) {
+function LabelSheetFor({ thread, labels, ending, onClose }: { thread: Listed; labels: readonly AnswerLabel[]; ending: Ending; onClose: () => void }) {
   const answer = useListAnswer(labels);
   const { thinks } = thread;
   const target = {
@@ -186,6 +189,7 @@ function LabelSheetFor({ thread, labels, onClose }: { thread: Listed; labels: re
       value={thinks?.labelId ?? null}
       groups={withDoes(labels, answerChoices(labels, target, thinks ? sureness(thinks) : 1, []))}
       onPick={(id) => void answer(target, id).catch(() => undefined)}
+      ending={ending}
     />
   );
 }
@@ -223,6 +227,7 @@ const ThreadRow = memo(function ThreadRow({
   const ink = thread.unread ? 'font-semibold text-foreground' : 'text-foreground/70';
   // Swiped right it is labelled, from a sheet of every label; swiped left, archived. Neither acts on its sender.
   const [labelling, setLabelling] = useState(false);
+  const { ending, dialogs } = useLabelEnding(labels, () => messageStart(reveal(thread.from), thread.thinks?.labelId ?? null));
   const start = useMemo<SwipePress>(() => ({ label: 'Label', icon: <TagIcon />, onPress: () => setLabelling(true) }), []);
   const end = useMemo<SwipePress>(() => ({ label: 'Archive', icon: <ArchiveIcon />, onPress: () => press([thread], 'archive') }), [thread, press]);
   return (
@@ -267,7 +272,8 @@ const ThreadRow = memo(function ThreadRow({
               </span>
             </span>
           </Swipe>
-          {labelling ? <LabelSheetFor thread={thread} labels={labels} onClose={() => setLabelling(false)} /> : null}
+          {labelling ? <LabelSheetFor thread={thread} labels={labels} ending={ending} onClose={() => setLabelling(false)} /> : null}
+          {dialogs}
         </div>
       </Td>
       <Td phone="hide" className="max-w-0 md:w-full">
@@ -278,7 +284,7 @@ const ThreadRow = memo(function ThreadRow({
         </span>
       </Td>
       <RowPresses
-        lead={<Label thread={thread} labels={labels} />}
+        lead={<Label thread={thread} labels={labels} ending={ending} />}
         mark={unplaced(thread) ? <Hint icon={CircleHelpIcon} says="Unlabelled" tone="look" /> : null}
         presses={
           <>

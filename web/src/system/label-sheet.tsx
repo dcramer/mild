@@ -3,14 +3,15 @@ import { Dialog as Base } from '@base-ui/react/dialog';
 import { CheckIcon } from 'lucide-react';
 import { Fragment, type ReactNode, useRef } from 'react';
 import { useBackCloses } from '@/lib/params.ts';
-import type { Pick } from './answer-picker.tsx';
+import { type Ending, type Pick, endingOf } from './answer-picker.tsx';
 import { Button } from './button.tsx';
 import { Backdrop, useLayerOpen } from './layer.tsx';
 
 /**
  * On a phone, saying what one conversation is (Inbox's swipe right): a sheet risen from the bottom with every label, Leave
- * in inbox first and set apart, then Mild's answer with its meter, each with what it does, and Cancel under the thumb. A
- * press on a label is the answer and closes it; a press above it, Back or Cancel closes it with nothing said.
+ * in inbox first and set apart, then Mild's answer with its meter, each with what it does, ending as every label picker
+ * does (`Ending`), and Cancel under the thumb. A press on a label is the answer and closes it; a press above it, Back or
+ * Cancel closes it with nothing said.
  */
 export function LabelSheet({
   open,
@@ -20,6 +21,7 @@ export function LabelSheet({
   value,
   groups,
   onPick,
+  ending,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +30,7 @@ export function LabelSheet({
   value: string | null;
   groups: readonly (readonly (Pick & { does?: ReactNode })[])[];
   onPick: (id: string) => void;
+  ending: Ending;
 }) {
   const popup = useRef<HTMLDivElement>(null);
   const layer = useLayerOpen(open, onClose);
@@ -78,6 +81,22 @@ export function LabelSheet({
                     </li>
                   ))}
                 </Fragment>
+              ))}
+              <li aria-hidden className="mx-4 my-1 border-t border-(--rule)" />
+              {endingOf(ending).map(({ key, label, icon: Icon, onSelect }) => (
+                <li key={key}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      layer.root.onOpenChange(false);
+                      onSelect();
+                    }}
+                    className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-4 text-left text-base text-muted-foreground select-none active:bg-(--fill-strong)"
+                  >
+                    <Icon aria-hidden className="size-4 shrink-0" />
+                    {label}
+                  </button>
+                </li>
               ))}
             </ul>
           </div>

@@ -1,5 +1,5 @@
 'use client';
-import { PlusIcon, WorkflowIcon } from 'lucide-react';
+import { WorkflowIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
@@ -34,10 +34,10 @@ import {
   TrGroup,
   useNow,
 } from '@/system';
-import { AddLabelsDialog } from '@/views/label-panel.tsx';
+import { useLabelEnding } from '@/views/label-ending.tsx';
 import { RuleDialog } from '@/views/rule-dialog.tsx';
 import { fold } from '@/lib/fold.ts';
-import { proposalStart } from '@/lib/rule-start.ts';
+import { messageStart, proposalStart } from '@/lib/rule-start.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { useShown } from '@/lib/telemetry.ts';
@@ -134,8 +134,7 @@ function SuggestionRow({
   const { answer, answerAll, choices } = useAnswer(labels, waiting);
   const folded = rest.length > 0;
   const subjects = [item, ...rest].map((i) => reveal(i.subject) || '(no subject)').join(' · ');
-  // A message none of the labels fits gets a new one; it is then among the choices.
-  const [adding, setAdding] = useState(false);
+  const { ending, dialogs } = useLabelEnding(labels, () => messageStart(target.sender, item.labelId));
   const groups = choices(target, sureness(item), item.alternatives);
 
   return (
@@ -192,10 +191,10 @@ function SuggestionRow({
           groups={groups}
           empty={outcomeName('review')}
           onSubmit={(id) => (folded ? answerAll([item, ...rest].map(answerableOf), id) : answer(target, id))}
-          extras={[{ label: 'Add a label…', lead: <PlusIcon />, onSelect: () => setAdding(true) }]}
+          ending={ending}
         />
       </RowActions>
-      {adding ? <AddLabelsDialog onClose={() => setAdding(false)} onSaved={() => setAdding(false)} /> : null}
+      {dialogs}
     </Tr>
   );
 }

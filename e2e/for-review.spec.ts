@@ -4,6 +4,7 @@ import {
   boxOf,
   choose,
   expect,
+  openMessage,
   reader,
   patchJson,
   query,
@@ -16,9 +17,28 @@ import {
   test,
   writeLabel,
 } from './sift.ts';
-import { addRule, writeRule } from './rule.ts';
+import { addRule, ruleDialog, writeRule } from './rule.ts';
 
 test.describe('For review', () => {
+  test('a row’s list of labels and its reader’s end as every label menu does, Add a label… then Make a rule…, and the reader has no Rule… of its own', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const ending = async () => {
+      await expect(page.getByRole('option').nth(-2)).toHaveText('Add a label…');
+      await expect(page.getByRole('option').last()).toHaveText('Make a rule…');
+      await page.keyboard.press('Escape');
+    };
+    await row(page, 'Notes from the review').getByRole('combobox', { name: 'What this message is' }).click();
+    await ending();
+    const open = await openMessage(page, 'Notes from the review');
+    await open.getByRole('combobox', { name: 'What this message is' }).click();
+    await ending();
+    await expect(open.getByRole('button', { name: /Rule…$/ })).toHaveCount(0);
+    await choose(open, 'Make a rule…');
+    await expect(ruleDialog(page)).toContainText('grace@example.net');
+  });
+
   test('adding a label from a row opens only the dialog, and leaves the page as it was', async ({ page }) => {
     await page.goto('/');
     await choose(row(page, 'Notes from the review'), 'Add a label…');
