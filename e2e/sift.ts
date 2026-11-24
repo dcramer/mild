@@ -232,6 +232,19 @@ async function touches(page: Page) {
 }
 
 /**
+ * A finger over the middle of `target`, measured now so it can be put down and lifted while the page's clock is held
+ * (`page.clock`), which holds the frames a measurement waits for.
+ */
+export async function fingerOver(target: Locator) {
+  const box = await boxOf(target);
+  const touch = await touches(target.page());
+  return {
+    down: () => touch('touchStart', { x: box.x + box.width / 2, y: box.y + box.height / 2 }),
+    lift: () => touch('touchEnd'),
+  };
+}
+
+/**
  * A finger drawn across a row by `dx` pixels and lifted: its swipe scrolls that far, and the browser snaps it and says
  * it has stopped as it does after a finger. Chrome without a screen scrolls for touches sent to it but does not snap
  * after them, so the scroll is asked for directly.

@@ -110,11 +110,15 @@ export function Tr({
         )}
         onPointerDown={(event) => {
           holdEnding = false;
-          if (!onHold || event.pointerType === 'mouse') return;
+          // A finger that lands while the page or a row still moves stops it: that is not a press.
+          if (!onHold || event.pointerType === 'mouse' || Date.now() - scrolledAt < COASTING_MS) return;
           const { clientX: x, clientY: y } = event;
+          const since = Date.now();
           const timer = setTimeout(() => {
-            holdEnding = true;
             holding.current = null;
+            // Anything scrolled since it landed, the page or the row's own swipe, made it a scroll.
+            if (scrolledAt >= since) return;
+            holdEnding = true;
             onHold();
           }, HOLD_MS);
           holding.current = { timer, x, y };
@@ -161,6 +165,19 @@ let holdEnding = false;
 const HOLD_MS = 500;
 /** How far it may drift meanwhile, in pixels, before it is a scroll or a swipe instead. */
 const STRAY_PX = 10;
+/** A touch this soon after anything scrolled stops a scroll still coasting, as a phone's own lists take it. */
+const COASTING_MS = 100;
+
+/** When anything on the page last scrolled: a phone does not always say a touch became a scroll (`pointercancel`). */
+let scrolledAt = -Infinity;
+if (typeof window !== 'undefined')
+  window.addEventListener(
+    'scroll',
+    () => {
+      scrolledAt = Date.now();
+    },
+    { capture: true, passive: true },
+  );
 
 /** The row on the page that holds `name`, if one does. */
 export const rowHolding = (name: string) => document.querySelector<HTMLElement>(`tr[data-holds~="${CSS.escape(name)}"]`);

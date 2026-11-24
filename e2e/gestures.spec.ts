@@ -1,4 +1,4 @@
-import { TOUCH, boxOf, dismiss, edgeSwipe, expect, hold, path, reader, swipe, test, toast } from './sift.ts';
+import { TOUCH, boxOf, dismiss, edgeSwipe, expect, fingerOver, hold, path, reader, swipe, test, toast } from './sift.ts';
 import type { Page } from '@playwright/test';
 import { ruleDialog } from './rule.ts';
 
@@ -58,7 +58,7 @@ test.describe('Inbox by touch, on a phone', () => {
     })()`);
     await swipe(row(page, 'Your order has shipped'), -380);
     await expect(row(page, 'Your order has shipped')).toHaveCount(0);
-    const heights = (await page.evaluate('window.heights')) as number[];
+    const heights = await page.evaluate<number[]>('window.heights');
     const full = heights[0]!;
     expect(heights.some((h) => h > 1 && h < full / 2)).toBe(true);
     expect(Math.min(...heights)).toBeLessThan(2);
@@ -160,6 +160,27 @@ test.describe('Inbox by touch, on a phone', () => {
     // A press on a row opens it again.
     await row(page, 'Notes from the review').tap();
     await expect(reader(page)).toBeVisible();
+  });
+
+  test('a finger left on a row while the list scrolls under it selects nothing; one held still selects', async ({ page }) => {
+    await page.goto('/inbox');
+    const selected = page.getByText('1 selected').filter({ visible: true });
+    const [shipped, lunch] = [await fingerOver(row(page, 'Your order has shipped')), await fingerOver(row(page, 'Lunch on Thursday?'))];
+    await page.clock.install();
+
+    await lunch.down();
+    await page.clock.runFor(600);
+    await lunch.lift();
+    await expect(selected).toBeVisible();
+    await page.getByRole('button', { name: 'Select none' }).filter({ visible: true }).tap();
+    await expect(selected).toHaveCount(0);
+
+    await shipped.down();
+    // The list moves under the finger, as when a scroll begins slowly or the row starts to swipe, and the phone does not say so.
+    await page.evaluate("dispatchEvent(new Event('scroll'))");
+    await page.clock.runFor(600);
+    await shipped.lift();
+    await expect(selected).toHaveCount(0);
   });
 
   test('Select none lets go of every row, and nothing selected on a phone keeps its bar', async ({ page }) => {
