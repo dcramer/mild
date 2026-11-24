@@ -43,6 +43,7 @@ import mailboxPrimaryWrite from './routes/mailbox/primary/post.ts';
 import mailboxRemoveWrite from './routes/mailbox/remove/post.ts';
 import manageRead from './routes/manage/get.ts';
 import messageRead from './routes/message/get.ts';
+import messagesAhead from './routes/messages/get.ts';
 import messageFileDownload from './routes/message/file/download.ts';
 import messageHtmlFrame from './routes/message/html/frame.ts';
 import modelChatgptFinishWrite from './routes/model/chatgpt/finish/post.ts';
@@ -93,6 +94,7 @@ export const READS: readonly Read[] = [
   syncRead,
   manageRead,
   messageRead,
+  messagesAhead,
   modelsRead,
   rulesRead,
   rulesInboxRead,

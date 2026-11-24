@@ -1,6 +1,6 @@
 import { type ContactQuery, type Days, type DecisionQuery, type FactFilter, type MailThreadsQuery, api } from './endpoints.ts';
 import { keys } from './keys.ts';
-import { readAhead, readAheadOnRest, useLoaded, usePages } from './query.ts';
+import { queryClientFor, readAhead, readAheadOnRest, useLoaded, usePages } from './query.ts';
 
 /**
  * Every read the page makes, by name, each under its key (`keys`) and how often it is read again. `mailbox` narrows a
@@ -45,6 +45,31 @@ export const useMessage = (accountId: string, messageId: string | null) =>
 /** A message read ahead of a press that opens it: at once, or once the pointer or the keys rest on its row. */
 export const readMessageAhead = (accountId: string, messageId: string, onRest = false) =>
   (onRest ? readAheadOnRest : readAhead)(keys.message(accountId, messageId), (signal) => api.message(messageId, signal, accountId));
+
+/**
+ * The top of Inbox read ahead in one call, so opening any of it waits on nothing: each message is kept as
+ * `useMessage` reads it. One asked for in the last minute is not asked for again, whatever came of it.
+ */
+export function readScreenAhead(refs: readonly { accountId: string; messageId: string }[]): void {
+  const now = Date.now();
+  const client = queryClientFor();
+  const due = refs.filter(({ accountId, messageId }) => {
+    const key = keys.message(accountId, messageId);
+    return client.getQueryData([key]) === undefined && now - (askedAt.get(key) ?? -Infinity) > 60_000;
+  });
+  if (due.length === 0) return;
+  for (const { accountId, messageId } of due) askedAt.set(keys.message(accountId, messageId), now);
+  void api
+    .messagesAhead(
+      due.map((ref) => ref.messageId),
+      new AbortController().signal,
+    )
+    .then(({ messages }) => {
+      for (const detail of messages) client.setQueryData([keys.message(detail.accountId, detail.messageId)], detail, { updatedAt: now });
+    })
+    .catch(() => {});
+}
+const askedAt = new Map<string, number>();
 
 /** What Mild waits on the reader for from `sender`. */
 export const useSuggestion = (sender: string) => useLoaded(keys.suggestion(sender), (signal) => api.suggestion(sender, signal), 120_000);

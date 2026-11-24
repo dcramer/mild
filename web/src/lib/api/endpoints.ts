@@ -22,6 +22,7 @@ import type {
   MailView,
   ManageState,
   MessageDetail,
+  MessagesAhead,
   Models,
   Removed,
   RuleDraft,
@@ -147,6 +148,8 @@ export const api = {
     ),
   /** A message by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
   message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
+  /** Messages by Gmail's id, read ahead of a press that opens one; one the person cannot read is left out. */
+  messagesAhead: (ids: readonly string[], signal: AbortSignal) => get<MessagesAhead>('/api/messages', { ids: ids.join(',') }, signal),
   /** One of a message's files, fetched from Gmail through Mild, to save. */
   file: async (accountId: string, messageId: string, part: string): Promise<Blob> => {
     const query = new URLSearchParams({ id: messageId, part, mailbox: accountId });
