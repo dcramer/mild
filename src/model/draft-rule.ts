@@ -1,38 +1,8 @@
-import type { Api, AssistantMessage, Context, Model, Models, Tool, ToolCall } from '@earendil-works/pi-ai';
-import {
-  BY,
-  FACT_WORDS,
-  FILL_TOOL,
-  FIND_TOOL,
-  MAX_LOOKUPS,
-  RULE_DRAFT_PROMPT,
-  type RuleDrafter,
-  buildRuleDraftPrompt,
-  describeFound,
-  readRuleDraft,
-} from '../triage/rule-draft.ts';
+import type { Api, Model, Models, Tool } from '@earendil-works/pi-ai';
+import { BY, FACT_WORDS, FILL_TOOL, RULE_DRAFT_PROMPT, type RuleDrafter, buildRuleDraftPrompt, readRuleDraft } from '../triage/rule-draft.ts';
 import { DECIDED } from '../triage/types.ts';
-import type { Usage } from '../triage/stages/model.ts';
-import { describeFailure as failure } from '../triage/stages/model.ts';
-import { chat, executeTool } from './chat.ts';
+import { withLookups } from './lookups.ts';
 import type { Reasoning } from './reasoning.ts';
-
-/** One attempt per turn, as for the judge; the person asks again. */
-const CALL = { timeoutMs: 60_000, maxRetries: 0 };
-
-/** Turns that may end without a usable rule: one more after an unusable one, told what is wrong with it, or after an answer in words. */
-const MAX_FILLS = 2;
-
-const find: Tool = {
-  name: FIND_TOOL,
-  description: 'Find senders Mild has recorded mail from, by words in their name, address, mailing list or newest subject.',
-  parameters: {
-    type: 'object',
-    properties: { query: { type: 'string', description: 'A name, brand, domain or a few words.' } },
-    required: ['query'],
-    additionalProperties: false,
-  },
-};
 
 function fill(labels: readonly string[]): Tool {
   return {
@@ -81,90 +51,28 @@ function fill(labels: readonly string[]): Tool {
   };
 }
 
-const add = (a: Usage | undefined, b: Usage): Usage =>
-  a ? { model: b.model, inputTokens: a.inputTokens + b.inputTokens, outputTokens: a.outputTokens + b.outputTokens, costUsd: a.costUsd + b.costUsd } : b;
-
-/**
- * A RuleDrafter backed by a pi-ai model: a conversation of a few turns with the person's words and labels,
- * and two tools. One looks up senders in the person's own record and changes nothing; the other records
- * the rule, which is checked here before use and sent back once with what is wrong when it cannot be. The last
- * turn offers only the second.
- */
+/** A RuleDrafter backed by a pi-ai model: the person's words and labels, with the look-up of their senders. */
 export function createRuleDrafter(models: Models, model: Model<Api>, reasoning: Reasoning): RuleDrafter {
   return async (input, findSenders) => {
-    const record = fill(input.labels.map((l) => l.name));
-    const context: Context = {
+    const drafted = await withLookups(models, model, reasoning, {
       systemPrompt: RULE_DRAFT_PROMPT,
-      messages: [{ role: 'user', content: buildRuleDraftPrompt(input), timestamp: Date.now() }],
-    };
-    let usage: Usage | undefined;
-    let lookups = 0;
-    let fills = 0;
-    const spent = () => ({ lookups, ...(usage ? { usage } : {}) });
-    for (;;) {
-      const last = lookups >= MAX_LOOKUPS;
-      let message: AssistantMessage;
-      try {
-        message = await chat(models, model, { ...context, tools: last ? [record] : [find, record] }, { ...CALL, reasoning });
-      } catch (error) {
-        return { failed: failure(error), ...spent() };
-      }
-      usage = add(usage, {
-        model: `${model.provider}/${model.id}`,
-        inputTokens: message.usage.input + message.usage.cacheRead + message.usage.cacheWrite,
-        outputTokens: message.usage.output,
-        costUsd: message.usage.cost.total,
-      });
-      if (message.stopReason === 'error' || message.stopReason === 'aborted')
-        return { failed: failure(message.errorMessage ?? message.stopReason), ...spent() };
-      const calls = message.content.filter((block): block is ToolCall => block.type === 'toolCall');
-      const filled = calls.find((c) => c.name === FILL_TOOL);
-      let unusable: string | undefined;
-      if (filled) {
-        const read = await executeTool(FILL_TOOL, filled.id, async (span) => {
-          const result = readRuleDraft(filled.arguments, input.labels);
-          if ('unusable' in result) span.fail();
-          return result;
-        });
-        if ('draft' in read) return { draft: read.draft, ...spent() };
-        unusable = read.unusable;
-        fills += 1;
-        if (fills >= MAX_FILLS) return { failed: `the model did not fill in a usable rule: ${unusable}`, ...spent() };
-      }
-      const asked = calls.filter((c) => c.name === FIND_TOOL);
-      if (!filled && (last || asked.length === 0)) {
-        // It answered in words. Asked once more, since nothing makes a model call a tool.
-        fills += 1;
-        if (fills >= MAX_FILLS || calls.length > 0) return { failed: 'the model did not fill in a rule', ...spent() };
-        context.messages.push(message, { role: 'user', content: `Fill in the rule with ${FILL_TOOL}.`, timestamp: Date.now() });
-        continue;
-      }
-      context.messages.push(message);
-      if (filled)
-        context.messages.push({
-          role: 'toolResult',
-          toolCallId: filled.id,
-          toolName: FILL_TOOL,
-          content: [{ type: 'text', text: `That rule cannot be used: ${unusable}. Fill it in again.` }],
-          isError: true,
-          timestamp: Date.now(),
-        });
-      for (const c of asked) {
-        lookups += 1;
-        const query = typeof c.arguments['query'] === 'string' ? c.arguments['query'] : '';
-        const text =
-          lookups > MAX_LOOKUPS
-            ? 'No more look-ups: fill in the rule.'
-            : await executeTool(FIND_TOOL, c.id, async () => describeFound(await findSenders(query)));
-        context.messages.push({
-          role: 'toolResult',
-          toolCallId: c.id,
-          toolName: FIND_TOOL,
-          content: [{ type: 'text', text }],
-          isError: false,
-          timestamp: Date.now(),
-        });
-      }
-    }
+      prompt: buildRuleDraftPrompt(input),
+      record: fill(input.labels.map((l) => l.name)),
+      read: (args) => {
+        const read = readRuleDraft(args, input.labels);
+        return 'draft' in read ? { answer: read.draft } : read;
+      },
+      findSenders,
+      words: {
+        unusable: (why) => `the model did not fill in a usable rule: ${why}`,
+        retry: (why) => `That rule cannot be used: ${why}. Fill it in again.`,
+        noAnswer: 'the model did not fill in a rule',
+        nudge: `Fill in the rule with ${FILL_TOOL}.`,
+        noMoreLookups: 'No more look-ups: fill in the rule.',
+      },
+    });
+    if (!('answer' in drafted)) return drafted;
+    const { answer, ...spent } = drafted;
+    return { draft: answer, ...spent };
   };
 }

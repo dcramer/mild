@@ -1,7 +1,7 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt, forModel, fromModel } from '../triage/prompt.ts';
 import { type Judge, UNSURE, describeFailure as failure } from '../triage/stages/model.ts';
-import { chat, executeTool } from './chat.ts';
+import { chat, executeTool, usageOf } from './chat.ts';
 import type { Reasoning } from './reasoning.ts';
 
 const MAX_REASON = 300;
@@ -48,12 +48,7 @@ export function createJudge(models: Models, model: Model<Api>, reasoning: Reason
     } catch (error) {
       return { failed: failure(error) };
     }
-    const usage = {
-      model: `${model.provider}/${model.id}`,
-      inputTokens: message.usage.input + message.usage.cacheRead + message.usage.cacheWrite,
-      outputTokens: message.usage.output,
-      costUsd: message.usage.cost.total,
-    };
+    const usage = usageOf(model, message);
     if (message.stopReason === 'error' || message.stopReason === 'aborted') return { failed: failure(message.errorMessage ?? message.stopReason), usage };
 
     const verdict = message.content.find((block) => block.type === 'toolCall' && block.name === VERDICT_TOOL);
