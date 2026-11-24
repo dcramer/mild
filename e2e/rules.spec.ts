@@ -447,6 +447,6 @@ test.describe('Apply to your inbox, with what is due begun', () => {
 
     await page.goto('/?settings=1');
     await settingsActive(page).getByRole('button', { name: 'Check now' }).click();
-    await expect.poll(() => sift.google().mailbox('me@example.org').message('m8')?.labelIds).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf('m8')).not.toContain('INBOX');
   });
 });

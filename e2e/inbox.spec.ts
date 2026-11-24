@@ -241,7 +241,7 @@ test.describe('Inbox', () => {
       await (await label()).click();
       await page.getByRole('option', { name, exact: true }).click();
     };
-    const inGmail = () => sift.google().mailbox('me@example.org').message('m3')!.labelIds;
+    const inGmail = () => sift.google().mailbox('me@example.org').labelsOf('m3');
     await expect(await label()).toContainText('Receipts');
 
     // Personal keeps its mail: saved at once, and the row stays.
@@ -332,8 +332,8 @@ test.describe('Inbox', () => {
     // Its toast says so: archived, to the label.
     await expect(toast(page, 'Your order has shipped')).toContainText(/Archived\s*to\s*Receipts/);
     await dismiss(page, 'Your order has shipped');
-    await expect.poll(() => gmail().message('m3')!.labelIds).not.toContain('INBOX');
-    expect(gmail().message('m3')!.labelIds).toContain(gmail().labelId('mild/receipts'));
+    await expect.poll(() => gmail().labelsOf('m3')).not.toContain('INBOX');
+    expect(gmail().labelsOf('m3')).toContain(gmail().labelId('mild/receipts'));
     await page.reload();
     await expect(inboxRows(page)).toHaveCount(18);
     await expect(row).toHaveCount(0);
@@ -357,7 +357,7 @@ test.describe('Inbox', () => {
     await row.getByRole('button', { name: 'Archive' }).click();
     await expect(toast(page, 'Your order has shipped')).toContainText(/Archived\s*to\s*Receipts/);
     await dismiss(page, 'Your order has shipped');
-    await expect.poll(() => gmail().message('m3')!.labelIds).toContain(gmail().labelId('mild/receipts'));
+    await expect.poll(() => gmail().labelsOf('m3')).toContain(gmail().labelId('mild/receipts'));
   });
 
   test('a row’s label menu stays under its label while the pointer moves into it', async ({ page }) => {
@@ -479,13 +479,13 @@ test.describe('Inbox', () => {
     await toast(page, '48 hours only: 30% off').getByRole('button', { name: /^Undo/ }).click();
     await expect(deal).toBeVisible();
     expect(changes()).toBe(0);
-    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
+    expect(sift.google().mailbox('me@example.org').labelsOf(id)).toContain('INBOX');
 
     await pointAt(deal);
     await deal.getByRole('button', { name: 'Spam' }).click();
     await dismiss(page, '48 hours only: 30% off');
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
-    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).toContain('SPAM');
+    expect(sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
     await expect(deal).toHaveCount(0);
   });
 
@@ -533,7 +533,7 @@ test.describe('Inbox', () => {
       await pointAt(widgets);
       await widgets.getByRole('button', { name: 'Archive' }).click();
       await dismiss(page, 'This week in widgets');
-      await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+      await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
       expect(refused).toBe(2);
       await expect(widgets).toHaveCount(0);
       await expect(failureToast(page, 'Could not archive it')).toHaveCount(0);
@@ -553,10 +553,10 @@ test.describe('Inbox', () => {
       await dismiss(page, 'This week in widgets');
       await expect(page.getByRole('status').filter({ hasText: 'Mild cannot be reached: 1 change will go once it is back' })).toBeVisible();
       await expect(widgets).toHaveCount(0);
-      expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
+      expect(sift.google().mailbox('me@example.org').labelsOf(id)).toContain('INBOX');
 
       await context.setOffline(false);
-      await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+      await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
       await expect(widgets).toHaveCount(0);
       await expect(failureToast(page, 'Could not archive it')).toHaveCount(0);
     });
@@ -575,7 +575,7 @@ test.describe('Inbox', () => {
       await page.reload();
       await expect(inboxRows(page).first()).toBeVisible();
       await expect(widgets).toHaveCount(0);
-      await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+      await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
     });
   });
 
@@ -647,7 +647,7 @@ test.describe('Inbox', () => {
     await widgets.getByRole('button', { name: 'Archive' }).click();
     await expect(toast(page, 'Widgets, part two')).toBeVisible();
     await page.goto('/inbox?unread=1');
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
+    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('INBOX');
   });
 
   test('Block sender gives them Blocked and marks their conversation spam, with one Undo', async ({ page, sift }) => {
@@ -661,7 +661,7 @@ test.describe('Inbox', () => {
     await expect(blocked).toContainText('Blocked sale@store.example.com');
     await blocked.getByRole('button', { name: /^Undo/ }).click();
     await expect(sale).toBeVisible();
-    expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('SPAM');
+    expect(sift.google().mailbox('me@example.org').labelsOf(id)).not.toContain('SPAM');
     await page.goto('/sender/sale%40store.example.com');
     await expect(page.getByRole('button', { name: 'Block', pressed: true })).toHaveCount(0);
 
@@ -669,7 +669,7 @@ test.describe('Inbox', () => {
     await pointAt(sale);
     await sale.getByRole('button', { name: 'Block sender' }).click();
     await dismiss(page, 'Winter sale starts now');
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
+    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).toContain('SPAM');
     await page.goto('/sender/sale%40store.example.com');
     await expect(page.getByRole('button', { name: 'Block', pressed: true })).toBeVisible();
   });

@@ -1050,7 +1050,6 @@ describe('going through the inbox', () => {
       .asked('users.messages.list')
       .filter((r) => !r.q)
       .map((r) => r.pageToken ?? '');
-  const labelsOf = (id: string) => gmail.gmail.message(id)!.labelIds;
   /** One piece of work on the run, with Mild on or off; the model is `judge`. */
   const goOn = async (run: number, options: { on?: boolean; judge?: typeof unsure; until?: number; now?: () => number } = {}) =>
     await continueInboxRun(
@@ -1135,7 +1134,7 @@ describe('going through the inbox', () => {
       { message_id: 'b', carry_out: true, outcome: 'done' },
       { message_id: 'c', carry_out: true, outcome: 'done' },
     ]);
-    expect(labelsOf('a')).not.toContain('INBOX');
+    expect(gmail.gmail.labelsOf('a')).not.toContain('INBOX');
   });
 
   it('takes back what Mild did before carrying out something different', async () => {
@@ -1145,12 +1144,12 @@ describe('going through the inbox', () => {
     // Mild was not sure enough to act, and put the label the model guessed on it in Gmail.
     const guess = testModel(async () => ({ label: 'marketing', reason: 'perhaps a sale', confidence: 0.5 }));
     await triageAccount({ db, mailbox: gmail.mailbox, model: guess, sources: gmail, now: () => 10 }, await firstAccount(db));
-    const marked = labelsOf('a');
+    const marked = gmail.gmail.labelsOf('a');
     expect(marked.length).toBeGreaterThan(1);
     // Now a rule says what it is.
     await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
     await goOn(await begin(true), { on: true, now: () => 200 });
-    const now = labelsOf('a');
+    const now = gmail.gmail.labelsOf('a');
     expect(now).not.toContain('INBOX');
     expect(now.filter((l) => marked.includes(l))).toEqual([]);
   });

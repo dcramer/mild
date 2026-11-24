@@ -6,14 +6,9 @@ import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw } from './fixtu
 import type { FakeGmail, Mail } from './google.ts';
 import { ACCOUNT, DAY, rawMessage } from './helpers.ts';
 import { parseAddressList } from '../src/triage/features.ts';
+import { RATE_LIMITED, type GmailMethod } from './google.ts';
 
 const fake = fakeGoogle();
-
-const HISTORY = 'users.history.list';
-const PROFILE = 'users.getProfile';
-const SEARCH = 'users.messages.list';
-const READ = 'users.messages.get';
-const LIMITED = { status: 403, reason: 'userRateLimitExceeded' };
 
 /** Mild's Gmail client and its mailbox, with `arrive` for mail from `News <news@example.com>` unless it says. */
 function gmail() {
@@ -25,7 +20,7 @@ function gmail() {
     for (let i = 0; i < n; i++) box.deliver({ from: 'spam@example.net', labelIds: ['SPAM'] });
   };
   /** What Mild asked of `methods` since the `from`th request, with the page and search each asked for. */
-  const since = (from: number, ...methods: string[]) =>
+  const since = (from: number, ...methods: GmailMethod[]) =>
     box.requests
       .slice(from)
       .filter((r) => methods.includes(r.method))
@@ -45,7 +40,7 @@ describe('pullChanges', () => {
       historyId: '1000',
       mode: 'start',
     });
-    expect(box.requests.map((r) => r.method)).toEqual([PROFILE]);
+    expect(box.requests.map((r) => r.method)).toEqual(['users.getProfile']);
   });
 
   it('pages through history, keeps inbox arrivals once each, and keeps mail added elsewhere apart', async () => {
@@ -60,7 +55,7 @@ describe('pullChanges', () => {
     box.delete('old');
     const asked = box.requests.length;
     const pull = await pullChanges(api, cursor);
-    expect(since(asked, HISTORY)).toEqual([{ method: HISTORY }, { method: HISTORY, pageToken: '500' }]);
+    expect(since(asked, 'users.history.list')).toEqual([{ method: 'users.history.list' }, { method: 'users.history.list', pageToken: '500' }]);
     expect(pull).toEqual({
       messageIds: ['a', 'b'],
       labelChanges: [],
@@ -110,7 +105,11 @@ describe('pullChanges', () => {
     box.expireHistory();
     const asked = box.requests.length;
     const pull = await pullChanges(api, cursor);
-    expect(since(asked, HISTORY, PROFILE, SEARCH)).toEqual([{ method: HISTORY }, { method: PROFILE }, { method: SEARCH, q: 'newer_than:7d' }]);
+    expect(since(asked, 'users.history.list', 'users.getProfile', 'users.messages.list')).toEqual([
+      { method: 'users.history.list' },
+      { method: 'users.getProfile' },
+      { method: 'users.messages.list', q: 'newer_than:7d' },
+    ]);
     expect(pull).toEqual({
       messageIds: ['old', 'new'],
       labelChanges: [],
@@ -126,10 +125,14 @@ describe('pullChanges', () => {
     const { api, gmail: box, arrive, since } = gmail();
     const cursor = box.cursor();
     for (let i = 0; i < 1001; i++) arrive(`m${i}`);
-    box.meanwhile(HISTORY, () => arrive('late'));
+    box.meanwhile('users.history.list', () => arrive('late'));
     const asked = box.requests.length;
     const pull = await pullChanges(api, cursor);
-    expect(since(asked, HISTORY)).toEqual([{ method: HISTORY }, { method: HISTORY, pageToken: '500' }, { method: HISTORY, pageToken: '1000' }]);
+    expect(since(asked, 'users.history.list')).toEqual([
+      { method: 'users.history.list' },
+      { method: 'users.history.list', pageToken: '500' },
+      { method: 'users.history.list', pageToken: '1000' },
+    ]);
     expect(pull.messageIds).toHaveLength(1002);
     expect(pull.messageIds[0]).toBe('m0');
     expect(pull.messageIds.at(-1)).toBe('late');
@@ -143,15 +146,15 @@ describe('pullChanges', () => {
     box.change('from-history', { remove: ['INBOX'] });
     const at = Date.now() - DAY;
     const ids = Array.from({ length: 501 }, (_, i) => arrive(`d${i}`, { at: at + i * 1000 }));
-    box.meanwhile(HISTORY, () => box.expireHistory());
+    box.meanwhile('users.history.list', () => box.expireHistory());
     const asked = box.requests.length;
     const pull = await pullChanges(api, cursor);
-    expect(since(asked, HISTORY, PROFILE, SEARCH)).toEqual([
-      { method: HISTORY },
-      { method: HISTORY, pageToken: '500' },
-      { method: PROFILE },
-      { method: SEARCH, q: 'newer_than:7d' },
-      { method: SEARCH, q: 'newer_than:7d', pageToken: '500' },
+    expect(since(asked, 'users.history.list', 'users.getProfile', 'users.messages.list')).toEqual([
+      { method: 'users.history.list' },
+      { method: 'users.history.list', pageToken: '500' },
+      { method: 'users.getProfile' },
+      { method: 'users.messages.list', q: 'newer_than:7d' },
+      { method: 'users.messages.list', q: 'newer_than:7d', pageToken: '500' },
     ]);
     // What the first history page said is dropped: the search covers it, and the cursor is the profile's.
     expect(pull).toEqual({
@@ -169,7 +172,7 @@ describe('pullChanges', () => {
     const { api, gmail: box, arrive } = gmail();
     const cursor = box.cursor();
     arrive('a');
-    box.fail(HISTORY, LIMITED);
+    box.fail('users.history.list', RATE_LIMITED);
     await expect(pullChanges(api, cursor)).rejects.toMatchObject({ status: 403 });
   });
 });
@@ -282,7 +285,7 @@ describe('syncAccount', () => {
     const db = await synced(box);
     const { historyId: cursor } = await firstAccount(db);
     const ids = Array.from({ length: 501 }, (_, i) => arrive(`m${i}`));
-    box.failLater(HISTORY, 1, LIMITED);
+    box.failLater('users.history.list', 1, RATE_LIMITED);
     await expect(syncAccount(db, api, await firstAccount(db))).rejects.toMatchObject({ status: 403 });
     expect((await firstAccount(db)).historyId).toBe(cursor);
     expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 0 });
@@ -305,7 +308,11 @@ describe('syncAccount', () => {
     const recovered = await syncAccount(db, api, await firstAccount(db));
     expect(recovered.mode).toBe('recovery');
     expect(recovered.added.map((m) => m.messageId)).toEqual(['b']);
-    expect(since(recovering, HISTORY, PROFILE, SEARCH)).toEqual([{ method: HISTORY }, { method: PROFILE }, { method: SEARCH, q: 'newer_than:7d' }]);
+    expect(since(recovering, 'users.history.list', 'users.getProfile', 'users.messages.list')).toEqual([
+      { method: 'users.history.list' },
+      { method: 'users.getProfile' },
+      { method: 'users.messages.list', q: 'newer_than:7d' },
+    ]);
     expect((await firstAccount(db)).historyId).toBe(box.cursor());
 
     arrive('c');
@@ -313,7 +320,7 @@ describe('syncAccount', () => {
     const after = await syncAccount(db, api, await firstAccount(db));
     expect(after.mode).toBe('incremental');
     expect(after.added.map((m) => m.messageId)).toEqual(['c']);
-    expect(since(next, HISTORY, PROFILE, SEARCH)).toEqual([{ method: HISTORY }]);
+    expect(since(next, 'users.history.list', 'users.getProfile', 'users.messages.list')).toEqual([{ method: 'users.history.list' }]);
   });
 
   it('keeps what it fetched before a failure, and fetches only the rest next time', async () => {
@@ -321,14 +328,14 @@ describe('syncAccount', () => {
     const db = await synced(box);
     const { historyId: cursor } = await firstAccount(db);
     const ids = Array.from({ length: 120 }, (_, i) => arrive(`m${i}`));
-    box.failLater(READ, 110, LIMITED);
+    box.failLater('users.messages.get', 110, RATE_LIMITED);
     await expect(syncAccount(db, api, await firstAccount(db))).rejects.toMatchObject({ status: 403 });
     expect((await firstAccount(db)).historyId).toBe(cursor);
     expect(await raw(db).get('SELECT count(*) AS n FROM messages')).toEqual({ n: 100 });
 
     const asked = box.requests.length;
     const report = await syncAccount(db, api, await firstAccount(db));
-    expect(box.requests.slice(asked).flatMap((r) => (r.method === READ ? [r.id] : []))).toEqual(ids.slice(100));
+    expect(box.requests.slice(asked).flatMap((r) => (r.method === 'users.messages.get' ? [r.id] : []))).toEqual(ids.slice(100));
     expect(report.added.map((m) => m.messageId)).toEqual(ids.slice(100));
     expect((await firstAccount(db)).historyId).toBe(box.cursor());
   });
@@ -338,7 +345,7 @@ describe('syncAccount', () => {
     const db = await synced(box);
     const { historyId: cursor } = await firstAccount(db);
     for (const id of ['a', 'b', 'c']) arrive(id);
-    const clock = () => box.asked(READ).length * 1000;
+    const clock = () => box.asked('users.messages.get').length * 1000;
     const report = await syncAccount(db, api, await firstAccount(db), clock, 1500);
     expect(report).toMatchObject({ unfinished: true });
     expect(report.added.map((m) => m.messageId)).toEqual(['a', 'b']);
@@ -352,7 +359,7 @@ describe('syncAccount', () => {
     const { historyId: cursor } = await firstAccount(db);
     arrive('a');
     box.expireHistory();
-    box.fail(SEARCH, LIMITED);
+    box.fail('users.messages.list', RATE_LIMITED);
     await expect(syncAccount(db, api, await firstAccount(db))).rejects.toMatchObject({ status: 403 });
     expect((await firstAccount(db)).historyId).toBe(cursor);
   });
@@ -374,7 +381,7 @@ describe('syncAccount', () => {
     box.change('a', { add: ['STARRED'] });
     const reads = async () => await raw(db).all('SELECT id, read_at FROM messages ORDER BY id');
     await syncAccount(db, api, before, () => 2000);
-    expect(box.asked(HISTORY).filter((r) => r.pageToken === '500')).toHaveLength(1);
+    expect(box.asked('users.history.list').filter((r) => r.pageToken === '500')).toHaveLength(1);
     expect(await reads()).toEqual([
       { id: 'a', read_at: 2000 },
       { id: 'b', read_at: 2000 },
@@ -430,7 +437,7 @@ describe('syncAccount', () => {
     const db = await synced(box);
     await setMailboxAliases(db, ACCOUNT, ['me@example.com']);
     arrive('a', { from: 'ada@example.com', cc: 'me@example.com' });
-    box.fail('users.settings.sendAs.list', LIMITED);
+    box.fail('users.settings.sendAs.list', RATE_LIMITED);
     const report = await syncAccount(db, api, await firstAccount(db));
     expect(report.added.map((m) => m.messageId)).toEqual(['a']);
     expect((await firstAccount(db)).historyId).toBe(box.cursor());
@@ -445,7 +452,7 @@ describe('syncAccount', () => {
     const db = await synced(box);
     const { historyId: cursor } = await firstAccount(db);
     arrive('a');
-    box.fail(READ, LIMITED);
+    box.fail('users.messages.get', RATE_LIMITED);
     await expect(syncAccount(db, api, await firstAccount(db))).rejects.toMatchObject({ status: 403 });
     expect((await firstAccount(db)).historyId).toBe(cursor);
   });

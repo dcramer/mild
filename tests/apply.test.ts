@@ -43,8 +43,6 @@ function hold(inbox: MessageFacts[]) {
 }
 
 const searches = () => gmail.gmail.asked('users.messages.list').map((r) => r.q);
-const fetched = () => gmail.gmail.asked('users.messages.get').flatMap((r) => (r.format === 'metadata' && r.id ? [r.id] : []));
-const labelsOf = (id: string) => gmail.gmail.message(id)!.labelIds;
 
 /** Press Apply on `rule` and go through the run it starts, as the ticks would. */
 async function applyRule(rule: string, now: number) {
@@ -99,7 +97,7 @@ describe('applying a rule to the inbox', () => {
     expect(sample).toMatchObject({ messages: 2, reading: 0, exact: true, most: null });
     expect(sample.examples.map((m) => m.messageId)).toEqual(['seen', 'unseen']);
     // Mail Mild has a record of is not fetched again, and what it fetched it records, out of the triage queue, deciding nothing.
-    expect(fetched().toSorted()).toEqual(['other', 'unseen', 'vip']);
+    expect(gmail.gmail.reads('metadata').toSorted()).toEqual(['other', 'unseen', 'vip']);
     expect(await raw(db).all(`SELECT id, decided FROM messages WHERE id IN ('unseen', 'vip', 'other') ORDER BY id`)).toEqual([
       { id: 'other', decided: true },
       { id: 'unseen', decided: true },
@@ -107,7 +105,7 @@ describe('applying a rule to the inbox', () => {
     ]);
     expect(await raw(db).get(`SELECT count(*) AS n FROM decisions WHERE message_id = 'unseen'`)).toEqual({ n: 0 });
     expect(await ruleInbox(db, gmail.api, ACCOUNT, rule)).toEqual(sample);
-    expect(fetched()).toHaveLength(3);
+    expect(gmail.gmail.reads('metadata')).toHaveLength(3);
   });
 
   it("checks only the newest, and scales what they say to Gmail's guess at how many there are", async () => {
@@ -117,7 +115,7 @@ describe('applying a rule to the inbox', () => {
     gmail.gmail.estimate = () => 600;
 
     const sample = await ruleInbox(db, gmail.api, ACCOUNT, rule);
-    expect(fetched()).toHaveLength(20);
+    expect(gmail.gmail.reads('metadata')).toHaveLength(20);
     expect(sample).toMatchObject({ messages: 300, reading: 0, exact: false, most: null });
     expect(sample.examples.map((m) => m.messageId)).toEqual(['m0', 'm2', 'm4', 'm6', 'm8']);
 
@@ -153,8 +151,8 @@ describe('applying a rule to the inbox', () => {
     expect(await inboxProgress(db, [ACCOUNT])).toEqual({ going: null, last: null });
 
     await triageAccount({ db, mailbox: null, answers: gmail.mailbox }, await firstAccount(db));
-    expect(labelsOf('seen')).not.toContain('INBOX');
-    expect(labelsOf('unseen')).not.toContain('INBOX');
+    expect(gmail.gmail.labelsOf('seen')).not.toContain('INBOX');
+    expect(gmail.gmail.labelsOf('unseen')).not.toContain('INBOX');
     expect(await pendingSuggestions(db)).toEqual([]);
   });
 
@@ -171,17 +169,17 @@ describe('applying a rule to the inbox', () => {
     await decidedWhileOn('kept', { ...model, disposition: 'keep', labelId: 'everything_else', reason: 'from a person' });
     // Carried out at the next pass.
     await recordDecision(db, ACCOUNT, 'waiting', { ...model, disposition: 'keep', reason: 'r' }, { now: 1, carryOut: true });
-    expect(labelsOf('asked')).toEqual(['INBOX', gmail.gmail.labelId('mild/marketing')]);
+    expect(gmail.gmail.labelsOf('asked')).toEqual(['INBOX', gmail.gmail.labelId('mild/marketing')]);
 
     expect(await ruleInbox(db, gmail.api, ACCOUNT, rule)).toMatchObject({ messages: 2, exact: true });
     await applyRule(rule, 3);
-    expect(labelsOf('asked')).toEqual(['INBOX']);
+    expect(gmail.gmail.labelsOf('asked')).toEqual(['INBOX']);
     expect((await decisionsOf('asked')).at(-1)).toMatchObject({ rule_id: rule, carry_out: true, by_user: true });
     expect((await decisionsOf('kept')).at(-1)).toMatchObject({ rule_id: rule, carry_out: true, by_user: true });
     expect(await decisionsOf('waiting')).toHaveLength(1);
 
     await triageAccount({ db, mailbox: null, answers: gmail.mailbox }, await firstAccount(db));
-    for (const id of ['asked', 'kept']) expect(labelsOf(id)).toEqual([gmail.gmail.labelId('mild/marketing')]);
+    for (const id of ['asked', 'kept']) expect(gmail.gmail.labelsOf(id)).toEqual([gmail.gmail.labelId('mild/marketing')]);
     // Done, the rule has nothing left to do there.
     expect(await ruleInbox(db, gmail.api, ACCOUNT, rule)).toMatchObject({ messages: 0, exact: true });
   });
@@ -202,10 +200,10 @@ describe('applying a rule to the inbox', () => {
     );
     await triageAccount({ db, mailbox: null, answers: gmail.mailbox, model, sources: gmail }, await firstAccount(db));
     expect(await decisionsOf('sale')).toEqual([{ stage: 'model', disposition: 'spam', label_id: 'marketing', rule_id: rule, carry_out: true, by_user: true }]);
-    expect(labelsOf('sale')).toContain('SPAM');
+    expect(gmail.gmail.labelsOf('sale')).toContain('SPAM');
     // What the model found it to be is a suggestion, as any mail is while Mild is off.
     expect(await decisionsOf('note')).toEqual([{ stage: 'model', disposition: 'keep', label_id: 'personal', rule_id: null, carry_out: false, by_user: false }]);
-    expect(labelsOf('note')).toEqual(['INBOX']);
+    expect(gmail.gmail.labelsOf('note')).toEqual(['INBOX']);
   });
 
   it('goes on a slice at a time, stops when asked or when its rule is removed, and leaves going through the inbox alone', async () => {

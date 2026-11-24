@@ -16,6 +16,7 @@ import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type JudgeFailure, type Verdict, modelStage } from '../src/triage/stages/model.ts';
 import { ACCOUNT, DAY, b64, facts, memorySignIns, SAMPLE_LABELS, toolReply, email } from './helpers.ts';
+import { RATE_LIMITED } from './google.ts';
 
 function evidence(overrides: Partial<Evidence['sender']> = {}, body: string | null = 'Our autumn sale starts today.'): Evidence {
   const f = facts({ headers: { 'list-unsubscribe': '<https://example.com/u>' } });
@@ -549,8 +550,8 @@ describe('gatherEvidence', () => {
     const db = await openUserDb(ACCOUNT);
     const { api, mailbox, gmail } = connectGmail(fake.google);
     gmail.deliver({ id: 'm1', from: 'news@example.com' });
-    gmail.fail('users.messages.get', { status: 403, reason: 'userRateLimitExceeded' });
-    gmail.fail('users.messages.list', { status: 403, reason: 'userRateLimitExceeded' });
+    gmail.fail('users.messages.get', RATE_LIMITED);
+    gmail.fail('users.messages.list', RATE_LIMITED);
     const result = await gatherEvidence({ db, api, mailbox }, facts());
     expect(result).toMatchObject({ body: null, sender: { userHasWritten: null } });
   });

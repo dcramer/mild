@@ -134,7 +134,7 @@ test.describe('The reader, from Inbox', () => {
     await reader(page).getByRole('button', { name: 'Block sender' }).click();
     await dismiss(page, 'Winter sale starts now');
     await expect(readerHeading(page, 'Winter sale starts now')).toHaveCount(0);
-    await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('SPAM');
+    await expect.poll(() => sift.google().mailbox('me@example.org').labelsOf(id)).toContain('SPAM');
   });
 
   test('a rule is made from what the message is: Make a rule… is last in its list, and opens the rule dialog', async ({ page }) => {

@@ -27,17 +27,17 @@ describe('Mild on and off', () => {
   it('only suggests while off, and carries out what it decides in Gmail once on', async () => {
     const { box, me, receipt } = await withRule();
     const suggested = await receipt();
-    expect(box.message(suggested)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    expect(box.labelsOf(suggested)).toEqual(['INBOX', 'UNREAD']);
     expect(box.asked('users.messages.modify')).toEqual([]);
 
     expect((await me.call('POST', '/api/active', { active: true })).status).toBe(200);
     expect(await manage(me)).toMatchObject({ active: true });
     const done = await receipt();
-    expect(box.message(done)!.labelIds).toEqual(['UNREAD', box.labelId('mild/receipts')]);
-    expect(box.message(suggested)!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    expect(box.labelsOf(done)).toEqual(['UNREAD', box.labelId('mild/receipts')]);
+    expect(box.labelsOf(suggested)).toEqual(['INBOX', 'UNREAD']);
 
     await me.call('POST', '/api/active', { active: false });
-    expect(box.message(await receipt())!.labelIds).toEqual(['INBOX', 'UNREAD']);
+    expect(box.labelsOf(await receipt())).toEqual(['INBOX', 'UNREAD']);
   });
 
   it('checks Gmail now when asked, and counts what was decided and what it saved', async () => {
