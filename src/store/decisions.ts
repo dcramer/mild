@@ -1,8 +1,42 @@
-import { type DECISION_OUTCOMES, and, asc, decisions, desc, eq, feedback, isNull, labels, messages, ne } from './query.ts';
+import {
+  type AnyColumn,
+  type DECISION_OUTCOMES,
+  type SQL,
+  alias,
+  and,
+  asc,
+  decisions,
+  desc,
+  eq,
+  feedback,
+  isNull,
+  labels,
+  max,
+  messages,
+  ne,
+} from './query.ts';
 import type { Sql } from './sql.ts';
 import { openPart, sealPart } from './content.ts';
 import type { Decision, Disposition } from '../triage/types.ts';
 import { plain } from '../plain.ts';
+
+const later = alias(decisions, 'later');
+
+/**
+ * True on a message's current decision, the newest recorded for it. The message is named by the decision's own
+ * columns unless given, as where a join has the message before the decision.
+ */
+export const isCurrent = (db: Sql, accountId: AnyColumn | SQL.Aliased = decisions.accountId, messageId: AnyColumn | SQL.Aliased = decisions.messageId) =>
+  eq(
+    decisions.id,
+    db
+      .select({ id: max(later.id) })
+      .from(later)
+      .where(and(eq(later.accountId, accountId), eq(later.messageId, messageId))),
+  );
+
+/** Joins `messages` to `decisions`. */
+export const ofMessage = and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId));
 
 /** A decision's label, whose Gmail label is the one the decision applies. */
 const ofLabel = eq(labels.id, decisions.labelId);

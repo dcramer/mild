@@ -1,7 +1,6 @@
 import {
   type SQL,
   type VERDICTS,
-  alias,
   and,
   asc,
   count,
@@ -15,7 +14,6 @@ import {
   isNotNull,
   isNull,
   labels,
-  max,
   messages,
   min,
   ne,
@@ -28,7 +26,7 @@ import {
 import type { Sql } from '../store/sql.ts';
 import { exampleKeysOf, hashOf, openEnvelope } from '../store/content.ts';
 import { listLabels } from '../store/labels.ts';
-import { recordDecision } from '../store/decisions.ts';
+import { isCurrent, ofMessage, recordDecision } from '../store/decisions.ts';
 import { exampleText } from '../store/kept.ts';
 import { proposeFromCorrections } from '../store/proposals.ts';
 import type { RuleFacts } from '../triage/facts.ts';
@@ -60,8 +58,6 @@ export interface Suggestion {
   fromName: Confidential | null;
   subject: Confidential;
 }
-
-const x = alias(decisions, 'x');
 
 const SUGGESTION = {
   decisionId: decisions.id,
@@ -95,7 +91,7 @@ export async function pendingSuggestions(
   const rows = await db
     .select(SUGGESTION)
     .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .leftJoin(rules, eq(rules.id, decisions.ruleId))
     .where(waiting(db, filter))
     .orderBy(desc(decisions.decidedAt), desc(decisions.id))
@@ -108,7 +104,7 @@ export async function waitingCount(db: Sql, accounts: readonly string[]): Promis
   const [row] = await db
     .select({ n: count() })
     .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .leftJoin(rules, eq(rules.id, decisions.ruleId))
     .where(and(waiting(db, { accounts }), ne(decisions.disposition, 'keep')));
   return row?.n ?? 0;
@@ -116,13 +112,7 @@ export async function waitingCount(db: Sql, accounts: readonly string[]): Promis
 
 const waiting = (db: Sql, filter: { accountId?: string; accounts?: readonly string[]; sender?: string; facts?: RuleFacts; since?: number }) =>
   and(
-    eq(
-      decisions.id,
-      db
-        .select({ id: max(x.id) })
-        .from(x)
-        .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
-    ),
+    isCurrent(db),
     // Mail Mild asked about while on is waiting on the user as much as what it would have done while off.
     or(eq(decisions.carryOut, false), eq(decisions.disposition, 'review')),
     eq(decisions.byUser, false),
@@ -153,7 +143,7 @@ async function undecided(db: Sql, accountId: string, messageId: string): Promise
           db
             .select({ one: sql`1` })
             .from(decisions)
-            .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
+            .where(ofMessage),
         ),
       ),
     );
@@ -179,7 +169,7 @@ async function currentDecision(db: Sql, accountId: string, messageId: string): P
   const [row] = await db
     .select(SUGGESTION)
     .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, messageId)))
     .orderBy(desc(decisions.id))
     .limit(1);

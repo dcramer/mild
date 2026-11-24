@@ -22,6 +22,7 @@ import type { Sql } from '../../store/sql.ts';
 import { type Scope, within } from '../scope.ts';
 import type { Saved } from '../types.ts';
 import { DAY_MS } from './decisions.ts';
+import { ofMessage } from '../../store/decisions.ts';
 
 /**
  * What one message Mild took out of the inbox saved: about the time people spend on an email they open (Litmus's
@@ -53,7 +54,7 @@ export async function keptOut(
   return await db
     .select({ decidedAt: decisions.decidedAt, labelId: decisions.labelId })
     .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .innerJoin(
       actions,
       eq(

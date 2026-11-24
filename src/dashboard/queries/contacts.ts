@@ -1,5 +1,4 @@
 import {
-  alias,
   and,
   asc,
   count,
@@ -28,6 +27,7 @@ import type { ContactPage, NextMail, RuleSummary } from '../types.ts';
 import { listRuleSummaries } from './rules.ts';
 import { DAY_MS } from './decisions.ts';
 import { plain } from '../../plain.ts';
+import { isCurrent, ofMessage } from '../../store/decisions.ts';
 
 type Rule = Pick<RuleSummary, 'id' | 'match' | 'kind' | 'labelId' | 'labelName' | 'disposition' | 'when'>;
 
@@ -83,8 +83,6 @@ export const nextOf = (rule: Rule | null, kinds: readonly Kind[]): NextMail => {
     : { labelId: null, labelName: null, disposition: 'review', usually: false, ruleId: null };
 };
 
-const later = alias(decisions, 'later');
-
 /**
  * Each sender's (or domain's, by `column`) mail by what its current decision says, or the reader's answer to it, which
  * beats the decision, for the hashes given. A label since removed is left out: their history has it, but no mail is given it again.
@@ -109,23 +107,10 @@ async function kindsOf(
       does: sql<string>`(array_agg(${does} ORDER BY ${messages.receivedAt} DESC, ${decisions.id} DESC))[1]`,
     })
     .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .leftJoin(feedback, eq(feedback.decisionId, decisions.id))
     .leftJoin(labels, eq(labels.id, labelId))
-    .where(
-      and(
-        within(scope, decisions.accountId),
-        inArray(column, [...hashes]),
-        or(isNull(labelId), isNull(labels.removedAt)),
-        eq(
-          decisions.id,
-          db
-            .select({ id: max(later.id) })
-            .from(later)
-            .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
-        ),
-      ),
-    )
+    .where(and(within(scope, decisions.accountId), inArray(column, [...hashes]), or(isNull(labelId), isNull(labels.removedAt)), isCurrent(db)))
     .groupBy(column, labelId, labels.name);
   const kinds = new Map<string, Kind[]>();
   for (const { hash, lastAt, ...kind } of rows) kinds.set(hash, [...(kinds.get(hash) ?? []), { ...kind, lastAt: lastAt ?? 0 }]);

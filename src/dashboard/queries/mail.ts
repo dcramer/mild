@@ -14,7 +14,6 @@ import {
   isNull,
   lt,
   mailBodies,
-  max,
   messages,
   not,
   or,
@@ -33,6 +32,7 @@ import { Refusal } from '../../refusal.ts';
 import type { MailConversation, MailThread, MailThreads, MailView } from '../types.ts';
 import { plain, seal } from '../../plain.ts';
 import type { Confidential } from '../../confidential.ts';
+import { isCurrent } from '../../store/decisions.ts';
 
 /** About a screen's worth of conversations, so a page arrives in one read and scrolling loads the next. */
 const PAGE = 50;
@@ -115,7 +115,6 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
     )
     .groupBy(messages.accountId, messages.threadId)
     .as('threads');
-  const later = alias(decisions, 'later');
   // The reader's answer about it, where they gave one, beats what Mild decided.
   const answered = sql`${feedback.id} IS NOT NULL`;
   const labelId = sql<string | null>`CASE WHEN ${answered} THEN ${feedback.labelId} ELSE ${decisions.labelId} END`;
@@ -147,17 +146,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
     .from(threads)
     .leftJoin(
       decisions,
-      and(
-        eq(decisions.accountId, threads.accountId),
-        eq(decisions.messageId, threads.newestId),
-        eq(
-          decisions.id,
-          db
-            .select({ id: max(later.id) })
-            .from(later)
-            .where(and(eq(later.accountId, threads.accountId), eq(later.messageId, threads.newestId))),
-        ),
-      ),
+      and(eq(decisions.accountId, threads.accountId), eq(decisions.messageId, threads.newestId), isCurrent(db, threads.accountId, threads.newestId)),
     )
     .leftJoin(feedback, eq(feedback.decisionId, decisions.id))
     .where(

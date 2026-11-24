@@ -1,7 +1,7 @@
 import { alias, and, decisions, desc, eq, exists, feedback, lt, max, ne, notExists, isNotNull, isNull, rules as ruleRows, sql } from '../store/query.ts';
 import type { Sql } from '../store/sql.ts';
 import { openEnvelope } from '../store/content.ts';
-import { recordDecision } from '../store/decisions.ts';
+import { isCurrent, recordDecision } from '../store/decisions.ts';
 import { listLabels } from '../store/labels.ts';
 import { lastStandingChange } from '../store/actions.ts';
 import { getFacts } from '../store/messages.ts';
@@ -28,7 +28,6 @@ const STANDING = {
   ruleId: decisions.ruleId,
 };
 
-const x = alias(decisions, 'x');
 const p = alias(decisions, 'p');
 const answeredDecision = alias(decisions, 'answered');
 const WILL: Record<Disposition, string> = { keep: 'kept', archive: 'archived', spam: 'marked as spam', review: 'left for you' };
@@ -105,13 +104,7 @@ async function redecide(db: Sql, accountId: string, now: number, learnedGone: st
         eq(decisions.accountId, accountId),
         eq(decisions.carryOut, false),
         isNotNull(decisions.ruleId),
-        eq(
-          decisions.id,
-          db
-            .select({ id: max(x.id) })
-            .from(x)
-            .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
-        ),
+        isCurrent(db),
         notExists(
           db
             .select({ one: sql`1` })
@@ -147,13 +140,7 @@ async function redecide(db: Sql, accountId: string, now: number, learnedGone: st
               eq(decisions.ruleId, learnedGone),
               eq(decisions.carryOut, false),
               eq(decisions.byUser, false),
-              eq(
-                decisions.id,
-                db
-                  .select({ id: max(x.id) })
-                  .from(x)
-                  .where(and(eq(x.accountId, decisions.accountId), eq(x.messageId, decisions.messageId))),
-              ),
+              isCurrent(db),
             ),
           );
   const suggested = await pendingSuggestions(db, { accountId });

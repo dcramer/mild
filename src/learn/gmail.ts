@@ -6,6 +6,7 @@ import { listLabels } from '../store/labels.ts';
 import { type DecidedDisposition, LEAVE_IN_INBOX } from '../triage/types.ts';
 import { applyFeedback } from './feedback.ts';
 import { plain } from '../plain.ts';
+import { ofMessage } from '../store/decisions.ts';
 
 /** Labels put on or taken off one message in Gmail. */
 interface MessageChange {
@@ -94,7 +95,7 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
         labelIds: messages.labelIds,
       })
       .from(decisions)
-      .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+      .innerJoin(messages, ofMessage)
       .where(and(eq(decisions.accountId, accountId), eq(decisions.messageId, change.messageId)))
       .orderBy(desc(decisions.id))
       .limit(1);

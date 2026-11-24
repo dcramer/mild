@@ -1,8 +1,9 @@
-import { alias, and, count, decisions, eq, feedback, inArray, isNotNull, max, rules as ruleRows, sql } from '../../store/query.ts';
+import { and, count, decisions, eq, feedback, inArray, isNotNull, rules as ruleRows, sql } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { listLabels } from '../../store/labels.ts';
 import { type Scope, within } from '../scope.ts';
 import type { LabelSummary } from '../types.ts';
+import { isCurrent } from '../../store/decisions.ts';
 
 /** What a label does, as the one word the dashboard shows and sets. */
 export const outcomeOf = (label: { disposition: string; block?: boolean; digest?: boolean }) =>
@@ -14,24 +15,11 @@ export async function listLabelSummaries(db: Sql, scope: Scope): Promise<LabelSu
   const byLabel = <T extends { id: string | null }>(rows: T[]) => new Map(rows.map((r) => [r.id, r] as const));
   const labelOfRule = sql<string | null>`coalesce(${ruleRows.labelId}, ${ruleRows.whenLabel})`;
   const rules = byLabel(await db.select({ id: labelOfRule, n: count() }).from(ruleRows).where(isNotNull(labelOfRule)).groupBy(labelOfRule));
-  const later = alias(decisions, 'later');
   const messages = byLabel(
     await db
       .select({ id: decisions.labelId, n: count() })
       .from(decisions)
-      .where(
-        and(
-          within(scope, decisions.accountId),
-          isNotNull(decisions.labelId),
-          eq(
-            decisions.id,
-            db
-              .select({ id: max(later.id) })
-              .from(later)
-              .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
-          ),
-        ),
-      )
+      .where(and(within(scope, decisions.accountId), isNotNull(decisions.labelId), isCurrent(db)))
       .groupBy(decisions.labelId),
   );
   const record = byLabel(
