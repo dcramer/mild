@@ -105,3 +105,6 @@ export const MessageDetail = z.object({
   ),
 });
 export type MessageDetail = z.infer<typeof MessageDetail>;
+
+export const MessagesAhead = z.object({ messages: z.array(MessageDetail) });
+export type MessagesAhead = z.infer<typeof MessagesAhead>;

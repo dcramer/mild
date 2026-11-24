@@ -716,6 +716,24 @@ test.describe('Inbox', () => {
     await expect(page.getByRole('button', { name: 'Block', pressed: true })).toBeVisible();
   });
 
+  test('a conversation at the top of the inbox opens whole on its first draw, its text read ahead in one call', async ({ page }) => {
+    const ahead = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/messages');
+    await page.goto('/inbox');
+    await expect(inboxRows(page)).toHaveCount(19);
+    expect((await ahead).status()).toBe(200);
+    // One opened and closed first, so the reader's code is here however busy the machine: it is loaded as the page starts.
+    await inboxRow(page, 'This week in widgets').getByRole('cell').nth(2).click();
+    await expect(reader(page).getByText('Five stories about widgets.')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(reader(page)).toHaveCount(0);
+    await page.evaluate(
+      `window.drewLoading = false; new MutationObserver(() => { if (document.querySelector('[aria-label="Loading"]')) window.drewLoading = true; }).observe(document.body, { subtree: true, childList: true })`,
+    );
+    await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    await expect(reader(page).getByText('Are you free for lunch on Thursday?')).toBeVisible();
+    expect(await page.evaluate('window.drewLoading')).toBe(false);
+  });
+
   test('J and K move, O opens a conversation with its unread open, and opening it marks it read', async ({ page }) => {
     await page.goto('/inbox');
     await expect(inboxRows(page)).toHaveCount(19);

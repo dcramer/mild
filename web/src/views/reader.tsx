@@ -568,7 +568,8 @@ function useConversation(accountId: string, threadId: string | undefined) {
     30_000,
     '',
   );
-  const fromCopy = inCopy.data?.[0];
+  // The live query answers only after the first draw, which would draw a page of placeholders before the conversation.
+  const fromCopy = inCopy.data?.[0] ?? (key && started ? copied(key) : undefined);
   return {
     fromCopy,
     conversation: threadId ? (fromCopy ? conversationOf(fromCopy) : thread.data) : null,
@@ -699,7 +700,7 @@ export function MessageReader({
     return <Arriving conversation={conversation} subject={subject!} bar={bar(<Blank className="h-(--control) w-40 py-0" />)} thumbs={thumbs} />;
   if (loading || (threadId && !conversation && thread.loading))
     return (
-      <Reader bar={bar()} thumbs={thumbs} title={<Blank />}>
+      <Reader bar={bar()} thumbs={thumbs} title={picked || item.subject === null ? <Blank /> : reveal(item.subject) || '(no subject)'}>
         <Loading rows={6} />
       </Reader>
     );

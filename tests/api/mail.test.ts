@@ -171,6 +171,20 @@ describe('reading mail', () => {
     ]);
   });
 
+  it('reads several messages ahead in one call, each as the reader reads it alone, leaving out one it cannot', async () => {
+    const { box, me, arrives } = await withInbox();
+    const lunch = box.deliver({ from: 'ada@example.com', subject: 'Lunch?', text: 'Lunch on Friday?' });
+    const notes = box.deliver({ from: 'grace@example.com', subject: 'Notes', text: 'Attached are my notes.' });
+    await arrives();
+    const ahead = await me.call('GET', `/api/messages?ids=${lunch},missing,${notes}`);
+    expect(ahead.status).toBe(200);
+    expect(ahead.body).toEqual({
+      messages: [(await me.call('GET', `/api/message?id=${lunch}`)).body, (await me.call('GET', `/api/message?id=${notes}`)).body],
+    });
+    const many = Array.from({ length: 31 }, (_, i) => `m${i}`).join(',');
+    expect((await me.call('GET', `/api/messages?ids=${many}`)).status).toBe(400);
+  });
+
   it('shows someone else none of it', async () => {
     const { sift, box, arrives } = await withInbox();
     const id = box.deliver({ from: 'ada@example.com', subject: 'Lunch?', html: '<p>Lunch</p>' });
@@ -179,6 +193,7 @@ describe('reading mail', () => {
     expect(threadsOf(await other.call('GET', '/api/mail/threads'))).toEqual([]);
     expect((await other.call('GET', `/api/mail/thread?thread=${id}`)).status).toBe(404);
     expect((await other.call('GET', `/api/message?id=${id}`)).status).toBe(404);
+    expect((await other.call('GET', `/api/messages?ids=${id}`)).body).toEqual({ messages: [] });
     expect((await other.call('GET', `/api/message/html?id=${id}`)).status).toBe(404);
     expect((await other.call('GET', `/api/message/file?id=${id}&part=1`)).status).toBe(404);
     expect((await other.call('GET', `/api/mail/threads?mailbox=${ME}`)).status).toBe(404);

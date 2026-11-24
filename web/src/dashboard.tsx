@@ -3,7 +3,7 @@ import { useIsFetching } from '@tanstack/react-query';
 import { ActivityIcon, ContactRoundIcon, InboxIcon, ListChecksIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
-import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Activity, type ComponentProps, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { SetUp } from '@/views/set-up.tsx';
 import { MildStatus, UsageDetail } from '@/components/status.tsx';
 import type { ManageState } from '@/lib/api/endpoints.ts';
@@ -24,12 +24,14 @@ import { onOutboxFailed, useOutbox } from '@/lib/waiting.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
 import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing, useNow, useToast } from '@/system';
 import { Boot } from '@/views/boot.tsx';
+import type * as ReaderModule from '@/views/reader.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { useSession, useManage, useUsage } from '@/lib/api/reads.ts';
 import { usePlan } from '@/lib/prices.ts';
 import { useDeviceFrame } from '@/lib/frame.ts';
 
-// What opens over a screen, or in its place, is fetched when first needed and, once the page is idle, ahead of need.
+// What opens over a screen, or in its place, is fetched when first needed and, once the page is idle, ahead of need;
+// the reader, as the page starts.
 const loadSettings = () => import('@/views/settings.tsx');
 const loadReader = () => import('@/views/reader.tsx');
 const loadComposer = () => import('@/views/composer.tsx');
@@ -38,7 +40,27 @@ const loadComposer = () => import('@/views/composer.tsx');
 const loadPanels = () => Promise.all([loadSettings(), loadComposer()]);
 const SettingsPanel = dynamic(() => loadPanels().then(([m]) => m.SettingsPanel), { ssr: false });
 const Composer = dynamic(() => loadPanels().then(([, m]) => m.Composer), { ssr: false });
-const MessageReader = dynamic(() => loadReader().then((m) => m.MessageReader), { ssr: false, loading: () => <Loading rows={6} /> });
+// Not `dynamic`, which draws its placeholder for a frame even once the module is here: the reader, loaded as the page
+// starts, opens on its first frame.
+let reader: typeof ReaderModule | undefined;
+const readerLoaded = new Set<() => void>();
+const fetchReader = () =>
+  loadReader().then((m) => {
+    reader = m;
+    for (const loaded of readerLoaded) loaded();
+  });
+function MessageReader(props: ComponentProps<typeof ReaderModule.MessageReader>) {
+  const loaded = useSyncExternalStore(
+    (changed) => {
+      readerLoaded.add(changed);
+      if (!reader) void fetchReader().catch(() => {});
+      return () => void readerLoaded.delete(changed);
+    },
+    () => reader,
+    () => undefined,
+  );
+  return loaded ? <loaded.MessageReader {...props} /> : <Loading rows={6} />;
+}
 const ProposalReader = dynamic(() => import('@/views/proposal.tsx').then((m) => m.ProposalReader), { ssr: false, loading: () => <Loading rows={6} /> });
 
 /** What the reader's Back says, by the section a list is in; a sender's or a domain's page by its address. */
@@ -49,9 +71,11 @@ const listName = (path: string) => {
 };
 
 function usePanelsAhead() {
+  // Opening mail is most of what is done here: not left until the page is idle, which a busy phone may not be for seconds.
+  useEffect(() => void fetchReader().catch(() => {}), []);
   useEffect(() => {
     const ahead = () => {
-      for (const load of [loadSettings, loadReader, loadComposer]) void load().catch(() => {});
+      for (const load of [loadSettings, loadComposer]) void load().catch(() => {});
     };
     if ('requestIdleCallback' in window) {
       const id = window.requestIdleCallback(ahead, { timeout: 4000 });

@@ -24,6 +24,7 @@ export const AREAS = {
     'POST /api/mail/drafts/remove',
     'POST /api/mail/ask',
     'GET /api/message',
+    'GET /api/messages',
     'GET /api/message/html',
     'GET /api/message/file',
     'POST /api/undo',

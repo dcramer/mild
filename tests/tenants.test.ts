@@ -215,6 +215,7 @@ const READS = (account: string, mark: string) => [
   '/api/models',
   '/api/labels/proposal',
   `/api/message?id=m-${mark}`,
+  `/api/messages?ids=m-${mark}`,
   `/api/suggestion?sender=sender@${mark}.example.com`,
   '/api/contacts',
   `/api/contacts?q=${mark}`,

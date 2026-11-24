@@ -58,7 +58,7 @@ import {
   Blank,
   OnPhone,
 } from '@/system';
-import { useManage, useSuggestions, readMessageAhead, useMailThreads } from '@/lib/api/reads.ts';
+import { useManage, useSuggestions, readMessageAhead, readScreenAhead, useMailThreads } from '@/lib/api/reads.ts';
 
 /** What Inbox shows: its conversations, narrowed or not, or the mail begun and not sent. */
 type Shown = MailView | 'drafts';
@@ -79,6 +79,8 @@ const LIST_KEPT_MS = 30 * 60_000;
 const COPY_PAGE = 100;
 /** Rows drawn first, more than a screen holds: on a phone, drawing a hundred at once is most of a second before any shows. */
 const FIRST_DRAWN = 30;
+/** The top of the inbox, whose text is read ahead in one call: about 40 ms of the server's time a message, so not all that is drawn. */
+const READ_AHEAD = 10;
 
 /** A conversation as a row lists it: who wrote, revealed. */
 type Listed = Omit<MailThread, 'who'> & { who: readonly Writer[] };
@@ -461,6 +463,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
     else periods.push({ title, rows: [thread] });
   }
   const refs = threads.map((t) => ({ ...newest(t), subject: t.subject, threadId: t.threadId }));
+  useEffect(() => readScreenAhead(refs.slice(0, READ_AHEAD)));
   // On a phone, once a row is held, a press on a row selects it or lets it go, as a phone's own mail app does.
   const phone = usePhone();
   const choosing = phone && selected.size > 0;
