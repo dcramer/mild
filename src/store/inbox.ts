@@ -1,13 +1,14 @@
 import { and, count, decisions, desc, eq, gte, inArray, inboxRuns, isNull, modelRuns, sql, sum } from './query.ts';
 import type { Sql } from './sql.ts';
+import type { REACHES } from './states.ts';
 
 /**
  * How many of a mailbox's newest messages one press goes through. `inbox` bounds what one press can spend
  * on model calls and Gmail reads, applying a rule as much as going through the inbox; `recent` is enough to
  * teach with while setting up.
  */
-export const REACH = { inbox: 10_000, recent: 300 } as const;
-export type Reach = keyof typeof REACH;
+export const REACH = { inbox: 10_000, recent: 300 } as const satisfies Record<Reach, number>;
+export type Reach = (typeof REACHES)[number];
 
 export interface InboxRun {
   id: number;

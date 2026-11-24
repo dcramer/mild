@@ -1,4 +1,5 @@
-import { type FILTER_STATES, actions, and, asc, eq, inArray, isNotNull, mailboxes, ruleFilters, rules as ruleRows } from './query.ts';
+import { actions, and, asc, eq, inArray, isNotNull, mailboxes, ruleFilters, rules as ruleRows } from './query.ts';
+import type { FILTER_STATES } from './states.ts';
 import type { Sql } from './sql.ts';
 import { openJson, ruleName, sealJson } from './content.ts';
 import { openPayload } from './actions.ts';

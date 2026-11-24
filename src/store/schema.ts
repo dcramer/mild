@@ -37,6 +37,7 @@ import { REASONING } from '../model/reasoning.ts';
 import { MAIL_WINDOWS } from '../mail-window.ts';
 import type { Facts } from '../triage/facts.ts';
 import { DECIDED, DISPOSITIONS, LEAVE_IN_INBOX, STAGE_NAMES, SUBSCRIPTION_ACTIONS } from '../triage/types.ts';
+import { EVAL_STATUSES, EXAMPLE_STATUSES, FILTER_STATES } from './states.ts';
 
 /** `device`: the key one browser's copy of the person's mail is encrypted with (docs/sync.md), by the id its cookie holds. */
 export const CREDENTIAL_KINDS = ['gmail', 'model', 'device'] as const;
@@ -49,14 +50,10 @@ export const ACTION_TYPES = ['archive', 'spam', 'label', 'undo', 'unsubscribe', 
 export const ACTION_STATUSES = ['pending', 'done', 'failed', 'unknown', 'undone'] as const;
 /** `learned`: Mild made it (blocking a sender). */
 export const RULE_SOURCES = ['user', 'learned', 'correction'] as const;
-/** `changed`: edited in Gmail. `gone`: deleted there. `outdated`: the rule no longer says what the filter does. */
-export const FILTER_STATES = ['active', 'changed', 'gone', 'outdated'] as const;
 const PROPOSAL_STATUSES = ['open', 'accepted', 'dismissed'] as const;
 /** right: Mild's suggestion was what they wanted. wrong: it was not. answered: Mild had no suggestion. */
 export const VERDICTS = ['right', 'wrong', 'answered'] as const;
 const FEEDBACK_VIA = ['dashboard', 'gmail'] as const;
-export const EXAMPLE_STATUSES = ['pending', 'captured', 'gone'] as const;
-export const EVAL_STATUSES = ['running', 'done', 'failed'] as const;
 
 /** What Mild's own queries run as: it owns nothing and cannot bypass row-level security. */
 export const siftApp = pgRole('sift_app', { createRole: false });

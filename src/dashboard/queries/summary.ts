@@ -24,14 +24,15 @@ import { outOfTries } from '../../store/runs.ts';
 import { noDecision } from '../../store/messages.ts';
 import { accuracy } from '../../learn/feedback.ts';
 import { type Scope, within } from '../scope.ts';
-import { type DayChanges, STAGES, type StageKey, type Summary } from '../types.ts';
+import { type DayChanges, type StageKey, type Summary } from '../types.ts';
+import { STAGE_NAMES } from '../../triage/types.ts';
 import { DAY_MS, labelIs, listDecisions } from './decisions.ts';
 import { keptOutLessDigests, net, saved, unsubscribed } from './saved.ts';
 import { labelNames } from '../../store/labels.ts';
 
 const first = alias(decisions, 'first');
 
-const emptyCounts = () => Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<StageKey, number>;
+const emptyCounts = () => Object.fromEntries(STAGE_NAMES.map((s) => [s, 0])) as Record<StageKey, number>;
 
 export const localDay = (ms: number) => {
   const d = new Date(ms);
@@ -133,7 +134,7 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
     .leftJoin(modelRuns, eq(modelRuns.id, decisions.runId))
     .where(triagedSince)
     .groupBy(decisions.stage);
-  const byStage = STAGES.map((stage) => {
+  const byStage = STAGE_NAMES.map((stage) => {
     const row = stageRows.find((r) => r.stage === stage);
     return { stage, decisions: row?.n ?? 0, costUsd: row?.cost ?? 0, tokens: row?.tokens ?? 0 };
   });
@@ -239,6 +240,6 @@ export async function summarize(db: Sql, scope: Scope, days: number, now: number
       byLabel: kept,
       unsubscribed: await unsubscribed(db, scope, since),
     },
-    accuracy: { ...answered, byStage: STAGES.map((stage) => answered.byStage.find((r) => r.stage === stage) ?? { stage, reviewed: 0, right: 0 }) },
+    accuracy: { ...answered, byStage: STAGE_NAMES.map((stage) => answered.byStage.find((r) => r.stage === stage) ?? { stage, reviewed: 0, right: 0 }) },
   };
 }
