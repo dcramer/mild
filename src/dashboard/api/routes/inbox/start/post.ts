@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { listAccounts } from '../../../../../store/accounts.ts';
-import { REACH, startInboxRuns } from '../../../../../store/inbox.ts';
+import { REACH, startInboxRuns } from '../../../../../store/inbox-runs.ts';
 import { hasOwnLabels } from '../../../../../store/labels.ts';
 import { preferences } from '../../../../../store/preferences.ts';
 import { InboxReach } from '../../../../types.ts';

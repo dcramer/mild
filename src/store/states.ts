@@ -14,5 +14,5 @@ export const EVAL_STATUSES = ['running', 'done', 'failed'] as const;
  */
 export const CONTACTS = ['new', 'mutual', 'one-way'] as const;
 
-/** How far one press of going through the inbox reaches: `REACH` in src/store/inbox.ts. */
+/** How far one press of going through the inbox reaches: `REACH` in src/store/inbox-runs.ts. */
 export const REACHES = ['inbox', 'recent'] as const;

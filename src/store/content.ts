@@ -1,5 +1,5 @@
 import type { Confidential, Sealed } from '../confidential.ts';
-import { seal as held } from '../plain.ts';
+import { held } from '../plain.ts';
 import { currentPrefix, keyedHash, openBytes, openSecret, openToRekey, sealBytes, sealSecret, staleSecret } from '../secrets.ts';
 import type { Facts } from '../triage/facts.ts';
 import { envelopeOf, parseListId } from '../triage/features.ts';

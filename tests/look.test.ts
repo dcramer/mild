@@ -8,7 +8,7 @@ import { setRuleFilter } from '../src/store/filters.ts';
 import { setActive, setMail } from '../src/store/preferences.ts';
 import { examples } from '../src/store/query.ts';
 import { addRule } from '../src/store/rules.ts';
-import { goingInboxRuns, startInboxRuns } from '../src/store/inbox.ts';
+import { goingInboxRuns, startInboxRuns } from '../src/store/inbox-runs.ts';
 import { startEval } from '../src/learn/evals.ts';
 import { type RunOptions, type Work, dueWork } from '../src/work/run.ts';
 import { FILTER_CHECK_MINUTES } from '../src/work/filters.ts';

@@ -2,7 +2,7 @@ import { ADDRESS_PREFIX, openAddress } from '../../store/addresses.ts';
 import { addresses, and, desc, sql } from '../../store/query.ts';
 import { mayHold, wordsOf } from '../../store/search.ts';
 import type { Sql } from '../../store/sql.ts';
-import { plain, seal } from '../../plain.ts';
+import { plain, held } from '../../plain.ts';
 import { type Scope, within } from '../scope.ts';
 import type { AddressSuggestion } from '../types.ts';
 
@@ -35,7 +35,7 @@ export async function suggestAddresses(db: Sql, scope: Scope, typed: string, mos
     const who = plain(openAddress(db, row.accountId, row.hash, row.who));
     if (!startsEach(words, wordsOf(`${who.name ?? ''} ${who.address}`))) continue;
     shown.add(row.hash);
-    found.push({ address: seal(who.address), name: seal(who.name) });
+    found.push({ address: held(who.address), name: held(who.name) });
   }
   return found;
 }

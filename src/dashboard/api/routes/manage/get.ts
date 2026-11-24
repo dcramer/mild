@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { canSend, lastSyncedAt, listAccounts, mailboxAliases, signInEnds } from '../../../../store/accounts.ts';
-import { inboxProgress } from '../../../../store/inbox.ts';
+import { inboxProgress } from '../../../../store/inbox-runs.ts';
 import { copyProgress } from '../../../../store/copies.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
 import { waitingCount } from '../../../../learn/feedback.ts';

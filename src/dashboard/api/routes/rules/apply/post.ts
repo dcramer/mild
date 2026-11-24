@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { eq, rules } from '../../../../../store/query.ts';
 import { listAccounts } from '../../../../../store/accounts.ts';
-import { REACH, startInboxRuns } from '../../../../../store/inbox.ts';
+import { REACH, startInboxRuns } from '../../../../../store/inbox-runs.ts';
 import { hasOwnLabels } from '../../../../../store/labels.ts';
 import { done, self, write } from '../../../route.ts';
 import { ruleId } from '../../../shared/rules.ts';

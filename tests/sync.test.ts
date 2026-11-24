@@ -4,7 +4,7 @@ import { scopeFor } from '../src/dashboard/scope.ts';
 import { recordLabels, recordSync } from '../src/store/messages.ts';
 import { setMail } from '../src/store/preferences.ts';
 import { conversationChanges, eq, messages } from '../src/store/query.ts';
-import { headOf, pruneGone } from '../src/store/sync.ts';
+import { headOf, pruneGone } from '../src/store/changes.ts';
 import { onePerson, raw } from './fixtures.ts';
 import { ACCOUNT, facts } from './helpers.ts';
 

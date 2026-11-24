@@ -1,6 +1,6 @@
 import type { Confidential } from '../confidential.ts';
 import type { Sql } from '../store/sql.ts';
-import type { Reach } from '../store/inbox.ts';
+import type { Reach } from '../store/inbox-runs.ts';
 import type { InboxEstimate, LabelProposal, MailAsk, MailChange, MailReach, RuleDraft, RuleInbox } from './types.ts';
 
 /**

@@ -2,7 +2,7 @@ import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { openDigests, recordHighlights, startDigest } from '../src/store/digests.ts';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
-import { finishAsk, startAsk } from '../src/store/mail-calls.ts';
+import { finishAsk, startAsk } from '../src/store/asks.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { loadConfig, loadEnvFiles, saveKeyFile, secretPaths } from '../src/config.ts';
 import { installClient, loadClientSecrets } from '../src/gmail/auth.ts';

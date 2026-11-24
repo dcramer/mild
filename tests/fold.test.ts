@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { seal } from '../src/plain.ts';
+import { held } from '../src/plain.ts';
 import { fold } from '../web/src/lib/fold.ts';
 
 const mail = (id: string, sender: string, labelId: string | null, senderName: string | null = null, accountId = 'me@example.org') => ({
   id,
   accountId,
-  sender: seal(sender),
-  senderName: seal(senderName),
+  sender: held(sender),
+  senderName: held(senderName),
   labelId,
 });
 const rows = (items: ReturnType<typeof mail>[]) => fold(items).map(({ item, rest }) => [item.id, ...rest.map((r) => r.id)]);

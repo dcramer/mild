@@ -2,7 +2,7 @@ import { and, asc, conversationChanges, decisions, desc, eq, feedback, gt, inArr
 import type { Sql } from '../../store/sql.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { preferences } from '../../store/preferences.ts';
-import { headOf } from '../../store/sync.ts';
+import { headOf } from '../../store/changes.ts';
 import { openEnvelope } from '../../store/content.ts';
 import { type Scope, within } from '../scope.ts';
 import type { SyncPage, SyncedConversation } from '../types.ts';

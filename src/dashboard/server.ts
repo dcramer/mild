@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { People } from '../store/people.ts';
 import { credentials } from '../store/credentials.ts';
-import { headOf } from '../store/sync.ts';
+import { headOf } from '../store/changes.ts';
 import type { z } from 'zod';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { DOWNLOADS, FRAMES, READS, WRITES } from './api/index.ts';

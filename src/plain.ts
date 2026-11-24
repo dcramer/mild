@@ -7,4 +7,4 @@ import type { Plain, Sealed } from './confidential.ts';
 export const plain = <T>(value: T): Plain<T> => value as Plain<T>;
 
 /** Text that names a sender or came from mail, held as what it is. */
-export const seal = <T>(value: T): Sealed<T> => value as unknown as Sealed<T>;
+export const held = <T>(value: T): Sealed<T> => value as unknown as Sealed<T>;
