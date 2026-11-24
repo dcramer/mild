@@ -104,7 +104,8 @@ test.describe('Inbox by touch, on a phone', () => {
     await sheet.getByRole('button', { name: /^Receipts/ }).tap();
     await expect(sheet).toHaveCount(0);
     await expect(lunch).toHaveCount(0);
-    await dismiss(page, 'Archive as Receipts');
+    await expect(toast(page, 'Lunch on Thursday?')).toContainText('Receipts');
+    await dismiss(page, 'Lunch on Thursday?');
     await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
   });
 

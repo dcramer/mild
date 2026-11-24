@@ -31,22 +31,23 @@ export function LabelSheet({
 }) {
   const popup = useRef<HTMLDivElement>(null);
   const layer = useLayerOpen(open, onClose);
-  useBackCloses(open, () => layer.onOpenChange(false));
+  useBackCloses(open, () => layer.root.onOpenChange(false));
   const pick = (id: string) => {
     onPick(id);
-    layer.onOpenChange(false);
+    layer.root.onOpenChange(false);
   };
   const shown = groups.filter((g) => g.length > 0);
   return (
-    <Base.Root {...layer}>
+    <Base.Root {...layer.root}>
       <Base.Portal>
-        <Backdrop />
+        <Backdrop still={layer.still} />
         {/* The sheet takes the focus itself, not its first label, which would show as chosen. */}
         <Base.Popup
           ref={popup}
           tabIndex={-1}
           initialFocus={popup}
-          className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85svh] flex-col rounded-t-[10px] border-t border-(--frame) bg-card pb-(--safe-bottom) [--surface:var(--card)] text-sm outline-none transition-transform duration-200 ease-out data-ending-style:pointer-events-none data-ending-style:translate-y-full data-starting-style:translate-y-full motion-reduce:transition-none"
+          data-still={layer.still || undefined}
+          className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85svh] flex-col rounded-t-[10px] border-t border-(--frame) bg-card pb-(--safe-bottom) [--surface:var(--card)] text-sm outline-none transition-transform duration-200 ease-out data-ending-style:pointer-events-none data-ending-style:translate-y-full data-starting-style:translate-y-full data-still:transition-none motion-reduce:transition-none"
         >
           <header className="px-4 pt-4 pb-2">
             <Base.Title className="name truncate">{who}</Base.Title>
@@ -81,7 +82,7 @@ export function LabelSheet({
             </ul>
           </div>
           <div className="border-t border-(--rule) px-4 py-2">
-            <Button size="lg" className="w-full" onClick={() => layer.onOpenChange(false)}>
+            <Button size="lg" className="w-full" onClick={() => layer.root.onOpenChange(false)}>
               Cancel
             </Button>
           </div>
