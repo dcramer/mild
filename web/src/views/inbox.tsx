@@ -229,7 +229,10 @@ const ThreadRow = memo(function ThreadRow({
   const [labelling, setLabelling] = useState(false);
   const { ending, dialogs } = useLabelEnding(labels, () => messageStart(reveal(thread.from), thread.thinks?.labelId ?? null));
   const start = useMemo<SwipePress>(() => ({ label: 'Label', icon: <TagIcon />, onPress: () => setLabelling(true) }), []);
-  const end = useMemo<SwipePress>(() => ({ label: 'Archive', icon: <ArchiveIcon />, onPress: () => press([thread], 'archive') }), [thread, press]);
+  const end = useMemo<SwipePress>(
+    () => ({ label: 'Archive', icon: <ArchiveIcon />, onPress: () => press([thread], 'archive'), leaves: true }),
+    [thread, press],
+  );
   return (
     <Tr
       selected={selected}
