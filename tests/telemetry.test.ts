@@ -1,4 +1,4 @@
-import { type Api, type Model, type Models, createModels, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
+import { type Api, type Model, type Models, fauxAssistantMessage, fauxProvider, fauxToolCall } from '@earendil-works/pi-ai';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -35,8 +35,8 @@ import {
   tracedFetch,
 } from '../src/telemetry.ts';
 import { triageAccount } from '../src/work/triage.ts';
-import { connectGmail, fakeGoogle, firstAccount, freshStore, openUserDb, personWith, raw } from './fixtures.ts';
-import { ACCOUNT, facts, SAMPLE_LABELS, storeExample } from './helpers.ts';
+import { connectGmail, fakeGoogle, firstAccount, freshStore, openUserDb, personWith, raw, fauxModel } from './fixtures.ts';
+import { ACCOUNT, facts, SAMPLE_LABELS, storeExample, toolReply } from './helpers.ts';
 
 const fake = fakeGoogle();
 
@@ -163,37 +163,30 @@ describe('the model call, as Sentry is sent it', () => {
 });
 
 describe('each conversation with the model', () => {
-  /** A provider that gives `answers` in turn. */
-  function scripted(...answers: ReturnType<typeof fauxAssistantMessage>[]) {
-    const provider = fauxProvider();
-    const models = createModels();
-    models.setProvider(provider.provider);
-    provider.setResponses(answers);
-    return { models, model: provider.getModel() };
+  /** A provider that gives `replies` in turn. */
+  function scripted(...replies: ReturnType<typeof fauxAssistantMessage>[]) {
+    const faux = fauxModel();
+    faux.answers(...replies);
+    return faux;
   }
   const GOAL = 'Archive the Acme digest';
 
   it('is a rule draft: its turns and each tool the model used, all under one id, with none of what was asked', async () => {
     const { db } = await keyedPerson();
     const { models, model } = scripted(
-      fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'acme digest' })], { stopReason: 'toolUse' }),
-      fauxAssistantMessage(
-        [
-          fauxToolCall(FILL_TOOL, {
-            conditions: [{ by: 'from', value: 'shop.example.com' }],
-            facts: [],
-            name: '',
-            label: '',
-            onlyOnceLabelled: false,
-            when: '',
-            action: 'archive',
-            markRead: false,
-            unsubscribe: false,
-            note: '',
-          }),
-        ],
-        { stopReason: 'toolUse' },
-      ),
+      toolReply(FIND_TOOL, { query: 'acme digest' }),
+      toolReply(FILL_TOOL, {
+        conditions: [{ by: 'from', value: 'shop.example.com' }],
+        facts: [],
+        name: '',
+        label: '',
+        onlyOnceLabelled: false,
+        when: '',
+        action: 'archive',
+        markRead: false,
+        unsubscribe: false,
+        note: '',
+      }),
     );
     await draftRule({ db, draft: createRuleDrafter(models, model, 'low'), model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });
 
@@ -229,7 +222,7 @@ describe('each conversation with the model', () => {
 
   it('is a digest’s picks, shown mail, so none of what it was asked or answered', async () => {
     const { db } = await keyedPerson();
-    const { models, model } = scripted(fauxAssistantMessage([fauxToolCall(HIGHLIGHT_TOOL, { picks: [{ item: 1, why: REASON }] })], { stopReason: 'toolUse' }));
+    const { models, model } = scripted(toolReply(HIGHLIGHT_TOOL, { picks: [{ item: 1, why: REASON }] }));
     const highlight = createHighlighter(models, model, 'low');
     const answer = await invokeAgent('digest', [db.person, 4], { 'sift.digest': 4 }, () =>
       highlight({
@@ -251,7 +244,7 @@ describe('each conversation with the model', () => {
   it('is a label proposal, and the next one is another', async () => {
     const { db } = await keyedPerson();
     const PITCHES = { why: 'w', name: 'Sales pitches', description: 'Pitches.', action: 'archive', markRead: false, unsubscribe: true };
-    const answer = () => fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES] })], { stopReason: 'toolUse' });
+    const answer = () => toolReply(PROPOSAL_TOOL, { labels: [PITCHES] });
     const { models, model } = scripted(answer(), answer());
     const propose = createProposer(models, model, 'low');
     await proposeLabels({ db, propose, model: 'faux/model' }, { accountId: ACCOUNT, goal: GOAL });

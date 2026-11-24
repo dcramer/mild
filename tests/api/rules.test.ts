@@ -1,9 +1,8 @@
-import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import { describe, expect, it, vi } from 'vitest';
 import { FILL_TOOL, FIND_TOOL } from '../../src/prompts/rule-draft.ts';
 import { FILTER_CHECK_MINUTES } from '../../src/work/filters.ts';
 import { type Browser, type FauxModel, fauxModel } from '../fixtures.ts';
-import { DAY } from '../helpers.ts';
+import { DAY, toolReply } from '../helpers.ts';
 import { AT, ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
@@ -199,10 +198,8 @@ describe('a rule drafted by the model', () => {
     const { me } = await waiting(model);
     const blank = { facts: [], label: '', onlyOnceLabelled: false, when: '', markRead: false, unsubscribe: false, note: '', name: '' };
     model.answers(
-      fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'news' })], { stopReason: 'toolUse' }),
-      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...blank, conditions: [{ by: 'from', value: NEWS }], action: 'archive', markRead: true })], {
-        stopReason: 'toolUse',
-      }),
+      toolReply(FIND_TOOL, { query: 'news' }),
+      toolReply(FILL_TOOL, { ...blank, conditions: [{ by: 'from', value: NEWS }], action: 'archive', markRead: true }),
     );
 
     const drafted = await me.call('POST', '/api/rules/draft', { goal: 'Archive the weekly news' });

@@ -1,4 +1,4 @@
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage, fauxText } from '@earendil-works/pi-ai';
 import { describe, expect, it, vi } from 'vitest';
 import { gatherEvidence } from '../src/work/evidence.ts';
 import { MAX_BODY_CHARS, extractText } from '../src/gmail/body.ts';
@@ -8,14 +8,14 @@ import { modelChoices, priceOf, offerModel, openModels, resolveModel, saveApiKey
 import { finishChatGPTRedirect, pollChatGPTDeviceCode, startChatGPTDeviceCode, startChatGPTRedirect } from '../src/model/chatgpt-sign-in.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
-import { connectGmail, fakeGoogle, openUserDb, raw } from './fixtures.ts';
+import { connectGmail, fakeGoogle, openUserDb, raw, fauxModel } from './fixtures.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { contactOf, contacts, domainFacts, rememberCorrespondent, senderFacts } from '../src/store/senders.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { SYSTEM_PROMPT, VERDICT_TOOL, buildPrompt } from '../src/triage/prompt.ts';
 import { type Evidence, type JudgeFailure, type Verdict, modelStage } from '../src/triage/stages/model.ts';
-import { ACCOUNT, DAY, b64, facts, memorySignIns, SAMPLE_LABELS } from './helpers.ts';
+import { ACCOUNT, DAY, b64, facts, memorySignIns, SAMPLE_LABELS, toolReply } from './helpers.ts';
 
 function evidence(overrides: Partial<Evidence['sender']> = {}, body: string | null = 'Our autumn sale starts today.'): Evidence {
   const f = facts({ headers: { 'list-unsubscribe': '<https://example.com/u>' } });
@@ -255,21 +255,15 @@ describe('extractText', () => {
 
 describe('judge', () => {
   function setup() {
-    const faux = fauxProvider();
-    const models = createModels();
-    models.setProvider(faux.provider);
-    const judge = createJudge(models, faux.getModel(), 'low');
+    const { models, model, answers } = fauxModel();
+    const judge = createJudge(models, model, 'low');
     const ask = () => judge({ evidence: evidence(), labels: SAMPLE_LABELS });
-    return { faux, ask };
+    return { answers, ask };
   }
 
   it('returns the model verdict with its usage', async () => {
-    const { faux, ask } = setup();
-    faux.setResponses([
-      fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { label: 'marketing', confidence: 0.92, reason: '  A seasonal\nsale.  ' })], {
-        stopReason: 'toolUse',
-      }),
-    ]);
+    const { answers, ask } = setup();
+    answers(toolReply(VERDICT_TOOL, { label: 'marketing', confidence: 0.92, reason: '  A seasonal\nsale.  ' }));
     const verdict = await ask();
     expect(verdict).toMatchObject({ label: 'marketing', confidence: 0.92, reason: 'A seasonal sale.' });
     expect(verdict).toHaveProperty('usage.model', expect.stringContaining('/'));
@@ -277,68 +271,56 @@ describe('judge', () => {
   });
 
   it('knows Leave in inbox by a name of its own, and answers with the id it is stored under', async () => {
-    const faux = fauxProvider();
-    const models = createModels();
-    models.setProvider(faux.provider);
+    const { models, model, answers } = fauxModel();
     const inbox = { id: 'everything_else', name: 'Leave in inbox', description: '', disposition: 'keep' as const };
-    faux.setResponses([
-      fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { reason: 'r', label: 'leave_in_inbox', confidence: 0.9 })], { stopReason: 'toolUse' }),
-    ]);
-    expect(await createJudge(models, faux.getModel(), 'low')({ evidence: evidence(), labels: [...SAMPLE_LABELS, inbox] })).toMatchObject({
+    answers(toolReply(VERDICT_TOOL, { reason: 'r', label: 'leave_in_inbox', confidence: 0.9 }));
+    expect(await createJudge(models, model, 'low')({ evidence: evidence(), labels: [...SAMPLE_LABELS, inbox] })).toMatchObject({
       label: 'everything_else',
     });
   });
 
   it('thinks as hard as the person chose', async () => {
-    const faux = fauxProvider();
-    const models = createModels();
-    models.setProvider(faux.provider);
-    faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { reason: 'r', label: 'marketing', confidence: 0.9 })], { stopReason: 'toolUse' })]);
-    const complete = vi.spyOn(models, 'completeSimple');
-    await createJudge(models, faux.getModel(), 'medium')({ evidence: evidence(), labels: SAMPLE_LABELS });
+    const { models, model, complete, answers } = fauxModel();
+    answers(toolReply(VERDICT_TOOL, { reason: 'r', label: 'marketing', confidence: 0.9 }));
+    await createJudge(models, model, 'medium')({ evidence: evidence(), labels: SAMPLE_LABELS });
     expect(complete.mock.calls[0]?.[2]).toMatchObject({ reasoning: 'medium' });
   });
 
   it('asks for the reason before the label, so the label follows from it', async () => {
-    const faux = fauxProvider();
-    const models = createModels();
-    models.setProvider(faux.provider);
-    faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { reason: 'r', label: 'marketing', confidence: 0.9 })], { stopReason: 'toolUse' })]);
-    const complete = vi.spyOn(models, 'completeSimple');
-    await createJudge(models, faux.getModel(), 'low')({ evidence: evidence(), labels: SAMPLE_LABELS });
+    const { models, model, complete, answers } = fauxModel();
+    answers(toolReply(VERDICT_TOOL, { reason: 'r', label: 'marketing', confidence: 0.9 }));
+    await createJudge(models, model, 'low')({ evidence: evidence(), labels: SAMPLE_LABELS });
     const parameters = complete.mock.calls[0]?.[1].tools?.find((t) => t.name === VERDICT_TOOL)?.parameters as { properties: object; required: string[] };
     expect(Object.keys(parameters.properties)).toEqual(['reason', 'label', 'confidence']);
     expect(parameters.required).toEqual(['reason', 'label', 'confidence']);
   });
 
   it('makes one attempt with a timeout, leaving retries to the queue', async () => {
-    const { faux, ask } = setup();
+    const { answers, ask } = setup();
     let given: { timeoutMs?: number; maxRetries?: number } | undefined;
-    faux.setResponses([
-      (_context, options) => {
-        given = options;
-        return fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { label: 'marketing', confidence: 0.9, reason: 'r' })], { stopReason: 'toolUse' });
-      },
-    ]);
+    answers((_context, options) => {
+      given = options;
+      return toolReply(VERDICT_TOOL, { label: 'marketing', confidence: 0.9, reason: 'r' });
+    });
     await ask();
     expect(given?.maxRetries).toBe(0);
     expect(given?.timeoutMs).toBeLessThanOrEqual(120_000);
   });
 
   it('rejects a label outside the list, a missing verdict and out-of-range confidence', async () => {
-    const { faux, ask } = setup();
+    const { answers, ask } = setup();
     // Still billed, so what it cost comes back with it.
     const unusable = {
       failed: 'the model did not return a usable verdict',
       usage: expect.objectContaining({ model: expect.stringContaining('/') }),
       unusable: true,
     };
-    faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { label: 'trash_it', confidence: 1, reason: 'r' })], { stopReason: 'toolUse' })]);
+    answers(toolReply(VERDICT_TOOL, { label: 'trash_it', confidence: 1, reason: 'r' }));
     expect(await ask()).toEqual(unusable);
-    faux.setResponses([fauxAssistantMessage([fauxText('I think this is marketing.')])]);
+    answers(fauxAssistantMessage([fauxText('I think this is marketing.')]));
     expect(await ask()).toEqual(unusable);
 
-    faux.setResponses([fauxAssistantMessage([fauxToolCall(VERDICT_TOOL, { label: 'unsure', confidence: 7, reason: 'r' })], { stopReason: 'toolUse' })]);
+    answers(toolReply(VERDICT_TOOL, { label: 'unsure', confidence: 7, reason: 'r' }));
     expect(await ask()).not.toHaveProperty('confidence');
   });
 

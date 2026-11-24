@@ -1,17 +1,16 @@
-import { type Models, createModels, fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
+import { type Models, fauxAssistantMessage } from '@earendil-works/pi-ai';
 import { describe, expect, it } from 'vitest';
 import { createJudge } from '../src/model/judge.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { facts, SAMPLE_LABELS } from './helpers.ts';
+import { fauxModel } from './fixtures.ts';
 
 const SECRET = 'Your one-time code is 482913';
 
 /** What the judge records when the provider answers with `errorMessage`, or `complete` throws it, about a message whose text is SECRET. */
 async function failedWith(error: string | Error): Promise<unknown> {
-  const faux = fauxProvider();
-  const models = createModels();
-  models.setProvider(faux.provider);
-  faux.setResponses([fauxAssistantMessage([], { stopReason: 'error', errorMessage: String(error) })]);
+  const { models, model, answers } = fauxModel();
+  answers(fauxAssistantMessage([], { stopReason: 'error', errorMessage: String(error) }));
   const throwing = {
     completeSimple: async () => {
       throw error;
@@ -20,7 +19,7 @@ async function failedWith(error: string | Error): Promise<unknown> {
   const f = facts({ subject: SECRET });
   const verdict = await createJudge(
     typeof error === 'string' ? models : throwing,
-    faux.getModel(),
+    model,
     'low',
   )({
     evidence: { facts: f, known: deriveFacts(f), body: SECRET, sender: { messagesSeen: 1, userHasWritten: false } },

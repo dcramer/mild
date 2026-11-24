@@ -1,4 +1,4 @@
-import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { describe, expect, it, vi } from 'vitest';
 import { draftRule } from '../src/learn/rules.ts';
 import { createRuleDrafter } from '../src/model/draft-rule.ts';
@@ -7,8 +7,8 @@ import { recordSync } from '../src/store/messages.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { senderDirectory } from '../src/store/senders.ts';
 import { FILL_TOOL, FIND_TOOL, type FoundSender, MAX_LOOKUPS, type RuleDrafter, readRuleDraft, searchSenders } from '../src/prompts/rule-draft.ts';
-import { personWith, raw } from './fixtures.ts';
-import { SAMPLE_LABELS, facts } from './helpers.ts';
+import { personWith, raw, fauxModel } from './fixtures.ts';
+import { SAMPLE_LABELS, facts, toolReply } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
@@ -148,19 +148,14 @@ describe('looking up senders', () => {
 
 describe('the model filling in a rule', () => {
   function faux() {
-    const provider = fauxProvider();
-    const models = createModels();
-    models.setProvider(provider.provider);
-    return { provider, complete: vi.spyOn(models, 'completeSimple'), draft: createRuleDrafter(models, provider.getModel(), 'low') };
+    const { models, model, complete, answers } = fauxModel();
+    return { answers, complete, draft: createRuleDrafter(models, model, 'low') };
   }
   const input = { goal: 'Archive the Example digest', labels: LABELS };
 
   it('looks senders up, is shown what it found, and fills the rule in', async () => {
-    const { provider, complete, draft } = faux();
-    provider.setResponses([
-      fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'example digest' })], { stopReason: 'toolUse' }),
-      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, conditions: [{ by: 'listId', value: 'digest.example.org' }] })], { stopReason: 'toolUse' }),
-    ]);
+    const { answers, complete, draft } = faux();
+    answers(toolReply(FIND_TOOL, { query: 'example digest' }), toolReply(FILL_TOOL, { ...BLANK, conditions: [{ by: 'listId', value: 'digest.example.org' }] }));
     const asked: string[] = [];
     const found = [
       { address: 'digest@example.org', name: 'Example Digest', listId: 'digest.example.org', messages: 2, label: 'Newsletters', subject: 'Newer' },
@@ -179,42 +174,36 @@ describe('the model filling in a rule', () => {
   });
 
   it(`stops offering look-ups after ${MAX_LOOKUPS}, and fails when no rule comes`, async () => {
-    const { provider, complete, draft } = faux();
-    provider.setResponses([
-      ...Array.from({ length: MAX_LOOKUPS }, () => fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'x' })], { stopReason: 'toolUse' })),
+    const { answers, complete, draft } = faux();
+    answers(
+      ...Array.from({ length: MAX_LOOKUPS }, () => toolReply(FIND_TOOL, { query: 'x' })),
       fauxAssistantMessage([fauxText('I could not find them.')]),
       fauxAssistantMessage([fauxText('Still nothing.')]),
-    ]);
+    );
     expect(await draft(input, async () => [])).toMatchObject({ failed: 'the model did not fill in a rule', lookups: MAX_LOOKUPS });
     expect(complete.mock.calls.at(-1)?.[1].tools?.map((t) => t.name)).toEqual([FILL_TOOL]);
   });
 
   it('asks once more for the rule when the model answers in words', async () => {
-    const { provider, complete, draft } = faux();
-    provider.setResponses([
-      fauxAssistantMessage([fauxText('You want the digest archived.')]),
-      fauxAssistantMessage([fauxToolCall(FILL_TOOL, BLANK)], { stopReason: 'toolUse' }),
-    ]);
+    const { answers, complete, draft } = faux();
+    answers(fauxAssistantMessage([fauxText('You want the digest archived.')]), toolReply(FILL_TOOL, BLANK));
     expect(await draft(input, async () => [])).toMatchObject({ draft: { match: { fromDomain: ['example.org'] }, disposition: 'archive' } });
     expect(complete.mock.calls[1]?.[1].messages.at(-1)).toMatchObject({ role: 'user', content: `Fill in the rule with ${FILL_TOOL}.` });
   });
 
   it('sends an unusable rule back once with what is wrong, then gives up saying why', async () => {
-    const { provider, complete, draft } = faux();
+    const { answers, complete, draft } = faux();
     const shared = fauxToolCall(FILL_TOOL, { ...BLANK, conditions: [{ by: 'from', value: 'gmail.com' }] });
-    provider.setResponses([
+    answers(
       fauxAssistantMessage([shared], { stopReason: 'toolUse' }),
-      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, conditions: [{ by: 'from', value: 'friend@gmail.com' }] })], { stopReason: 'toolUse' }),
-    ]);
+      toolReply(FILL_TOOL, { ...BLANK, conditions: [{ by: 'from', value: 'friend@gmail.com' }] }),
+    );
     expect(await draft(input, async () => [])).toMatchObject({ draft: { match: { from: ['friend@gmail.com'] } }, lookups: 0 });
     const told = complete.mock.calls[1]?.[1].messages.at(-1);
     expect(told).toMatchObject({ role: 'toolResult', toolName: FILL_TOOL, toolCallId: shared.id, isError: true });
     expect(JSON.stringify(told)).toContain('a domain anyone can get an address at');
 
-    provider.setResponses([
-      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, action: '' })], { stopReason: 'toolUse' }),
-      fauxAssistantMessage([fauxToolCall(FILL_TOOL, { ...BLANK, action: '' })], { stopReason: 'toolUse' }),
-    ]);
+    answers(toolReply(FILL_TOOL, { ...BLANK, action: '' }), toolReply(FILL_TOOL, { ...BLANK, action: '' }));
     expect(await draft(input, async () => [])).toMatchObject({
       failed: 'the model did not fill in a usable rule: a rule with no label needs an `action`',
       lookups: 0,

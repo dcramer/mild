@@ -1,11 +1,10 @@
-import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import { describe, expect, it, vi } from 'vitest';
 import { DRAFT_QUIET_MS } from '../../src/actions/drafts.ts';
 import { SETTLE_MS } from '../../src/actions/send.ts';
 import { ASK_TOOL } from '../../src/prompts/mail-ask.ts';
 import { FIND_TOOL } from '../../src/prompts/rule-draft.ts';
 import { type Browser, fauxModel } from '../fixtures.ts';
-import { DAY } from '../helpers.ts';
+import { DAY, toolReply } from '../helpers.ts';
 import { AT, ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
@@ -737,10 +736,7 @@ describe('asking Inbox in words', () => {
     box.deliver({ from: 'Vendor <billing@vendor.example.com>', subject: 'Your invoice' });
     await arrives();
     const blank = { reading: '', from: [], domains: [], label: '', view: '', unread: false, since: '', words: [], note: '' };
-    model.answers(
-      fauxAssistantMessage([fauxToolCall(FIND_TOOL, { query: 'vendor' })], { stopReason: 'toolUse' }),
-      fauxAssistantMessage([fauxToolCall(ASK_TOOL, { ...blank, from: ['billing@vendor.example.com'], words: ['invoice'] })], { stopReason: 'toolUse' }),
-    );
+    model.answers(toolReply(FIND_TOOL, { query: 'vendor' }), toolReply(ASK_TOOL, { ...blank, from: ['billing@vendor.example.com'], words: ['invoice'] }));
 
     const asked = await me.call('POST', '/api/mail/ask', { words: 'invoices from the vendor', today: '2026-11-18' });
     expect(asked).toMatchObject({ status: 200, body: { filter: { from: ['billing@vendor.example.com'], words: ['invoice'] } } });
