@@ -11,7 +11,7 @@ import type { Given } from '../triage/standing.ts';
 import { Refusal } from '../refusal.ts';
 import { plain } from '../plain.ts';
 
-/** `user`: the user wrote it. `correction`: it came from the user correcting sift. `learned`: Mild made it when it blocked the sender. */
+/** `user`: the user wrote it. `correction`: it came from the user correcting Mild. `learned`: Mild made it when it blocked the sender. */
 type RuleSource = (typeof RULE_SOURCES)[number];
 
 interface StoredRule extends Rule {
@@ -148,6 +148,10 @@ async function ruleMatching(db: Sql, match: RuleMatch, whenLabel: string | null 
     .orderBy(asc(rules.position))
     .limit(1);
   return row;
+}
+
+export async function ruleExists(db: Sql, id: string): Promise<boolean> {
+  return (await db.select({ id: rules.id }).from(rules).where(eq(rules.id, id))).length > 0;
 }
 
 /** Whether a rule has exactly these conditions and waits for `whenLabel` (none: a rule for all the mail they match). */
