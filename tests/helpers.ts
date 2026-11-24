@@ -6,7 +6,6 @@ import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { type Scope, scopeFor } from '../src/dashboard/scope.ts';
 import type { SignIn } from '../src/dashboard/controls.ts';
 import type { Sql } from '../src/store/sql.ts';
-import type { RawMessage } from '../src/gmail/api.ts';
 import type { SignIns } from '../src/model/credentials.ts';
 import { listAccounts } from '../src/store/accounts.ts';
 import { recordSync } from '../src/store/messages.ts';
@@ -52,25 +51,6 @@ export const DEVICE = '00000000-0000-4000-8000-000000000001';
 
 /** The model tier, with calls recorded as `test/model`. */
 export const testModel = (judge: Judge = async () => UNSURE) => ({ model: 'test/model', judge });
-
-/** A message as Gmail's metadata read returns it. `from` is the From header; `headers` replaces all of them. */
-export function rawMessage(
-  id: string,
-  { from = 'News <news@example.com>', subject = `Subject ${id}`, ...overrides }: Partial<RawMessage> & { from?: string; subject?: string } = {},
-): RawMessage {
-  return {
-    id,
-    threadId: `t-${id}`,
-    labelIds: ['INBOX', 'UNREAD'],
-    internalDate: 1000,
-    headers: [
-      { name: 'From', value: from },
-      { name: 'To', value: ACCOUNT },
-      { name: 'Subject', value: subject },
-    ],
-    ...overrides,
-  };
-}
 
 /** What a pass or a tick runs with in a test: its own ephemeral store and no log, unless `more` says otherwise. */
 export const runOptions = (more: Pick<RunOptions, 'connect'> & Partial<RunOptions>): RunOptions => ({ ephemeral: memoryEphemeral(), log: () => {}, ...more });

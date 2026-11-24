@@ -13,17 +13,12 @@ import type { Sql } from '../src/store/sql.ts';
 import { type Store, storeOn } from '../src/store/store.ts';
 import { type Keyring, loadKeyring } from '../src/secrets.ts';
 import { type Account, connectAccount, listAccounts, userOf } from '../src/store/accounts.ts';
-import { recordSync } from '../src/store/messages.ts';
 import { recordDecision } from '../src/store/decisions.ts';
-import { setRuleFilter } from '../src/store/filters.ts';
-import { addRule } from '../src/store/rules.ts';
 import { addLabels } from '../src/store/labels.ts';
-import { rememberCorrespondent } from '../src/store/senders.ts';
-import { conditionsHash } from '../src/store/content.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
 import { type Usage } from '../src/triage/types.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { ACCOUNT, tempDir, withSampleLabels, email } from './helpers.ts';
+import { ACCOUNT, tempDir, withSampleLabels } from './helpers.ts';
 import { FakeGoogle, SECRETS, serveGoogle } from './google.ts';
 import { loadConfig } from '../src/config.ts';
 import { clientFor, installClient } from '../src/gmail/auth.ts';
@@ -249,92 +244,6 @@ export async function modelRun(
   const run = await startRun(db, { accountId, messageId, model, ruleId, now: at });
   await finishRun(db, run, { error, usage, now: at });
   return run;
-}
-
-/**
- * A row in every table of a person's data that a mailbox can have one in, for `account` (connected, in
- * `db`): what deleting a mailbox or a person must take with it. Its message is `m-<account>`.
- */
-export async function recordEverything(db: Sql, account: string): Promise<void> {
-  await withSampleLabels(db);
-  const message = `m-${account}`;
-  await recordSync(
-    db,
-    account,
-    [
-      {
-        accountId: account,
-        messageId: message,
-        threadId: 't1',
-        from: email('news@example.com'),
-        to: [],
-        cc: [],
-        subject: 'Weekly digest',
-        labelIds: ['INBOX'],
-        headers: {},
-        receivedAt: 0,
-      },
-    ],
-    '2',
-    0,
-  );
-  const decision = await recordDecision(db, account, message, {
-    disposition: 'archive',
-    subscription: 'preserve',
-    stage: 'model',
-    labelId: 'newsletter',
-    reason: 'r',
-  });
-  const rule = await addRule(db, { match: { from: ['news@example.com'] }, whenLabel: 'newsletter' }, 'user', 0);
-  await setRuleFilter(db, rule, account, { filterId: 'f-1', state: 'active', written: null }, 0);
-  await rememberCorrespondent(db, account, 'news@example.com', true, 0);
-  const { id: run } = (await raw(db).get<{ id: number }>(
-    `INSERT INTO eval_runs (account_id, started_at, status, model, prompt_hash, labels_hash, labels, few_shot, total)
-     VALUES (?, 0, 'done', 'p/m', 'h', 'h', '[]', false, 1) RETURNING id`,
-    account,
-  ))!;
-  for (const [statement, ...params] of [
-    [`INSERT INTO credentials (kind, key, value) VALUES ('gmail', ?, 'x')`, account],
-    [
-      `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', '[]', 'done', 0, ?)`,
-      account,
-      message,
-      decision,
-    ],
-    [
-      `INSERT INTO proposals (account_id, match, conditions, label_id, disposition, agreed, created_at) VALUES (?, '{"from": ["a@example.com"]}', ?, 'newsletter', 'keep', 2, 0)`,
-      account,
-      conditionsHash(db, { from: ['a@example.com'] }),
-    ],
-    [
-      `INSERT INTO feedback (account_id, decision_id, verdict, disposition, label_id, via, created_at) VALUES (?, ?, 'right', 'archive', 'newsletter', 'dashboard', 0)`,
-      account,
-      decision,
-    ],
-    [`INSERT INTO examples (account_id, message_id, label_id, marked_at) VALUES (?, ?, 'newsletter', 0)`, account, message],
-    [`INSERT INTO read_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
-    [`INSERT INTO mail_bodies (account_id, message_id, body_text, fetched_at) VALUES (?, ?, 'Hello.', 0)`, account, message],
-    [`INSERT INTO model_runs (account_id, message_id, model, started_at, error) VALUES (?, ?, 'p/m', 0, 'e')`, account, message],
-    [`INSERT INTO label_proposals (account_id, started_at, model, goal) VALUES (?, 0, 'p/m', 'g')`, account],
-    [`INSERT INTO rule_drafts (account_id, started_at, model, goal) VALUES (?, 0, 'p/m', 'g')`, account],
-    [`INSERT INTO mail_asks (account_id, started_at, model, words) VALUES (?, 0, 'p/m', 'w')`, account],
-    [`INSERT INTO inbox_runs (account_id, started_at, acts, most) VALUES (?, 0, false, 10)`, account],
-    [`INSERT INTO mail_copies (account_id, before, started_at) VALUES (?, 0, 0)`, account],
-    [`INSERT INTO uploads (id, about, size, pieces, created_at) VALUES (?, 'x', 1, 1, 0)`, `up-${account}`],
-    [`INSERT INTO drafts (id, account_id, writing, changed_at) VALUES (?, ?, 'x', 0)`, `draft-${account}`, account],
-    [`INSERT INTO upload_pieces (upload_id, piece, data) VALUES (?, 0, '\\x00')`, `up-${account}`],
-    [
-      `INSERT INTO digests (label_id, account_id, since, until, message_id, count, created_at) VALUES ('newsletter', ?, 0, 1, ?, 1, 0)`,
-      account,
-      `<digest.${account}@sift.invalid>`,
-    ],
-    [
-      `INSERT INTO eval_results (run_id, message_id, expected, got, duration_ms, shots, sender_shots) VALUES (?, ?, 'newsletter', 'newsletter', 1, 0, 0)`,
-      run,
-      message,
-    ],
-  ] as [string, ...(string | number)[]][])
-    await raw(db).run(statement, ...params);
 }
 
 /** How many rows each table holds, by `column`'s value, for every table that has the column; read past row-level security. */
