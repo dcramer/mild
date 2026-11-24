@@ -1,40 +1,32 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { SHARED, UNKNOWN } from '../../src/dashboard/api/shared/senders.ts';
-import { type Browser, fakeGoogle, startSift } from '../fixtures.ts';
+import type { Browser } from '../fixtures.ts';
+import { AT, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const fake = fakeGoogle();
-const ME = 'me@example.org';
-const OTHER = 'other@example.com';
+const { settled } = theApp();
 const ADA = 'ada@example.com';
 const BO = 'bo@example.com';
-const AT = Date.UTC(2026, 10, 18, 12);
-
-beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: AT, shouldAdvanceTime: true }));
-afterEach(() => void vi.useRealTimers());
 
 type Contact = { address: string; name: string | null; given: string | null; rules: number; recent: number };
 const contactsOf = async (b: Browser, query = '') => (await b.call('GET', `/api/contacts${query}`)).body as { total: number; rows: Contact[] };
 
 /** Signed in, with mail from Ada (twice) and Bo at example.com, and from a shop, recorded by a pass. */
 async function withMail() {
-  const sift = await startSift(fake.google);
-  const box = fake.google.mailbox(ME);
-  const me = await sift.settled(ME);
+  const app = await settled();
+  const { box } = app;
   box.deliver({ from: `Ada <${ADA}>`, subject: 'Lunch?', at: AT - 3_600_000 });
   box.deliver({ from: `Ada Lovelace <${ADA}>`, subject: 'Tea?', at: AT - 60_000 });
   box.deliver({ from: `Bo <${BO}>`, subject: 'Hello', at: AT - 7_200_000 });
   box.deliver({ from: 'Shop <orders@shop.example.org>', subject: 'Your receipt', at: AT - 10_800_000 });
-  /** Mail that arrives now, brought by the next pass. */
-  const arrives = async (from: string) => {
+  /** Mail from `from` that arrives now, brought by the next pass. */
+  const arrivesFrom = async (from: string) => {
     const id = box.deliver({ from, subject: 'More' });
-    await me.call('POST', '/api/check', {});
-    await sift.work();
+    await app.arrives();
     return id;
   };
-  await me.call('POST', '/api/check', {});
-  await sift.work();
-  return { sift, box, me, arrives };
+  await app.arrives();
+  return { ...app, arrivesFrom };
 }
 
 describe('a sender’s page', () => {
@@ -84,7 +76,7 @@ describe('contacts', () => {
 
 describe('a standing', () => {
   it('is given in one press as their own rule, shown on their page and in contacts, and carried out on their next mail', async () => {
-    const { box, me, arrives } = await withMail();
+    const { box, me, arrivesFrom } = await withMail();
     await me.call('POST', '/api/active', { active: true });
 
     expect(await me.call('POST', '/api/standing', { address: BO, standing: 'unwanted' })).toMatchObject({
@@ -94,11 +86,11 @@ describe('a standing', () => {
     expect((await me.call('GET', `/api/sender?address=${BO}`)).body).toMatchObject({ profile: { given: 'unwanted' } });
     expect((await contactsOf(me, '?standing=unwanted')).rows).toMatchObject([{ address: BO, given: 'unwanted', rules: 1 }]);
     expect((await me.call('GET', '/api/rules')).body).toMatchObject({ rules: [{ match: { from: [BO] }, disposition: 'archive' }] });
-    expect(box.message(await arrives(`Bo <${BO}>`))!.labelIds).not.toContain('INBOX');
+    expect(box.message(await arrivesFrom(`Bo <${BO}>`))!.labelIds).not.toContain('INBOX');
 
     expect(await me.call('POST', '/api/standing', { address: BO, standing: 'trusted' })).toMatchObject({ status: 200, body: { was: 'unwanted' } });
     expect((await me.call('GET', '/api/rules')).body['rules']).toHaveLength(1);
-    expect(box.message(await arrives(`Bo <${BO}>`))!.labelIds).toContain('INBOX');
+    expect(box.message(await arrivesFrom(`Bo <${BO}>`))!.labelIds).toContain('INBOX');
   });
 
   it('is given to a whole domain, and never replaces a rule of theirs that says more', async () => {
@@ -113,7 +105,7 @@ describe('a standing', () => {
   });
 
   it('is cleared, and with it the rule and its Gmail filter', async () => {
-    const { box, me, arrives } = await withMail();
+    const { box, me, arrivesFrom } = await withMail();
     await me.call('POST', '/api/active', { active: true });
     const { id } = (await me.call('POST', '/api/standing', { address: BO, standing: 'unwanted' })).body as { id: string };
     await me.call('POST', '/api/rules/filter', { id, on: true });
@@ -123,7 +115,7 @@ describe('a standing', () => {
     expect(box.filters).toEqual([]);
     expect((await me.call('GET', '/api/rules')).body).toEqual({ rules: [] });
     expect((await me.call('GET', `/api/sender?address=${BO}`)).body).toMatchObject({ profile: { given: null } });
-    expect(box.message(await arrives(`Bo <${BO}>`))!.labelIds).toContain('INBOX');
+    expect(box.message(await arrivesFrom(`Bo <${BO}>`))!.labelIds).toContain('INBOX');
     expect((await me.call('POST', '/api/standing/clear', { domain: 'example.com' })).status).toBe(200);
   });
 

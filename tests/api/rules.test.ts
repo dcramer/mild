@@ -1,19 +1,14 @@
 import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { FILL_TOOL, FIND_TOOL } from '../../src/prompts/rule-draft.ts';
 import { FILTER_CHECK_MINUTES } from '../../src/work/filters.ts';
-import { type Browser, fakeGoogle, fauxModel, startSift } from '../fixtures.ts';
+import { type Browser, type FauxModel, fauxModel } from '../fixtures.ts';
 import { DAY } from '../helpers.ts';
+import { AT, ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const fake = fakeGoogle();
-const ME = 'me@example.org';
-const OTHER = 'other@example.com';
+const { fake, start, settled } = theApp();
 const NEWS = 'news@example.com';
-const AT = Date.UTC(2026, 10, 18, 12);
-
-beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: AT, shouldAdvanceTime: true }));
-afterEach(() => void vi.useRealTimers());
 
 type Rule = {
   id: string;
@@ -29,15 +24,12 @@ const waitingOn = async (b: Browser, id: string) =>
   (await b.call('GET', `/api/rules/waiting?id=${id}`)).body as { total: number; messages: { messageId: string }[] };
 
 /** Signed in, with mail from `NEWS` the pass recorded and the model read as Receipts, waiting on them. */
-async function waiting(model?: ReturnType<typeof fauxModel>) {
-  const sift = await startSift(fake.google, model ? { model: model.chosen } : {});
-  const box = fake.google.mailbox(ME);
-  const me = await sift.settled(ME);
-  const news = box.deliver({ from: `News <${NEWS}>`, subject: 'This week' });
-  await me.call('POST', '/api/check', {});
-  await sift.work();
-  await sift.judged(ME, news, 'receipts');
-  return { sift, box, me, news };
+async function waiting(model?: FauxModel) {
+  const app = await settled(model);
+  const news = app.box.deliver({ from: `News <${NEWS}>`, subject: 'This week' });
+  await app.arrives();
+  await app.sift.judged(ME, news, 'receipts');
+  return { ...app, news };
 }
 
 describe('making a rule', () => {
@@ -100,15 +92,14 @@ describe('a rule as a Gmail filter', () => {
   });
 
   it('is brought into line with its rule in Gmail at the next look after the rule changed', async () => {
-    const { sift, box, me } = await waiting();
+    const { box, me, arrives } = await waiting();
     await me.call('POST', '/api/active', { active: true });
     const { id } = (await me.call('POST', '/api/rules', { match: { from: [NEWS] }, label: 'receipts' })).body as { id: string };
     await me.call('POST', '/api/rules/filter', { id, on: true });
     await me.call('POST', '/api/rules/edit', { id, match: { from: [NEWS] }, label: 'receipts', disposition: 'keep' });
 
     vi.setSystemTime(Date.now() + FILTER_CHECK_MINUTES * 60_000);
-    await me.call('POST', '/api/check', {});
-    await sift.work();
+    await arrives();
     expect(box.filters).toEqual([{ id: expect.any(String), criteria: { from: NEWS }, action: { addLabelIds: [box.labelId('mild/receipts')] } }]);
   });
 
@@ -142,7 +133,7 @@ describe('a rule as a Gmail filter', () => {
 
 describe('applying a rule to the inbox', () => {
   it('looks at what it would decide in Gmail, once a while, and applying it changes that mail in Gmail', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const box = fake.google.mailbox(ME);
     const before = box.deliver({ from: 'Shop <shop@example.com>', subject: 'Old receipt', at: AT - DAY }, { quietly: true });
     const me = await sift.settled(ME);
@@ -233,8 +224,7 @@ describe('a rule Mild proposes from answers', () => {
   async function proposed() {
     const ready = await waiting();
     const second = ready.box.deliver({ from: `News <${NEWS}>`, subject: 'Next week' });
-    await ready.me.call('POST', '/api/check', {});
-    await ready.sift.work();
+    await ready.arrives();
     await ready.sift.judged(ME, second, 'receipts');
     for (const messageId of [ready.news, second])
       expect((await ready.me.call('POST', '/api/feedback', { accountId: ME, sender: NEWS, label: 'receipts', disposition: 'keep', messageId })).status).toBe(

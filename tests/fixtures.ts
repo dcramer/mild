@@ -395,6 +395,7 @@ export function fauxModel(): { chosen: ChosenModel; answers: (...replies: FauxRe
   models.setProvider(faux.provider);
   return { chosen: { spec: 'faux/model', models, model: faux.getModel(), reasoning: 'low' }, answers: (...replies) => faux.setResponses(replies) };
 }
+export type FauxModel = ReturnType<typeof fauxModel>;
 
 /** One browser's view of the app: its own cookies, and what each call answered. */
 export type Browser = Awaited<ReturnType<Awaited<ReturnType<typeof startSift>>['browser']>>;

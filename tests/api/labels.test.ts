@@ -1,16 +1,11 @@
 import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { PROPOSAL_TOOL } from '../../src/prompts/proposal.ts';
-import { type Browser, fakeGoogle, fauxModel, startSift } from '../fixtures.ts';
+import { type Browser, fauxModel } from '../fixtures.ts';
+import { ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
-const fake = fakeGoogle();
-const ME = 'me@example.org';
-const OTHER = 'other@example.com';
-const AT = Date.UTC(2026, 10, 18, 12);
-
-beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: AT, shouldAdvanceTime: true }));
-afterEach(() => void vi.useRealTimers());
+const { fake, start } = theApp();
 
 type Label = { id: string; name: string; disposition: string; markRead: boolean; gmailLabel: string | null; rules: number };
 const labelsOf = async (b: Browser) => (await b.call('GET', '/api/manage')).body['labels'] as Label[];
@@ -27,7 +22,7 @@ const BUILDS = {
 describe('setting up labels', () => {
   it('asks the model for labels from what the person wants, keeps its answer, and reads no Gmail until some are made', async () => {
     const model = fauxModel();
-    const sift = await startSift(fake.google, { model: model.chosen });
+    const sift = await start({ model: model.chosen });
     const box = fake.google.mailbox(ME);
     const me = await sift.signedIn(ME);
     await sift.work();
@@ -75,7 +70,7 @@ describe('setting up labels', () => {
 
   it('says so when the model suggests nothing usable, and without a model', async () => {
     const model = fauxModel();
-    const sift = await startSift(fake.google, { model: model.chosen });
+    const sift = await start({ model: model.chosen });
     const me = await sift.signedIn(ME);
     model.answers(fauxAssistantMessage([fauxText('Try a Marketing label.')]));
     expect(await me.call('POST', '/api/labels/propose', { goal: 'Fewer pitches' })).toMatchObject({
@@ -83,7 +78,7 @@ describe('setting up labels', () => {
       body: { error: 'The model could not suggest labels (the model did not suggest any usable labels). Try again.' },
     });
 
-    const without = await (await startSift(fake.google)).signedIn(OTHER);
+    const without = await (await start()).signedIn(OTHER);
     expect(await without.call('POST', '/api/labels/propose', { goal: 'Fewer pitches' })).toMatchObject({
       status: 409,
       body: { error: 'Choose a model first.' },
@@ -92,7 +87,7 @@ describe('setting up labels', () => {
 
   it('shows nobody else the proposal', async () => {
     const model = fauxModel();
-    const sift = await startSift(fake.google, { model: model.chosen });
+    const sift = await start({ model: model.chosen });
     const me = await sift.signedIn(ME);
     model.answers(fauxAssistantMessage([fauxToolCall(PROPOSAL_TOOL, { labels: [PITCHES], note: '' })], { stopReason: 'toolUse' }));
     await me.call('POST', '/api/labels/propose', { goal: 'Fewer pitches' });
@@ -103,7 +98,7 @@ describe('setting up labels', () => {
 
 describe('a person’s labels', () => {
   it('are added, all or none, and a digest’s hour is kept in the person’s own zone', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const me = await sift.settled(ME);
     const added = await me.call('POST', '/api/labels/add', {
       labels: [{ name: 'Updates', description: 'Product updates.', disposition: 'digest' }],
@@ -124,7 +119,7 @@ describe('a person’s labels', () => {
   });
 
   it('change what they do, and what is waiting with them is decided again', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const box = fake.google.mailbox(ME);
     const me = await sift.settled(ME);
     const id = box.deliver({ from: 'shop@example.com', subject: 'Receipt' });
@@ -143,7 +138,7 @@ describe('a person’s labels', () => {
   });
 
   it('are removed with their rules and those rules’ Gmail filters, though never the last one or Leave in inbox', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const box = fake.google.mailbox(ME);
     const me = await sift.settled(ME);
     await me.call('POST', '/api/labels/add', { labels: [{ name: 'Updates', description: 'Product updates.', disposition: 'archive' }] });
@@ -163,7 +158,7 @@ describe('a person’s labels', () => {
   });
 
   it('are each person’s own', async () => {
-    const sift = await startSift(fake.google);
+    const sift = await start();
     const me = await sift.settled(ME);
     await me.call('POST', '/api/labels/add', { labels: [{ name: 'Updates', description: 'Product updates.', disposition: 'archive' }] });
     const other = await sift.settled(OTHER);
