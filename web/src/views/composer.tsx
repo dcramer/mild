@@ -1,13 +1,12 @@
 'use client';
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { ChevronDownIcon, ClockIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { reloadAll } from '@/components/action.ts';
 import { type Party, type Recipient, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
 import { api } from '@/lib/api/endpoints.ts';
 import { dateTime } from '@/lib/format.ts';
-import { type Draft, type Writing, draftId, emptyDraft, keepDraft, keptDraft, newMessageId, useCompose } from '@/lib/compose.ts';
-import { uploadFile } from '@/lib/upload.ts';
+import { type Draft, type Writing, draftId, emptyDraft, keepDraft, newMessageId, useCompose } from '@/lib/compose.ts';
 import { useFiles } from '@/lib/attachments.ts';
 import { useChosenMailbox } from '@/lib/mailbox.ts';
 import { useHere } from '@/lib/params.ts';
@@ -36,50 +35,34 @@ import {
   useNow,
   useToast,
 } from '@/system';
-import type { ManageState, MessageDetail } from '../../../src/dashboard/types.ts';
+import type { MessageDetail } from '../../../src/dashboard/types.ts';
 import { useSession, useManage, useDrafts } from '@/lib/api/reads.ts';
-import { keys } from '@/lib/api/keys.ts';
-
-/** An address mail can be from: a mailbox's own, or one of its aliases, and whether Google lets Mild send from that mailbox. */
-interface From {
-  address: string;
-  accountId: string;
-  canSend: boolean;
-}
-
-const addressesOf = (account: ManageState['accounts'][number]): From[] =>
-  [account.email, ...account.aliases].map((address) => ({ address, accountId: account.id, canSend: account.canSend }));
-
-/** "Re: " once, as Gmail and the server put it. */
-const answering = (subject: string) => (/^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}`);
-/** "Fwd: " once. */
-const forwarding = (subject: string) => (/^fwd?:/i.test(subject.trim()) ? subject.trim() : `Fwd: ${subject.trim()}`);
+import { type From, addressesOf, answering, QUOTE, startOf, ofWhat } from '@/lib/answering.ts';
+import { useAutosave, reloadDrafts } from '@/lib/autosave.ts';
+import { useUploads } from '@/lib/upload.ts';
 
 const TITLES = { new: 'New message', reply: 'Reply', all: 'Reply to all', forward: 'Forward' } as const;
 
 /**
- * A new message, in a narrow panel over whatever is open: From (when there is more than one address to send as), To, Cc
- * on a press, a subject and the text. What is written is kept in this browser until it is sent or discarded, so closing
- * it, or a reload, loses nothing.
+ * Mild's copy of the draft for `what`, as the composer holds one, and when it is scheduled to go or why it did not:
+ * another device may have written it. The composer opens without it, from what this browser kept, and takes Mild's copy
+ * as it comes if it is newer.
  */
-/**
- * The person's drafts as Mild has them, which another device may have written. The composer opens without them, from
- * what this browser kept, and takes Mild's copy as it comes if it is newer.
- */
-const useSaved = () => useDrafts();
-
-/** Mild's copy of the draft for `what`, as the composer holds one, and when it is scheduled to go or why it did not. */
-function savedFor(saved: ReturnType<typeof useSaved>['data'], what: Writing): { draft: Draft; sendAt: number | null; sendError: string | null } | null {
+function savedFor(saved: ReturnType<typeof useDrafts>['data'], what: Writing): { draft: Draft; sendAt: number | null; sendError: string | null } | null {
   const found = saved?.drafts.find((d) => d.id === draftId(what));
   if (!found) return null;
   const { of: _of, ...draft } = reveal(found.writing);
   return { draft, sendAt: found.sendAt, sendError: found.sendError };
 }
 
-/** A new message, in a panel of its own; `to` someone already, from their page. `draft` names it, made as it opened. */
+/**
+ * A new message, in a narrow panel over whatever is open: From (when there is more than one address to send as), To, Cc
+ * on a press, a subject and the text. What is written is kept in this browser until it is sent or discarded, so closing
+ * it, or a reload, loses nothing. `to` someone already, from their page; `draft` names it, made as it opened.
+ */
 export function Composer({ to, draft, onClose }: { to: string; draft: string; onClose: () => void }) {
   const manage = useManage({ mailbox: '' });
-  const saved = useSaved();
+  const saved = useDrafts();
   const accounts = manage.data?.accounts ?? [];
   const chosen = useChosenMailbox(accounts.map((a) => a.email));
   // Every address that may send, and the one it starts on even if it may not yet, so the composer can say so.
@@ -117,7 +100,7 @@ export function InlineComposer({
   onClose: () => void;
 }) {
   const manage = useManage({ mailbox: '' });
-  const saved = useSaved();
+  const saved = useDrafts();
   const account = manage.data?.accounts.find((a) => a.id === message.accountId);
   if (!account) return <Loading rows={3} />;
   const choices = addressesOf(account);
@@ -138,48 +121,6 @@ export function InlineComposer({
   );
 }
 
-const shown = (list: MessageDetail['to']): Party[] => list.map((p) => ({ address: reveal(p.address), ...(p.name ? { name: reveal(p.name) } : {}) }));
-const senderOf = (message: MessageDetail): Party => ({ address: reveal(message.fromAddress), ...(message.fromName ? { name: reveal(message.fromName) } : {}) });
-const owns = (choices: readonly From[]) => {
-  const own = new Set(choices.map((c) => c.address.toLowerCase()));
-  return (p: Party) => own.has(p.address.toLowerCase());
-};
-/** The address the message was sent to, of those it can be answered from. */
-const answeredFrom = (message: MessageDetail, choices: readonly From[]) =>
-  [...shown(message.to), ...shown(message.cc)].find(owns(choices))?.address ?? choices[0].address;
-
-function replyDraft(message: MessageDetail, choices: readonly From[], all: boolean): Draft {
-  const isOwn = owns(choices);
-  const sender = senderOf(message);
-  const asked = message.headers['reply-to'] ? readAddresses(reveal(message.headers['reply-to'])).parties : [];
-  const recipients = [...shown(message.to), ...shown(message.cc)];
-  // Mail the person sent themselves is answered as Gmail does: to whoever it went to.
-  const to = isOwn(sender) ? shown(message.to).filter((p) => !isOwn(p)) : asked.length > 0 ? asked : [sender];
-  const answered = new Set(to.map((p) => p.address.toLowerCase()));
-  const cc = all ? recipients.filter((p) => !isOwn(p) && !answered.has(p.address.toLowerCase())) : [];
-  return emptyDraft(answeredFrom(message, choices), { to, cc, showCc: cc.length > 0 });
-}
-
-/** How a reply or forward of `message` starts. */
-const startOf = (message: MessageDetail, choices: readonly From[], what: Exclude<Writing, { kind: 'new' }>) =>
-  what.kind === 'reply' ? replyDraft(message, choices, what.all) : forwardDraft(message, choices);
-
-/** Gmail's quote of a forwarded message, under two empty lines for the reader's own text. Its files go with it (`ForwardedFiles`). */
-function forwardDraft(message: MessageDetail, choices: readonly From[]): Draft {
-  const subject = reveal(message.subject);
-  const quoted = [
-    QUOTE,
-    `From: ${typed(senderOf(message))}`,
-    `Date: ${dateTime(message.receivedAt)}`,
-    `Subject: ${subject}`,
-    ...(message.to.length > 0 ? [`To: ${shown(message.to).map(typed).join(', ')}`] : []),
-    ...(message.cc.length > 0 ? [`Cc: ${shown(message.cc).map(typed).join(', ')}`] : []),
-    '',
-    reveal(message.body) ?? '',
-  ];
-  return emptyDraft(answeredFrom(message, choices), { subject: forwarding(subject), text: `\n\n${quoted.join('\n')}` });
-}
-
 /** Whom to suggest as an address is typed: the person's own address book, on the server. */
 const suggest = async (q: string, signal: AbortSignal): Promise<Party[]> =>
   (await api.addresses(q, signal)).addresses.map((a) => ({ address: reveal(a.address), ...(a.name ? { name: reveal(a.name) } : {}) }));
@@ -187,19 +128,7 @@ const suggest = async (q: string, signal: AbortSignal): Promise<Party[]> =>
 /** What is wrong with a line's recipients, in a sentence, or null. */
 const wrongOf = (list: readonly Recipient[]) => wrongAddresses(list.filter((r) => r.wrong).map((r) => r.address));
 
-/** What a saved draft answers, as Mild keeps it. */
-const ofWhat = (what: Writing) =>
-  what.kind === 'new'
-    ? ({ kind: 'new' } as const)
-    : what.kind === 'reply'
-      ? ({ kind: 'reply', messageId: what.messageId, all: what.all } as const)
-      : ({ kind: 'forward', messageId: what.messageId } as const);
-
-/** A pause in writing long enough to save the draft to Mild, which gives it to Gmail only once the writing has stopped. */
-const SAVE_PAUSE_MS = 1500;
-
 /** Where a forward's quote begins: what the person wrote is above it. */
-const QUOTE = '---------- Forwarded message ---------';
 /** Words that say a file goes with the mail. */
 const SAYS_ATTACHED = /\b(attach(ed|ing|ment|ments)?|enclosed)\b/i;
 
@@ -229,16 +158,6 @@ function blank(draft: Draft, start: Draft, subject: string | undefined): boolean
     draft.subject.trim() === (draft.editSubject ? (subject ?? '') : start.subject).trim() &&
     recipients(draft) === recipients(start)
   );
-}
-
-/** Files being uploaded, by a key of their own until Mild gives them an id. */
-interface Uploading {
-  key: string;
-  file: File;
-  added: number;
-  sent: number;
-  failed?: string;
-  abort: AbortController;
 }
 
 /** The composer's fields, text and presses: in a panel of their own for new mail, in place under the conversation (`inline`) for a reply or a forward. */
@@ -273,80 +192,9 @@ function Writer({
 }) {
   const who = useSession('').data?.email ?? '';
   const client = useQueryClient();
-  const [draft, setDraft] = useState(() => keptDraft(who, what, saved?.draft ?? null) ?? start);
-  // Mild's copy, come since it opened: the newer is kept, as it was as it opened.
-  const [offered, setOffered] = useState(saved?.draft.at ?? 0);
-  if (saved && saved.draft.at !== offered) {
-    setOffered(saved.draft.at);
-    if (saved.draft.at > draft.at) setDraft(saved.draft);
-  }
-  // Said over the draft until it changes, which makes it a draft again, as in Gmail.
-  const scheduled = saved !== null && draft.at <= saved.draft.at ? saved : null;
   const empty = (d: Draft) => blank(d, start, subject);
-  // Saved to Mild once the writing pauses, and as the composer closes; never once it is sent or discarded.
-  const saving = useRef<{ timer: ReturnType<typeof setTimeout> | null; latest: Draft | null; done: boolean; stored: boolean }>({
-    timer: null,
-    latest: null,
-    done: false,
-    stored: false,
-  });
-  /** Gone from Mild, and from Gmail's Drafts. */
-  const forget = () => {
-    saving.current.stored = false;
-    void api.removeDraft(draftId(what)).then(
-      () => client.invalidateQueries({ queryKey: [keys.drafts] }),
-      () => {},
-    );
-  };
-  const save = () => {
-    const { latest, done } = saving.current;
-    if (saving.current.timer) clearTimeout(saving.current.timer);
-    saving.current.timer = null;
-    saving.current.latest = null;
-    if (!latest || done) return;
-    if (empty(latest)) {
-      if (saved || saving.current.stored) forget();
-      return;
-    }
-    saving.current.stored = true;
-    const account = choices.find((c) => c.address === latest.from) ?? choices[0];
-    void api
-      .saveDraft({
-        id: draftId(what),
-        accountId: account.accountId,
-        writing: { ...latest, of: ofWhat(what) },
-      })
-      .then(
-        () => client.invalidateQueries({ queryKey: [keys.drafts] }),
-        () => {},
-      );
-  };
-  const flush = useRef(save);
-  useLayoutEffect(() => {
-    flush.current = save;
-  });
-  useEffect(() => () => flush.current(), []);
-  const finished = () => {
-    if (saving.current.timer) clearTimeout(saving.current.timer);
-    saving.current = { ...saving.current, timer: null, latest: null, done: true };
-  };
-  const change = (next: Partial<Draft> | ((was: Draft) => Partial<Draft>)) => {
-    setDraft((was) => {
-      const asked = typeof next === 'function' ? next(was) : next;
-      // A changed draft is mail of its own: a try before the change may have gone, and must not be found and called this one.
-      const changed = { ...was, ...('id' in asked ? {} : { id: null }), ...asked, at: Date.now() };
-      keepDraft(who, what, empty(changed) ? null : changed);
-      return changed;
-    });
-  };
-  // Each change, once the writing pauses.
-  useEffect(() => {
-    if (draft.at === 0 || saving.current.done) return;
-    saving.current.latest = draft;
-    if (saving.current.timer) clearTimeout(saving.current.timer);
-    saving.current.timer = setTimeout(() => flush.current(), SAVE_PAUSE_MS);
-  }, [draft]);
-  const [uploading, setUploading] = useState<Uploading[]>([]);
+  const { draft, change, scheduled, finished, forget, held } = useAutosave(who, what, saved, start, choices, empty);
+  const { uploading, attach, cancel } = useUploads(change);
   // What is typed in each line that is not a chip yet.
   const [typing, setTyping] = useState({ to: '', cc: '', bcc: '' });
   const files = useFiles(what.kind === 'forward' || draft.withFiles ? answered : undefined);
@@ -385,36 +233,8 @@ function Writer({
   // What a toast calls it: its subject, or who it is to.
   const said = ((draft.editSubject ? draft.subject.trim() : subject) ?? draft.subject.trim()) || (addressee ? `To ${typed(addressee)}` : title);
 
-  const attach = (picked: readonly File[]) => {
-    for (const [index, file] of picked.entries()) {
-      const key = crypto.randomUUID();
-      const added = Date.now() + index;
-      const abort = new AbortController();
-      const set = (more: Partial<Uploading>) => setUploading((all) => all.map((u) => (u.key === key ? { ...u, ...more } : u)));
-      setUploading((all) => [...all, { key, file, added, sent: 0, abort }]);
-      uploadFile(file, (sent) => set({ sent }), abort.signal).then(
-        (id) => {
-          // Taken off as it finished: Mild need not keep it.
-          if (abort.signal.aborted) {
-            api.removeUpload(id).catch(() => {});
-            return;
-          }
-          setUploading((all) => all.filter((u) => u.key !== key));
-          change((was) => ({ files: [...was.files, { id, name: file.name, size: file.size, added }] }));
-        },
-        (failure: unknown) => {
-          if (!abort.signal.aborted) set({ failed: failure instanceof Error ? failure.message : 'It did not upload.' });
-        },
-      );
-    }
-  };
   const detach = (key: string) => {
-    const going = uploading.find((u) => u.key === key);
-    if (going) {
-      going.abort.abort();
-      setUploading((all) => all.filter((u) => u.key !== key));
-      return;
-    }
+    if (cancel(key)) return;
     if (files.some((f) => f.part === key)) {
       change((was) => ({ dropped: [...was.dropped, key] }));
       return;
@@ -465,15 +285,13 @@ function Writer({
     onClose();
     void api.saveDraft({ id: draftId(what), accountId: from.accountId, writing, sendAt: at }).then(
       () => {
-        void client.invalidateQueries({ queryKey: [keys.drafts] });
+        void reloadDrafts(client);
         toast(said, {
           kind: `Scheduled for ${dateTime(at)}`,
           undo: () => {
             const again = { ...writing, at: Date.now() };
             keepDraft(who, what, again);
-            void api
-              .saveDraft({ id: draftId(what), accountId: from.accountId, writing: again })
-              .then(() => client.invalidateQueries({ queryKey: [keys.drafts] }));
+            void api.saveDraft({ id: draftId(what), accountId: from.accountId, writing: again }).then(() => reloadDrafts(client));
             compose?.(what);
           },
         });
@@ -550,7 +368,7 @@ function Writer({
     finished();
     keepDraft(who, what, null);
     const nothing = empty(draft) && uploading.length === 0;
-    if (!nothing || saved || saving.current.stored) forget();
+    if (!nothing || held()) forget();
     onClose();
     if (nothing) return;
     toast(said, {
@@ -569,7 +387,7 @@ function Writer({
     const own = draft.text.includes(QUOTE) ? draft.text.slice(0, draft.text.indexOf(QUOTE)).trimEnd() : draft.text;
     finished();
     keepDraft(who, what, null);
-    if (saved || saving.current.stored) forget();
+    if (held()) forget();
     const carried = { ...started, text: other.kind === 'forward' ? `${own}${started.text}` : own, files: draft.files, at: Date.now() };
     keepDraft(who, other, blank(carried, started, subject) ? null : carried);
     compose?.(other);

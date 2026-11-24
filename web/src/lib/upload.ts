@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { api } from './api/endpoints.ts';
+import type { Draft } from './compose.ts';
 import { holdReload } from './build.ts';
 
 /** A piece is sent again this many times before the file is said to have failed. */
@@ -16,7 +18,7 @@ async function base64(blob: Blob): Promise<string> {
  * Upload a file to attach, a piece to a request (a request is at most a few megabytes on Vercel), telling `sent` how many
  * bytes have gone. Resolves with its id, which Send names; Mild keeps it a day, or until it is sent.
  */
-export async function uploadFile(file: File, sent: (bytes: number) => void, signal: AbortSignal): Promise<string> {
+async function uploadFile(file: File, sent: (bytes: number) => void, signal: AbortSignal): Promise<string> {
   const release = holdReload();
   try {
     const { id, piece } = await api.startUpload({ name: file.name, type: file.type, size: file.size });
@@ -37,4 +39,53 @@ export async function uploadFile(file: File, sent: (bytes: number) => void, sign
   } finally {
     release();
   }
+}
+
+/** Files being uploaded, by a key of their own until Mild gives them an id. */
+interface Uploading {
+  key: string;
+  file: File;
+  added: number;
+  sent: number;
+  failed?: string;
+  abort: AbortController;
+}
+
+/**
+ * The files being uploaded to attach to a draft: `attach` sends each, and puts it in the draft through `change` once it
+ * has gone; `cancel` stops one, and says whether it was one of them.
+ */
+export function useUploads(change: (next: (was: Draft) => Partial<Draft>) => void) {
+  const [uploading, setUploading] = useState<Uploading[]>([]);
+  const attach = (picked: readonly File[]) => {
+    for (const [index, file] of picked.entries()) {
+      const key = crypto.randomUUID();
+      const added = Date.now() + index;
+      const abort = new AbortController();
+      const set = (more: Partial<Uploading>) => setUploading((all) => all.map((u) => (u.key === key ? { ...u, ...more } : u)));
+      setUploading((all) => [...all, { key, file, added, sent: 0, abort }]);
+      uploadFile(file, (sent) => set({ sent }), abort.signal).then(
+        (id) => {
+          // Taken off as it finished: Mild need not keep it.
+          if (abort.signal.aborted) {
+            api.removeUpload(id).catch(() => {});
+            return;
+          }
+          setUploading((all) => all.filter((u) => u.key !== key));
+          change((was) => ({ files: [...was.files, { id, name: file.name, size: file.size, added }] }));
+        },
+        (failure: unknown) => {
+          if (!abort.signal.aborted) set({ failed: failure instanceof Error ? failure.message : 'It did not upload.' });
+        },
+      );
+    }
+  };
+  const cancel = (key: string) => {
+    const going = uploading.find((u) => u.key === key);
+    if (!going) return false;
+    going.abort.abort();
+    setUploading((all) => all.filter((u) => u.key !== key));
+    return true;
+  };
+  return { uploading, attach, cancel };
 }

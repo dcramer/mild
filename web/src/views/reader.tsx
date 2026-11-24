@@ -3,7 +3,7 @@ import { eq, useLiveQuery } from '@tanstack/react-db';
 import { ArchiveIcon, BanIcon, MailIcon, ReplyIcon, ShieldAlertIcon, TagIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAnswer, useRecordAnswer, withDoes } from '@/components/answer.tsx';
-import { StatusWord, Verdict } from '@/components/bits.tsx';
+import { StatusWord } from '@/components/bits.tsx';
 import { MessageBody, SeenFacts, useMessageView } from '@/components/message-parts.tsx';
 import { DigestBody } from '@/components/digest.tsx';
 import { useMailPress } from '@/components/mail.tsx';
@@ -14,12 +14,11 @@ import { type Confidential, type MailConversation, type MessageDetail, type Rule
 import { changeLoaded, useLoaded } from '@/lib/api/query.ts';
 import { conversationOf, conversations, copied, copiedKey } from '@/lib/copy.ts';
 import { type Writing, closeReply, useCompose, writing } from '@/lib/compose.ts';
-import { capitalised, count, dateTime, money } from '@/lib/format.ts';
-import { outcomeName, sureness, tier } from '@/lib/words.ts';
+import { capitalised, count } from '@/lib/format.ts';
+import { outcomeName, sureness } from '@/lib/words.ts';
 import type { MessageRef } from '@/lib/open-messages.ts';
 import { messageKey } from '@/lib/rows.ts';
 import { useParam } from '@/lib/params.ts';
-import { AT_API_PRICES, usePlan } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { keepStart, messageStart, standingStart } from '@/lib/rule-start.ts';
 import { useStarted } from '@/lib/started.ts';
@@ -52,145 +51,14 @@ import {
   TextLink,
   Th,
   type Thumb,
-  Timeline,
-  TimelineEvent,
   Tr,
   useToast,
   MessageFiles,
-  LabelChip,
 } from '@/system';
 import { useManage, useMessage, readMessageAhead, useSuggestion } from '@/lib/api/reads.ts';
 import { keys } from '@/lib/api/keys.ts';
 import { useLabelEnding } from '@/components/label-ending.tsx';
-
-type Decision = MessageDetail['decisions'][number];
-type Action = MessageDetail['actions'][number];
-
-const CHANGE: Record<string, string> = {
-  archive: 'Archived',
-  spam: 'Marked spam',
-  label: 'Labelled',
-  undo: 'Undid a change',
-  unsubscribe: 'Unsubscribed',
-  read: 'Marked read',
-  unread: 'Marked unread',
-};
-/** A change that never landed, as the lists say it ("Not archived"): it is tried again, so it is only history. */
-const NOT_DONE: Record<string, string> = {
-  archive: 'Not archived',
-  spam: 'Not marked spam',
-  label: 'Not labelled',
-  undo: 'Not undone',
-  unsubscribe: 'Not unsubscribed',
-  read: 'Not marked read',
-  unread: 'Not marked unread',
-};
-
-function DecisionEvent({ d }: { d: Decision }) {
-  // Through a plan, the call was paid for by it: its cost is only what the API would have charged.
-  const plan = usePlan(d.model ?? '');
-  const facts = [
-    d.ruleId ? `rule ${d.ruleId}` : null,
-    d.confidence === null ? null : `confidence ${d.confidence.toFixed(2)}`,
-    d.model ? `${d.model}, ${count(d.inputTokens + d.outputTokens)} tokens, ${money(d.costUsd)}${plan ? ` ${AT_API_PRICES}` : ''}` : null,
-    d.durationMs === null ? null : `${count(d.durationMs)} ms`,
-  ].filter(Boolean);
-  return (
-    <TimelineEvent
-      at={dateTime(d.decidedAt)}
-      title={
-        <>
-          <span className="font-medium">{d.carryOut ? 'Decided' : 'Suggested'}</span>
-          <Verdict labelId={d.labelId} labelName={d.labelName} disposition={d.disposition} />
-        </>
-      }
-    >
-      <p className="text-foreground">{capitalised(reveal(d.reason))}</p>
-      <p>
-        By {tier(d.stage).name.toLowerCase()}
-        {facts.length > 0 ? ` · ${facts.join(' · ')}` : ''}
-      </p>
-    </TimelineEvent>
-  );
-}
-
-/** Where a change got to, when it is not done and did land. */
-const ACTION_STATUS: Record<string, string> = { undone: 'Undone', pending: 'Waiting' };
-
-function ActionEvent({ a, onUndo, busy }: { a: Action; onUndo: (id: number) => void; busy: boolean }) {
-  const labels = (title: string, list: string[]) =>
-    list.length === 0 ? null : (
-      <p className="flex flex-wrap items-baseline gap-1.5">
-        {title}
-        {list.map((label) => (
-          <LabelChip key={label}>{label}</LabelChip>
-        ))}
-      </p>
-    );
-  return (
-    <TimelineEvent
-      at={dateTime(a.createdAt)}
-      title={
-        a.status === 'failed' || a.status === 'unknown' ? (
-          <span className="text-muted-foreground">{NOT_DONE[a.type] ?? a.type}</span>
-        ) : (
-          <>
-            <span className="font-medium">{CHANGE[a.type] ?? a.type} in Gmail</span>
-            {a.status === 'done' ? null : <span className="text-muted-foreground">{ACTION_STATUS[a.status] ?? a.status}</span>}
-          </>
-        )
-      }
-      {...(a.status === 'done' && a.type !== 'undo' && a.type !== 'unsubscribe'
-        ? {
-            action: (
-              <Button busy={busy} onClick={() => onUndo(a.id)}>
-                Undo
-              </Button>
-            ),
-          }
-        : {})}
-    >
-      {labels('Added', reveal(a.added))}
-      {labels('Removed', reveal(a.removed))}
-    </TimelineEvent>
-  );
-}
-
-/** What happened to a message, oldest first: what Mild decided and what changed in Gmail, each with Undo. */
-function History({ detail, onUndone }: { detail: MessageDetail; onUndone: () => void }) {
-  const undo = useAction();
-  const toast = useToast();
-  const history = [
-    ...detail.decisions.map((d) => ({ at: d.decidedAt, order: 0, node: <DecisionEvent key={`d${d.id}`} d={d} /> })),
-    ...detail.actions.map((a) => ({
-      at: a.createdAt,
-      order: 1,
-      node: (
-        <ActionEvent
-          key={`a${a.id}`}
-          a={a}
-          busy={undo.busy}
-          onUndo={(id) =>
-            undo.run(async () => {
-              const { message } = await api.undo(id);
-              if (message) toast(message);
-              onUndone();
-            })
-          }
-        />
-      ),
-    })),
-  ].toSorted((x, y) => x.at - y.at || x.order - y.order);
-  if (history.length === 0) return null;
-  return (
-    <>
-      <Failure>{undo.error}</Failure>
-      <Timeline>{history.map((entry) => entry.node)}</Timeline>
-    </>
-  );
-}
-
-const historyCount = (detail: MessageDetail) => detail.decisions.length + detail.actions.length;
+import { History, historyCount } from '@/components/message-history.tsx';
 
 /** Each address, the account's own as "me", as a mail app says it. */
 const people = (list: MessageDetail['to'], account: string) => list.map((p) => (reveal(p.address) === account ? 'me' : reveal(p.address)));
@@ -683,6 +551,33 @@ function OpenedMessage({
 }
 
 /**
+ * The conversation `threadId`, none for no id. One in the inbox is in this browser's copy already (docs/sync.md); the
+ * server is asked for one that is not. `markRead` changes what was read of it, for a press here that marked it read.
+ */
+function useConversation(accountId: string, threadId: string | undefined) {
+  const load = keys.thread(accountId, threadId ?? '');
+  const key = threadId && accountId ? copiedKey(accountId, threadId) : null;
+  const started = useStarted();
+  const inCopy = useLiveQuery({ query: (from) => (key && started ? from.from({ c: conversations() }).where(({ c }) => eq(c.key, key)) : undefined) });
+  const thread = useLoaded(
+    load,
+    (signal) => {
+      const held = key ? copied(key) : undefined;
+      return held ? Promise.resolve(conversationOf(held)) : threadId ? api.mailThread(threadId, signal, accountId) : Promise.resolve(null);
+    },
+    30_000,
+    '',
+  );
+  const fromCopy = inCopy.data?.[0];
+  return {
+    fromCopy,
+    conversation: threadId ? (fromCopy ? conversationOf(fromCopy) : thread.data) : null,
+    thread,
+    markRead: () => changeLoaded<MailConversation | null>(load, (read) => read && { ...read, messages: read.messages.map((m) => ({ ...m, unread: false })) }),
+  };
+}
+
+/**
  * Every list opens a message here, in the list's place: `items` is the list and `index` the one showing, so previous,
  * next and "answer, then the next one" follow it. `back` names the list, which `onBack` returns to. `onShown` is told
  * which row the message is, for the list to come back to.
@@ -713,20 +608,7 @@ export function MessageReader({
   const shown = picked ?? item;
   const { data, error, loading, reload } = useMessage(shown.accountId, shown.messageId);
   const threadId = picked ? undefined : item.threadId;
-  const threadLoad = keys.thread(item.accountId, threadId ?? '');
-  // A conversation in the inbox is in this browser's copy already (docs/sync.md); the server is asked for one that is not.
-  const key = threadId && item.accountId ? copiedKey(item.accountId, threadId) : null;
-  const started = useStarted();
-  const inCopy = useLiveQuery({ query: (from) => (key && started ? from.from({ c: conversations() }).where(({ c }) => eq(c.key, key)) : undefined) });
-  const thread = useLoaded(
-    threadLoad,
-    (signal) => {
-      const held = key ? copied(key) : undefined;
-      return held ? Promise.resolve(conversationOf(held)) : threadId ? api.mailThread(threadId, signal, item.accountId) : Promise.resolve(null);
-    },
-    30_000,
-    '',
-  );
+  const { fromCopy, conversation, thread, markRead } = useConversation(item.accountId, threadId);
   // The conversations either side are read ahead, so previous and next wait on nothing.
   useEffect(() => {
     for (const near of [items[index + 1], items[index - 1]]) if (near?.accountId) readMessageAhead(near.accountId, near.messageId);
@@ -743,8 +625,6 @@ export function MessageReader({
     window.scrollTo(0, 0);
   };
   const next = () => (index < items.length - 1 ? go(index + 1) : onBack());
-  const fromCopy = inCopy.data?.[0];
-  const conversation = threadId ? (fromCopy ? conversationOf(fromCopy) : thread.data) : null;
   // The copy has all a press needs before the message has loaded.
   const subject = data?.subject ?? fromCopy?.conversation.messages.at(-1)?.subject;
   const manage = useManage();
@@ -842,9 +722,7 @@ export function MessageReader({
         onPick={pick}
         onUndone={reload}
         onAnswered={next}
-        onRead={() =>
-          changeLoaded<MailConversation | null>(threadLoad, (read) => read && { ...read, messages: read.messages.map((m) => ({ ...m, unread: false })) })
-        }
+        onRead={() => markRead()}
         labelling={labelling}
         onLabelled={() => setLabelling(false)}
       />
