@@ -1,4 +1,4 @@
-import { type Rule, type RuleMatch, asksFacts, describeMatch, specificity } from './stages/rules.ts';
+import { type Rule, type RuleMatch, asksFacts, describeMatch, specificity } from './rule.ts';
 import { type Label, labelled } from './types.ts';
 
 /** A rule as Gmail could run it by itself. The label is named, not given by id: the id is Gmail's to assign. */

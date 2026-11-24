@@ -2,7 +2,7 @@ import { actions, and, asc, decisions, desc, digests, eq, gt, inArray, isNull, l
 import { costOf } from './runs.ts';
 import type { Sql } from './sql.ts';
 import { digestName, openEnvelope, openJson, sealJson } from './content.ts';
-import type { Usage } from '../triage/stages/model.ts';
+import { type Usage } from '../triage/types.ts';
 import { plain } from '../plain.ts';
 import type { Confidential } from '../confidential.ts';
 import { isCurrent, ofMessage } from './decisions.ts';

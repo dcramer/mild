@@ -31,7 +31,7 @@ import {
   sql,
   readBodies,
 } from './query.ts';
-import { type RuleMatch, tidyMatch } from '../triage/stages/rules.ts';
+import { type RuleMatch, tidyMatch } from '../triage/rule.ts';
 import { searchIndex } from './search.ts';
 import type { Sql } from './sql.ts';
 

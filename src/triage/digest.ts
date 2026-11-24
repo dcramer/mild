@@ -1,4 +1,4 @@
-import type { Usage } from './stages/model.ts';
+import { type Usage } from './types.ts';
 
 export const HIGHLIGHT_TOOL = 'record_highlights';
 

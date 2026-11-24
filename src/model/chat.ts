@@ -1,6 +1,6 @@
 import type { Api, AssistantMessage, Context, Message, Model, Models } from '@earendil-works/pi-ai';
 import { type Attributes, type Traced, traced } from '../telemetry.ts';
-import type { Usage } from '../triage/stages/model.ts';
+import { type Usage } from '../triage/types.ts';
 import type { Reasoning } from './reasoning.ts';
 
 /** Why the model stopped, as OpenTelemetry says it. */

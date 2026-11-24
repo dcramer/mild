@@ -1,6 +1,6 @@
 import type { FoundSender } from './rule-draft.ts';
 import { FIND_TOOL } from './rule-draft.ts';
-import type { Usage } from './stages/model.ts';
+import { type Usage } from './types.ts';
 import type { Label } from './types.ts';
 
 export const ASK_TOOL = 'narrow_inbox';

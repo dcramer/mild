@@ -1,7 +1,7 @@
 import { and, asc, count, decisions, desc, eq, gte, inboxRuns, isNull, labels, max, messages, modelRuns, rules, sql } from '../../store/query.ts';
 import { keptOut, saved } from './saved.ts';
 import type { Sql } from '../../store/sql.ts';
-import type { RuleMatch } from '../../triage/stages/rules.ts';
+import { type RuleMatch } from '../../triage/rule.ts';
 import { openEnvelope, openJson, ruleName } from '../../store/content.ts';
 import { ruleFilterStatus } from '../../store/filters.ts';
 import { type Scope, within } from '../scope.ts';

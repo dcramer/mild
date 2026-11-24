@@ -1,5 +1,5 @@
 import type { MailAnswer } from '../triage/mail-ask.ts';
-import type { Usage } from '../triage/stages/model.ts';
+import { type Usage } from '../triage/types.ts';
 import { askName, sealJson } from './content.ts';
 import { eq, mailAsks } from './query.ts';
 import { costOf } from './runs.ts';

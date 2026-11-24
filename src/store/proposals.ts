@@ -1,7 +1,7 @@
 import { and, decisions, desc, eq, feedback, messages, proposals } from './query.ts';
 import type { Sql } from './sql.ts';
 import { conditionsHash, hashOf, openJson, proposalName, sealJson } from './content.ts';
-import type { RuleMatch } from '../triage/stages/rules.ts';
+import { type RuleMatch } from '../triage/rule.ts';
 import type { DecidedDisposition } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 import { hasRuleFor } from './rules.ts';
