@@ -247,9 +247,6 @@ export function MessageStack({
       {items.map((item) =>
         'open' in item ? (
           <article key={item.open.id} className={GUTTERED}>
-            <span data-avatar className="pointer-events-none relative z-1 col-start-1 row-start-1 -mt-1.5">
-              <Avatar name={item.open.from} />
-            </span>
             <Opened value={{ from: item.open.from, fold: alone ? null : () => onToggle(item.open.id) }}>{children(item.open.id)}</Opened>
           </article>
         ) : 'folded' in item || item.more.length === 1 ? (
@@ -274,11 +271,11 @@ export function MessageStack({
 }
 
 /**
- * An open message: its sender's `Avatar` in a gutter, the head and text beside it, as Gmail sets each message apart. On
- * a phone the text takes the gutter's width too, under the head.
+ * An open message: its head across the top, its sender's `Avatar` in a gutter there (`MessageHead`), and the text beside
+ * the gutter, as Gmail sets each message apart. On a phone the text takes the gutter's width too.
  */
 const GUTTERED =
-  'row grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-4 py-5 first:pt-1 [--gutter:calc(var(--control)_+_1rem)] [&>:not([data-avatar])]:col-start-2 phone:[&>:not([data-avatar],header)]:col-span-2 phone:[&>:not([data-avatar],header)]:col-start-1';
+  'row grid min-w-0 grid-cols-[var(--control)_minmax(0,1fr)] gap-x-4 gap-y-4 py-5 first:pt-1 [&>header]:col-span-2 [&>:not(header)]:col-start-2 phone:[&>:not(header)]:col-span-2 phone:[&>:not(header)]:col-start-1';
 
 /** A folded message: its sender's `Avatar`, their name and when over its first line, which a press opens in place. */
 function Folded({ message, onToggle }: { message: Listed; onToggle: (id: string) => void }) {
@@ -287,7 +284,7 @@ function Folded({ message, onToggle }: { message: Listed; onToggle: (id: string)
       type="button"
       aria-expanded={false}
       onClick={() => onToggle(message.id)}
-      className="row -mx-(--bleed) flex min-w-0 cursor-pointer items-start gap-4 px-(--bleed) py-3 text-left [--inset:var(--bleed)] hover:bg-(--fill)"
+      className="row -mx-(--bleed) flex min-w-0 cursor-pointer items-center gap-4 px-(--bleed) py-3 text-left [--inset:var(--bleed)] hover:bg-(--fill)"
     >
       <Avatar name={message.from} />
       <span className="flex min-w-0 flex-1 flex-col">
@@ -308,8 +305,9 @@ interface Answers {
 }
 
 /**
- * Who wrote a message and when, over its text: the name, the address after it (not on a phone), the time at the right,
- * who it went to under them (`to`: a To and a Cc row, the words in a column of their own). In a `MessageStack` of several, a press anywhere on it but a link folds the message.
+ * Who wrote a message and when, over its text: their `Avatar`, the name, the address after it (not on a phone), the time at
+ * the right, who it went to under them (`to`: a To and a Cc row, the words in a column of their own). The avatar is
+ * centred on the name and the To row, so a Cc row hangs below without moving it. In a `MessageStack` of several, a press anywhere on it but a link folds the message.
  * `answers` puts Reply at its end, and Reply all and Forward in its ⋮ menu, for answering this message rather than the
  * newest; `more` adds to that menu what else can be done with the message (Show as text).
  */
@@ -340,18 +338,22 @@ export function MessageHead({
       : []),
     ...more,
   ];
+  const rows = to ?? [];
   return (
-    <header className="relative flex flex-col gap-1">
+    <header className="relative grid grid-cols-[var(--control)_minmax(0,1fr)] items-center gap-x-4 gap-y-1">
       {opened.fold ? (
         <button
           type="button"
           aria-expanded
           aria-label={`Fold the message from ${opened.from}`}
           onClick={opened.fold}
-          className="absolute -inset-y-2 -right-(--bleed) left-[calc(-1*var(--bleed)_-_var(--gutter,0px))] cursor-pointer hover:bg-(--fill)"
+          className="absolute -inset-x-(--bleed) -inset-y-2 cursor-pointer hover:bg-(--fill)"
         />
       ) : null}
-      <div className={cn('flex items-center gap-x-3', through)}>
+      <span data-avatar className={cn('pointer-events-none relative row-start-1', rows.length > 0 && 'row-span-2')}>
+        <Avatar name={opened.from} />
+      </span>
+      <div className={cn('col-start-2 row-start-1 flex items-center gap-x-3', through)}>
         <span className="flex min-w-0 flex-1 items-baseline gap-x-2">
           <span className="name flex min-w-0 items-baseline gap-1.5 [&>a]:truncate">{from}</span>
           {address ? <span className="min-w-0 truncate text-sm text-muted-foreground max-sm:hidden">{address}</span> : null}
@@ -381,9 +383,9 @@ export function MessageHead({
           </span>
         ) : null}
       </div>
-      {to && to.length > 0 ? (
-        <dl className={cn('grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm', through)}>
-          {to.map((row) => (
+      {rows.length > 0 ? (
+        <dl className={cn('col-start-2 row-start-2 grid grid-cols-[auto_1fr] grid-rows-subgrid gap-x-3 text-sm', rows.length > 1 && 'row-span-2', through)}>
+          {rows.map((row) => (
             <Fragment key={row.label}>
               <dt className="text-muted-foreground">{row.label}</dt>
               <dd className="min-w-0 text-muted-foreground">{row.who}</dd>

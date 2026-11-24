@@ -186,6 +186,17 @@ test.describe('A message read as part of the page', () => {
     await frameMisfit(page, RELEASE_SUBJECT).toBeLessThanOrEqual(1);
   });
 
+  test('a letter is set at the page’s line height, whatever its program wrote', async ({ page }) => {
+    await replyAs(
+      page,
+      `<style>p.MsoNormal{margin:0 0 8pt;line-height:107%;font-size:16px}</style><div style="font:16px Calibri"><p class="MsoNormal">${REPLIED}</p><p class="MsoNormal" style="line-height:normal">${ASKED}</p></div>`,
+    );
+    await page.goto(RELEASE);
+    const frame = mailFrame(page, RELEASE_SUBJECT);
+    await expect(frame.getByText(REPLIED)).toHaveCSS('line-height', '26px');
+    await expect(frame.getByText(ASKED)).toHaveCSS('line-height', '26px');
+  });
+
   test('its text folds the same history', async ({ page }) => {
     await page.goto(RELEASE);
     const open = reader(page);

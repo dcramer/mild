@@ -393,6 +393,18 @@ test.describe('A long conversation', () => {
     const gutter = await boxOf(initial);
     expect((await boxOf(text)).x).toBeGreaterThan(gutter.x + gutter.width);
   });
+
+  test('centres the sender’s initial on their name and the To line, with Cc under it', async ({ page }) => {
+    await page.goto('/system');
+    await page.getByRole('button', { name: 'Open a message' }).click();
+    const message = page.getByRole('region', { name: 'Lunch on Thursday?' }).getByRole('article');
+    const initial = await boxOf(message.locator('[data-avatar]'));
+    const name = await boxOf(message.getByRole('link', { name: 'Ada Lovelace' }));
+    const to = await boxOf(addressed(message, 'To'));
+    const middle = (name.y + to.y + to.height) / 2;
+    expect(Math.abs(initial.y + initial.height / 2 - middle)).toBeLessThanOrEqual(2);
+    expect((await boxOf(addressed(message, 'Cc'))).y).toBeGreaterThanOrEqual(initial.y + initial.height);
+  });
 });
 
 test.describe('On a phone, a message', () => {
