@@ -7,6 +7,9 @@ import { Thinks } from './suggestions.ts';
 export const MAIL_VIEWS = ['all', 'needs', 'sorted'] as const;
 export type MailView = (typeof MAIL_VIEWS)[number];
 
+/** What Mild thinks of a conversation: of its newest message in the inbox, the one keeping it there, or its newest where none is. */
+const ThreadThinks = Thinks.extend({ messageId: z.string() });
+
 /** GET /api/mail/threads: one conversation with mail in the inbox now. */
 export const MailThread = z.object({
   accountId: z.string(),
@@ -25,8 +28,8 @@ export const MailThread = z.object({
   place: z.enum(['inbox', 'archived', 'sent']),
   /** The start of its newest message's text, on one line, where Mild holds it. */
   preview: held.nullable(),
-  /** About its newest message; null when Mild has not decided it. */
-  thinks: Thinks.nullable(),
+  /** Null when Mild has not decided it. */
+  thinks: ThreadThinks.nullable(),
 });
 export type MailThread = z.infer<typeof MailThread>;
 
@@ -55,7 +58,7 @@ export const MailConversation = z.object({
 });
 export type MailConversation = z.infer<typeof MailConversation>;
 
-/** A conversation as the page's copy holds it (docs/sync.md): its recorded messages, oldest first, and what Mild thinks of its newest. */
+/** A conversation as the page's copy holds it (docs/sync.md): its recorded messages, oldest first, and what Mild thinks of it. */
 export const SyncedConversation = z.object({
   accountId: z.string(),
   threadId: z.string(),
@@ -71,8 +74,8 @@ export const SyncedConversation = z.object({
       preview: held.nullable(),
     }),
   ),
-  /** About its newest message, as Inbox's list says it; the label by id alone, named from the person's labels. Null when Mild has not decided it. */
-  thinks: Thinks.omit({ labelName: true }).nullable(),
+  /** As Inbox's list says it; the label by id alone, named from the person's labels. Null when Mild has not decided it. */
+  thinks: ThreadThinks.omit({ labelName: true }).nullable(),
 });
 export type SyncedConversation = z.infer<typeof SyncedConversation>;
 

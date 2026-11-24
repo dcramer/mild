@@ -85,9 +85,8 @@ async function settleLabel(deps: Deps, accountId: string, shown: Shown, change: 
 }
 
 /**
- * The label each pressed conversation's row shows, about its newest message, as Inbox draws it: the newest decision, or
- * the person's answer to it. Only for a newest message that was pressed and is in the inbox; a conversation Mild never
- * placed has none.
+ * The label each pressed conversation's row shows, about its newest message in the inbox, as Inbox draws it: that message's
+ * newest decision, or the person's answer to it. Only for one that was pressed; a conversation Mild never placed has none.
  */
 async function shownLabels(db: Sql, accountId: string, messageIds: readonly string[]): Promise<Shown[]> {
   if (messageIds.length === 0) return [];
@@ -109,7 +108,8 @@ async function shownLabels(db: Sql, accountId: string, messageIds: readonly stri
       ),
     )
     .orderBy(asc(messages.receivedAt), asc(messages.id));
-  const newest = [...new Map(all.map((m) => [m.threadId, m])).values()].filter((m) => messageIds.includes(m.id) && m.labelIds.includes('INBOX'));
+  const inInbox = all.filter((m) => m.labelIds.includes('INBOX'));
+  const newest = [...new Map(inInbox.map((m) => [m.threadId, m])).values()].filter((m) => messageIds.includes(m.id));
   if (newest.length === 0) return [];
   const labels = await listLabels(db);
   const shown: Shown[] = [];

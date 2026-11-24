@@ -296,7 +296,7 @@ describe('a press that says what the mail is', () => {
     const id = box.deliver({ from: 'Shop <shop@example.com>', subject: 'Your receipt' });
     await arrives();
     await sift.judged(ME, id, labelId, disposition);
-    return { sift, box, me, id };
+    return { sift, box, me, id, arrives };
   }
 
   it('does what the row’s label does when the press is what it does, and keeps the label as the answer', async () => {
@@ -337,6 +337,18 @@ describe('a press that says what the mail is', () => {
     const { box, me, id } = await placed('receipts');
     await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id], change: 'spam' });
     expect(box.labelsOf(id)).toEqual(['UNREAD', 'SPAM']);
+    expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'receipts' }]);
+  });
+
+  it('takes the label from the newest message in the inbox, the one the row speaks for', async () => {
+    const { sift, box, me, id, arrives } = await placed('receipts');
+    const later = box.deliver({ from: 'Shop <shop@example.com>', subject: 'Re: Your receipt', threadId: id });
+    await arrives();
+    await sift.judged(ME, later, 'everything_else', 'keep');
+    box.change(later, { remove: ['INBOX'] });
+    await arrives();
+    await me.call('POST', '/api/mail/change', { accountId: ME, messageIds: [id, later], change: 'archive' });
+    expect(box.labelsOf(id)).toEqual(['UNREAD', box.labelId('mild/receipts')]);
     expect(await examplesOf(me)).toMatchObject([{ messageId: id, labelId: 'receipts' }]);
   });
 

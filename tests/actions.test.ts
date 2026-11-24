@@ -235,7 +235,7 @@ describe('a conversation', () => {
     expect(await raw(db).all("SELECT DISTINCT status FROM actions WHERE type = 'archive'")).toEqual([{ status: 'undone' }]);
   });
 
-  it('leaves what the person answered for, what Mild left for review, and mail from someone they have written to', async () => {
+  it('leaves what the person answered for and mail from someone they have written to, but takes what Mild left for review', async () => {
     await earlier('answered', -40);
     await applyFeedback(db, { accountId: ACCOUNT, sender: 'news@example.com', label: LEAVE_IN_INBOX, messageId: 'answered' }, 1);
     await earlier('review', -30);
@@ -243,9 +243,9 @@ describe('a conversation', () => {
     await earlier('colleague', -20, 'colleague@example.com');
     gmail.deliver({ from: ACCOUNT, to: 'colleague@example.com', labelIds: ['SENT'] });
     await earlier('newsletter', -10);
-    expect((await archiveNewest()).archived).toBe(1);
-    expect(gmail.labelsOf('newsletter')).not.toContain('INBOX');
-    for (const message of ['answered', 'review', 'colleague']) expect(gmail.labelsOf(message)).toContain('INBOX');
+    expect((await archiveNewest()).archived).toBe(2);
+    for (const message of ['newsletter', 'review']) expect(gmail.labelsOf(message)).not.toContain('INBOX');
+    for (const message of ['answered', 'colleague']) expect(gmail.labelsOf(message)).toContain('INBOX');
   });
 
   it('leaves the whole of a conversation the owner wrote in', async () => {

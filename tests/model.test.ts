@@ -91,6 +91,21 @@ describe('model stage', () => {
     expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.95 }, strangers).decide(facts())).toMatchObject({ disposition: 'archive' });
   });
 
+  it('never hides a conversation with earlier mail in the inbox from someone the owner has written to, or could not check', async () => {
+    const withEarlier = (writtenTo: boolean | null): Evidence => ({ ...evidence(), conversation: { writtenTo } });
+    expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.95 }, withEarlier(true)).decide(facts())).toMatchObject({
+      disposition: 'review',
+      labelId: 'marketing',
+      reason: expect.stringContaining('an earlier message in this conversation is from someone you have written to'),
+    });
+    expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.95 }, withEarlier(null)).decide(facts())).toMatchObject({
+      disposition: 'review',
+      reason: expect.stringContaining('could not check'),
+    });
+    expect(await stage({ label: 'marketing', reason: 'r', confidence: 0.95 }, withEarlier(false)).decide(facts())).toMatchObject({ disposition: 'archive' });
+    expect(await stage({ label: 'personal', reason: 'r', confidence: 0.95 }, withEarlier(true)).decide(facts())).toMatchObject({ disposition: 'keep' });
+  });
+
   it('leaves the message unfinished when the model call fails, rather than asking about it', async () => {
     expect(await stage({ failed: 'provider error' }).decide(facts())).toEqual({ unfinished: 'provider error' });
   });
@@ -544,6 +559,33 @@ describe('gatherEvidence', () => {
     expect(first).toMatchObject({ body: 'hello', sender: { messagesSeen: 1, userHasWritten: false, ownerLabels: [] } });
     expect(gmail.asked('users.messages.list')).toHaveLength(1);
     expect(gmail.asked('users.threads.get')).toEqual([]);
+  });
+
+  it('checks the other senders of the earlier messages of its conversation still in the inbox', async () => {
+    const db = await openUserDb(ACCOUNT);
+    const { api, mailbox, gmail } = connectGmail(fake.google);
+    const inConversation = (messageId: string, address: string, receivedAt: number, labelIds = ['INBOX']) =>
+      facts({ messageId, threadId: 'talk', receivedAt, from: { address, domain: 'example.com' }, labelIds });
+    const newest = inConversation('newest', 'news@example.com', 30);
+    await recordSync(
+      db,
+      ACCOUNT,
+      [
+        inConversation('archived', 'colleague@example.com', 10, []),
+        inConversation('mine', ACCOUNT, 15),
+        inConversation('alerts', 'alerts@example.com', 20),
+        newest,
+      ],
+      '2',
+    );
+    gmail.deliver({ id: 'newest', threadId: 'talk', from: 'news@example.com' });
+    gmail.deliver({ from: ACCOUNT, to: 'colleague@example.com', labelIds: ['SENT'] });
+    const sources = { db, api, mailbox, now: () => 1000 };
+    // Only alerts@ is asked about: the colleague's message has left the inbox, and the owner's own is theirs.
+    expect((await gatherEvidence(sources, newest)).conversation).toEqual({ writtenTo: false });
+    await rememberCorrespondent(db, ACCOUNT, 'alerts@example.com', true, 1000);
+    expect((await gatherEvidence(sources, newest)).conversation).toEqual({ writtenTo: true });
+    expect((await gatherEvidence(sources, inConversation('alone', 'news@example.com', 40))).conversation).toBeUndefined();
   });
 
   it('reports unknown instead of failing when a lookup errors', async () => {

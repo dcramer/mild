@@ -44,6 +44,17 @@ describe('the copy the page keeps', () => {
       thinks: { disposition: 'archive', labelId: 'receipts', stage: 'model', confidence: 0.9 },
     });
     expect(conversations[1]!.conversation!.thinks).toBeNull();
+
+    // Once the reply has left the inbox, the question keeping the conversation there speaks for it.
+    await sift.judged(ME, lunch, 'everything_else', 'review');
+    box.change(reply, { remove: ['INBOX'] });
+    await arrives();
+    const moved = await pull(me);
+    expect(moved.conversations.find((c) => c.threadId === lunch)!.conversation!.thinks).toMatchObject({
+      messageId: lunch,
+      disposition: 'review',
+      labelId: 'everything_else',
+    });
   });
 
   it('then sends only what changed, as it is now, and a conversation gone from the inbox as gone', async () => {

@@ -1137,6 +1137,31 @@ describe('going through the inbox', () => {
     expect(gmail.gmail.labelsOf('a')).not.toContain('INBOX');
   });
 
+  it('decides a conversation once, by its newest message in the inbox, and archives the whole of it', async () => {
+    const conversation = [
+      ['first', 30],
+      ['second', 20],
+      ['archived', 10],
+    ] as const;
+    for (const [id, ago] of conversation) {
+      const labelIds = id === 'archived' ? [] : ['INBOX'];
+      gmail.gmail.deliver({ id, threadId: 'talk', from: 'News <news@example.com>', to: ACCOUNT, at: 1000 - ago, labelIds }, { quietly: true });
+    }
+    await recordSync(
+      db,
+      ACCOUNT,
+      conversation.map(([messageId, ago]) =>
+        facts({ messageId, threadId: 'talk', receivedAt: 1000 - ago, labelIds: messageId === 'archived' ? [] : ['INBOX'] }),
+      ),
+      '2',
+    );
+    const archives = async () => ({ label: 'newsletter', reason: 'a newsletter', confidence: 0.95 });
+    await goOn(await begin(true), { on: true, now: () => 200, judge: archives });
+    // The newest has left the inbox already: the one keeping the conversation there speaks for it.
+    expect(asked).toEqual(['second']);
+    for (const id of ['first', 'second']) expect(gmail.gmail.labelsOf(id)).not.toContain('INBOX');
+  });
+
   it('takes back what Mild did before carrying out something different', async () => {
     gmail.gmail.deliver({ id: 'a', from: 'News <news@example.com>', to: ACCOUNT, labelIds: ['INBOX'] }, { quietly: true });
     await setActive(db, true);
@@ -1205,7 +1230,7 @@ describe('going through the inbox', () => {
     expect((await call('GET', '/api/manage')).body).toMatchObject({
       inbox: { going: { listed: true, done: 4, total: 5, spent: 0.02, startedAt: 50 }, last: null },
     });
-    await goOn(run);
+    await goOn(run, { now: () => clock });
     expect(await importing()).toBe(false);
     expect((await call('GET', '/api/manage')).body).toMatchObject({ inbox: { going: null, last: { total: 5, spent: 0.02, stopped: false } } });
   });

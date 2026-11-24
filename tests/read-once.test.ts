@@ -214,15 +214,22 @@ describe('going through the inbox with Inbox on', () => {
     expect(await raw(db).all(`SELECT messages, finished_at IS NOT NULL AS finished FROM inbox_runs`)).toEqual([
       { messages: ['newer', 'older'], finished: true },
     ]);
-    expect(await decided()).toEqual([
-      { message_id: 'newer', label_id: 'personal' },
-      { message_id: 'older', label_id: 'personal' },
-    ]);
+    // Decided side by side, so in whichever order they finish.
+    expect(await decided()).toHaveLength(2);
+    expect(await decided()).toEqual(
+      expect.arrayContaining([
+        { message_id: 'newer', label_id: 'personal' },
+        { message_id: 'older', label_id: 'personal' },
+      ]),
+    );
     // Whether the person has written to each sender, asked once a sender and remembered, is all it asks.
-    expect(gmail.gmail.requests.slice(before)).toEqual([
-      { method: 'users.messages.list', q: 'in:sent to:ada@example.org' },
-      { method: 'users.messages.list', q: 'in:sent to:bo@example.net' },
-    ]);
+    expect(gmail.gmail.requests.slice(before)).toHaveLength(2);
+    expect(gmail.gmail.requests.slice(before)).toEqual(
+      expect.arrayContaining([
+        { method: 'users.messages.list', q: 'in:sent to:ada@example.org' },
+        { method: 'users.messages.list', q: 'in:sent to:bo@example.net' },
+      ]),
+    );
   });
 });
 

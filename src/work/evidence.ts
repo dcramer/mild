@@ -3,7 +3,7 @@ import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import type { MessageContent } from '../gmail/body.ts';
 import { mailboxAliases } from '../store/accounts.ts';
-import { recordFacts, recordedThread } from '../store/messages.ts';
+import { earlierSenders, recordFacts, recordedThread } from '../store/messages.ts';
 import { copied } from '../store/copies.ts';
 import { cachedCorrespondent, domainFacts, rememberCorrespondent, senderFacts } from '../store/senders.ts';
 import { answersUnderName } from '../store/examples.ts';
@@ -46,6 +46,7 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
   if (content || thread) await recordFacts(db, facts.accountId, facts.messageId, known);
 
   const userHasWritten = await ownerHasWritten(sources, facts);
+  const conversation = await conversationWrittenTo(sources, facts);
   const now = (sources.now ?? Date.now)();
   const sender = await senderFacts(db, [facts.accountId], facts.from.address, now);
   const domain = await domainFacts(db, [facts.accountId], facts.from.domain, now);
@@ -62,6 +63,7 @@ export async function gatherEvidence(sources: EvidenceSources, facts: MessageFac
       underName,
       firstSeenAt: sender.firstSeenAt,
     },
+    ...(conversation === undefined ? {} : { conversation: { writtenTo: conversation } }),
     ...(domain
       ? { domain: { messages: domain.messages, senders: domain.senders, standing: domain.standing, why: domain.why, ownerLabels: domain.answered } }
       : {}),
@@ -84,16 +86,37 @@ async function threadOf(sources: Pick<EvidenceSources, 'db' | 'api'>, facts: Mes
 }
 
 /** Whether the owner has ever written to the sender: the cached answer, or one search of sent mail, remembered. Null if that failed. */
-async function ownerHasWritten(sources: Pick<EvidenceSources, 'db' | 'mailbox' | 'now'>, facts: MessageFacts): Promise<boolean | null> {
+async function ownerHasWritten(
+  sources: Pick<EvidenceSources, 'db' | 'mailbox' | 'now'>,
+  facts: MessageFacts,
+  address = facts.from.address,
+): Promise<boolean | null> {
   const { db } = sources;
   const now = (sources.now ?? Date.now)();
-  const cached = await cachedCorrespondent(db, facts.accountId, facts.from.address, now);
+  const cached = await cachedCorrespondent(db, facts.accountId, address, now);
   if (cached !== undefined) return cached;
   try {
-    const written = await sources.mailbox.hasSentTo(facts.from.address);
-    await rememberCorrespondent(db, facts.accountId, facts.from.address, written, now);
+    const written = await sources.mailbox.hasSentTo(address);
+    await rememberCorrespondent(db, facts.accountId, address, written, now);
     return written;
   } catch {
     return null;
   }
+}
+
+/**
+ * `ownerHasWritten` for the other senders of the earlier messages of its conversation in the inbox: true for any, null when
+ * one could not be checked, undefined when there are none. The owner's own addresses are theirs, not someone written to.
+ */
+async function conversationWrittenTo(sources: Pick<EvidenceSources, 'db' | 'mailbox' | 'now'>, facts: MessageFacts): Promise<boolean | null | undefined> {
+  const own = new Set([facts.accountId, ...(await mailboxAliases(sources.db, facts.accountId))]);
+  const others = (await earlierSenders(sources.db, facts.accountId, facts.messageId)).filter((a) => a !== facts.from.address && !own.has(a));
+  if (others.length === 0) return undefined;
+  let unknown = false;
+  for (const address of others) {
+    const written = await ownerHasWritten(sources, facts, address);
+    if (written) return true;
+    if (written === null) unknown = true;
+  }
+  return unknown ? null : false;
 }
