@@ -34,6 +34,7 @@ import {
   Th,
   Tr,
   useToast,
+  Blank,
 } from '@/system';
 import { type OpenMessages, useOpenMessages } from '@/lib/open-messages.ts';
 import { useStarted } from '@/lib/started.ts';
@@ -494,5 +495,15 @@ function ToContacts() {
       <ArrowLeftIcon aria-hidden />
       Contacts
     </Button>
+  );
+}
+
+/** A sender's or a domain's page until its address is read and its data comes. */
+export function WhoLoading() {
+  return (
+    <div className="flex flex-col gap-10">
+      <PageHeader title={<Blank className="w-2/5" />} meta={null} />
+      <Loading />
+    </div>
   );
 }

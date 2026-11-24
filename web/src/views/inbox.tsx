@@ -54,6 +54,9 @@ import {
   useNow,
   usePhone,
   type Ending,
+  Loading,
+  Blank,
+  OnPhone,
 } from '@/system';
 import { useManage, useSuggestions, readMessageAhead, useMailThreads } from '@/lib/api/reads.ts';
 
@@ -587,5 +590,31 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
         </>
       )}
     </ListView>
+  );
+}
+
+/** Inbox's rows while they load. */
+export function InboxLoading() {
+  return (
+    <Loading dense>
+      <Td phone="hide" className="w-px">
+        <Blank className="size-3.5" />
+      </Td>
+      <Td className="max-w-0 md:w-[18%] md:min-w-40">
+        <Blank />
+        <OnPhone>
+          <span className="w-full text-base">
+            <Blank />
+          </span>
+          <Blank />
+        </OnPhone>
+      </Td>
+      <Td phone="hide" className="max-w-0 md:w-full">
+        <Blank />
+      </Td>
+      <Td phone="hide" num>
+        <Blank word />
+      </Td>
+    </Loading>
   );
 }

@@ -9,9 +9,9 @@ import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, inboxFirst, labelSeries, factFil
 import { count, duration, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
 import { Empty, Figure, Figures, FilterGroup, ListView, Pager, Reserve, Select, Share, StackedBars, TextLink, useToast } from '@/system';
 import { useOpenMessages } from '@/lib/open-messages.ts';
-import { PhoneSiftStatus } from '@/components/status.tsx';
+import { MildStatus } from '@/components/status.tsx';
 import { costName, usePlan } from '@/lib/prices.ts';
-import { useManage, useDecisions, useSummary } from '@/lib/api/reads.ts';
+import { useManage, useDecisions, useSummary, useUsage } from '@/lib/api/reads.ts';
 
 const PAGE = 50;
 /** What the list shows. Changed: what Mild did, or tried to do, in Gmail. Everything adds suggestions and mail left alone. */
@@ -149,7 +149,7 @@ export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
       intro={
         // What was saved and the chart arrive after the list is drawn, and would push it down. Either may be empty: no gap between them, so an empty one takes no room.
         <div>
-          <PhoneSiftStatus />
+          <PhoneMildStatus />
           <Reserve id="activity-saved" ready={summary.data !== null} room="min-h-[260px]">
             {summary.data ? <Saved saved={summary.data.saved} days={days} /> : null}
           </Reserve>
@@ -193,5 +193,17 @@ export function ActivityView({ loading: loadingRows }: { loading: ReactNode }) {
       )}
       {data ? <Pager offset={offset} size={PAGE} total={data.total} onGo={goTo} /> : null}
     </ListView>
+  );
+}
+
+/** Mild's line on Activity, where what it counts is, on a phone, whose bar has no room for it. Its room is held while it loads. */
+function PhoneMildStatus() {
+  const manage = useManage();
+  const usage = useUsage();
+  const plan = usePlan();
+  return (
+    <p className="mb-4 flex h-5 items-center text-sm text-muted-foreground md:hidden">
+      {manage.data ? <MildStatus accounts={manage.data.accounts} usage={usage.data} plan={plan} /> : null}
+    </p>
   );
 }

@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SetUp } from '@/views/set-up.tsx';
-import { SiftStatus, UsageDetail } from '@/components/status.tsx';
+import { MildStatus, UsageDetail } from '@/components/status.tsx';
 import type { ManageState } from '@/lib/api/endpoints.ts';
 import { useOnline } from '@/lib/api/query.ts';
 import { useKeptPlace } from '@/lib/place.ts';
@@ -316,7 +316,7 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
     ...(s.to === (inbox ? 'inbox' : '') && waiting ? { count: waiting } : {}),
   }));
   const notice = useNotice(accounts, manage.data?.activity.expired ?? [], name);
-  const status = (stacked: boolean) => (manage.data ? <SiftStatus accounts={accounts} usage={usage.data} plan={plan} stacked={stacked} /> : null);
+  const status = (stacked: boolean) => (manage.data ? <MildStatus accounts={accounts} usage={usage.data} plan={plan} stacked={stacked} /> : null);
   const account = name
     ? {
         name,

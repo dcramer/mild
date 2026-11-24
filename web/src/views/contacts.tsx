@@ -1,13 +1,13 @@
 'use client';
 import { type ReactNode, useEffect, useState } from 'react';
 import { ErrorNote, Verdict } from '@/components/bits.tsx';
-import { SenderCell, senderHref } from '@/components/sender.tsx';
+import { SenderCell, senderHref, SenderCellLoading } from '@/components/sender.tsx';
 import { type ContactPage } from '@/lib/api/endpoints.ts';
 import { CONTACT_FILTER, STANDINGS } from '@/lib/words.ts';
 import { count, dateTime, plural } from '@/lib/format.ts';
 import { paramNow, setParams, useGo, useParam } from '@/lib/params.ts';
 import { reveal } from '@/lib/reveal.ts';
-import { Ago, Empty, FilterGroup, Heads, ListView, OnPhone, Pager, Table, Td, Th, Tr } from '@/system';
+import { Ago, Empty, FilterGroup, Heads, ListView, OnPhone, Pager, Table, Td, Th, Tr, Loading, Blank } from '@/system';
 import { useContacts } from '@/lib/api/reads.ts';
 
 const PAGE = 50;
@@ -122,5 +122,33 @@ export function ContactsView({ loading: loadingRows }: { loading: ReactNode }) {
       )}
       {data ? <Pager offset={offset} size={PAGE} total={data.total} onGo={(at) => setPage(at === 0 ? '' : String(at / PAGE + 1))} /> : null}
     </ListView>
+  );
+}
+
+/** Contacts' rows while they load. */
+export function ContactsLoading() {
+  return (
+    <Loading>
+      <SenderCellLoading>
+        <OnPhone>
+          <span className="w-full">
+            <Blank />
+          </span>
+          <Blank />
+        </OnPhone>
+      </SenderCellLoading>
+      <Td phone="hide" className="md:w-full">
+        <Blank />
+      </Td>
+      <Td phone="hide">
+        <Blank word />
+      </Td>
+      <Td phone="hide" num>
+        <Blank word />
+      </Td>
+      <Td phone="hide" num>
+        <Blank word />
+      </Td>
+    </Loading>
   );
 }

@@ -4,7 +4,7 @@ import { type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils.ts';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
-import { SenderCell } from '@/components/sender.tsx';
+import { SenderCell, SenderCellLoading } from '@/components/sender.tsx';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { messageKey, proposalKey } from '@/lib/rows.ts';
 import { useParam } from '@/lib/params.ts';
@@ -35,6 +35,9 @@ import {
   Tr,
   TrGroup,
   useNow,
+  Loading,
+  Blank,
+  Sub,
 } from '@/system';
 import { useLabelEnding } from '@/components/label-ending.tsx';
 import { RuleDialog } from '@/components/rule-dialog.tsx';
@@ -378,5 +381,33 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
       )}
       {rows.length > reach ? <More onReach={() => setReach((r) => r + ROWS)} /> : null}
     </ListView>
+  );
+}
+
+/** For review's rows while they load. */
+export function SuggestionsLoading() {
+  return (
+    <Loading>
+      <SenderCellLoading>
+        <OnPhone>
+          <span className="w-full text-base">
+            <Blank />
+          </span>
+          <Blank />
+        </OnPhone>
+      </SenderCellLoading>
+      <Td phone="hide" className="max-w-0 md:w-full">
+        <Blank />
+        <Sub>
+          <Blank />
+        </Sub>
+      </Td>
+      <Td phone="hide" num>
+        <Blank word />
+      </Td>
+      <RowActions>
+        <Blank className="h-(--control) w-60 py-0" />
+      </RowActions>
+    </Loading>
   );
 }

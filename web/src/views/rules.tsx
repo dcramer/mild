@@ -10,7 +10,7 @@ import { RemoveRule, RulePanel, Who, checked, whoText } from '@/views/rule-panel
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { INBOX, MADE_BY, doesName, inboxFirst, outcomeName } from '@/lib/words.ts';
 import { count, dateTime, plural } from '@/lib/format.ts';
-import { Ago, Heads, Button, Does, Empty, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr } from '@/system';
+import { Ago, Heads, Button, Does, Empty, FilterGroup, Hint, ListView, RowActions, Sub, Table, Td, Th, Tr, Loading, Blank } from '@/system';
 import { approx, atApiPrices, usePlan } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { useManage, useRules } from '@/lib/api/reads.ts';
@@ -186,5 +186,22 @@ export function Rules({ loading: loadingRows }: { loading: ReactNode }) {
         />
       ) : null}
     </ListView>
+  );
+}
+
+/** Rules' rows while they load. */
+export function RulesLoading() {
+  return (
+    <Loading>
+      <Td className="max-w-0 md:w-full">
+        <Blank />
+      </Td>
+      <Td phone="hide" num className="md:w-28">
+        <Blank word />
+      </Td>
+      <Td phone="hide" num className="md:w-32">
+        <Blank word />
+      </Td>
+    </Loading>
   );
 }

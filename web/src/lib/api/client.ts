@@ -41,7 +41,7 @@ function lost() {
     setTimeout(() => {
       fetch('/api/session', { cache: 'no-store' }).then(
         (response) => {
-          if (!fromSift(response)) {
+          if (!fromMild(response)) {
             ask(Math.min(wait * 2, 30_000));
             return;
           }
@@ -58,7 +58,7 @@ function lost() {
  * Mild answers every request itself, in JSON. A failure that is not (a proxy's 502 page, Vercel's
  * crashed function) is something in front of Mild saying it is not there.
  */
-function fromSift(response: Response): boolean {
+function fromMild(response: Response): boolean {
   return response.status < 500 || (response.headers.get('content-type') ?? '').startsWith('application/json');
 }
 
@@ -75,7 +75,7 @@ export async function send(path: string, init: RequestInit, unreachable: string)
     lost();
     throw new Unreachable(unreachable, { cause: error });
   }
-  if (!fromSift(response)) {
+  if (!fromMild(response)) {
     lost();
     throw new Unreachable(unreachable);
   }
