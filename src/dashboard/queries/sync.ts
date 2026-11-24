@@ -1,4 +1,4 @@
-import { and, asc, conversationChanges, decisions, desc, eq, feedback, gt, inArray, lt, max, messages, or, sql } from '../../store/query.ts';
+import { and, asc, conversationChanges, decisions, desc, eq, feedback, gt, inArray, isNull, lt, max, messages, or, sql } from '../../store/query.ts';
 import type { Sql } from '../../store/sql.ts';
 import { listAccounts } from '../../store/accounts.ts';
 import { preferences } from '../../store/preferences.ts';
@@ -130,7 +130,7 @@ async function conversations(db: Sql, scope: Scope, wanted: readonly { accountId
           labelIds: messages.labelIds,
         })
         .from(messages)
-        .where(and(within(scope, messages.accountId), inArray(messages.threadId, [...new Set(wanted.map((w) => w.threadId))])))
+        .where(and(within(scope, messages.accountId), isNull(messages.goneAt), inArray(messages.threadId, [...new Set(wanted.map((w) => w.threadId))])))
         .orderBy(asc(messages.receivedAt), asc(messages.id))
     : [];
   const byThread = new Map<string, typeof rows>();

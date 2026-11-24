@@ -213,6 +213,8 @@ export const messages = pgTable(
     // A decision has been recorded for it (`recordDecision`), or it is not mail to triage: the person's own, or copied for Inbox
     // (`recordKept`). What is neither is the triage queue, which a tick looks at every minute.
     decided: boolean('decided').notNull().default(false),
+    // When Gmail said it no longer has it (`recordGone`): in no list from then on, the row kept as the record of what Mild saw.
+    goneAt: time('gone_at'),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.accountId, t.id] }),

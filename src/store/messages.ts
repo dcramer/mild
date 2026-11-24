@@ -1,4 +1,23 @@
-import { type SQL, and, asc, count, decisions, desc, eq, feedback, inArray, isNull, lte, mailboxes, max, messages, notExists, or, sql } from './query.ts';
+import {
+  type SQL,
+  and,
+  asc,
+  count,
+  decisions,
+  desc,
+  eq,
+  feedback,
+  inArray,
+  isNull,
+  lte,
+  mailBodies,
+  mailboxes,
+  max,
+  messages,
+  notExists,
+  or,
+  sql,
+} from './query.ts';
 import { mailboxAliases } from './accounts.ts';
 import { rememberMail } from './addresses.ts';
 import { outOfTries } from './runs.ts';
@@ -249,6 +268,23 @@ export async function followLabels(db: Sql, accountId: string, history: readonly
           .set({ labelIds: [...labels] })
           .where(and(eq(messages.accountId, accountId), eq(messages.id, row.id)));
       }
+    });
+  }
+}
+
+/**
+ * Messages Gmail no longer has, from its history or a read that found nothing. Their labels are emptied, so nothing that
+ * asks for the inbox finds them again, and Inbox's copy of their text is deleted, since it is kept only as the person's mail.
+ */
+export async function recordGone(db: Sql, accountId: string, messageIds: readonly string[], at: number): Promise<void> {
+  for (let start = 0; start < messageIds.length; start += IDS_AT_ONCE) {
+    const ids = messageIds.slice(start, start + IDS_AT_ONCE);
+    await db.transaction(async (tx) => {
+      await tx
+        .update(messages)
+        .set({ labelIds: [], goneAt: at })
+        .where(and(eq(messages.accountId, accountId), inArray(messages.id, ids), isNull(messages.goneAt)));
+      await tx.delete(mailBodies).where(and(eq(mailBodies.accountId, accountId), inArray(mailBodies.messageId, ids)));
     });
   }
 }

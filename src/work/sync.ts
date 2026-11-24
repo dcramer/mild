@@ -8,7 +8,7 @@ import { preferences } from '../store/preferences.ts';
 import { learnFromGmail, userChanges } from '../learn/gmail.ts';
 import { type Account, lastSyncedAt, setMailboxAliases } from '../store/accounts.ts';
 import { isOwnDigest, knownDigests } from '../store/digests.ts';
-import { followLabels, recordSync, recordSynced } from '../store/messages.ts';
+import { followLabels, recordGone, recordSync, recordSynced } from '../store/messages.ts';
 import type { MessageFacts } from '../triage/types.ts';
 import { DAY_MS } from '../time.ts';
 
@@ -75,8 +75,14 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
     unrecorded = [];
     texts.clear();
   };
+  // Deleted for good since: a read would find nothing.
+  const deleted = new Set(pull.deleted);
   for (const [id, stray] of [...pull.messageIds.map((id) => [id, false] as const), ...pull.strays.map((id) => [id, true] as const)]) {
     if (known.has(id)) continue;
+    if (deleted.has(id)) {
+      if (!stray) skipped++;
+      continue;
+    }
     if (now() >= until) {
       await record();
       return { mode: pull.mode, added, skipped, kept, corrections: 0, unfinished: true };
@@ -102,7 +108,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
   // While Inbox is on, the rest of the mail too, read whole once (60 units) and recorded with its text, never triaged.
   if (keeping)
     for (const id of pull.elsewhere) {
-      if (known.has(id)) continue;
+      if (known.has(id) || deleted.has(id)) continue;
       if (now() >= until) {
         await record();
         return { mode: pull.mode, added, skipped, kept, corrections: 0, unfinished: true };
@@ -115,11 +121,12 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
 
   // Mild's own changes too: the labels are where the mail is now, which is what learning reads.
   await followLabels(db, account.id, pull.labelChanges);
+  await recordGone(db, account.id, pull.deleted, startedAt);
   // Before the cursor moves: a failure here means the same history is read again, which both tolerate.
   const corrections = await learnFromGmail(
     db,
     account.id,
-    byUser.filter((c) => !pull.deleted.includes(c.messageId)),
+    byUser.filter((c) => !deleted.has(c.messageId)),
     api,
     startedAt,
   );
@@ -139,6 +146,8 @@ export async function syncWants(db: Sql, api: GmailApi, account: Account): Promi
   if (pull.mode !== 'incremental' || pull.messageIds.length > 0) return true;
   if ((await recorded(db, account.id, pull.strays)).size < pull.strays.length) return true;
   if (pull.elsewhere.length > 0 && (await preferences(db)).mail && (await recorded(db, account.id, pull.elsewhere)).size < pull.elsewhere.length) return true;
+  // Mail Mild holds that Gmail deleted for good, which Inbox would otherwise go on listing.
+  if ((await recorded(db, account.id, pull.deleted)).size > 0) return true;
   return (await userChanges(db, account.id, pull.labelChanges, (await lastSyncedAt(db, account.id)) ?? 0)).length > 0;
 }
 
