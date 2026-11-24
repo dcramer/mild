@@ -1,5 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
-import { useToast } from '@/system';
+import { useSyncExternalStore } from 'react';
 
 /**
  * What the outbox (`web/src/lib/outbox.ts`) tells every screen: how many presses wait to reach Mild, which
@@ -36,8 +35,8 @@ export function useOutbox(): Waiting {
   );
 }
 
-const failures = new Set<(failed: Failed) => void>();
-export const tellFailed = (failed: Failed) => failures.forEach((listener) => listener(failed));
+const failures = new Set<(title: string, why: string) => void>();
+export const tellFailed = ({ change, count, why }: Failed) => failures.forEach((listener) => listener(FAILED[change][count === 1 ? 0 : 1], why));
 
 const FAILED = {
   archive: ['Could not archive it', 'Could not archive them'],
@@ -46,12 +45,8 @@ const FAILED = {
   unread: ['Could not mark it unread', 'Could not mark them unread'],
 } as const;
 
-/** Says each press that came back, wherever it was made: drawn once, for the whole page. */
-export function useOutboxFailures(): void {
-  const toast = useToast();
-  useEffect(() => {
-    const said = ({ change, count, why }: Failed) => toast(FAILED[change][count === 1 ? 0 : 1], { tone: 'failure', description: why });
-    failures.add(said);
-    return () => void failures.delete(said);
-  }, [toast]);
+/** Told each press that came back, wherever it was made, until the returned function is called. */
+export function onOutboxFailed(listener: (title: string, why: string) => void): () => void {
+  failures.add(listener);
+  return () => void failures.delete(listener);
 }

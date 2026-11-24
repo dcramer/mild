@@ -1,6 +1,6 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { useStarted } from '@/system/started.ts';
+import { useStarted } from './started.ts';
 import { isStale } from './build.ts';
 
 /** A message as a list's rows name it (`holds`), which is how the panel finds its way back to one. */

@@ -8,7 +8,7 @@ import { SenderCell } from '@/components/sender.tsx';
 import { type Proposal, ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { messageKey, proposalKey, useParam } from '@/lib/params.ts';
 import { type SuggestionItem, api } from '@/lib/api/endpoints.ts';
-import { useAction, useHidden } from '@/lib/action.ts';
+import { useAction, useHidden } from '@/components/action.ts';
 import { ACTIONS, FACT_FILTER_OPTIONS, INBOX, inboxFirst, count, duration, factFilterName, outcomeName, period, plural, sureness } from '@/lib/format.ts';
 import {
   Arrived,
@@ -34,8 +34,8 @@ import {
   TrGroup,
   useNow,
 } from '@/system';
-import { useLabelEnding } from '@/views/label-ending.tsx';
-import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { useLabelEnding } from '@/components/label-ending.tsx';
+import { RuleDialog } from '@/components/rule-dialog.tsx';
 import { fold } from '@/lib/fold.ts';
 import { messageStart, proposalStart } from '@/lib/rule-start.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';

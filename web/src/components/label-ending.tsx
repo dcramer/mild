@@ -3,8 +3,8 @@ import { type ComponentProps, type ReactNode, useState } from 'react';
 import type { AnswerLabel } from '@/components/answer.tsx';
 import type { RuleStart } from '@/lib/rule-start.ts';
 import type { Ending } from '@/system';
-import { AddLabelsDialog } from '@/views/label-panel.tsx';
-import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { AddLabelsDialog } from './label-fields.tsx';
+import { RuleDialog } from './rule-dialog.tsx';
 
 /**
  * A label picker's `Ending` for one message, with the dialogs it opens: Add a label…, and Make a rule… started on

@@ -5,12 +5,12 @@ import { type ReactNode, useState } from 'react';
 import { ErrorNote, NamedLabel, StatusWord, Verdict } from '@/components/bits.tsx';
 import { ContactHint, DomainNamed, NameCell, RuleWords, SenderCell, SenderFacts, senderHref } from '@/components/sender.tsx';
 import { type Given, type ListedDecision, type SenderPage, api } from '@/lib/api/endpoints.ts';
-import { useAction } from '@/lib/action.ts';
+import { useAction } from '@/components/action.ts';
 import { STANDINGS, count, dateTime, doesName, longDay, outcomeName, percent, shortDay } from '@/lib/format.ts';
 import { type RuleStart, addedWords, messageStart, nameStart, standingStart } from '@/lib/rule-start.ts';
 import { useCompose } from '@/lib/compose.ts';
 import { messageKey, rulePath, useGo, useOpenRule, useParam } from '@/lib/params.ts';
-import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { RuleDialog } from '@/components/rule-dialog.tsx';
 import {
   Ago,
   Heads,
@@ -34,7 +34,7 @@ import {
   useToast,
 } from '@/system';
 import { type OpenMessages, useOpenMessages } from '@/lib/open-messages.ts';
-import { useStarted } from '@/system/started.ts';
+import { useStarted } from '@/lib/started.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { useManage, useWhoPage, useSenderUnder } from '@/lib/api/reads.ts';
 

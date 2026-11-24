@@ -4,7 +4,7 @@ import { ActivityIcon, ContactRoundIcon, InboxIcon, ListChecksIcon, TagIcon, Wor
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { Activity, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { SetUp } from '@/components/set-up.tsx';
+import { SetUp } from '@/views/set-up.tsx';
 import { SiftStatus, UsageDetail } from '@/components/status.tsx';
 import type { ManageState } from '@/lib/api/endpoints.ts';
 import { useOnline } from '@/lib/api/query.ts';
@@ -16,12 +16,12 @@ import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
 import { goBack, isMessageKey, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
-import { useStarted } from '@/system/started.ts';
-import { useHidden } from '@/lib/action.ts';
+import { useStarted } from '@/lib/started.ts';
+import { useHidden } from '@/components/action.ts';
 import { ahead, plural } from '@/lib/format.ts';
-import { useOutbox, useOutboxFailures } from '@/lib/waiting.ts';
+import { onOutboxFailed, useOutbox } from '@/lib/waiting.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
-import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing, useNow } from '@/system';
+import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing, useNow, useToast } from '@/system';
 import { Boot } from '@/views/boot.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { useSession, useManage, useUsage } from '@/lib/api/reads.ts';
@@ -288,7 +288,9 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const [draftParam] = useParam('draft');
   useEffect(() => void (compose && panelOpened('Composer')), [compose]);
   const online = useOnline();
-  useOutboxFailures();
+  const toast = useToast();
+  // Said once for the whole page.
+  useEffect(() => onOutboxFailed((title, why) => toast(title, { tone: 'failure', description: why })), [toast]);
   // Drawn above the `Mailbox` it provides, so for all of them: whose mailboxes these are, and whose sign-in expired.
   const manage = useManage();
   const mailboxes = (manage.data?.accounts ?? []).map((a) => a.email);

@@ -3,7 +3,7 @@ import { ArrowRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Session } from '@/lib/api/endpoints.ts';
 import { Button, Code, Copyable, Entry, Note, Rope, Splash } from '@/system';
-import { useStarted } from '@/system/started.ts';
+import { useStarted } from '@/lib/started.ts';
 
 /** The only thing an unsigned-in visitor sees. Signing in with Google also connects that Gmail account to sift. */
 export function SignInScreen({ session, error }: { session: Session; error: string | null }) {

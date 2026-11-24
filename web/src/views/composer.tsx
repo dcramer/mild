@@ -2,7 +2,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDownIcon, ClockIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { reloadAll } from '@/lib/action.ts';
+import { reloadAll } from '@/components/action.ts';
 import { type Party, type Recipient, readAddresses, typed, wrongAddresses } from '@/lib/addresses.ts';
 import { api } from '@/lib/api/endpoints.ts';
 import { dateTime } from '@/lib/format.ts';

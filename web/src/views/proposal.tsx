@@ -5,13 +5,13 @@ import { useState } from 'react';
 import { Thinks } from '@/components/mail.tsx';
 import { ProposalWords, proposalWhy } from '@/components/proposal.tsx';
 import { api } from '@/lib/api/endpoints.ts';
-import { useAction } from '@/lib/action.ts';
+import { useAction } from '@/components/action.ts';
 import { conversations } from '@/lib/copy.ts';
 import { count } from '@/lib/format.ts';
 import { proposalStart } from '@/lib/rule-start.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { Arrived, Empty, Heads, Loading, Reader, ReaderBar, Section, Table, Td, Th, Tr } from '@/system';
-import { RuleDialog } from '@/views/rule-dialog.tsx';
+import { RuleDialog } from '@/components/rule-dialog.tsx';
 import { useManage, useSuggestions } from '@/lib/api/reads.ts';
 
 /**

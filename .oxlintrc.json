@@ -156,6 +156,23 @@
       }
     },
     {
+      // The page's layers, each importing only from those under it: lib/, system/ (which takes no API client from lib/), components/, views/. Each list repeats the page's own, which it replaces.
+      "files": ["web/src/system/**/*.ts", "web/src/system/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
+              { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
+              { "group": ["@sentry/*"], "message": "Only web/src/lib/telemetry.ts talks to Sentry from the page, so that what leaves the browser passes its scrubber." },
+              { "group": ["@/components", "@/components/**", "@/views", "@/views/**", "@/lib/api/**", "../components/**", "../views/**", "../lib/api/**"], "message": "The design system is the bottom layer: its parts take what they show as props, and know nothing of Mild's screens or its API." }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // A chart's columns take the focus, so a keyboard gets the figures a pointer gets on hover.
       "files": ["web/src/system/chart.tsx"],
       "rules": { "jsx-a11y/no-noninteractive-tabindex": "off" }
@@ -177,6 +194,42 @@
       }
     },
     {
+      // components/ import no screen.
+      "files": ["web/src/components/**/*.ts", "web/src/components/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
+              { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
+              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." },
+              { "group": ["@sentry/*"], "message": "Only web/src/lib/telemetry.ts talks to Sentry from the page, so that what leaves the browser passes its scrubber." },
+              { "group": ["@/views", "@/views/**", "../views/**"], "message": "components/ are shared by screens; a screen (views/) uses them, never the other way. Move what two screens share here." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // lib/ imports no part of the design system.
+      "files": ["web/src/lib/**/*.ts", "web/src/lib/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
+              { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
+              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." },
+              { "group": ["@sentry/*"], "message": "Only web/src/lib/telemetry.ts talks to Sentry from the page, so that what leaves the browser passes its scrubber." },
+              { "group": ["@/system", "@/system/**", "../system/**", "../../system/**"], "message": "lib/ is the page's plumbing, under the design system: take a callback, or put a hook that needs a part in components/." }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // The page's one way to Sentry: the lists above, but for Sentry.
       "files": ["web/src/lib/telemetry.ts", "web/src/lib/telemetry-sdk.ts"],
       "rules": {
@@ -186,7 +239,8 @@
             "patterns": [
               { "group": ["**/src/plain.ts"], "message": "src/plain.ts reads what Mild stores encrypted as text. The page reveals it in the browser alone (web/src/lib/reveal.ts), so none of it is drawn into HTML on the server." },
               { "group": ["**/src/**"], "allowTypeImports": true, "message": "The page is sent to the browser: from src/ it takes types alone (import type), so no server code or secret is bundled into it. It gets everything else from /api/." },
-              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." }
+              { "group": ["@base-ui/**"], "message": "Only web/src/system imports Base UI. Use or extend a part from '@/system' (docs/design.md)." },
+              { "group": ["@/system", "@/system/**", "../system/**", "../../system/**"], "message": "lib/ is the page's plumbing, under the design system: take a callback, or put a hook that needs a part in components/." }
             ]
           }
         ]

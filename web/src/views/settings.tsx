@@ -9,7 +9,7 @@ import { ProviderList, pressOf, providerName, useProviderConnect } from '@/compo
 import { costLine, spentLine, usePlan, providerOf } from '@/lib/prices.ts';
 import { type ManageState, type Removed, api } from '@/lib/api/endpoints.ts';
 import { forgetHere } from '@/lib/sign-out.ts';
-import { useAction } from '@/lib/action.ts';
+import { useAction } from '@/components/action.ts';
 import { useParam } from '@/lib/params.ts';
 import {
   Ago,
