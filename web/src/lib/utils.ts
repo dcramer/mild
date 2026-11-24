@@ -6,3 +6,6 @@ import { createCn } from 'cn/config';
  * colour beside it removes it.
  */
 export const cn = createCn({ extend: { classGroups: { 'font-size': [{ text: ['head', 'label', 'reading'] }] } } });
+
+/** Once the page has nothing else to do, or a second from now at the latest. */
+export const idle = () => new Promise((done) => ('requestIdleCallback' in window ? requestIdleCallback(done, { timeout: 1000 }) : setTimeout(done)));

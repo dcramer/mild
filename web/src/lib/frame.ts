@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import type { Session } from './api/endpoints.ts';
 import { keys } from './api/keys.ts';
 import { queryClientFor } from './api/query.ts';
-import { forgetDevice, keepFrame as keep, keptFrame, unknownDevice } from './device.ts';
+import { forgetDevice, keepFrame as keep, keepRead, keptFrame, readReads, unknownDevice } from './device.ts';
+import { keptReads, readName } from './kept.ts';
+import { idle } from './utils.ts';
 
 /**
  * What the frame is drawn with, kept on the device for the next time the page opens (`web/src/lib/device.ts`). With it
@@ -12,28 +14,43 @@ import { forgetDevice, keepFrame as keep, keptFrame, unknownDevice } from './dev
 const FRAME: ReadonlySet<string> = new Set([keys.session, keys.manage, keys.usage, keys.suggestions(false, '')]);
 let keeping = false;
 
+const inFrame = (queryKey: readonly unknown[]) => queryKey.length === 1 && typeof queryKey[0] === 'string' && FRAME.has(queryKey[0]);
+
 /**
  * Draw the frame from what this device kept, at once, and keep what Mild answers for next time: the page is one shell for
  * everyone, which the service worker serves without asking Mild, so who is signed in comes from here first and from Mild
- * after. What was kept is marked out of date, so Mild is still asked. Nobody signed in, or a device Mild no longer
- * knows, wipes what was kept; then a device is made again.
+ * after. Every other read a screen showed is kept too, read from the device once the page is idle, so a screen opened
+ * again draws what it showed last time (`useLoaded`). What was kept is marked out of date, so Mild is still asked.
+ * Nobody signed in, or a device Mild no longer knows, wipes what was kept; then a device is made again.
  */
 function follow() {
   if (keeping || typeof window === 'undefined') return;
   keeping = true;
   const client = queryClientFor();
-  void keptFrame().then((kept) => {
+  void keptFrame().then(async (kept) => {
     for (const [name, value] of Object.entries(kept)) if (client.getQueryData([name]) === undefined) client.setQueryData([name], value, { updatedAt: 0 });
+    // After the screen's first rows, which this would otherwise hold up.
+    await idle();
+    await readReads();
+    // Drawn before they were read: Mild has not answered them yet.
+    for (const query of client.getQueryCache().getAll()) {
+      const read = keptReads.get(readName(query.queryKey));
+      if (read && query.state.data === undefined) client.setQueryData(query.queryKey, read.value, { updatedAt: 0 });
+    }
   });
+  const signedIn = (session = client.getQueryData<Session>([keys.session])) => session !== undefined && !(session.required && session.email === null);
   client.getQueryCache().subscribe((event) => {
+    const queryKey = event.query.queryKey as unknown[];
+    const { data, status } = event.query.state;
+    // Shown again (a message read ahead, opened), or answered while shown, unless it is what was kept.
+    if (event.type === 'observerAdded' && status === 'success' && !inFrame(queryKey) && signedIn()) return void keepRead(readName(queryKey), data);
     // Only what Mild answered: the frame put back from the device (`setQueryData`, `manual`) is what was kept.
     if (event.type !== 'updated' || event.action.type !== 'success' || event.action.manual) return;
-    const [name, ...narrowed] = event.query.queryKey as unknown[];
-    if (narrowed.length > 0 || typeof name !== 'string' || !FRAME.has(name)) return;
-    const data = event.query.state.data;
+    if (!inFrame(queryKey)) return void (event.query.getObserversCount() > 0 && signedIn() && keepRead(readName(queryKey), data));
+    const name = queryKey[0] as string;
     const session = client.getQueryData<Session>([keys.session]);
     // Signed out, here or by the server: nothing more is kept, nor a key asked for that would be refused.
-    if (!session || (session.required && session.email === null)) return void (name === keys.session && forgetDevice());
+    if (!session || !signedIn(session)) return void (name === keys.session && forgetDevice());
     // In turn: the wipe first, then what is kept, under a key made again. What answered before the session was kept
     // under the old key and wiped with it, so all Mild has answered of the frame is kept again.
     if (name === keys.session && !session.device) {

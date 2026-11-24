@@ -1,17 +1,20 @@
 import { type DBSchema, type IDBPDatabase, deleteDB, openDB } from 'idb';
 import { api } from './api/endpoints.ts';
 import { BUILT } from './build.ts';
+import { keptReads } from './kept.ts';
 import { timed } from './trace.ts';
 
 /**
  * What this browser keeps of the person, so the page opens on it without waiting for Mild (docs/sync.md): the key the
- * copy is encrypted with, which no script can read out, and the frame's data (who is signed in, Settings' data, usage, For review's list and the rules Mild proposes),
- * encrypted with it. The server knows the device by its cookie, and a device it no longer knows wipes what it kept.
+ * copy is encrypted with, which no script can read out, the frame's data (who is signed in, Settings' data, usage, For review's list and the rules Mild proposes),
+ * and every other read a screen showed, encrypted with it. The server knows the device by its cookie, and a device it no longer knows wipes what it kept.
  */
 
 interface Kept extends DBSchema {
   key: { key: 'key'; value: CryptoKey };
   frame: { key: string; value: Sealed };
+  /** By a random id, with its name sealed inside: a read's name can be a sender's address or a search. */
+  reads: { key: string; value: Sealed & { at: number }; indexes: { at: number } };
 }
 export interface Sealed {
   iv: Uint8Array<ArrayBuffer>;
@@ -19,6 +22,8 @@ export interface Sealed {
 }
 
 const DATABASE = 'sift-device';
+/** The most reads kept, the least recently answered dropped first: each message opened is one. */
+const MOST_READS = 300;
 /** The copy of the inbox (`web/src/lib/copy.ts`) and the presses on their way (`web/src/lib/outbox.ts`), wiped with the device. */
 const COPY = 'sift-copy';
 const OUTBOX = 'sift-outbox';
@@ -46,10 +51,13 @@ async function fromServer(): Promise<CryptoKey> {
 let opened: Promise<{ db: IDBPDatabase<Kept>; key: CryptoKey } | null> | null = null;
 
 async function store() {
-  const db = await openDB<Kept>(DATABASE, 1, {
-    upgrade: (upgrading) => {
-      upgrading.createObjectStore('key');
-      upgrading.createObjectStore('frame');
+  const db = await openDB<Kept>(DATABASE, 2, {
+    upgrade: (upgrading, from) => {
+      if (from < 1) {
+        upgrading.createObjectStore('key');
+        upgrading.createObjectStore('frame');
+      }
+      upgrading.createObjectStore('reads').createIndex('at', 'at');
     },
     // Wiped from another tab, which waits until every connection to it is closed.
     blocking: () => {
@@ -134,10 +142,66 @@ export function keepFrame(name: string, value: unknown): Promise<void> {
   });
 }
 
-/** Drop the frame kept, but not the key or the copy: what it holds may be what failed to draw. */
+let readsRead: Promise<void> | null = null;
+/** Opened after a wipe, the store would be made again, and nothing would be in it. */
+let wiped = false;
+
+/**
+ * Put what this device kept of every other read in `keptReads`, once, under any this page has kept since it opened.
+ * Makes no key, like `keptFrame`.
+ */
+export function readReads(): Promise<void> {
+  return (readsRead ??= inTurn(async () => {
+    const start = performance.now();
+    if (wiped || !globalThis.crypto?.subtle || typeof indexedDB === 'undefined') return;
+    const db = await store();
+    const tx = db.transaction(['key', 'reads']);
+    const reads = tx.objectStore('reads');
+    const [key, ids, sealed] = await Promise.all([tx.objectStore('key').get('key'), reads.getAllKeys(), reads.getAll(), tx.done]).finally(() => db.close());
+    if (!key) return;
+    const opened = await Promise.all(
+      ids.map(async (id, at) => {
+        const kept = await unseal<{ build: string | null; name: string; value: unknown }>(key, id, sealed[at]).catch(() => null);
+        return kept?.build === BUILT ? { id, at: sealed[at].at, name: kept.name, value: kept.value } : null;
+      }),
+    );
+    // Two tabs keep the same read under ids of their own: the newest is drawn.
+    for (const read of opened.filter((read) => read !== null).toSorted((a, b) => b.at - a.at))
+      if (!keptReads.has(read.name)) keptReads.set(read.name, { id: read.id, value: read.value });
+    timed('Reads from the device', 'mild.device', start, { kept: keptReads.size });
+  }));
+}
+
+/** Keep what a screen showed of `name` for the next time it is drawn, unless it is what is kept already. */
+export function keepRead(name: string, value: unknown): Promise<void> {
+  const had = keptReads.get(name);
+  if (had?.value === value) return Promise.resolve();
+  const id = had?.id ?? crypto.randomUUID();
+  keptReads.set(name, { id, value });
+  return inTurn(async () => {
+    const kept = await device();
+    if (!kept) return;
+    const sealed = await seal(kept.key, id, { build: BUILT, name, value });
+    const tx = kept.db.transaction('reads', 'readwrite');
+    const writing = async () => {
+      await tx.store.put({ ...sealed, at: Date.now() }, id);
+      let over = (await tx.store.count()) - MOST_READS;
+      let oldest = over > 0 ? await tx.store.index('at').openCursor() : null;
+      while (oldest && over-- > 0) {
+        await oldest.delete();
+        oldest = await oldest.continue();
+      }
+    };
+    await Promise.all([writing(), tx.done]);
+  });
+}
+
+/** Drop the frame and the reads kept, but not the key or the copy: what they hold may be what failed to draw. */
 export function forgetFrame(): Promise<void> {
   return inTurn(async () => {
-    await (await device())?.db.clear('frame');
+    keptReads.clear();
+    const kept = await device();
+    await Promise.all([kept?.db.clear('frame'), kept?.db.clear('reads')]);
   });
 }
 
@@ -154,6 +218,8 @@ async function wipe() {
   kept?.db.close();
   opened = null;
   held = Promise.resolve(false);
+  keptReads.clear();
+  wiped = true;
   await Promise.all([deleteDB(DATABASE), deleteDB(COPY), deleteDB(OUTBOX)]);
 }
 

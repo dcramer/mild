@@ -39,6 +39,16 @@ const kept = `new Promise((done) => {
 })`;
 const keptAll = { key: 1, frame: ['manage', 'session', 'suggestions-false', 'usage'] };
 
+/** The ids of the other reads this device keeps. */
+const reads = `new Promise((done) => {
+  indexedDB.open('sift-device').onsuccess = (event) => {
+    const db = event.target.result;
+    const reading = db.transaction('reads');
+    const ids = reading.objectStore('reads').getAllKeys();
+    reading.oncomplete = () => (db.close(), done(ids.result));
+  };
+})`;
+
 /** Drop what the device kept of the frame under `name`. */
 const forget = (name: string) => `new Promise((done) => {
   indexedDB.open('sift-device').onsuccess = (event) => {
@@ -319,6 +329,25 @@ test.describe('The installed app', () => {
     await page.reload();
     await expect(sections(page)).toBeVisible();
     await expect(page.getByRole('button', { name: /^Account, / })).toBeVisible();
+    await expect.poll(() => waiting.length).toBeGreaterThan(0);
+    await Promise.all(waiting.map((answer) => answer()));
+  });
+
+  test('opens a screen on what it showed last time before Mild answers, and keeps no name readable on the disk', async ({ page }) => {
+    await page.goto('/rules');
+    const rule = page.getByRole('row').nth(1);
+    await expect(rule).toBeVisible();
+    const shown = await rule.innerText();
+    await expect.poll(() => page.evaluate(reads)).toContainEqual(expect.stringMatching(/^[0-9a-f-]{36}$/));
+    const waiting: (() => Promise<void>)[] = [];
+    await page.route('**/api/rules*', (route) => void waiting.push(() => route.continue()));
+    await page.reload();
+    await expect(
+      page
+        .getByRole('row')
+        .filter({ hasText: shown.split('\n')[0] })
+        .first(),
+    ).toBeVisible();
     await expect.poll(() => waiting.length).toBeGreaterThan(0);
     await Promise.all(waiting.map((answer) => answer()));
   });
