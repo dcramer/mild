@@ -1,4 +1,5 @@
 import { actions, alias, and, asc, decisions, desc, digests, eq, gt, inArray, isNull, labels, lte, max, messages } from './query.ts';
+import { costOf } from './runs.ts';
 import type { Sql } from './sql.ts';
 import { digestName, openEnvelope, openJson, sealJson } from './content.ts';
 import type { Usage } from '../triage/stages/model.ts';
@@ -171,7 +172,7 @@ export async function recordHighlights(db: Sql, id: number, outcome: ({ highligh
     .update(digests)
     .set({
       ...('highlights' in outcome ? { highlights: sealJson(db, digestName(db, id), outcome.highlights) } : { error: outcome.error }),
-      ...(outcome.usage ? { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens, costUsd: outcome.usage.costUsd } : {}),
+      ...costOf(outcome.usage),
     })
     .where(eq(digests.id, id));
 }

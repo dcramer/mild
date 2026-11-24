@@ -32,6 +32,9 @@ export const outOfTries = (db: Sql, accountId: AnyColumn, messageId: AnyColumn) 
     .from(modelRuns)
     .where(and(forMessage(accountId, messageId), counted(db)))}) >= ${MAX_ATTEMPTS}`;
 
+/** A call's usage, as the columns every row of a model call keeps it in. */
+export const costOf = (usage: Usage | undefined) => (usage ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, costUsd: usage.costUsd } : {});
+
 /** Stamped before the call, so a pass that stops part-way leaves a run that counts as failed. */
 export async function startRun(db: Sql, run: { accountId: string; messageId: string; model: string; ruleId?: string; now: number }): Promise<number> {
   const [row] = await db
