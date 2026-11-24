@@ -19,7 +19,7 @@ import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { EXAMPLE_KEEP_DAYS } from '../src/store/examples.ts';
 import { preferences, setActive, setMail } from '../src/store/preferences.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
-import { ACCOUNT, DAY, UNSURE, facts, storeExample, testModel, workDue } from './helpers.ts';
+import { ACCOUNT, DAY, UNSURE, facts, storeExample, testModel, workDue, email } from './helpers.ts';
 import { type Reply, connectGmail, fakeGoogle, firstAccount, modelRun, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { held } from '../src/plain.ts';
@@ -276,7 +276,7 @@ describe('managing Mild from the dashboard', () => {
 
   it('a rule that decides mail Mild left for review settles it, and has the label it guessed taken back', async () => {
     const { call } = await start();
-    await recordSync(db, ACCOUNT, [facts({ messageId: 'r1', from: { address: 'sales@example.com', domain: 'example.com' } })], '2');
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'r1', from: email('sales@example.com') })], '2');
     const asked = await recordDecision(
       db,
       ACCOUNT,

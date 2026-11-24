@@ -23,7 +23,7 @@ import { conditionsHash } from '../src/store/content.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
 import { type Usage } from '../src/triage/types.ts';
 import type { Decision } from '../src/triage/types.ts';
-import { ACCOUNT, tempDir, withSampleLabels } from './helpers.ts';
+import { ACCOUNT, tempDir, withSampleLabels, email } from './helpers.ts';
 import { FakeGoogle, SECRETS, serveGoogle } from './google.ts';
 import { loadConfig } from '../src/config.ts';
 import { clientFor, installClient } from '../src/gmail/auth.ts';
@@ -266,7 +266,7 @@ export async function recordEverything(db: Sql, account: string): Promise<void> 
         accountId: account,
         messageId: message,
         threadId: 't1',
-        from: { address: 'news@example.com', domain: 'example.com' },
+        from: email('news@example.com'),
         to: [],
         cc: [],
         subject: 'Weekly digest',

@@ -7,7 +7,7 @@ import { messageDetail } from '../src/dashboard/queries/messages.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
 import { connectGmail, fakeGoogle, openUserDb, raw } from './fixtures.ts';
-import { ACCOUNT, everything, facts } from './helpers.ts';
+import { ACCOUNT, everything, facts, email } from './helpers.ts';
 
 const fake = fakeGoogle();
 
@@ -39,7 +39,7 @@ const deps = () => ({
 });
 
 async function message(id: string, headers: Record<string, string>, from = 'news@example.com') {
-  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: { address: from, domain: from.split('@')[1] ?? '' }, headers })], '2');
+  await recordSync(db, ACCOUNT, [facts({ messageId: id, from: email(from), headers })], '2');
 }
 
 beforeEach(async () => {

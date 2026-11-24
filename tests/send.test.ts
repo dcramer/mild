@@ -14,7 +14,7 @@ import type { Store } from '../src/store/store.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
 import { connectGmail, fakeGoogle, onePerson, openUserDb, raw, startDashboard } from './fixtures.ts';
 import type { FakeGmail } from './google.ts';
-import { ACCOUNT, everything, facts } from './helpers.ts';
+import { ACCOUNT, everything, facts, email } from './helpers.ts';
 
 const fake = fakeGoogle();
 
@@ -306,7 +306,7 @@ describe('from the dashboard', () => {
           facts({
             messageId: 'm1',
             threadId: 't9',
-            from: { address: 'ada@example.com', domain: 'example.com' },
+            from: email('ada@example.com'),
             subject: 'Lunch',
             headers: { 'message-id': '<m1@example.com>', references: '<m0@example.com> not-an-id <bad id@example.com>' },
           }),

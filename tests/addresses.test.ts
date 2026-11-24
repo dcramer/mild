@@ -4,7 +4,7 @@ import { recordSync } from '../src/store/messages.ts';
 import { addressesDue, fillAddresses } from '../src/store/addresses.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { openUserDb, raw } from './fixtures.ts';
-import { ACCOUNT, everything, facts } from './helpers.ts';
+import { ACCOUNT, everything, facts, email } from './helpers.ts';
 
 const ada = (name: string | undefined, at: number, id: string) =>
   facts({ messageId: id, from: { address: 'ada@example.com', domain: 'example.com', ...(name ? { name } : {}) }, receivedAt: at, headers: {} });
@@ -29,9 +29,9 @@ describe('the address book', () => {
       db,
       ACCOUNT,
       [
-        facts({ messageId: 'm1', from: { address: 'ada@example.com', domain: 'example.com', name: 'Ada' }, receivedAt: 1, headers: {} }),
-        facts({ messageId: 'm2', from: { address: 'bo@example.com', domain: 'example.com', name: 'Bo' }, receivedAt: 2, headers: {} }),
-        facts({ messageId: 'm3', from: { address: 'cy@example.com', domain: 'example.com', name: 'Cy' }, receivedAt: 3, headers: {} }),
+        facts({ messageId: 'm1', from: email('ada@example.com', 'Ada'), receivedAt: 1, headers: {} }),
+        facts({ messageId: 'm2', from: email('bo@example.com', 'Bo'), receivedAt: 2, headers: {} }),
+        facts({ messageId: 'm3', from: email('cy@example.com', 'Cy'), receivedAt: 3, headers: {} }),
       ],
       '1',
       0,

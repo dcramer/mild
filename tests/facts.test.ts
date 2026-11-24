@@ -7,7 +7,7 @@ import { FACT_FILTERS as FACT_FILTER_CONDITIONS } from '../src/dashboard/types.t
 import { RULE_FACTS, deriveFacts, describeFacts, factCondition, matchesFacts, threadFacts } from '../src/triage/facts.ts';
 import { sealFacts } from '../src/store/content.ts';
 import { FACTS, FACT_FILTER_WORDS } from '../web/src/lib/words.ts';
-import { ACCOUNT, everything, facts } from './helpers.ts';
+import { ACCOUNT, everything, facts, email } from './helpers.ts';
 
 const fake = fakeGoogle();
 const me = { address: ACCOUNT, domain: 'example.org' };
@@ -84,7 +84,7 @@ describe('deriveFacts', () => {
   });
 
   it('counts a dot-variant or googlemail.com address as the owner on gmail.com only', () => {
-    const to = (accountId: string, address: string) => deriveFacts(facts({ accountId, to: [{ address, domain: address.split('@')[1]! }] })).addressed;
+    const to = (accountId: string, address: string) => deriveFacts(facts({ accountId, to: [email(address)] })).addressed;
     expect(to('ada.lovelace@gmail.com', 'adalovelace@gmail.com')).toBe('to');
     expect(to('adalovelace@gmail.com', 'a.d.a.lovelace+news@googlemail.com')).toBe('to');
     expect(to('ada.lovelace@example.org', 'adalovelace@example.org')).toBe('neither');
@@ -101,7 +101,7 @@ describe('deriveFacts', () => {
 
   it("tells mail from the owner and from the owner's own domain from everyone else's", () => {
     const from = (address: string, accountId = 'ada@example.com', aliases: string[] = []) =>
-      deriveFacts(facts({ accountId, from: { address, domain: address.split('@')[1]! } }), {}, aliases).origin;
+      deriveFacts(facts({ accountId, from: email(address) }), {}, aliases).origin;
     expect(from('ada+notes@example.com')).toBe('owner');
     expect(from('ada@example.net', 'ada@example.com', ['ada@example.net'])).toBe('owner');
     expect(from('grace@example.com')).toBe('own-domain');

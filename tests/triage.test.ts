@@ -6,7 +6,7 @@ import { deriveFacts } from '../src/triage/facts.ts';
 import { rulesStage, settle } from '../src/triage/stages/rules.ts';
 import { type Rule, describeMatch, readsMessage, specificity } from '../src/triage/rule.ts';
 import { labelled } from '../src/triage/types.ts';
-import { facts, SAMPLE_LABELS } from './helpers.ts';
+import { facts, SAMPLE_LABELS, email } from './helpers.ts';
 
 const LABELS = SAMPLE_LABELS;
 
@@ -97,7 +97,7 @@ describe('rules stage', () => {
       match: { from: ['shop@example.net'], fromDomain: ['example.com'], subjectContains: ['receipt', 'invoice'] },
       labelId: 'transactional',
     };
-    const from = (address: string, subject: string) => facts({ from: { address, domain: address.split('@')[1]! }, subject });
+    const from = (address: string, subject: string) => facts({ from: email(address), subject });
     expect(await decide([rule], from('news@example.com', 'Your INVOICE'))).toMatchObject({ ruleId: 'r' });
     expect(await decide([rule], from('shop@example.net', 'A receipt'))).toMatchObject({ ruleId: 'r' });
     expect(await decide([rule], from('other@example.net', 'A receipt'))).toBeNull();
@@ -161,7 +161,7 @@ describe('rules stage', () => {
 
   it('matches To but not Cc', async () => {
     const rule: Rule = { id: 'r', match: { to: ['jobs@example.org'] }, labelId: 'cold_outreach' };
-    expect(await decide([rule], facts({ cc: [{ address: 'jobs@example.org', domain: 'example.org' }] }))).toBeNull();
+    expect(await decide([rule], facts({ cc: [email('jobs@example.org')] }))).toBeNull();
   });
 
   it('matches on List-Id', async () => {

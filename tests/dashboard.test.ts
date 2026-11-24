@@ -13,7 +13,7 @@ import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { connectGmail, fakeGoogle, firstAccount, modelRun, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
 import { addRule, countRuleHit, removeRule } from '../src/store/rules.ts';
-import { ACCOUNT, DAY, codeSignIn, everything, facts, testModel } from './helpers.ts';
+import { ACCOUNT, DAY, codeSignIn, everything, facts, testModel, email } from './helpers.ts';
 import { conditionsHash } from '../src/store/content.ts';
 import { triageAccount } from '../src/work/triage.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
@@ -42,14 +42,14 @@ async function seededStore(): Promise<{ store: Store; db: Sql }> {
         messageId: 'a',
         subject: 'Weekly digest',
         receivedAt: NOW - DAY,
-        from: { address: 'news@example.com', domain: 'example.com', name: 'Example News' },
+        from: email('news@example.com', 'Example News'),
       }),
       facts({ messageId: 'b', subject: 'Second digest', receivedAt: NOW - DAY }),
       facts({
         messageId: 'c',
         subject: '<img src=x onerror=alert(1)>',
         receivedAt: NOW - 2 * DAY,
-        from: { address: 'cold@example.net', domain: 'example.net' },
+        from: email('cold@example.net'),
       }),
       facts({ messageId: 'old', receivedAt: NOW - 40 * DAY }),
       facts({ messageId: 'waiting', receivedAt: NOW }),
@@ -83,13 +83,7 @@ const seeded = async () => (await seededStore()).db;
 describe('tracking', () => {
   it('stores the headers with each message, and never a body', async () => {
     const db = await openUserDb(ACCOUNT);
-    await recordSync(
-      db,
-      ACCOUNT,
-      [facts({ messageId: 'a', headers: { 'list-id': '<dev.lists.example.com>' }, cc: [{ address: 'c@example.org', domain: 'example.org' }] })],
-      '2',
-      NOW,
-    );
+    await recordSync(db, ACCOUNT, [facts({ messageId: 'a', headers: { 'list-id': '<dev.lists.example.com>' }, cc: [email('c@example.org')] })], '2', NOW);
     const row = (await raw(db).get<{ headers: string }>('SELECT * FROM messages'))!;
     expect(row).toMatchObject({ synced_at: NOW, label_ids: ['INBOX', 'UNREAD'] });
     expect(JSON.parse(unmarked(row.headers))).toMatchObject({ subject: 'Weekly digest', cc: 'c@example.org', 'list-id': '<dev.lists.example.com>' });

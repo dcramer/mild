@@ -8,7 +8,7 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { senderDirectory } from '../src/store/senders.ts';
 import { FILL_TOOL, FIND_TOOL, type FoundSender, MAX_LOOKUPS, type RuleDrafter, readRuleDraft, searchSenders } from '../src/prompts/rule-draft.ts';
 import { personWith, raw, fauxModel } from './fixtures.ts';
-import { SAMPLE_LABELS, facts, toolReply } from './helpers.ts';
+import { SAMPLE_LABELS, facts, toolReply, email } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
@@ -217,7 +217,7 @@ describe('asking for a rule', () => {
 
   it('records the call with what it cost and how many look-ups it made, its words encrypted, and makes no rule', async () => {
     const db = await person();
-    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'm1', from: { address: 'hi@acme.example.org', domain: 'acme.example.org' } })], '2');
+    await recordSync(db, ACCOUNT, [facts({ accountId: ACCOUNT, messageId: 'm1', from: email('hi@acme.example.org') })], '2');
     const draft: RuleDrafter = async (given, find) => {
       expect(given.goal).toBe('Archive Acme');
       expect(given.labels.map((l) => l.id)).toContain('newsletter');

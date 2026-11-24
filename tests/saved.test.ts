@@ -7,7 +7,7 @@ import { finishAction, insertPendingAction, setActionStatus } from '../src/store
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { digestInserted, startDigest } from '../src/store/digests.ts';
 import { onePerson } from './fixtures.ts';
-import { ACCOUNT, DAY, everything, facts } from './helpers.ts';
+import { ACCOUNT, DAY, everything, facts, email } from './helpers.ts';
 
 const NOW = Date.UTC(2026, 5, 15, 12);
 const base = { subscription: 'preserve', reason: 'test', stage: 'rules' } as const;
@@ -97,7 +97,7 @@ describe('attention saved', () => {
 
   it('counts the senders it unsubscribed from and what they sent the month before', async () => {
     const { db } = await onePerson(ACCOUNT);
-    const from = (address: string) => ({ address, domain: address.split('@')[1]!, name: 'List' });
+    const from = (address: string) => email(address, 'List');
     await recordSync(
       db,
       ACCOUNT,
