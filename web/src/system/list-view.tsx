@@ -1,5 +1,5 @@
 'use client';
-import { ArrowLeftIcon, CheckIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
+import { ArrowLeftIcon, CheckIcon, EllipsisIcon, SearchIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import { type ReactNode, createContext, useContext, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { count } from '@/lib/format.ts';
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils.ts';
 import { useBackCloses } from '@/lib/params.ts';
 import { Button } from './button.tsx';
 import { useShortcut } from './keys.tsx';
+import { Menu } from './menu.tsx';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { Narrowed } from './mailbox.tsx';
 import { BarSlot, ToBar } from './nav.tsx';
@@ -47,6 +48,59 @@ export function ListHead({ title, actions, children }: { title: string; actions?
   );
 }
 
+interface SelectedAction {
+  label: string;
+  key: string;
+  onPress: () => void;
+  /** Seldom wanted: in the menu at the end of the bar, not on it. */
+  tucked?: boolean;
+}
+
+/** Every row listed, or none once they all are; some of them shows as neither. */
+function SelectAll({ count, total, select, clear }: { count: number; total: number; select: () => void; clear: () => void }) {
+  const every = count >= total;
+  return (
+    <label className="-ml-0.5 mr-2.5 flex h-full cursor-pointer items-center">
+      <input
+        type="checkbox"
+        aria-label="Select all"
+        className="size-3.5 cursor-pointer accent-foreground"
+        checked={every}
+        ref={(box) => {
+          if (box) box.indeterminate = !every;
+        }}
+        onChange={() => (every ? clear() : select())}
+      />
+    </label>
+  );
+}
+
+/** The presses seldom wanted, behind one button; each keeps its key. */
+function Tucked({ actions }: { actions: readonly SelectedAction[] }) {
+  if (actions.length === 0) return null;
+  return (
+    <>
+      {actions.map((action) => (
+        <TuckedKey key={action.label} action={action} />
+      ))}
+      <Menu
+        label="More"
+        trigger={
+          <span className="flex size-(--control) items-center justify-center">
+            <EllipsisIcon aria-hidden className="size-4" />
+          </span>
+        }
+        items={actions.map((action) => ({ label: action.label, onSelect: action.onPress }))}
+      />
+    </>
+  );
+}
+
+function TuckedKey({ action }: { action: SelectedAction }) {
+  void useShortcut(action.key, action.label, action.onPress);
+  return null;
+}
+
 interface ActiveFilter {
   /** What is being narrowed and to what: "Label: Newsletters". */
   label: string;
@@ -57,8 +111,9 @@ interface ActiveFilter {
  * The standard way to show many of one thing, inside a `ListPage`: one outlined bar holding the search and the filter
  * button, at the top of the page as on a phone, then `intro` (anything the page shows before its list), then the rows. With `search.ask`, words in the
  * search can be put to the model, which answers with filters that then show as any others do. While rows are selected
- * (`RowCheck`), the bar holds what to do with them in place of the search (`selected`): how many, the presses, and a
- * way to select none, so the rows do not move.
+ * (`RowCheck`), the bar holds what to do with them in place of the search (`selected`): a check that selects every row
+ * listed (`all`) or none, how many, the presses, and a way to select none, so the rows do not move. A press seldom wanted
+ * (`tucked`) waits in a menu at the end of the others, its key still working.
  *
  * The filter button opens a panel on the right that pushes the list left; closing it puts the list
  * back. While closed, the button shows how many filters are on and each is listed under the search
@@ -86,8 +141,14 @@ export function ListView({
   /** Which of a few ways to see the list, as segments at the end of the search bar: "Changed" or "Everything". */
   view?: { label: string; value: string; options: readonly (readonly [string, string])[]; onChange: (value: string) => void };
   filters?: { panel: ReactNode; active: ActiveFilter[] };
-  /** Rows selected, and what can be done to all of them, each with its key; on a phone, `thumbs` along the bottom. */
-  selected?: { count: number; clear: () => void; actions: readonly { label: string; key: string; onPress: () => void }[]; thumbs?: readonly Thumb[] };
+  /** Rows selected, and what can be done to all of them, each with its key; on a phone, `thumbs` along the bottom. `all`: how many rows are listed, and selecting them. */
+  selected?: {
+    count: number;
+    clear: () => void;
+    all?: { total: number; select: () => void };
+    actions: readonly SelectedAction[];
+    thumbs?: readonly Thumb[];
+  };
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -135,6 +196,11 @@ export function ListView({
         <>
           <ToBar>
             <span className="flex h-full min-w-0 flex-1 items-center text-base font-semibold tabular-nums">{selected.count} selected</span>
+            {selected.all && selected.count < selected.all.total ? (
+              <Button variant="quiet" onClick={selected.all.select}>
+                Select all
+              </Button>
+            ) : null}
             <button
               type="button"
               aria-label="Select none"
@@ -199,12 +265,16 @@ export function ListView({
               >
                 {selected && selected.count > 0 ? (
                   <div role="toolbar" aria-label="Selected rows" className="flex h-9 min-w-0 flex-1 items-center gap-1 pr-1 pl-3">
+                    {selected.all ? <SelectAll count={selected.count} total={selected.all.total} select={selected.all.select} clear={selected.clear} /> : null}
                     <span className="mr-2 text-sm font-semibold tabular-nums">{selected.count} selected</span>
-                    {selected.actions.map((action) => (
-                      <Button key={action.label} variant="quiet" shortcut={action.key} onClick={action.onPress}>
-                        {action.label}
-                      </Button>
-                    ))}
+                    {selected.actions
+                      .filter((action) => !action.tucked)
+                      .map((action) => (
+                        <Button key={action.label} variant="quiet" shortcut={action.key} onClick={action.onPress}>
+                          {action.label}
+                        </Button>
+                      ))}
+                    <Tucked actions={selected.actions.filter((action) => action.tucked)} />
                     <Button variant="quiet" size="icon" className="ml-auto" aria-label="Select none" onClick={selected.clear}>
                       <XIcon aria-hidden />
                     </Button>
