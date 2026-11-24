@@ -1,7 +1,7 @@
 /**
  * The iPhones the installed app shows its opening screen on while it starts, in points, with how tall the status bar
  * is over it. iOS shows a picture only when it is exactly the screen's size, so each gets its own; without one it shows
- * white. Drawn by `pnpm startup-images` (e2e/startup-images.ts) into public/startup.
+ * white. Drawn by `pnpm startup-images` (scripts/startup-images.ts) into public/startup.
  */
 export const STARTUP_SCREENS = [
   { width: 375, height: 667, scale: 2, top: 20 },
