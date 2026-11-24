@@ -7,6 +7,7 @@ import { type DecidedDisposition, LEAVE_IN_INBOX } from '../triage/types.ts';
 import { applyFeedback } from './feedback.ts';
 import { plain } from '../plain.ts';
 import { ofMessage } from '../store/decisions.ts';
+import { BEFORE_MILD } from '../gmail/call.ts';
 
 /** Labels put on or taken off one message in Gmail. */
 interface MessageChange {
@@ -105,17 +106,17 @@ export async function learnFromGmail(db: Sql, accountId: string, changes: readon
     const moved = moves(touched);
     if (!moved && !touched.some(isUserLabel)) continue;
     // Gmail compares label names without case, so one renamed "Mild/…" there is still Mild's; and one still "sift/…",
-    // from before the rename, is Mild's until a pass renames it (src/gmail/mailbox.ts).
-    names ??= new Map((await gmail.listLabels()).map((l) => [l.id, l.name.toLowerCase().replace(/^sift(?=\/|$)/, 'mild')]));
-    const siftLabel = (id: string) => labels.find((l) => l.gmailLabel !== undefined && l.gmailLabel.toLowerCase() === names?.get(id));
-    if (!moved && !touched.some(siftLabel)) continue;
+    // from before the rename, is Mild's until a pass renames it (`createGmailMailbox`, src/gmail/mailbox.ts).
+    names ??= new Map((await gmail.listLabels()).map((l) => [l.id, l.name.toLowerCase().replace(BEFORE_MILD, 'mild')]));
+    const mildLabel = (id: string) => labels.find((l) => l.gmailLabel !== undefined && l.gmailLabel.toLowerCase() === names?.get(id));
+    if (!moved && !touched.some(mildLabel)) continue;
 
     // Where the message is now, as the history this sync read has brought the record (`followLabels`), with no read of Gmail.
     const current = decision.labelIds;
     if (current.includes('TRASH')) continue;
     const place: DecidedDisposition = current.includes('SPAM') ? 'spam' : current.includes('INBOX') ? 'keep' : 'archive';
-    const on = current.flatMap((id) => siftLabel(id) ?? []);
-    const given = change.added.flatMap((id) => siftLabel(id) ?? []).filter((l) => on.includes(l));
+    const on = current.flatMap((id) => mildLabel(id) ?? []);
+    const given = change.added.flatMap((id) => mildLabel(id) ?? []).filter((l) => on.includes(l));
     const label = given.length === 1 ? given[0] : on.length === 1 ? on[0] : labels.find((l) => l.id === decision.labelId);
     // Moving mail Mild left in the inbox says it is not that, but not what it is: like mail Mild could not place.
     if (!label || (label.id === LEAVE_IN_INBOX && place !== 'keep')) continue;

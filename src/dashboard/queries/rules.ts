@@ -6,10 +6,10 @@ import { openEnvelope, openJson, ruleName } from '../../store/content.ts';
 import { ruleFilterStatus } from '../../store/filters.ts';
 import { type Scope, within } from '../scope.ts';
 import type { RuleSummary, RuleUsage, RuleWaiting } from '../types.ts';
-import { DAY_MS } from './decisions.ts';
 import { localDay } from './summary.ts';
 import { MONTH } from './usage.ts';
 import { isCurrent, ofMessage } from '../../store/decisions.ts';
+import { DAY_MS } from '../../time.ts';
 
 /**
  * Every rule in evaluation order, with its label, what it does, how often and how recently it decided a

@@ -19,8 +19,6 @@ export type FilterVerdict =
     }
   | { possible: false; reason: string };
 
-export type FilterableRule = Rule;
-
 // The values go into a Gmail search, so anything that could change the search's meaning is refused.
 const ADDRESS = /^[^\s"'(){}<>:,]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
@@ -59,7 +57,7 @@ const anyOf = (values: readonly string[]) => values.join(' OR ');
  * qualifies only when the filter could never do something Mild itself would not have done.
  * `rules` is every rule of the account, for finding one that could decide the same mail differently.
  */
-export function filterFor(rule: FilterableRule, labels: readonly Label[], rules: readonly FilterableRule[]): FilterVerdict {
+export function filterFor(rule: Rule, labels: readonly Label[], rules: readonly Rule[]): FilterVerdict {
   if (rule.whenLabel !== undefined) return no('It applies only once Mild has said what the mail is.');
   const label = rule.labelId === undefined ? undefined : labels.find((l) => l.id === rule.labelId);
   if (rule.labelId !== undefined && !label) return no('Its label has been removed.');

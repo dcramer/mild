@@ -21,8 +21,8 @@ import {
 import type { Sql } from '../../store/sql.ts';
 import { type Scope, within } from '../scope.ts';
 import type { Saved } from '../types.ts';
-import { DAY_MS } from './decisions.ts';
 import { ofMessage } from '../../store/decisions.ts';
+import { DAY_MS } from '../../time.ts';
 
 /**
  * What one message Mild took out of the inbox saved: about the time people spend on an email they open (Litmus's

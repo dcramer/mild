@@ -48,6 +48,9 @@ export const isConflict = (error: unknown) => {
 /** Gmail compares label names without case: "Mild/news" is the label "mild/news", and creating one beside the other is refused. */
 export const labelKey = (name: string) => name.toLowerCase();
 
+/** What Mild's labels in Gmail began with when it was Sift: `sift`, and `sift/…` under it. */
+export const BEFORE_MILD = /^sift(?=\/|$)/i;
+
 /**
  * Requests that each wait their turn under the mailbox's quota, then go as an `http.client` span named by
  * the method's path with its ids left out, since they name the message. A 404 is an answer (the message

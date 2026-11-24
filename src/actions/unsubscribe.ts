@@ -9,6 +9,7 @@ import { bulkSignals, passedDmarc } from '../triage/features.ts';
 import { traced } from '../telemetry.ts';
 import { isPublicAddress } from './public-address.ts';
 import { plain } from '../plain.ts';
+import { DAY_MS } from '../time.ts';
 
 export type UnsubscribeOutcome =
   /** The sender's server accepted the request. */
@@ -30,7 +31,7 @@ interface UnsubscribeDeps {
 }
 
 const TIMEOUT_MS = 10_000;
-export const RETRY_AFTER_MS = 7 * 86_400_000;
+export const RETRY_AFTER_MS = 7 * DAY_MS;
 
 /** RFC 8058: one POST with a fixed body, to the address already checked, following nothing. */
 const postOneClick: PostOneClick = (url, address) =>

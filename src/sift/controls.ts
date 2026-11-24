@@ -43,8 +43,8 @@ import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
 import type { StandIns } from './sift.ts';
 import { held } from '../plain.ts';
+import { DAY_MS } from '../time.ts';
 
-const DAY_MS = 86_400_000;
 /** How far back an estimate looks for how much mail went to the model: recent enough to reflect the rules as they are. */
 const ESTIMATE_DAYS = 30;
 /** What a message's text and HTML take to keep, in bytes, for someone whose own mail does not say yet: a guess. */

@@ -25,9 +25,9 @@ import type { Given } from '../../triage/standing.ts';
 import { type Scope, within } from '../scope.ts';
 import type { ContactPage, NextMail, RuleSummary } from '../types.ts';
 import { listRuleSummaries } from './rules.ts';
-import { DAY_MS } from './decisions.ts';
 import { plain } from '../../plain.ts';
 import { isCurrent, ofMessage } from '../../store/decisions.ts';
+import { DAY_MS } from '../../time.ts';
 
 type Rule = Pick<RuleSummary, 'id' | 'match' | 'kind' | 'labelId' | 'labelName' | 'disposition' | 'when'>;
 

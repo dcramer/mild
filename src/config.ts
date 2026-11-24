@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { named } from './env.ts';
+import { named, namesOf } from './env.ts';
 import { type Keyring, loadKeyring } from './secrets.ts';
 
 /**
@@ -202,8 +202,8 @@ export function readSettings(env: Env): Settings {
  */
 export function saveSetting(config: Config, variable: Variable, value: string | undefined): void {
   const before = existsSync(config.envPath) ? readFileSync(config.envPath, 'utf8').split('\n') : [];
-  // A line under the variable's name from before the rename (src/env.ts) goes too, or it would come back when this one is taken out.
-  const names = [variable, variable.replace(/^MILD_/, 'SIFT_')];
+  // A line under the variable's name from before the rename goes too, or it would come back when this one is taken out.
+  const names = namesOf(variable);
   const kept = before.filter((line) => line !== '' && !names.some((name) => line.startsWith(`${name}=`)));
   writeFileSync(config.envPath, [...kept, ...(value === undefined ? [] : [`${variable}=${value}`])].map((line) => `${line}\n`).join(''), { mode: 0o600 });
   chmodSync(config.envPath, 0o600);

@@ -1,5 +1,5 @@
 /**
- * What a query is written with, anywhere in sift: the tables, Drizzle's operators, and `sql` that
+ * What a query is written with, anywhere in Mild: the tables, Drizzle's operators, and `sql` that
  * refuses a person's table written into it (src/store/own.ts). Queries run on the handle they are given
  * (`Sql`), whose builder holds them to its person. Nothing else imports Drizzle.
  */

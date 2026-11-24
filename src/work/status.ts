@@ -1,4 +1,5 @@
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
+import { DAY_MS } from '../time.ts';
 
 /** How a mailbox's last pass went, for the dashboard. Kept a week: a mailbox not passed in that long shows as never checked. */
 export interface PassStatus {
@@ -11,7 +12,7 @@ export interface PassStatus {
   unfinished?: true;
 }
 
-const KEEP_MS = 7 * 86_400_000;
+const KEEP_MS = 7 * DAY_MS;
 const key = (mailbox: string) => `status:${mailbox}`;
 
 export async function recordPassStatus(ephemeral: Ephemeral, mailbox: string, status: PassStatus): Promise<void> {

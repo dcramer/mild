@@ -28,8 +28,7 @@ import { contacts } from '../../store/senders.ts';
 import { LEAVE_IN_INBOX } from '../../triage/types.ts';
 import { plain } from '../../plain.ts';
 import { ofMessage } from '../../store/decisions.ts';
-
-export const DAY_MS = 86_400_000;
+import { DAY_MS } from '../../time.ts';
 
 const isOneOf = <T extends string>(values: readonly T[], value: string): value is T => (values as readonly string[]).includes(value);
 

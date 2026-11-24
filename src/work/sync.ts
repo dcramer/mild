@@ -3,14 +3,15 @@ import type { Sql } from '../store/sql.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { NOT_MAIL, type PullResult, pullChanges, toFacts } from '../gmail/sync.ts';
 import { type Text, keepText, recordKept } from '../store/kept.ts';
-import { inboxOn, textOf } from './bodies.ts';
+import { textOf } from './bodies.ts';
+import { preferences } from '../store/preferences.ts';
 import { learnFromGmail, userChanges } from '../learn/gmail.ts';
 import { type Account, lastSyncedAt, setMailboxAliases } from '../store/accounts.ts';
 import { isOwnDigest, knownDigests } from '../store/digests.ts';
 import { followLabels, recordSync, recordSynced } from '../store/messages.ts';
 import type { MessageFacts } from '../triage/types.ts';
+import { DAY_MS } from '../time.ts';
 
-const DAY_MS = 86_400_000;
 /**
  * Fetched messages are recorded this many at a time, so a sync cut short keeps what it fetched and the
  * next fetches only the rest. 50 metadata reads are 1,000 quota units; 50 whole reads, with Inbox on, 3,000.
@@ -52,7 +53,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
       // The last list stands until tomorrow's.
     }
   }
-  const keeping = await inboxOn(db);
+  const keeping = (await preferences(db)).mail;
   const pull = await mailOnly(db, account, await pullChanges(api, account.historyId), keeping);
   const byUser = await userChanges(db, account.id, pull.labelChanges, syncedAt ?? 0);
   const known = await recorded(db, account.id, [...pull.messageIds, ...pull.strays, ...(keeping ? pull.elsewhere : [])]);
@@ -134,10 +135,10 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
  * history from the cursor (2 quota units a page) and moves nothing.
  */
 export async function syncWants(db: Sql, api: GmailApi, account: Account): Promise<boolean> {
-  const pull = await mailOnly(db, account, await pullChanges(api, account.historyId), await inboxOn(db));
+  const pull = await mailOnly(db, account, await pullChanges(api, account.historyId), (await preferences(db)).mail);
   if (pull.mode !== 'incremental' || pull.messageIds.length > 0) return true;
   if ((await recorded(db, account.id, pull.strays)).size < pull.strays.length) return true;
-  if (pull.elsewhere.length > 0 && (await inboxOn(db)) && (await recorded(db, account.id, pull.elsewhere)).size < pull.elsewhere.length) return true;
+  if (pull.elsewhere.length > 0 && (await preferences(db)).mail && (await recorded(db, account.id, pull.elsewhere)).size < pull.elsewhere.length) return true;
   return (await userChanges(db, account.id, pull.labelChanges, (await lastSyncedAt(db, account.id)) ?? 0)).length > 0;
 }
 

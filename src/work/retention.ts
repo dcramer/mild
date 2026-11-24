@@ -24,6 +24,7 @@ import {
   readBodies,
 } from '../store/query.ts';
 import { ofMessage } from '../store/decisions.ts';
+import { DAY_MS } from '../time.ts';
 
 /**
  * A year: long enough to look back over and undo a change from, and well past sync's 7-day recovery search,
@@ -53,7 +54,7 @@ export const PRUNE_PER_RUN = 5000;
  * Returns how many messages went. `PRUNE_PER_RUN` means there may be more.
  */
 export async function pruneOld(db: Sql, now: number = Date.now()): Promise<number> {
-  const cutoff = now - RETENTION_DAYS * 86_400_000;
+  const cutoff = now - RETENTION_DAYS * DAY_MS;
   const { mail, mailWindow } = await preferences(db);
   const kept = mail ? windowStart(mailWindow, now) : cutoff;
   // Inbox on, keeping all of it.

@@ -2,11 +2,8 @@ import { gmail } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
 import { validateFilter } from '../actions/filters.ts';
 import type { Mailbox } from '../actions/mailbox.ts';
-import { calls, isConflict, isNotFound, labelKey } from './call.ts';
+import { BEFORE_MILD, calls, isConflict, isNotFound, labelKey } from './call.ts';
 import type { Pace } from './quota.ts';
-
-/** What Mild's labels in Gmail began with when it was Sift: `sift`, and `sift/…` under it. */
-const BEFORE_MILD = /^sift(?=\/|$)/i;
 
 /** Gmail implementation of the Mailbox port. Deliberately has no forward, trash or delete. Calls are paced as `createGmailApi`'s are. */
 export function createGmailMailbox(auth: OAuth2Client, pace: Pace): Mailbox {

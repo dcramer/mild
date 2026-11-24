@@ -5,13 +5,14 @@ import { openData, openJson, sealData, sealJson, uploadName } from './content.ts
 import { heldUploads } from './drafts.ts';
 import { and, asc, eq, inArray, lt, notInArray, uploadPieces, uploads } from './query.ts';
 import type { Sql } from './sql.ts';
+import { DAY_MS } from '../time.ts';
 
 /** A piece's bytes: as base64 in JSON, about 4 MB, under the 4.5 MB Vercel takes in a request. */
 export const PIECE_BYTES = 3_000_000;
 /** What Gmail sends attached to one message. */
 export const MOST_ATTACHED = 25 * 1024 * 1024;
 /** Long enough to write the mail it is for; past it, the pass removes it (`upkeep`), unless a draft saved holds it. */
-const UPLOAD_KEEP_MS = 86_400_000;
+const UPLOAD_KEEP_MS = DAY_MS;
 
 const MISSING = 'An attachment did not finish uploading. Remove it and attach it again.';
 

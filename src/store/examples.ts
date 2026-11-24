@@ -7,6 +7,7 @@ import { isSharedDomain } from '../triage/standing.ts';
 import type { Address, Label, MessageFacts } from '../triage/types.ts';
 import { plain } from '../plain.ts';
 import type { Confidential } from '../confidential.ts';
+import { DAY_MS } from '../time.ts';
 
 const CANDIDATE = {
   messageId: examples.messageId,
@@ -169,7 +170,7 @@ export async function pruneExamples(db: Sql, now: number = Date.now()): Promise<
   return (
     await db
       .delete(examples)
-      .where(lt(examples.markedAt, now - EXAMPLE_KEEP_DAYS * 86_400_000))
+      .where(lt(examples.markedAt, now - EXAMPLE_KEEP_DAYS * DAY_MS))
       .returning({ messageId: examples.messageId })
   ).length;
 }
