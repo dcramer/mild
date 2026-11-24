@@ -203,7 +203,7 @@ test.describe('A sender', () => {
     await param(page, 'name').toBe('Dependabot');
   });
 
-  test('a toast is a slip in the bottom right corner: its words, then its presses under them', async ({ page }) => {
+  test('a toast is a slip in the bottom right corner: its words, then its presses beside them', async ({ page }) => {
     await page.goto(SENDER);
     await standing(page, 'notifications@code.example.com', 'Block').click();
     const said = toast(page, 'Mail from notifications@code.example.com: send it to spam');
@@ -213,7 +213,7 @@ test.describe('A sender', () => {
     const words = await boxOf(said.getByText('Mail from notifications@code.example.com: send it to spam', { exact: true }));
     const undo = await boxOf(said.getByRole('button', { name: 'Undo' }));
     const { width, height } = page.viewportSize()!;
-    expect(undo.y).toBeGreaterThanOrEqual(words.y + words.height);
+    expect(undo.x).toBeGreaterThanOrEqual(words.x + words.width);
     expect(box.x + box.width).toBeGreaterThan(width - 40);
     expect(height - (box.y + box.height)).toBeLessThanOrEqual(32);
   });

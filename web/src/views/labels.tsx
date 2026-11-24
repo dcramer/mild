@@ -6,7 +6,7 @@ import { type LabelSummary, api, useLoaded } from '@/lib/api.ts';
 import { useOpened } from '@/lib/params.ts';
 import { AddLabelsDialog, LabelPanel, weak } from '@/views/label-panel.tsx';
 import { INBOX, count, percent } from '@/lib/format.ts';
-import { Heads, Blank, Button, Empty, FloatingPress, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
+import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
 
 /** What Mild does with a label's mail, as the page groups it: blocking is marking spam, and more. */
 const GROUPS = [
@@ -39,15 +39,7 @@ export function LabelActions() {
   return (
     <>
       <span className="text-sm text-muted-foreground tabular-nums max-sm:hidden">{data ? `${count(own)} of ${data.labelLimit}` : <Blank word />}</span>
-      <FloatingPress
-        label="Add labels"
-        icon={<PlusIcon aria-hidden />}
-        disabled={!data || data.accounts.length === 0 || full}
-        why={full ? `Mild keeps at most ${data.labelLimit} labels. Remove one you no longer use first.` : undefined}
-        onPress={() => setAdding(true)}
-      />
       <Button
-        className="phone:hidden"
         disabled={!data || data.accounts.length === 0 || full}
         {...(full ? { why: `Mild keeps at most ${data?.labelLimit} labels. Remove one you no longer use first.` } : {})}
         onClick={() => setAdding(true)}
