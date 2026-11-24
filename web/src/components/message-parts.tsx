@@ -7,11 +7,11 @@ import { Button, Heads, MailFrame, Quoted, RowActions, Section, Sub, Table, Td, 
 import { splitQuoted } from '@/lib/quoted.ts';
 import { reveal } from '@/lib/reveal.ts';
 
-type View = 'text' | 'html';
+type Shown = 'text' | 'html';
 /** How this reader last chose to read a message, kept in their browser. HTML until they choose text, as a mail client shows it. */
 const VIEW_KEY = 'sift:message-view';
 
-function storedView(): View {
+function storedView(): Shown {
   try {
     return window.localStorage.getItem(VIEW_KEY) === 'text' ? 'text' : 'html';
   } catch {
@@ -36,14 +36,26 @@ function Letter({ text }: { text: string }) {
   );
 }
 
+interface View {
+  html: boolean;
+  /** A design shown in its sender's colours, on white, rather than darkened. */
+  original: boolean;
+  onPaper: () => void;
+  more: { label: string; onSelect: () => void }[];
+}
+
 /**
- * Whether a message shows as its HTML or its text, and the item of its ⋮ menu that changes that (`MessageHead`'s
- * `more`), none when Mild holds no HTML for it. The choice is kept in the browser for every message after.
+ * Whether a message shows as its HTML or its text, and the items of its ⋮ menu that change that (`MessageHead`'s
+ * `more`), none when Mild holds no HTML for it: the choice is kept in the browser for every message after. A design's
+ * HTML, once its frame says it is one, can also be shown in its original colours, for this message alone, for when
+ * darkening got it wrong.
  */
-export function useMessageView(detail: MessageDetail): { html: boolean; more: { label: string; onSelect: () => void }[] } {
+export function useMessageView(detail: MessageDetail): View {
   const [view, setView] = useState(storedView);
+  const [paper, setPaper] = useState(false);
+  const [original, setOriginal] = useState(false);
   const html = detail.hasHtml && view === 'html';
-  const choose = (next: View) => {
+  const choose = (next: Shown) => {
     setView(next);
     try {
       window.localStorage.setItem(VIEW_KEY, next);
@@ -51,7 +63,13 @@ export function useMessageView(detail: MessageDetail): { html: boolean; more: { 
       // Not remembered; this message still shows it.
     }
   };
-  return { html, more: detail.hasHtml ? [{ label: html ? 'Show as text' : 'Show as HTML', onSelect: () => choose(html ? 'text' : 'html') }] : [] };
+  const colours = html && paper ? [{ label: original ? 'Show darkened' : 'Show original colours', onSelect: () => setOriginal(!original) }] : [];
+  return {
+    html,
+    original,
+    onPaper: () => setPaper(true),
+    more: detail.hasHtml ? [{ label: html ? 'Show as text' : 'Show as HTML', onSelect: () => choose(html ? 'text' : 'html') }, ...colours] : [],
+  };
 }
 
 /**
@@ -59,7 +77,8 @@ export function useMessageView(detail: MessageDetail): { html: boolean; more: { 
  * Its images load only once the reader presses Show images, since loading them tells the sender it was opened; the next
  * message is blocked again.
  */
-export function MessageBody({ detail, html }: { detail: MessageDetail; html: boolean }) {
+export function MessageBody({ detail, view }: { detail: MessageDetail; view: Pick<View, 'html' | 'original' | 'onPaper'> }) {
+  const { html, original, onPaper } = view;
   const [blocked, setBlocked] = useState(false);
   const [images, setImages] = useState(false);
   return (
@@ -71,9 +90,10 @@ export function MessageBody({ detail, html }: { detail: MessageDetail; html: boo
       ) : null}
       {html ? (
         <MailFrame
-          src={api.messageHtml(detail.messageId, detail.accountId, images)}
+          src={api.messageHtml(detail.messageId, detail.accountId, images, original)}
           title={reveal(detail.subject) || '(no subject)'}
           onBlocked={() => setBlocked(true)}
+          onPaper={onPaper}
         />
       ) : detail.body === null ? (
         <p className="text-muted-foreground">

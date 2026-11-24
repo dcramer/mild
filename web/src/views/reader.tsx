@@ -222,11 +222,11 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
   const id = detail.messageId;
   const mine = address === detail.accountId;
   const addressedTo = useAddressedTo(detail);
-  const { html, more } = useMessageView(detail);
+  const view = useMessageView(detail);
   return (
     <>
       <MessageHead
-        more={more}
+        more={view.more}
         from={
           mine ? (
             'me'
@@ -256,7 +256,7 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
         <DigestBody digest={detail.digest} />
       ) : (
         <>
-          <MessageBody key={id} detail={detail} html={html} />
+          <MessageBody key={id} detail={detail} view={view} />
           <Files detail={detail} />
         </>
       )}

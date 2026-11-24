@@ -93,10 +93,10 @@ describe('cleaning a message for the frame', () => {
     expect(performance.now() - started).toBeLessThan(2_000);
   });
 
-  it('puts designed mail on white paper, after its doctype, with the frame script before the message', () => {
+  it('puts designed mail on white paper, marked as paper for the frame script to darken, after its doctype, with the frame script before the message', () => {
     const document = mailDocument(HTML, false);
     expect(document).toMatch(
-      /^<!DOCTYPE html><style>:root\{color-scheme:light;background:#fff;color:#000;[^<]*<\/style><script>\(\(\) => \{[\s\S]*\}\)\(\);<\/script><html>/,
+      /^<!DOCTYPE html><style data-sift-paper>:root\{color-scheme:light;background:#fff;color:#000;[^<]*<\/style><script>\(\(\) => \{[\s\S]*\}\)\(\);<\/script><html>/,
     );
     expect(document.replace(`<script>${FRAME_SCRIPT}</script>`, '')).not.toMatch(/script|refresh|<base|<title|hero\.png|https:\/\/tracker/);
     expect(document).toContain('background:url(https://cdn.example.com/bg.png)');

@@ -10,34 +10,50 @@ const UNTOLD_MS = 2_000;
 interface Told {
   height: number;
   blocked: boolean;
+  paper: boolean;
 }
 
 /** What the frame's own script (`FRAME_SCRIPT`, src/dashboard/frame-script.ts) says, or null for anything else. */
 function told(data: unknown): Told | null {
   if (typeof data !== 'object' || data === null) return null;
-  const { sift, height, blocked } = data as Record<string, unknown>;
-  if (sift !== 'mail-frame' || typeof height !== 'number' || !Number.isFinite(height) || typeof blocked !== 'boolean') return null;
-  return { height: Math.min(Math.max(Math.ceil(height), 0), TALLEST), blocked };
+  const { sift, height, blocked, paper } = data as Record<string, unknown>;
+  if (sift !== 'mail-frame' || typeof height !== 'number' || !Number.isFinite(height) || typeof blocked !== 'boolean' || typeof paper !== 'boolean')
+    return null;
+  return { height: Math.min(Math.max(Math.ceil(height), 0), TALLEST), blocked, paper };
 }
 
 /**
  * A message as its own HTML, read as part of the page: the frame is as tall as the message, so the page scrolls as one,
- * and the document in it is a letter in the dashboard's ink or a design on its white paper (`mailDocument`,
- * src/dashboard/mail-html.ts). It runs nothing of the mail's and loads nothing from elsewhere; links open in a new tab.
- * Hidden until it has said how tall it is, so nothing jumps or flashes white; one that never says scrolls inside,
- * 70% of the screen tall. `onBlocked` is told when the message asked for images from elsewhere, which it did not get.
+ * and the document in it is a letter in the dashboard's ink or a design on paper, darkened unless `src` ends `#original`
+ * (`mailDocument`, src/dashboard/mail-html.ts). It runs nothing of the mail's and loads nothing from elsewhere; links open
+ * in a new tab. Hidden until it has said how tall it is, so nothing jumps or flashes white; one that never says scrolls
+ * inside, 70% of the screen tall. `onBlocked` is told when the message asked for images from elsewhere, which it did not
+ * get, and `onPaper` when it is a design, which has original colours to show.
  */
-export function MailFrame({ src, title, onBlocked }: { src?: string | undefined; title: string; onBlocked?: (() => void) | undefined }) {
+export function MailFrame({
+  src,
+  title,
+  onBlocked,
+  onPaper,
+}: {
+  src?: string | undefined;
+  title: string;
+  onBlocked?: (() => void) | undefined;
+  onPaper?: (() => void) | undefined;
+}) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState<number | null>(null);
   const [untold, setUntold] = useState(false);
-  const [shown, setShown] = useState(src);
-  if (shown !== src) {
-    setShown(src);
+  // A change of `#original` alone is switched by the frame's script, in place.
+  const address = src?.split('#')[0];
+  const [shown, setShown] = useState(address);
+  if (shown !== address) {
+    setShown(address);
     setHeight(null);
     setUntold(false);
   }
   const heardBlocked = useEffectEvent(() => onBlocked?.());
+  const heardPaper = useEffectEvent(() => onPaper?.());
   useEffect(() => {
     const heard = (event: MessageEvent) => {
       if (event.source === null || event.source !== frame.current?.contentWindow) return;
@@ -45,6 +61,7 @@ export function MailFrame({ src, title, onBlocked }: { src?: string | undefined;
       if (!said) return;
       setHeight(said.height);
       if (said.blocked) heardBlocked();
+      if (said.paper) heardPaper();
     };
     window.addEventListener('message', heard);
     return () => window.removeEventListener('message', heard);
