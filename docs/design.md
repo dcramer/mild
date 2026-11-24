@@ -180,7 +180,7 @@ A page is drawn before its data arrives, and what arrives must not push what is 
 
 - Build screens from these parts. If a screen needs something they cannot do, add or extend a part here, with its states (hover, focus, pressed, disabled, busy, empty, failed), and add it to the specimen page in the same change. A part exported from `web/src/system/index.ts` and missing from the specimen page fails the design-system test, as does a `mark` or `ink` button inside a `Tr` or `RowActions`, or a second `mark` in one screen's file.
 - A part says when to use it in its doc comment; that is the line the specimen page shows.
-- No inline styles, no fills, frames, corners, shadows or colours written outside `web/src/system/`; red is `Failure` and yellow comes only from a part's tone. If a value is missing, it is a missing token. `tests/design-system.test.ts` fails on any of these and names the file and line.
+- No inline styles, no fills, frames, corners, shadows or colours written outside `web/src/system/`; red is `Failure` and yellow comes only from a part's tone. If a value is missing, it is a missing token. `tests/conventions/design-system.test.ts` fails on any of these and names the file and line.
 - Behaviour that is hard to get right (a list that opens, a focus trap) comes from an unstyled primitive, today Base UI. Only files in `web/src/system/` import it (a lint error elsewhere), so the library can change without a screen changing.
 - A part's inline `style` is only for a value computed from data (a bar's height, a series colour).
 - Motion is short (80 to 150ms): a press, a dialog opening, rows pulsing while they load. All off under `prefers-reduced-motion`.

@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 // docs/design.md as checks. Screens kept drifting from the system one view at a time (grey fills, a stray
 // shadow, red and yellow written by hand, type set by eye), so what a screen may write is decided here.
 
-const WEB = new URL('../web/src/', import.meta.url).pathname;
+const WEB = new URL('../../web/src/', import.meta.url).pathname;
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

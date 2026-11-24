@@ -2,7 +2,7 @@ import { globSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DOWNLOADS, FRAMES, READS, WRITES } from '../src/dashboard/api/index.ts';
+import { DOWNLOADS, FRAMES, READS, WRITES } from '../../src/dashboard/api/index.ts';
 
 const DIR = 'src/dashboard/api/routes/';
 const KINDS = { get: READS, post: WRITES, frame: FRAMES, download: DOWNLOADS } as const;

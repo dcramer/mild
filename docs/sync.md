@@ -98,7 +98,7 @@ They are in [runtime.md](runtime.md#what-it-costs) too.
 
 ## Order of work
 
-1. The server. Built: `tests/api/sync.test.ts`, `tests/sync.test.ts`.
+1. The server. Built: `tests/api/sync.test.ts`, `tests/changes.test.ts`.
 2. The browser: the encrypted copy, the one tab that asks, the collection, and Inbox and the reader on it. Built: `e2e/inbox.spec.ts`.
 3. For review on the copy.
 4. Remove what it replaces: each screen's polling, and what the server answered only for lists the copy now draws.
