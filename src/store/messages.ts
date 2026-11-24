@@ -5,6 +5,7 @@ import type { Facts, RuleFacts } from '../triage/facts.ts';
 import type { MessageFacts } from '../triage/types.ts';
 import { openEnvelope, openFacts, sealFacts } from './content.ts';
 import { plain } from '../plain.ts';
+import { ofMessage } from './decisions.ts';
 
 const COLUMNS = {
   id: messages.id,
@@ -59,16 +60,7 @@ export interface QueuedMessage {
  * For a query over messages: no decision has been recorded for it. `decided` narrows it to the few that may not have
  * one (`messages_undecided`); the decisions themselves say, so mail decided by code that did not set it is still left out.
  */
-export const noDecision = (db: Sql) =>
-  and(
-    eq(messages.decided, false),
-    notExists(
-      db
-        .select({ id: decisions.id })
-        .from(decisions)
-        .where(and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id))),
-    ),
-  );
+export const noDecision = (db: Sql) => and(eq(messages.decided, false), notExists(db.select({ id: decisions.id }).from(decisions).where(ofMessage)));
 
 /**
  * Recorded messages that have no decision yet, newest first, rebuilt as triage input. This is the triage queue.

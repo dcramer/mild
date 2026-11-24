@@ -1,4 +1,4 @@
-import { alias, and, asc, count, decisions, desc, eq, gte, inboxRuns, isNull, labels, max, messages, modelRuns, rules, sql } from '../../store/query.ts';
+import { and, asc, count, decisions, desc, eq, gte, inboxRuns, isNull, labels, max, messages, modelRuns, rules, sql } from '../../store/query.ts';
 import { keptOut, saved } from './saved.ts';
 import type { Sql } from '../../store/sql.ts';
 import type { RuleMatch } from '../../triage/stages/rules.ts';
@@ -9,6 +9,7 @@ import type { RuleSummary, RuleUsage, RuleWaiting } from '../types.ts';
 import { DAY_MS } from './decisions.ts';
 import { localDay } from './summary.ts';
 import { MONTH } from './usage.ts';
+import { isCurrent, ofMessage } from '../../store/decisions.ts';
 
 /**
  * Every rule in evaluation order, with its label, what it does, how often and how recently it decided a
@@ -94,25 +95,18 @@ const MOST_WAITING = 50;
  * before the rule and was decided again when it was made. Newest first. And how far applying it to the inbox has got.
  */
 export async function ruleWaiting(db: Sql, scope: Scope, ruleId: string): Promise<RuleWaiting> {
-  const later = alias(decisions, 'later');
   const where = and(
     within(scope, decisions.accountId),
     eq(decisions.ruleId, ruleId),
     eq(decisions.carryOut, false),
     eq(decisions.byUser, false),
-    eq(
-      decisions.id,
-      db
-        .select({ id: max(later.id) })
-        .from(later)
-        .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
-    ),
+    isCurrent(db),
   );
   const [total] = await db.select({ n: count() }).from(decisions).where(where);
   const rows = await db
     .select({ accountId: decisions.accountId, messageId: decisions.messageId, headers: messages.headers, receivedAt: messages.receivedAt })
     .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .where(where)
     .orderBy(desc(messages.receivedAt))
     .limit(MOST_WAITING);

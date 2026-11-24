@@ -23,6 +23,7 @@ import {
   sql,
   readBodies,
 } from '../store/query.ts';
+import { ofMessage } from '../store/decisions.ts';
 
 /**
  * A year: long enough to look back over and undo a change from, and well past sync's 7-day recovery search,
@@ -57,7 +58,7 @@ export async function pruneOld(db: Sql, now: number = Date.now()): Promise<numbe
   const kept = mail ? windowStart(mailWindow, now) : cutoff;
   // Inbox on, keeping all of it.
   if (kept === null) return 0;
-  const decided = and(eq(decisions.accountId, messages.accountId), eq(decisions.messageId, messages.id));
+  const decided = ofMessage;
   const anyDecision = exists(
     db
       .select({ one: sql`1` })

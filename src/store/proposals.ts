@@ -6,6 +6,7 @@ import type { DecidedDisposition } from '../triage/types.ts';
 import { listLabels } from './labels.ts';
 import { hasRuleFor } from './rules.ts';
 import type { Sealed } from '../confidential.ts';
+import { ofMessage } from './decisions.ts';
 
 /** A rule Mild thinks is worth having: "from them, when it is this label → what the user has been doing to it". */
 export interface Proposal {
@@ -91,7 +92,7 @@ export async function proposeFromCorrections(db: Sql, accountId: string, address
     .select({ disposition: feedback.disposition })
     .from(feedback)
     .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .where(and(eq(feedback.accountId, accountId), eq(feedback.labelId, labelId), eq(messages.senderHash, hashOf(db, address))))
     .orderBy(desc(feedback.createdAt), desc(feedback.decisionId))
     .limit(MAX_RUN);

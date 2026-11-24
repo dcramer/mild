@@ -27,6 +27,7 @@ import { factsWhere } from '../../store/messages.ts';
 import { contacts } from '../../store/senders.ts';
 import { LEAVE_IN_INBOX } from '../../triage/types.ts';
 import { plain } from '../../plain.ts';
+import { ofMessage } from '../../store/decisions.ts';
 
 export const DAY_MS = 86_400_000;
 
@@ -67,7 +68,7 @@ export const decisionsJoined = (db: Sql) =>
   db
     .select(DECISION_FIELDS)
     .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .leftJoin(labels, eq(labels.id, decisions.labelId))
     .leftJoin(modelRuns, eq(modelRuns.id, decisions.runId))
     .leftJoin(

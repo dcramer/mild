@@ -1,10 +1,11 @@
-import { actions, alias, and, asc, decisions, desc, digests, eq, gt, inArray, isNull, labels, lte, max, messages } from './query.ts';
+import { actions, and, asc, decisions, desc, digests, eq, gt, inArray, isNull, labels, lte, max, messages } from './query.ts';
 import { costOf } from './runs.ts';
 import type { Sql } from './sql.ts';
 import { digestName, openEnvelope, openJson, sealJson } from './content.ts';
 import type { Usage } from '../triage/stages/model.ts';
 import { plain } from '../plain.ts';
 import type { Confidential } from '../confidential.ts';
+import { isCurrent, ofMessage } from './decisions.ts';
 
 /** The Message-ID a digest is given: `.invalid` is no one's domain, so no mail from anyone else carries one. */
 const DIGEST_ID = /^<digest\.[\w-]+@sift\.invalid>$/;
@@ -53,8 +54,6 @@ export interface DigestItem {
   archivedAt: number;
 }
 
-const latest = alias(decisions, 'latest');
-
 /**
  * What a label's digest for `(since, until]` lists: mail whose decision still standing put it in the digest, was
  * Mild's own and not the person's answer, and was archived in Gmail in that window. An archive undone since is
@@ -80,7 +79,7 @@ const inWindow = (db: Sql, labelId: string, since: number, until: number) =>
         lte(actions.completedAt, until),
       ),
     )
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .where(
       and(
         eq(decisions.labelId, labelId),
@@ -88,13 +87,7 @@ const inWindow = (db: Sql, labelId: string, since: number, until: number) =>
         eq(decisions.carryOut, true),
         eq(decisions.outcome, 'done'),
         eq(decisions.byUser, false),
-        eq(
-          decisions.id,
-          db
-            .select({ id: max(latest.id) })
-            .from(latest)
-            .where(and(eq(latest.accountId, decisions.accountId), eq(latest.messageId, decisions.messageId))),
-        ),
+        isCurrent(db),
       ),
     );
 

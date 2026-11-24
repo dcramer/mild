@@ -27,20 +27,7 @@ import { type Standing, isSharedDomain, standingOf } from '../triage/standing.ts
 import { labelNames, listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
 import { plain } from '../plain.ts';
-
-const later = alias(decisions, 'later');
-
-/** `decisions` is the current one for its message: the highest id. */
-const current = (db: Sql) =>
-  eq(
-    decisions.id,
-    db
-      .select({ id: max(later.id) })
-      .from(later)
-      .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
-  );
-
-const ofMessage = (t: typeof decisions) => and(eq(messages.accountId, t.accountId), eq(messages.id, t.messageId));
+import { isCurrent, ofMessage } from './decisions.ts';
 
 const CORRESPONDENT_TTL_MS = 7 * 86_400_000;
 
@@ -159,8 +146,8 @@ async function facts(db: Sql, accounts: readonly string[], who: { address: strin
     (await db
       .select({ id: decisions.labelId, messages: count() })
       .from(decisions)
-      .innerJoin(messages, ofMessage(decisions))
-      .where(and(inArray(decisions.accountId, [...accounts]), eq(column, hash), isNotNull(decisions.labelId), current(db), also))
+      .innerJoin(messages, ofMessage)
+      .where(and(inArray(decisions.accountId, [...accounts]), eq(column, hash), isNotNull(decisions.labelId), isCurrent(db), also))
       .groupBy(decisions.labelId)
       .orderBy(desc(count()), asc(decisions.labelId))) as SenderFacts['labels'];
   const labels = await tally();
@@ -183,7 +170,7 @@ async function facts(db: Sql, accounts: readonly string[], who: { address: strin
     })
     .from(feedback)
     .innerJoin(decisions, eq(decisions.id, feedback.decisionId))
-    .innerJoin(messages, ofMessage(decisions))
+    .innerJoin(messages, ofMessage)
     .where(and(inArray(feedback.accountId, [...accounts]), eq(column, hash)))) as [{ right: number; wrong: number }];
   const [written] = await db
     .select({ yes: sql<boolean | null>`bool_or(${correspondents.userHasWritten})` })

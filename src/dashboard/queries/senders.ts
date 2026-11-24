@@ -1,4 +1,4 @@
-import { alias, and, asc, count, decisions, desc, eq, isNotNull, max, messages, ne, or } from '../../store/query.ts';
+import { and, asc, count, decisions, desc, eq, isNotNull, max, messages, ne, or } from '../../store/query.ts';
 import { hashOf, newestOfGroup, openEnvelope, openNewest } from '../../store/content.ts';
 import type { Sql } from '../../store/sql.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
@@ -11,8 +11,7 @@ import { listRuleSummaries } from './rules.ts';
 import { keptOut, saved } from './saved.ts';
 import { forExactly, givenBy } from './contacts.ts';
 import { plain, seal } from '../../plain.ts';
-
-const later = alias(decisions, 'later');
+import { isCurrent, ofMessage } from '../../store/decisions.ts';
 
 /** How much of an address's mail the names are read from. Each name is in its message's encrypted headers, so each is opened in Mild. */
 const NAMES_FROM = 2_000;
@@ -37,19 +36,13 @@ async function namesOf(
   const decided = await db
     .select({ accountId: decisions.accountId, messageId: decisions.messageId, labelId: decisions.labelId, disposition: decisions.disposition })
     .from(decisions)
-    .innerJoin(messages, and(eq(messages.accountId, decisions.accountId), eq(messages.id, decisions.messageId)))
+    .innerJoin(messages, ofMessage)
     .where(
       and(
         within(scope, decisions.accountId),
         eq(messages.senderHash, hashOf(db, address)),
         or(isNotNull(decisions.labelId), ne(decisions.disposition, 'review')),
-        eq(
-          decisions.id,
-          db
-            .select({ id: max(later.id) })
-            .from(later)
-            .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
-        ),
+        isCurrent(db),
       ),
     );
   const decisionOf = new Map(decided.map((r) => [`${r.accountId}\n${r.messageId}`, r]));

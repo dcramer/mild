@@ -1,4 +1,4 @@
-import { alias, and, count, decisions, eq, inArray, isNotNull, mailBodies, max, messages as messageRows, not, readBodies } from '../../store/query.ts';
+import { and, count, decisions, eq, inArray, isNotNull, mailBodies, messages as messageRows, not, readBodies } from '../../store/query.ts';
 import { noDecision } from '../../store/messages.ts';
 import { goingInboxRuns } from '../../store/inbox.ts';
 import { outOfTries } from '../../store/runs.ts';
@@ -15,6 +15,7 @@ import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionIt
 import { outcomeOf } from './labels.ts';
 import { plain, seal } from '../../plain.ts';
 import type { Confidential } from '../../confidential.ts';
+import { isCurrent, ofMessage } from '../../store/decisions.ts';
 
 /** One sender's waiting mail, in all of the person's mailboxes, newest first. */
 export async function suggestionDetail(db: Sql, scope: Scope, sender: string): Promise<SuggestionDetail> {
@@ -62,26 +63,19 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
       return [`${s.accountId}\n${hashOf(db, plain(s.fromAddress))}`, key] as const;
     }),
   );
-  const later = alias(decisions, 'later');
   const labelled =
     senders.size === 0
       ? []
       : await db
           .select({ accountId: decisions.accountId, senderHash: messageRows.senderHash, labelId: decisions.labelId, n: count() })
           .from(decisions)
-          .innerJoin(messageRows, and(eq(messageRows.accountId, decisions.accountId), eq(messageRows.id, decisions.messageId)))
+          .innerJoin(messageRows, ofMessage)
           .where(
             and(
               within(scope, decisions.accountId),
               inArray(messageRows.senderHash, [...new Set([...senders.keys()].map((key) => key.split('\n')[1]!))]),
               isNotNull(decisions.labelId),
-              eq(
-                decisions.id,
-                db
-                  .select({ id: max(later.id) })
-                  .from(later)
-                  .where(and(eq(later.accountId, decisions.accountId), eq(later.messageId, decisions.messageId))),
-              ),
+              isCurrent(db),
             ),
           )
           .groupBy(decisions.accountId, messageRows.senderHash, decisions.labelId);
