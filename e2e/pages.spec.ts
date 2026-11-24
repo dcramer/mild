@@ -40,6 +40,24 @@ test.describe('Activity, after a pass with Mild on', () => {
     await expect(row(page, 'Quick question')).toHaveCount(0);
   });
 
+  test('opened again, holds the room the time saved and the chart took, so the list does not move when they come', async ({ page }) => {
+    await page.goto('/activity');
+    await expect(page.getByText('Time saved', { exact: true })).toBeVisible();
+    let release = () => {};
+    const held = new Promise<void>((done) => (release = done));
+    await page.route('**/api/summary*', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.reload();
+    const first = row(page, 'Last day of the sale');
+    const before = await boxOf(first);
+    await expect(page.getByText('Time saved', { exact: true })).toHaveCount(0);
+    release();
+    await expect(page.getByText('Time saved', { exact: true })).toBeVisible();
+    expect((await boxOf(first)).y).toBe(before.y);
+  });
+
   test('a sender’s page and a rule’s panel say what Mild kept out of the inbox', async ({ page }) => {
     await page.goto(senderPage('digest@news.example.com'));
     await expect(fact(page.getByRole('main'), 'Kept out')).toHaveText('1 from your inbox, about 10 s');
