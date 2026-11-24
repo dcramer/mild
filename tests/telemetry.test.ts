@@ -11,13 +11,13 @@ import { draftRule } from '../src/learn/rules.ts';
 import { createRuleDrafter } from '../src/model/draft-rule.ts';
 import { createJudge } from '../src/model/judge.ts';
 import { createHighlighter } from '../src/model/digest.ts';
-import { HIGHLIGHT_TOOL } from '../src/triage/digest.ts';
+import { HIGHLIGHT_TOOL } from '../src/prompts/digest.ts';
 import { createProposer } from '../src/model/propose.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { hashOf, traceIds } from '../src/store/content.ts';
 import { VERDICT_TOOL } from '../src/triage/prompt.ts';
-import { PROPOSAL_PROMPT, PROPOSAL_TOOL } from '../src/triage/proposal.ts';
-import { FILL_TOOL, FIND_TOOL } from '../src/triage/rule-draft.ts';
+import { PROPOSAL_PROMPT, PROPOSAL_TOOL } from '../src/prompts/proposal.ts';
+import { FILL_TOOL, FIND_TOOL } from '../src/prompts/rule-draft.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import {

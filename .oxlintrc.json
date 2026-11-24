@@ -56,8 +56,26 @@
               { "group": ["pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "triage/ is pure: no I/O. Inject what you need through a port (see src/triage/stages)." },
               {
                 // Every module in src/ but this one; a new one goes here too.
-                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/digest/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/sift/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
+                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/digest/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/prompts/**", "**/sift/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
                 "message": "triage/ is pure and depends on nothing else in src/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // What Mild asks a model besides the cascade's verdict, and how it reads the answer: as pure as triage/, whose types it takes.
+      "files": ["src/prompts/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." },
+              { "group": ["node:*", "@googleapis/*", "googleapis", "google-auth-library", "@earendil-works/*", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "prompts/ is pure: no I/O. What a prompt needs arrives through a port, as in triage/." },
+              {
+                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/digest/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/sift/**", "**/store/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
+                "message": "prompts/ is pure and depends on nothing in src/ but triage/."
               }
             ]
           }
@@ -73,7 +91,7 @@
             "patterns": [{ "group": ["@sentry/*"], "message": "Only src/telemetry.ts talks to Sentry, so that what leaves the machine passes its scrubber. Use traced and reportError." },
               { "group": ["node:*", "@googleapis/*", "googleapis", "google-auth-library", "@earendil-works/*", "pg", "@electric-sql/*", "drizzle-orm", "drizzle-orm/*"], "message": "digest/ is pure: it writes the digest from what it is given." },
               {
-                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/sift/**", "**/store/**", "**/triage/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
+                "group": ["**/actions/**", "**/cli/**", "**/dashboard/**", "**/ephemeral/**", "**/gmail/**", "**/learn/**", "**/model/**", "**/prompts/**", "**/sift/**", "**/store/**", "**/triage/**", "**/vercel/**", "**/work/**", "**/config.ts", "**/plain.ts", "**/refusal.ts", "**/secrets.ts", "**/telemetry.ts"],
                 "message": "digest/ is pure and depends on nothing else in src/."
               }
             ]

@@ -1,5 +1,5 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
-import { HIGHLIGHT_PROMPT, HIGHLIGHT_TOOL, type Highlighter, MAX_HIGHLIGHTS, buildHighlightPrompt, readHighlights } from '../triage/digest.ts';
+import { HIGHLIGHT_PROMPT, HIGHLIGHT_TOOL, type Highlighter, MAX_HIGHLIGHTS, buildHighlightPrompt, readHighlights } from '../prompts/digest.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
 import { chat, executeTool, usageOf } from './chat.ts';
 import type { Reasoning } from './reasoning.ts';

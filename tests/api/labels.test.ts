@@ -1,6 +1,6 @@
 import { fauxAssistantMessage, fauxText, fauxToolCall } from '@earendil-works/pi-ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PROPOSAL_TOOL } from '../../src/triage/proposal.ts';
+import { PROPOSAL_TOOL } from '../../src/prompts/proposal.ts';
 import { type Browser, fakeGoogle, fauxModel, startSift } from '../fixtures.ts';
 import { everyRouteAnswered } from './areas.ts';
 

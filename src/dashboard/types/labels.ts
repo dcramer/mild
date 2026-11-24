@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DRAFT_ACTIONS } from '../../triage/proposal.ts';
+import { DRAFT_ACTIONS } from '../../prompts/proposal.ts';
 import { answered, held } from './parts.ts';
 
 /** A label: what mail is, and what Mild does with it. */

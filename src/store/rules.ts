@@ -3,7 +3,7 @@ import { type RULE_SOURCES, and, asc, eq, ne, proposals, ruleDrafts, rules, sql 
 import { costOf } from './runs.ts';
 import type { Sql } from './sql.ts';
 import { conditionsHash, openJson, ruleDraftName, ruleName, sealJson } from './content.ts';
-import type { RuleDraft } from '../triage/rule-draft.ts';
+import type { RuleDraft } from '../prompts/rule-draft.ts';
 import { type Rule, type RuleMatch, tidyMatch } from '../triage/rule.ts';
 import { listLabels } from './labels.ts';
 import { LEAVE_IN_INBOX, type Usage } from '../triage/types.ts';

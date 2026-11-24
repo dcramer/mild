@@ -1,5 +1,5 @@
 import type { Api, AssistantMessage, Context, Model, Models, Tool } from '@earendil-works/pi-ai';
-import { DRAFT_ACTIONS, MAX_DRAFTS, PROPOSAL_PROMPT, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../triage/proposal.ts';
+import { DRAFT_ACTIONS, MAX_DRAFTS, PROPOSAL_PROMPT, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../prompts/proposal.ts';
 import { describeFailure as failure } from '../triage/stages/model.ts';
 import { chat, executeTool, usageOf } from './chat.ts';
 import type { Reasoning } from './reasoning.ts';

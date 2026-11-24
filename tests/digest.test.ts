@@ -8,7 +8,7 @@ import { setActive } from '../src/store/preferences.ts';
 import { addRule } from '../src/store/rules.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';
-import type { Highlighter } from '../src/triage/digest.ts';
+import type { Highlighter } from '../src/prompts/digest.ts';
 import { type RunOptions, type Work, dueWork, runOnce, runWork } from '../src/work/run.ts';
 import { syncAccount, syncWants } from '../src/work/sync.ts';
 import { setMail } from '../src/store/preferences.ts';

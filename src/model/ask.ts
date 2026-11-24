@@ -1,5 +1,5 @@
 import type { Api, Model, Models, Tool } from '@earendil-works/pi-ai';
-import { ASK_PROMPT, ASK_TOOL, type MailAsker, VIEW_WORDS, buildAskPrompt, readMailFilter } from '../triage/mail-ask.ts';
+import { ASK_PROMPT, ASK_TOOL, type MailAsker, VIEW_WORDS, buildAskPrompt, readMailFilter } from '../prompts/mail-ask.ts';
 import { withLookups } from './lookups.ts';
 import type { Reasoning } from './reasoning.ts';
 

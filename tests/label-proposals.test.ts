@@ -5,7 +5,7 @@ import { createProposer } from '../src/model/propose.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { connectAccount } from '../src/store/accounts.ts';
 import { latestLabelProposal } from '../src/store/labels.ts';
-import { MAX_DRAFTS, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../src/triage/proposal.ts';
+import { MAX_DRAFTS, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../src/prompts/proposal.ts';
 import { freshStore, raw } from './fixtures.ts';
 
 const reportError = vi.hoisted(() => vi.fn());

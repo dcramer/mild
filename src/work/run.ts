@@ -12,7 +12,7 @@ import { pruneUploads } from '../store/uploads.ts';
 import type { FilterCheck } from '../actions/rule-filters.ts';
 import type { UnsubscribeOutcome } from '../actions/unsubscribe.ts';
 import type { Judge } from '../triage/stages/model.ts';
-import type { Highlighter } from '../triage/digest.ts';
+import type { Highlighter } from '../prompts/digest.ts';
 import type { Ephemeral } from '../ephemeral/ephemeral.ts';
 import { type Account, lastSyncedAt, listAccounts, listUsers, mailboxesOf, signInEnded, signInHeld } from '../store/accounts.ts';
 import type { Store } from '../store/store.ts';

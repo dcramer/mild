@@ -2,7 +2,7 @@ import { createModels, fauxAssistantMessage, fauxProvider, fauxText, fauxToolCal
 import { describe, expect, it, vi } from 'vitest';
 import { createHighlighter } from '../src/model/digest.ts';
 import { knownZone, scheduledBefore } from '../src/digest/schedule.ts';
-import { HIGHLIGHT_TOOL, MAX_HIGHLIGHTS, buildHighlightPrompt, readHighlights } from '../src/triage/digest.ts';
+import { HIGHLIGHT_TOOL, MAX_HIGHLIGHTS, buildHighlightPrompt, readHighlights } from '../src/prompts/digest.ts';
 
 const at = (iso: string) => Date.parse(iso);
 const before = (iso: string, hour: number, zone: string) => new Date(scheduledBefore(at(iso), hour, zone)).toISOString();
