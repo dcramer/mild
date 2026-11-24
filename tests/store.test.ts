@@ -4,17 +4,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { generateDrizzleJson, generateMigration } from 'drizzle-kit/api';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import * as schema from '../src/store/schema.ts';
-import {
-  addMailbox,
-  connectAccount,
-  connectedAddresses,
-  deleteUser,
-  listAccounts,
-  mailboxesOf,
-  makePrimary,
-  recordSync,
-  removeMailbox,
-} from '../src/store/accounts.ts';
+import { addMailbox, connectAccount, connectedAddresses, deleteUser, listAccounts, mailboxesOf, makePrimary, removeMailbox } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { listLabels, updateLabel } from '../src/store/labels.ts';
 import { addRule, listRules } from '../src/store/rules.ts';

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { setActive } from '../src/store/preferences.ts';

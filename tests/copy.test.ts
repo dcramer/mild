@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { recordSync } from '../src/store/accounts.ts';
 import { recordDecision } from '../src/store/decisions.ts';
 import { keepText, recordKept } from '../src/store/kept.ts';
-import { listUndecided } from '../src/store/messages.ts';
+import { listUndecided, recordSync } from '../src/store/messages.ts';
 import { setMail } from '../src/store/preferences.ts';
 import type { Sql } from '../src/store/sql.ts';
 import type { Store } from '../src/store/store.ts';

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { syncPage } from '../src/dashboard/queries/sync.ts';
 import { scopeFor } from '../src/dashboard/scope.ts';
-import { recordSync } from '../src/store/accounts.ts';
-import { recordLabels } from '../src/store/messages.ts';
+import { recordLabels, recordSync } from '../src/store/messages.ts';
 import { setMail } from '../src/store/preferences.ts';
 import { conversationChanges, eq, messages } from '../src/store/query.ts';
 import { headOf, pruneGone } from '../src/store/sync.ts';

@@ -1,7 +1,7 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_EVAL_EXAMPLES, type EvalRequest, continueEval, getEvalRun, listEvalRuns, startEval } from '../src/learn/evals.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { openUserDb, raw } from './fixtures.ts';
 import { updateLabel } from '../src/store/labels.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';

@@ -7,7 +7,7 @@ import { summarize } from '../src/dashboard/queries/summary.ts';
 import { usage } from '../src/dashboard/queries/usage.ts';
 import type { SenderPage } from '../src/dashboard/types.ts';
 import { people } from '../src/store/people.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { finishAction, insertPendingAction, setActionStatus } from '../src/store/actions.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';
 import { connectGmail, fakeGoogle, firstAccount, modelRun, openUserDb, raw, startDashboard, onePerson, unmarked } from './fixtures.ts';

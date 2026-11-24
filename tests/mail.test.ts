@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BODY_CHARS } from '../src/gmail/body.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { openPart } from '../src/store/content.ts';
 import { setMail } from '../src/store/preferences.ts';
 import type { Sql } from '../src/store/sql.ts';

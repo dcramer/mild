@@ -1,9 +1,11 @@
-import { type SQL, and, asc, count, decisions, desc, eq, feedback, inArray, lte, max, messages, notExists, or, sql } from './query.ts';
+import { type SQL, and, asc, count, decisions, desc, eq, feedback, inArray, isNull, lte, mailboxes, max, messages, notExists, or, sql } from './query.ts';
+import { mailboxAliases } from './accounts.ts';
+import { rememberMail } from './addresses.ts';
 import { outOfTries } from './runs.ts';
 import type { Sql } from './sql.ts';
-import type { Facts, RuleFacts } from '../triage/facts.ts';
+import { type ContentFacts, type Facts, type RuleFacts, deriveFacts } from '../triage/facts.ts';
 import type { MessageFacts } from '../triage/types.ts';
-import { openEnvelope, openFacts, sealFacts } from './content.ts';
+import { openEnvelope, openFacts, sealFacts, sealMessage } from './content.ts';
 import { plain } from '../plain.ts';
 import { ofMessage } from './decisions.ts';
 
@@ -263,4 +265,93 @@ export function factsWhere(conditions: RuleFacts): SQL {
       return Array.isArray(want) ? or(...want.map((value: unknown) => has(key, value))) : has(key, want);
     }),
   )!;
+}
+
+/**
+ * Record messages Mild has read from Gmail, with their subject and triage headers and no body; one already recorded is
+ * left as it is. `read` is what reading the message whole showed, for a message read so. Returns how many were new.
+ */
+export async function insertMessages(
+  db: Sql,
+  accountId: string,
+  recorded: readonly MessageFacts[],
+  now: number,
+  record: { suggestOnly?: boolean; decided?: boolean; read?: ContentFacts } = {},
+): Promise<number> {
+  if (recorded.length === 0) return 0;
+  const aliases = await mailboxAliases(db, accountId);
+  const mail = recorded.map((message) => ({ message, facts: deriveFacts(message, record.read ?? {}, aliases) }));
+  const added = await db
+    .insert(messages)
+    .values(
+      mail.map(({ message: m, facts }) => ({
+        accountId,
+        id: m.messageId,
+        threadId: m.threadId,
+        receivedAt: m.receivedAt,
+        ...sealMessage(db, accountId, m.messageId, m),
+        labelIds: m.labelIds,
+        syncedAt: now,
+        suggestOnly: record.suggestOnly ?? false,
+        decided: record.decided ?? false,
+        facts: sealFacts(facts),
+      })),
+    )
+    .onConflictDoNothing()
+    .returning({ id: messages.id });
+  await rememberMail(db, accountId, mail, aliases);
+  return added.length;
+}
+
+/**
+ * Record newly synced messages and advance the cursor atomically, so a crash can neither lose a
+ * message nor skip one. Stores the subject and triage headers, no body.
+ * `read` are messages the user was seen to have opened, these or earlier ones; the first sighting stands.
+ * Returns how many messages were not already known.
+ */
+export async function recordSync(
+  db: Sql,
+  accountId: string,
+  recorded: readonly MessageFacts[],
+  historyId: string,
+  now: number = Date.now(),
+  read: readonly string[] = [],
+): Promise<number> {
+  return await db.transaction(async (tx) => {
+    const added = await insertMessages(tx, accountId, recorded, now);
+    for (const id of read)
+      await tx
+        .update(messages)
+        .set({ readAt: now })
+        .where(and(eq(messages.accountId, accountId), eq(messages.id, id), isNull(messages.readAt)));
+    await tx.update(mailboxes).set({ historyId, lastSyncedAt: now }).where(eq(mailboxes.id, accountId));
+    return added;
+  });
+}
+
+/** Record synced messages before the cursor moves, for a sync too long to fetch in one go. Returns how many were not already known. */
+export async function recordSynced(db: Sql, accountId: string, recorded: readonly MessageFacts[], now: number = Date.now()): Promise<number> {
+  return await db.transaction(async (tx) => await insertMessages(tx, accountId, recorded, now));
+}
+
+/**
+ * Record mail found in the inbox that Mild had not seen, read for a look that decides nothing (what a rule would do), so it
+ * is not read again. Out of the triage queue, as the copy's mail is: going through the inbox or applying a rule decides it.
+ */
+export async function recordFound(db: Sql, accountId: string, recorded: readonly MessageFacts[], now: number): Promise<void> {
+  await db.transaction(async (tx) => await insertMessages(tx, accountId, recorded, now, { decided: true }));
+}
+
+/**
+ * Record mail an inbox run found that Mild had not seen. It does not move the sync cursor. `suggestOnly`
+ * when the run only suggests, so a pass that decides it first never carries it out either. Returns how many were not already known.
+ */
+export async function recordFromInbox(
+  db: Sql,
+  accountId: string,
+  recorded: readonly MessageFacts[],
+  suggestOnly: boolean,
+  now: number = Date.now(),
+): Promise<number> {
+  return await db.transaction(async (tx) => await insertMessages(tx, accountId, recorded, now, { suggestOnly }));
 }

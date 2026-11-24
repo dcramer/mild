@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyFeedback, pendingSuggestions } from '../src/learn/feedback.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw, withReason } from './fixtures.ts';
 import { undo } from '../src/actions/executor.ts';
 import { triageAccount } from '../src/work/triage.ts';

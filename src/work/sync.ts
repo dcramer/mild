@@ -5,9 +5,9 @@ import { NOT_MAIL, type PullResult, pullChanges, toFacts } from '../gmail/sync.t
 import { type Text, keepText, recordKept } from '../store/kept.ts';
 import { inboxOn, textOf } from './bodies.ts';
 import { learnFromGmail, userChanges } from '../learn/gmail.ts';
-import { type Account, lastSyncedAt, recordSync, recordSynced, setMailboxAliases } from '../store/accounts.ts';
+import { type Account, lastSyncedAt, setMailboxAliases } from '../store/accounts.ts';
 import { isOwnDigest, knownDigests } from '../store/digests.ts';
-import { followLabels } from '../store/messages.ts';
+import { followLabels, recordSync, recordSynced } from '../store/messages.ts';
 import type { MessageFacts } from '../triage/types.ts';
 
 const DAY_MS = 86_400_000;

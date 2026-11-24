@@ -1,11 +1,11 @@
 import type { Mailbox } from '../actions/mailbox.ts';
 import type { GmailApi } from '../gmail/api.ts';
 import { toFacts } from '../gmail/sync.ts';
-import { type Account, recordFromInbox } from '../store/accounts.ts';
+import type { Account } from '../store/accounts.ts';
 import { currentDecision } from '../store/decisions.ts';
 import { isOwnDigest } from '../store/digests.ts';
 import { type InboxRun, addListed, advanceInboxRun, goingInboxRun, isGoing, stopInboxRuns } from '../store/inbox.ts';
-import { queuedMessage, recordedInbox } from '../store/messages.ts';
+import { queuedMessage, recordFromInbox, recordedInbox } from '../store/messages.ts';
 import { copied } from '../store/copies.ts';
 import type { Sql } from '../store/sql.ts';
 import { applyTo, inboxQuery, rulesWith } from './apply.ts';

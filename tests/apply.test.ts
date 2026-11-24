@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Sql } from '../src/store/sql.ts';
 import { pendingSuggestions } from '../src/learn/feedback.ts';
 import { redecideWaiting } from '../src/learn/redecide.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { execute } from '../src/actions/executor.ts';
 import { planAction } from '../src/actions/plan.ts';
 import { recordDecision, settleDecision } from '../src/store/decisions.ts';

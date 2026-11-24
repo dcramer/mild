@@ -1,13 +1,9 @@
-import { and, asc, eq, gt, isNull, lte, not, sql, accounts, credentials, labels, mailboxes, messages as messageRows, preferences, users } from './query.ts';
+import { and, asc, eq, gt, lte, not, sql, accounts, credentials, labels, mailboxes, preferences, users } from './query.ts';
 import { startCopies } from './copies.ts';
 import { windowStart } from '../mail-window.ts';
 import { inboxRow } from './labels.ts';
-import { rememberMail } from './addresses.ts';
 import type { Sql } from './sql.ts';
-import { sealFacts, sealMessage } from './content.ts';
 import type { Store } from './store.ts';
-import { deriveFacts } from '../triage/facts.ts';
-import type { MessageFacts } from '../triage/types.ts';
 
 export interface Account {
   id: string;
@@ -252,93 +248,7 @@ export async function rememberLabelName(db: Sql, accountId: string, id: string, 
 }
 
 /** Gmail's name for each label Mild has put on the mailbox's mail, by its id. */
-export async function labelNames(db: Sql, accountId: string): Promise<Record<string, string>> {
+export async function gmailLabelNames(db: Sql, accountId: string): Promise<Record<string, string>> {
   const [row] = await db.select({ names: mailboxes.labelNames }).from(mailboxes).where(eq(mailboxes.id, accountId));
   return row?.names ?? {};
-}
-
-async function insertMessages(
-  db: Sql,
-  accountId: string,
-  messages: readonly MessageFacts[],
-  now: number,
-  suggestOnly: boolean,
-  decided = false,
-): Promise<number> {
-  if (messages.length === 0) return 0;
-  const aliases = await mailboxAliases(db, accountId);
-  const mail = messages.map((message) => ({ message, facts: deriveFacts(message, {}, aliases) }));
-  const added = await db
-    .insert(messageRows)
-    .values(
-      mail.map(({ message: m, facts }) => ({
-        accountId,
-        id: m.messageId,
-        threadId: m.threadId,
-        receivedAt: m.receivedAt,
-        ...sealMessage(db, accountId, m.messageId, m),
-        labelIds: m.labelIds,
-        syncedAt: now,
-        suggestOnly,
-        decided,
-        facts: sealFacts(facts),
-      })),
-    )
-    .onConflictDoNothing()
-    .returning({ id: messageRows.id });
-  await rememberMail(db, accountId, mail, aliases);
-  return added.length;
-}
-
-/**
- * Record newly synced messages and advance the cursor atomically, so a crash can neither lose a
- * message nor skip one. Stores the subject and triage headers, no body.
- * `read` are messages the user was seen to have opened, these or earlier ones; the first sighting stands.
- * Returns how many messages were not already known.
- */
-export async function recordSync(
-  db: Sql,
-  accountId: string,
-  messages: readonly MessageFacts[],
-  historyId: string,
-  now: number = Date.now(),
-  read: readonly string[] = [],
-): Promise<number> {
-  return await db.transaction(async (tx) => {
-    const added = await insertMessages(tx, accountId, messages, now, false);
-    for (const id of read)
-      await tx
-        .update(messageRows)
-        .set({ readAt: now })
-        .where(and(eq(messageRows.accountId, accountId), eq(messageRows.id, id), isNull(messageRows.readAt)));
-    await tx.update(mailboxes).set({ historyId, lastSyncedAt: now }).where(eq(mailboxes.id, accountId));
-    return added;
-  });
-}
-
-/** Record synced messages before the cursor moves, for a sync too long to fetch in one go. Returns how many were not already known. */
-export async function recordSynced(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number = Date.now()): Promise<number> {
-  return await db.transaction(async (tx) => await insertMessages(tx, accountId, messages, now, false));
-}
-
-/**
- * Record mail found in the inbox that Mild had not seen, read for a look that decides nothing (what a rule would do), so it
- * is not read again. Out of the triage queue, as the copy's mail is: going through the inbox or applying a rule decides it.
- */
-export async function recordFound(db: Sql, accountId: string, messages: readonly MessageFacts[], now: number): Promise<void> {
-  await db.transaction(async (tx) => await insertMessages(tx, accountId, messages, now, false, true));
-}
-
-/**
- * Record mail an inbox run found that Mild had not seen. It does not move the sync cursor. `suggestOnly`
- * when the run only suggests, so a pass that decides it first never carries it out either. Returns how many were not already known.
- */
-export async function recordFromInbox(
-  db: Sql,
-  accountId: string,
-  messages: readonly MessageFacts[],
-  suggestOnly: boolean,
-  now: number = Date.now(),
-): Promise<number> {
-  return await db.transaction(async (tx) => await insertMessages(tx, accountId, messages, now, suggestOnly));
 }

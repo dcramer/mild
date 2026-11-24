@@ -1,7 +1,7 @@
 import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { triageAccount } from '../src/work/triage.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw } from './fixtures.ts';
 import { examplesFor } from '../src/store/examples.ts';
 import { deriveFacts, factLine } from '../src/triage/facts.ts';

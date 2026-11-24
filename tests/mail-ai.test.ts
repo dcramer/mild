@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { askMail } from '../src/learn/mail.ts';
 import { createMailAsker } from '../src/model/ask.ts';
 import { loadKeyring } from '../src/secrets.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { ASK_TOOL, type MailAsker, readMailFilter } from '../src/triage/mail-ask.ts';
 import { FIND_TOOL } from '../src/triage/rule-draft.ts';
 import { personWith, raw } from './fixtures.ts';

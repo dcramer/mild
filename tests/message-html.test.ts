@@ -5,7 +5,7 @@ import { FRAME_SCRIPT } from '../src/dashboard/frame-script.ts';
 import { INK, cleanHtml, isLetter, mailDocument } from '../src/dashboard/mail-html.ts';
 import { FRAME_POLICY, IMAGES_FRAME_POLICY } from '../src/dashboard/policy.ts';
 import { readContent } from '../src/gmail/body.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { readBodies } from '../src/store/query.ts';
 import { people } from '../src/store/people.ts';
 import type { Sql } from '../src/store/sql.ts';

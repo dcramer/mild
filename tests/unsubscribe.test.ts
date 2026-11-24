@@ -4,7 +4,7 @@ import { reconcile, undo } from '../src/actions/executor.ts';
 import { RETRY_AFTER_MS, unsubscribe } from '../src/actions/unsubscribe.ts';
 import { isPublicAddress } from '../src/public-address.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { getAction, insertPendingAction } from '../src/store/actions.ts';
 import { connectGmail, fakeGoogle, openUserDb, raw } from './fixtures.ts';
 import { ACCOUNT, everything, facts } from './helpers.ts';

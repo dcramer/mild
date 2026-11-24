@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { suggestAddresses } from '../src/dashboard/queries/addresses.ts';
-import { recordSync } from '../src/store/accounts.ts';
+import { recordSync } from '../src/store/messages.ts';
 import { addressesDue, fillAddresses } from '../src/store/addresses.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { openUserDb, raw } from './fixtures.ts';
