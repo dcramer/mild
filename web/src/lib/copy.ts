@@ -6,6 +6,7 @@ import { type MailConversation, type SyncPage, type SyncedConversation, api } fr
 import { onWrite } from './api/client.ts';
 import { type Sealed, device, seal, unseal } from './device.ts';
 import { timed } from './trace.ts';
+import { idle } from './utils.ts';
 
 /**
  * The page's copy of the person's inbox (docs/sync.md): every conversation with a message in it, kept in this browser
@@ -217,7 +218,7 @@ async function load(markReady: () => void) {
   timed("Copy's first screen", 'mild.copy', start, { rows: first.length });
   markReady();
   // The rest once the first screen is drawn, which would otherwise wait on it.
-  await new Promise((idle) => ('requestIdleCallback' in window ? requestIdleCallback(idle, { timeout: 1000 }) : setTimeout(idle)));
+  await idle();
   start = performance.now();
   const read = new Set(first.map((r) => r.key));
   const all = db.transaction('conversations');

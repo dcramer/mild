@@ -1,5 +1,15 @@
-import { QueryCache, QueryClient, environmentManager, keepPreviousData, onlineManager, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  QueryCache,
+  QueryClient,
+  environmentManager,
+  keepPreviousData,
+  onlineManager,
+  useInfiniteQuery,
+  useQuery,
+} from '@tanstack/react-query';
 import { useContext, useSyncExternalStore } from 'react';
+import { keptReads, readName } from '../kept.ts';
 import { Mailbox } from '../narrowed.ts';
 import { Refused, Unreachable, narrow } from './client.ts';
 import { keys } from './keys.ts';
@@ -40,6 +50,12 @@ export function useOnline(): boolean {
   );
 }
 
+/** What this device last kept of a read, drawn while Mild is asked: out of date, so it always is. */
+const kept = <T>(queryKey: readonly unknown[]) => ({
+  initialData: () => keptReads.get(readName(queryKey))?.value as T | undefined,
+  initialDataUpdatedAt: 0,
+});
+
 export interface Loaded<T> {
   data: T | null;
   error: string | null;
@@ -62,9 +78,11 @@ export interface Loaded<T> {
 export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Promise<T>, refreshMs = 30_000, mailbox?: string): Loaded<T> {
   const under = useContext(Mailbox);
   const narrowed = mailbox ?? under;
+  // All mailboxes is the key alone, as the device keeps the frame under it (`web/src/lib/device.ts`).
+  const queryKey = narrowed ? [key, narrowed] : [key];
   const query = useQuery({
-    // All mailboxes is the key alone, as the device keeps the frame under it (`web/src/lib/device.ts`).
-    queryKey: narrowed ? [key, narrowed] : [key],
+    queryKey,
+    ...kept<T>(queryKey),
     queryFn: ({ signal }) => {
       if (narrowed) narrow(signal, narrowed);
       return fetcher(signal);
@@ -140,8 +158,10 @@ export function usePages<T extends { next: string | null }>(
   refreshMs = 60_000,
 ): Pages<T> {
   const narrowed = useContext(Mailbox);
+  const queryKey = narrowed ? [key, narrowed] : [key];
   const query = useInfiniteQuery({
-    queryKey: narrowed ? [key, narrowed] : [key],
+    queryKey,
+    ...kept<InfiniteData<T, string>>(queryKey),
     queryFn: ({ pageParam, signal }) => {
       if (narrowed) narrow(signal, narrowed);
       return fetcher(pageParam, signal);
