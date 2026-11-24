@@ -4,7 +4,6 @@ import { createSift, runKey } from '../src/sift/sift.ts';
 import { loadConfig } from '../src/config.ts';
 import { fromHere } from '../src/cli/network.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import type { RunOptions } from '../src/work/run.ts';
 import { startInboxRuns } from '../src/store/inbox-runs.ts';
 import { listAccounts } from '../src/store/accounts.ts';
 import { recordSync } from '../src/store/messages.ts';
@@ -12,7 +11,7 @@ import { people } from '../src/store/people.ts';
 import { setModel } from '../src/store/preferences.ts';
 import type { Store } from '../src/store/store.ts';
 import { connectGmail, fakeGoogle, googleSignIn, onePerson, startDashboard } from './fixtures.ts';
-import { ACCOUNT, codeSignIn, tempDir, testModel, workDue } from './helpers.ts';
+import { ACCOUNT, codeSignIn, tempDir, workDue, runOptions, unsureModel } from './helpers.ts';
 
 const fake = fakeGoogle();
 
@@ -66,12 +65,7 @@ describe('a flow whose steps reach different instances', () => {
     const ephemeral = memoryEphemeral();
     await recordSync(db, ACCOUNT, [], fake.google.mailbox(ACCOUNT).cursor());
     // Each instance builds its own options; only the store and the ephemeral store are shared.
-    const instance = (): RunOptions => ({
-      ephemeral,
-      log: () => {},
-      model: async () => testModel(),
-      connect: () => connectGmail(fake.google),
-    });
+    const instance = () => runOptions({ ephemeral, model: unsureModel, connect: () => connectGmail(fake.google) });
     await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10, now: 0 });
     await workDue(store, instance(), Infinity);
     await workDue(store, instance(), Infinity);

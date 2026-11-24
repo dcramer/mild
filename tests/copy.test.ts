@@ -9,11 +9,11 @@ import type { Store } from '../src/store/store.ts';
 import { copyProgress } from '../src/store/copies.ts';
 import { copyMail, copyQuery } from '../src/work/copy.ts';
 import { pruneOld } from '../src/work/retention.ts';
-import { type RunOptions, dueWork, runOnce } from '../src/work/run.ts';
+import { dueWork, runOnce } from '../src/work/run.ts';
 import { syncAccount, syncWants } from '../src/work/sync.ts';
 import type { Mail } from './google.ts';
 import { connectGmail, fakeGoogle, firstAccount, onePerson, raw } from './fixtures.ts';
-import { ACCOUNT, DAY, facts, testModel } from './helpers.ts';
+import { ACCOUNT, DAY, facts, testModel, runOptions } from './helpers.ts';
 
 const NOW = 2000 * DAY;
 const YEAR = 365 * DAY;
@@ -163,12 +163,7 @@ describe('copying a mailbox for Inbox', () => {
 
   it('is one a mailbox, each due as a piece of its own while Inbox is on', async () => {
     ({ store, db } = await onePerson(ACCOUNT, 'me@work.example.org'));
-    const options: RunOptions = {
-      ephemeral: memoryEphemeral(),
-      connect: (_db, account) => connectGmail(fake.google, account.id),
-      log: () => {},
-      now: () => NOW,
-    };
+    const options = runOptions({ connect: (_db, account) => connectGmail(fake.google, account.id), now: () => NOW });
     const copying = async () => (await dueWork(store, options, [db.person!])).filter((w) => w.kind === 'copy');
     expect(await copying()).toEqual([]);
     await setMail(db, true, { now: NOW });

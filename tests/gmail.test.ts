@@ -4,7 +4,7 @@ import { pullChanges, toFacts } from '../src/gmail/sync.ts';
 import { addMailbox, setMailboxAliases } from '../src/store/accounts.ts';
 import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw } from './fixtures.ts';
 import type { FakeGmail, Mail } from './google.ts';
-import { ACCOUNT, DAY, rawMessage } from './helpers.ts';
+import { ACCOUNT, DAY, rawMessage, HOUR } from './helpers.ts';
 import { parseAddressList } from '../src/triage/features.ts';
 import { RATE_LIMITED, type GmailMethod } from './google.ts';
 
@@ -214,8 +214,6 @@ describe('parseAddressList', () => {
     expect(parseAddressList('undisclosed-recipients:;, a@example.com').map((a) => a.address)).toEqual(['a@example.com']);
   });
 });
-
-const HOUR = 3_600_000;
 
 /** The person's database, its mailbox's cursor where Gmail's history is now. */
 async function synced(box: FakeGmail) {

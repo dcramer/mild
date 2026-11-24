@@ -4,13 +4,12 @@ import { PROPOSAL_TOOL } from '../../src/prompts/proposal.ts';
 import { type Browser, fauxModel } from '../fixtures.ts';
 import { ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
-import { toolReply } from '../helpers.ts';
+import { toolReply, PITCHES } from '../helpers.ts';
 
 const { fake, start } = theApp();
 
 type Label = { id: string; name: string; disposition: string; markRead: boolean; gmailLabel: string | null; rules: number };
 const labelsOf = async (b: Browser) => (await b.call('GET', '/api/manage')).body['labels'] as Label[];
-const PITCHES = { why: 'fewer pitches', name: 'Cold outreach', description: 'Pitches from strangers.', action: 'archive', markRead: false, unsubscribe: true };
 const BUILDS = {
   why: 'builds only when one fails',
   name: 'Build results',

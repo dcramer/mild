@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { RETENTION_DAYS, pruneOld } from '../src/work/retention.ts';
 import { READ_KEEP_DAYS } from '../src/store/kept.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
-import { type RunOptions, type Work, dueWork, runWork } from '../src/work/run.ts';
+import { type Work, dueWork, runWork } from '../src/work/run.ts';
 import { upkeep } from '../src/work/upkeep.ts';
 import { applyFeedback } from '../src/learn/feedback.ts';
 import { pendingSuggestions } from '../src/store/suggestions.ts';
@@ -15,7 +15,7 @@ import { addRule } from '../src/store/rules.ts';
 import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { modelRun, raw, onePerson, superuser } from './fixtures.ts';
-import { ACCOUNT, DAY, facts, workDue } from './helpers.ts';
+import { ACCOUNT, DAY, facts, workDue, runOptions } from './helpers.ts';
 import type { Store } from '../src/store/store.ts';
 
 const OLD = 10 * DAY;
@@ -153,18 +153,14 @@ describe('daily upkeep', () => {
   });
 });
 
+/** Upkeep reaches no mailbox. */
+const unconnected = () => Promise.reject(new Error('not connected'));
+
 describe('retention', () => {
   it('runs on the first tick of a day', async () => {
     const logs: string[] = [];
     const ephemeral = memoryEphemeral();
-    const at = (now: number): RunOptions => ({
-      ephemeral,
-      connect: () => {
-        throw new Error('not connected');
-      },
-      log: (line) => logs.push(line),
-      now: () => now,
-    });
+    const at = (now: number) => runOptions({ ephemeral, connect: unconnected, log: (line) => logs.push(line), now: () => now });
     await acted('first');
     await workDue(store, at(NOW), Infinity);
     // Something else grows old after the first prune: it stays until the next day.
@@ -181,12 +177,7 @@ describe('retention', () => {
 
   it('that fails is said in the log, and is due again at the next tick', async () => {
     const logs: string[] = [];
-    const options: RunOptions = {
-      ephemeral: memoryEphemeral(),
-      connect: () => Promise.reject(new Error('not connected')),
-      log: (line) => logs.push(line),
-      now: () => NOW,
-    };
+    const options = runOptions({ connect: unconnected, log: (line) => logs.push(line), now: () => NOW });
     const pg = await superuser();
     await pg.exec('REVOKE DELETE ON examples FROM sift_app');
     try {
@@ -199,7 +190,7 @@ describe('retention', () => {
   });
 
   it('is done once a day, however many runs begin it', async () => {
-    const options: RunOptions = { ephemeral: memoryEphemeral(), connect: () => Promise.reject(new Error('not connected')), log: () => {}, now: () => NOW };
+    const options = runOptions({ connect: unconnected, now: () => NOW });
     const piece: Work = { kind: 'upkeep', person: db.person! };
     await acted('first');
     await runWork(store, piece, options, Infinity);
@@ -210,7 +201,7 @@ describe('retention', () => {
   });
 
   it('is due again when it was found due and never run', async () => {
-    const options: RunOptions = { ephemeral: memoryEphemeral(), connect: () => Promise.reject(new Error('not connected')), log: () => {}, now: () => NOW };
+    const options = runOptions({ connect: unconnected, now: () => NOW });
     const upkeepDue = async () => (await dueWork(store, options)).filter((work) => work.kind === 'upkeep');
     expect(await upkeepDue()).toHaveLength(1);
     expect(await upkeepDue()).toHaveLength(1);

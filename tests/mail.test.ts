@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MAX_BODY_CHARS } from '../src/gmail/body.ts';
-import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { openPart } from '../src/store/content.ts';
 import { setMail } from '../src/store/preferences.ts';
@@ -8,7 +7,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { type RunOptions, runOnce } from '../src/work/run.ts';
 import { syncAccount } from '../src/work/sync.ts';
 import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw } from './fixtures.ts';
-import { ACCOUNT, DAY, testModel } from './helpers.ts';
+import { ACCOUNT, DAY, testModel, runOptions } from './helpers.ts';
 
 const NOW = Date.UTC(2026, 10, 19, 12);
 const fake = fakeGoogle();
@@ -58,13 +57,7 @@ describe('a recorded message’s labels', () => {
 });
 
 describe('the text Inbox keeps', () => {
-  const options = (more: Partial<RunOptions> = {}): RunOptions => ({
-    ephemeral: memoryEphemeral(),
-    connect: () => gmail,
-    log: () => {},
-    now: () => NOW,
-    ...more,
-  });
+  const options = (more: Partial<RunOptions> = {}) => runOptions({ connect: () => gmail, now: () => NOW, ...more });
   const kept = async () =>
     (await raw(db).all<{ message_id: string; body_text: string }>('SELECT message_id, body_text FROM mail_bodies ORDER BY message_id')).map((r) => ({
       id: r.message_id,

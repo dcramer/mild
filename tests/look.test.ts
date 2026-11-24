@@ -18,9 +18,7 @@ import { signInEnds, signedIn } from '../src/store/accounts.ts';
 import { recordSync } from '../src/store/messages.ts';
 import type { FakeGmail } from './google.ts';
 import { connectGmail, fakeGoogle, onePerson, raw } from './fixtures.ts';
-import { ACCOUNT, DAY, storeExample, testModel, workDue } from './helpers.ts';
-
-const MINUTE = 60_000;
+import { ACCOUNT, DAY, storeExample, workDue, MINUTE, runOptions, unsureModel } from './helpers.ts';
 
 const fake = fakeGoogle();
 
@@ -47,13 +45,8 @@ function arrive(id: string, from: string, sent = clock) {
   gmail.deliver({ id, from, to: ACCOUNT, text: `Body ${id}`, at: sent });
 }
 
-const options = (more: Partial<RunOptions> = {}): RunOptions => ({
-  ephemeral,
-  connect: () => connectGmail(fake.google, ACCOUNT, { token }),
-  log: () => {},
-  now: () => clock,
-  ...more,
-});
+const options = (more: Partial<RunOptions> = {}) =>
+  runOptions({ ephemeral, connect: () => connectGmail(fake.google, ACCOUNT, { token }), now: () => clock, ...more });
 
 /** Whether the timed tick, a minute on, begins a piece of this kind. */
 async function timedTickBegins(kind: Work['kind'], more: Partial<RunOptions> = {}): Promise<boolean> {
@@ -68,8 +61,6 @@ async function timedTickSlices(more: Partial<RunOptions> = {}): Promise<number[]
   clock += MINUTE;
   return (await dueWork(store, options(more))).flatMap((piece) => (piece.kind === 'inbox' ? [piece.run] : []));
 }
-
-const unsure = async () => testModel();
 
 const decision = (disposition: Decision['disposition']): Decision => ({ disposition, subscription: 'preserve', stage: 'rules', reason: 'a rule' });
 
@@ -155,7 +146,7 @@ describe('the timed tick', () => {
   });
 
   it('begins one for mail waiting to be decided only while there is a model to decide it', async () => {
-    expect(await timedTickPasses({ model: unsure })).toBe(true);
+    expect(await timedTickPasses({ model: unsureModel })).toBe(true);
     expect(await timedTickPasses({ model: async () => null })).toBe(false);
   });
 
@@ -387,17 +378,17 @@ describe('going through an inbox, applying a rule to it, and a test run', () => 
   it('the timed tick begins an inbox run’s next slice only while there is a model, and the sign-in has not expired', async () => {
     await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10, now: clock });
     expect(await timedTickBegins('inbox')).toBe(false);
-    expect(await timedTickBegins('inbox', { model: unsure })).toBe(true);
+    expect(await timedTickBegins('inbox', { model: unsureModel })).toBe(true);
     signInEnded();
     expect(await timedTickPasses()).toBe(false);
-    expect(await timedTickBegins('inbox', { model: unsure })).toBe(false);
+    expect(await timedTickBegins('inbox', { model: unsureModel })).toBe(false);
   });
 
   it('the timed tick begins a test run’s next slice only while there is a model', async () => {
     await storeExample(db, ACCOUNT, { id: 'ex', from: 'ada@example.org', label: 'personal' });
     await startEval({ db, model: 'test/model' }, { accountId: ACCOUNT, fewShot: false });
     expect(await timedTickBegins('eval')).toBe(false);
-    expect(await timedTickBegins('eval', { model: unsure })).toBe(true);
+    expect(await timedTickBegins('eval', { model: unsureModel })).toBe(true);
   });
 
   it('the timed tick begins a slice applying a rule without a model, beside going through the inbox once there is one, and neither while the sign-in has expired', async () => {
@@ -406,10 +397,10 @@ describe('going through an inbox, applying a rule to it, and a test run', () => 
     await startInboxRuns(db, [ACCOUNT], { acts: true, most: 10, now: clock, ruleId });
     const applying = (await goingInboxRuns(db)).find((run) => run.ruleId === ruleId)!.id;
     expect(await timedTickSlices()).toEqual([applying]);
-    expect(await timedTickSlices({ model: unsure })).toHaveLength(2);
+    expect(await timedTickSlices({ model: unsureModel })).toHaveLength(2);
     signInEnded();
     expect(await timedTickPasses()).toBe(false);
-    expect(await timedTickSlices({ model: unsure })).toEqual([]);
+    expect(await timedTickSlices({ model: unsureModel })).toEqual([]);
   });
 
   it('a slice applying a rule needs no model, and the look then begins the pass that carries out what it decided', async () => {

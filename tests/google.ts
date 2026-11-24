@@ -14,6 +14,7 @@ import { http, HttpResponse } from 'msw/http';
 import { setupServer } from 'msw/node';
 import type { clientFor } from '../src/gmail/auth.ts';
 import { GMAIL_SCOPES, SEND_SCOPE } from '../src/gmail/scopes.ts';
+import { DAY_MS } from '../src/time.ts';
 
 type Part = gmail_v1.Schema$MessagePart;
 type Header = { name: string; value: string };
@@ -213,8 +214,6 @@ const hasAttachment = (part: Part): boolean => Boolean(part.filename) || (part.p
 /** A Gmail search Mild's fake cannot read the way Gmail would. */
 class QueryError extends Error {}
 
-const DAY = 86_400_000;
-
 /** Gmail's search, as far as the fake reads it: a test of one message. */
 function searchOf(query: string, gmail: FakeGmail): (m: Stored) => boolean {
   const tokens = query.match(/-?(?:[\w.]+:)?(?:\([^)]*\)|"[^"]*"|[^\s{}()]+)|[{}()]/g) ?? [];
@@ -275,7 +274,7 @@ function searchOf(query: string, gmail: FakeGmail): (m: Stored) => boolean {
       case 'older_than': {
         const span = /^(\d+)([dmy])$/.exec(rawValue);
         if (!span) throw new QueryError(token);
-        const ms = Number(span[1]) * { d: DAY, m: 30 * DAY, y: 365 * DAY }[span[2] as 'd' | 'm' | 'y'];
+        const ms = Number(span[1]) * { d: DAY_MS, m: 30 * DAY_MS, y: 365 * DAY_MS }[span[2] as 'd' | 'm' | 'y'];
         return (m) => (name === 'newer_than' ? m.internalDate > gmail.now() - ms : m.internalDate <= gmail.now() - ms);
       }
       default:

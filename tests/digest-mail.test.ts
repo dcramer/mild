@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type Digest, type DigestEntry, LISTED, toRfc822, writeDigest } from '../src/digest/mail.ts';
+import { HOUR } from './helpers.ts';
 
-const HOUR = 3_600_000;
 const until = Date.UTC(2026, 10, 18, 15, 0);
 
 const entry = (

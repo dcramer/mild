@@ -22,7 +22,7 @@ import { MAX_ATTEMPTS, startRun } from '../src/store/runs.ts';
 import { listProposals } from '../src/store/proposals.ts';
 import { addRule, listRules } from '../src/store/rules.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
-import { ACCOUNT, UNSURE, everything, facts, testModel, workDue } from './helpers.ts';
+import { ACCOUNT, UNSURE, everything, facts, testModel, workDue, runOptions, unsureModel } from './helpers.ts';
 import { listSuggestions } from '../src/dashboard/queries/suggestions.ts';
 import { RATE_LIMITED } from './google.ts';
 
@@ -62,15 +62,7 @@ const connect: RunOptions['connect'] = (_db, account) => {
   return connectGmail(fake.google, account.id);
 };
 
-/** A model that can place nothing. Mail Mild asks about comes from a model's "unsure"; with no model, nothing is asked. */
-const unsure = async () => testModel();
-
-const options = (): RunOptions => ({
-  ephemeral: memoryEphemeral(),
-  connect,
-  log: (line) => logs.push(line),
-  now: () => 5000,
-});
+const options = () => runOptions({ connect, log: (line) => logs.push(line), now: () => 5000 });
 /** The person's database, with Mild on or off for them. */
 const active = async (on: boolean) => {
   await setActive(db, on);
@@ -90,7 +82,7 @@ beforeEach(async () => {
 describe('runOnce', () => {
   it('is off by default: records what it would do and changes nothing', async () => {
     await addRule(db, { match: { fromDomain: ['example.com'] }, labelId: 'newsletter' }, 'user');
-    await runOnce(db, { ...options(), model: unsure });
+    await runOnce(db, { ...options(), model: unsureModel });
 
     expect(await decisions()).toMatchObject([
       { message_id: 'ada', stage: 'model', disposition: 'review', carry_out: false, outcome: null },
@@ -174,7 +166,7 @@ describe('runOnce', () => {
   });
 
   it('leaves mail it could not place in the inbox as it was, with no label of its own', async () => {
-    await runOnce(await active(true), { ...options(), model: unsure });
+    await runOnce(await active(true), { ...options(), model: unsureModel });
     expect(labelNames('ada')).toEqual(['INBOX', 'UNREAD']);
     expect(await decisions()).toContainEqual(expect.objectContaining({ message_id: 'ada', disposition: 'review', carry_out: true, outcome: 'none' }));
   });
@@ -191,8 +183,8 @@ describe('runOnce', () => {
 
   it('decides each message once, however many passes run', async () => {
     await addRule(db, { match: { from: ['news@example.com'] }, labelId: 'newsletter' }, 'user');
-    await runOnce(await active(true), { ...options(), model: unsure });
-    await runOnce(await active(true), { ...options(), model: unsure });
+    await runOnce(await active(true), { ...options(), model: unsureModel });
+    await runOnce(await active(true), { ...options(), model: unsureModel });
     expect(await decisions()).toHaveLength(2);
     expect(box.asked('users.messages.modify')).toHaveLength(1);
     expect(logs).toHaveLength(1);
@@ -254,7 +246,7 @@ describe('a tick', () => {
     const own = await store.user(newcomer);
     let connected = 0;
     await startInboxRuns(own, [NEW], { acts: false, most: 10, now: 0 });
-    const counting: RunOptions = { ...options(), model: unsure, connect: (own, account) => (connected++, connect(own, account)) };
+    const counting: RunOptions = { ...options(), model: unsureModel, connect: (own, account) => (connected++, connect(own, account)) };
     expect(await workDue(store, counting, Infinity, [newcomer])).toEqual([]);
     expect(connected).toBe(0);
     await addLabels(own, [{ name: 'Pitches', description: 'From strangers.', disposition: 'archive' }]);
@@ -316,7 +308,7 @@ describe('a tick', () => {
 
   it('goes through an inbox it was asked to, until it is all done', async () => {
     await startInboxRuns(db, [ACCOUNT], { acts: false, most: 10, now: 0 });
-    const reading: RunOptions = { ...options(), model: unsure };
+    const reading: RunOptions = { ...options(), model: unsureModel };
     await workDue(store, reading, Infinity);
     await workDue(store, reading, Infinity);
     expect(searchedInbox()).toEqual(['']);
@@ -548,7 +540,7 @@ describe('teaching from Gmail', () => {
 
   it('skips mail Mild could not place unless the user gave it a Mild label', async () => {
     await raw(db).run('DELETE FROM rules');
-    await runOnce(await active(true), { ...options(), now: () => clock, model: unsure });
+    await runOnce(await active(true), { ...options(), now: () => clock, model: unsureModel });
     clock += 1000;
     expect(await latest('news')).toMatchObject({ disposition: 'review', label_id: null });
     box.change('news', { remove: ['INBOX'] });
@@ -651,7 +643,7 @@ describe('Gmail filters', () => {
 describe('triage queue', () => {
   it('loses each message as it is decided, by its record and by its decisions', async () => {
     inbox = [inbox[0]!];
-    await runOnce(await active(false), { ...options(), model: unsure });
+    await runOnce(await active(false), { ...options(), model: unsureModel });
     expect(await raw(db).all('SELECT id, decided FROM messages')).toEqual([{ id: 'news', decided: true }]);
     // As code from before the record said so left it.
     await raw(db).run('UPDATE messages SET decided = false');

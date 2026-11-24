@@ -7,13 +7,10 @@ import { connectAccount } from '../src/store/accounts.ts';
 import { latestLabelProposal } from '../src/store/labels.ts';
 import { MAX_DRAFTS, PROPOSAL_TOOL, type Proposer, buildProposalPrompt, readProposal } from '../src/prompts/proposal.ts';
 import { freshStore, raw, fauxModel } from './fixtures.ts';
-import { toolReply } from './helpers.ts';
+import { toolReply, ACCOUNT, PITCHES } from './helpers.ts';
 
 const reportError = vi.hoisted(() => vi.fn());
 vi.mock('../src/telemetry.ts', async (actual) => ({ ...(await actual<object>()), reportError }));
-
-const ACCOUNT = 'me@example.com';
-const PITCHES = { why: 'fewer pitches', name: 'Cold outreach', description: 'Pitches from strangers.', action: 'archive', markRead: false, unsubscribe: true };
 
 describe('what the model suggests', () => {
   const readDrafts = (args: unknown, labels: { name: string; description: string }[]) => readProposal(args, labels)?.drafts ?? null;

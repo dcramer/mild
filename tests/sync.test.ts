@@ -6,9 +6,8 @@ import { setMail } from '../src/store/preferences.ts';
 import { conversationChanges, eq, messages } from '../src/store/query.ts';
 import { headOf, pruneGone } from '../src/store/changes.ts';
 import { onePerson, raw } from './fixtures.ts';
-import { ACCOUNT, facts } from './helpers.ts';
+import { ACCOUNT, facts, DAY } from './helpers.ts';
 
-const DAY = 86_400_000;
 const scope = scopeFor([ACCOUNT], true);
 
 async function inboxOf(...threads: string[]) {

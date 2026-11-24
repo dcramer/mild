@@ -5,9 +5,9 @@ import { copyQuery } from '../src/work/copy.ts';
 import { inboxQuery } from '../src/work/apply.ts';
 import { connectGmail, fakeGoogle } from './fixtures.ts';
 import { SECRETS } from './google.ts';
+import { DAY } from './helpers.ts';
 
 const ME = 'me@example.org';
-const DAY = 86_400_000;
 const AT = Date.UTC(2026, 10, 1, 12);
 
 const fake = fakeGoogle();
