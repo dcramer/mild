@@ -1,6 +1,6 @@
 'use client';
 import { type ComponentProps, type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { RowActive, useLayerMoves, useOnPage, useShortcut } from './keys.tsx';
 import { Control, ControlBar } from './controls.tsx';
 import { Tooltip } from './tooltip.tsx';

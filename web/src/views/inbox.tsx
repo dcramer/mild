@@ -19,8 +19,10 @@ import { useShown } from '@/lib/telemetry.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { useStarted } from '@/lib/started.ts';
 import { useAction, useHidden } from '@/components/action.ts';
-import { MOVES_OUT, count, inboxFirst, period, sureness } from '@/lib/format.ts';
-import { messageKey, proposalKey, setParams, threadKey, useParam } from '@/lib/params.ts';
+import { MOVES_OUT, inboxFirst, sureness } from '@/lib/words.ts';
+import { count, period } from '@/lib/format.ts';
+import { messageKey, proposalKey, threadKey } from '@/lib/rows.ts';
+import { setParams, useParam } from '@/lib/params.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
 import {

@@ -1,5 +1,5 @@
 import type { RuleMatch, RuleSummary } from './api/endpoints.ts';
-import { type FactAnswer, INBOX, factAnswers, factWords } from './format.ts';
+import { type FactAnswer, INBOX, factAnswers, factWords } from './words.ts';
 
 /** A kind of condition the rule dialog holds a value for. `from` takes an address or a domain. */
 export type By = 'from' | 'fromName' | 'fromNameContains' | 'listId' | 'to' | 'subjectContains';

@@ -4,7 +4,7 @@ import { type LabelProposal, api } from '@/lib/api/endpoints.ts';
 import { useAction } from '@/components/action.ts';
 import { type Suggestion, SuggestionList, keepWord, keptLabels, suggestionOf } from '@/components/label-suggestions.tsx';
 import { DescribeStep } from '@/components/describe.tsx';
-import { ACTIONS, type ActionKey, EXPLAIN } from '@/lib/format.ts';
+import { ACTIONS, type ActionKey, EXPLAIN } from '@/lib/words.ts';
 import { ActionIcon, Button, Check, Code, Dialog, Failure, Field, Form, Input, Note, Select, TextArea } from '@/system';
 import { reveal } from '@/lib/reveal.ts';
 

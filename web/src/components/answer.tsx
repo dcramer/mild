@@ -2,8 +2,9 @@
 import { api } from '@/lib/api/endpoints.ts';
 import { useAction } from './action.ts';
 import { copiedKey, leftInbox } from '@/lib/copy.ts';
-import { ACTIONS, INBOX, MOVES_OUT, labelDid, plural } from '@/lib/format.ts';
-import { messageKey, threadKey } from '@/lib/params.ts';
+import { ACTIONS, INBOX, MOVES_OUT, labelDid } from '@/lib/words.ts';
+import { plural } from '@/lib/format.ts';
+import { messageKey, threadKey } from '@/lib/rows.ts';
 import { type Did, Does, Meter, type Pick, useToast } from '@/system';
 
 /** A message whose label the user can say, as the list and the panel both hold it. */

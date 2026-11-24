@@ -12,7 +12,7 @@ import { type MailboxChoice, MailboxSwitch } from './mailbox.tsx';
 import { Avatar, type MenuItem } from './menu.tsx';
 import type { NavItem } from './rail.tsx';
 import { Wordmark } from './type.tsx';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 
 /**
  * The phone's top bar's own room, where a list puts its search: given by what draws the bar (the dashboard), `null` until

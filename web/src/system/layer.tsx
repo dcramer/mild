@@ -3,7 +3,7 @@ import { Dialog as Base } from '@base-ui/react/dialog';
 import { XIcon } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { whenSettled } from '@/lib/params.ts';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 
 // What a Panel and a Dialog share, so the two read as one kind of thing: the same dimming behind, the
 // same header, the same gutters, the same footer. Not exported from the system: use Panel or Dialog.

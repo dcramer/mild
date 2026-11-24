@@ -7,7 +7,7 @@ import { gatherEvidence } from '../src/work/evidence.ts';
 import { FACT_FILTERS as FACT_FILTER_CONDITIONS } from '../src/dashboard/types.ts';
 import { RULE_FACTS, deriveFacts, describeFacts, factCondition, matchesFacts, threadFacts } from '../src/triage/facts.ts';
 import { sealFacts } from '../src/store/content.ts';
-import { FACTS, FACT_FILTER_WORDS } from '../web/src/lib/format.ts';
+import { FACTS, FACT_FILTER_WORDS } from '../web/src/lib/words.ts';
 import { ACCOUNT, everything, facts } from './helpers.ts';
 
 const fake = fakeGoogle();

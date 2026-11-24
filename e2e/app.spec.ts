@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { STARTUP_SCREENS, startupImage } from '../web/src/lib/startup.ts';
+import { STARTUP_SCREENS, startupImage } from '../web/src/lib/startup-images.ts';
 import {
   back,
   boxOf,

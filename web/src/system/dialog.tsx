@@ -2,7 +2,7 @@
 import { Dialog as Base } from '@base-ui/react/dialog';
 import type { ReactNode } from 'react';
 import { useBackCloses } from '@/lib/params.ts';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { KeyLayer } from './keys.tsx';
 import { Backdrop, LayerContent, LayerFooter, useLayerOpen } from './layer.tsx';
 import { AboveToasts } from './toast.tsx';

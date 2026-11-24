@@ -5,20 +5,8 @@ import { ErrorNote } from '@/components/bits.tsx';
 import { MailLog } from '@/components/mail-log.tsx';
 import { type Days, type DecisionRow, type Summary, api } from '@/lib/api/endpoints.ts';
 import { paramNow, setParams, useParam } from '@/lib/params.ts';
-import {
-  FACT_FILTER_OPTIONS,
-  HANDLED,
-  PERIODS,
-  count,
-  duration,
-  inboxFirst,
-  labelSeries,
-  factFilterName,
-  longDay,
-  money,
-  moneyTick,
-  shortDay,
-} from '@/lib/format.ts';
+import { FACT_FILTER_OPTIONS, HANDLED, PERIODS, inboxFirst, labelSeries, factFilterName } from '@/lib/words.ts';
+import { count, duration, longDay, money, moneyTick, shortDay } from '@/lib/format.ts';
 import { Empty, Figure, Figures, FilterGroup, ListView, Pager, Reserve, Select, Share, StackedBars, TextLink, useToast } from '@/system';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { PhoneSiftStatus } from '@/components/status.tsx';

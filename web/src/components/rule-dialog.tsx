@@ -19,7 +19,7 @@ import {
   factWords,
   inboxFirst,
   outcomeName,
-} from '@/lib/format.ts';
+} from '@/lib/words.ts';
 import { Button, Check, Dialog, Does, Failure, Field, FieldGroup, Form, Input, Note, Select, useToast } from '@/system';
 import { useFilterOffer } from './gmail-filter.tsx';
 import { DescribeStep } from '@/components/describe.tsx';

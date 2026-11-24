@@ -4,8 +4,8 @@ import { Fragment, useState } from 'react';
 import { SenderName } from '@/components/sender.tsx';
 import { useAction } from './action.ts';
 import { press as outbox } from '@/lib/outbox.ts';
-import { outcomeName, sureness } from '@/lib/format.ts';
-import { threadKey } from '@/lib/params.ts';
+import { outcomeName, sureness } from '@/lib/words.ts';
+import { threadKey } from '@/lib/rows.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { type Did, Meter, useToast } from '@/system';
 

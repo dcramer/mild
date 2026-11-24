@@ -2,7 +2,7 @@
 import { Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
-import { GoThroughInbox, InboxRow, timeLeft } from '@/components/inbox.tsx';
+import { GoThroughInbox, InboxRow, timeLeft } from '@/components/go-through-inbox.tsx';
 import { count } from '@/lib/format.ts';
 import { MailWindowDialog, TurnInboxOn, windowName } from '@/components/inbox-switch.tsx';
 import { ProviderList, pressOf, providerName, useProviderConnect } from '@/components/model-connect.tsx';

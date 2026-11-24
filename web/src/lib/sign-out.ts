@@ -2,7 +2,7 @@ import { api } from './api/endpoints.ts';
 import { forgetDevice } from './device.ts';
 import { forgetDrafts } from './compose.ts';
 import { chooseMailbox } from './mailbox.ts';
-import { START } from './start.ts';
+import { START } from './opens-on.ts';
 
 /** How long sign-out waits for presses still on their way. */
 const SEND_MS = 5000;

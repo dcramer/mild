@@ -1,7 +1,7 @@
 'use client';
 import { DownloadIcon, PaperclipIcon, XIcon } from 'lucide-react';
 import { useRef } from 'react';
-import { size } from '@/lib/format';
+import { size } from '@/lib/format.ts';
 import { Button } from './button.tsx';
 import { Failure } from './note.tsx';
 import { Tooltip } from './tooltip.tsx';

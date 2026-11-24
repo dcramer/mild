@@ -6,7 +6,8 @@ import { type LabelSummary } from '@/lib/api/endpoints.ts';
 import { useOpened } from '@/lib/params.ts';
 import { AddLabelsDialog } from '@/components/label-fields.tsx';
 import { LabelPanel, weak } from './label-panel.tsx';
-import { INBOX, count, percent } from '@/lib/format.ts';
+import { INBOX } from '@/lib/words.ts';
+import { count, percent } from '@/lib/format.ts';
 import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
 import { useManage } from '@/lib/api/reads.ts';
 

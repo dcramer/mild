@@ -14,9 +14,11 @@ import { type Confidential, type MailConversation, type MessageDetail, type Rule
 import { changeLoaded, useLoaded } from '@/lib/api/query.ts';
 import { conversationOf, conversations, copied, copiedKey } from '@/lib/copy.ts';
 import { type Writing, closeReply, useCompose, writing } from '@/lib/compose.ts';
-import { capitalised, count, dateTime, money, outcomeName, sureness, tier } from '@/lib/format.ts';
+import { capitalised, count, dateTime, money } from '@/lib/format.ts';
+import { outcomeName, sureness, tier } from '@/lib/words.ts';
 import type { MessageRef } from '@/lib/open-messages.ts';
-import { messageKey, useParam } from '@/lib/params.ts';
+import { messageKey } from '@/lib/rows.ts';
+import { useParam } from '@/lib/params.ts';
 import { AT_API_PRICES, usePlan } from '@/lib/prices.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { keepStart, messageStart, standingStart } from '@/lib/rule-start.ts';

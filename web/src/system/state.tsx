@@ -1,6 +1,6 @@
 'use client';
 import { type ReactNode, useEffect, useId, useRef } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { Table, Tr } from './table.tsx';
 
 /**

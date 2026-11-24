@@ -2,7 +2,7 @@
 import { Select as Base } from '@base-ui/react/select';
 import { CheckIcon, ChevronDownIcon, PlusIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils.ts';
 import { Button } from './button.tsx';
 
 /**
