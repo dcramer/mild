@@ -8,7 +8,7 @@ import { AddLabelsDialog } from '@/components/label-fields.tsx';
 import { LabelPanel, weak } from './label-panel.tsx';
 import { INBOX } from '@/lib/words.ts';
 import { count, percent } from '@/lib/format.ts';
-import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr } from '@/system';
+import { Heads, Blank, Button, Empty, ListView, Look, Section, Share, Sub, Table, Td, Th, Tr, Loading } from '@/system';
 import { useManage } from '@/lib/api/reads.ts';
 
 /** What Mild does with a label's mail, as the page groups it: blocking is marking spam, and more. */
@@ -144,5 +144,27 @@ export function LabelsView({ loading: loadingRows }: { loading: ReactNode }) {
         />
       ) : null}
     </ListView>
+  );
+}
+
+/** Labels' rows while they load. */
+export function LabelsLoading() {
+  return (
+    <Loading>
+      <Td className="max-w-0">
+        <span className="name">
+          <Blank />
+        </span>
+        <Sub>
+          <Blank />
+        </Sub>
+      </Td>
+      <Td phone="hide" className="w-48">
+        <Blank />
+      </Td>
+      <Td phone="hide" num className="w-28">
+        <Blank word />
+      </Td>
+    </Loading>
   );
 }

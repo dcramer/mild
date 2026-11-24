@@ -1,7 +1,7 @@
 'use client';
 import { ArrowRightIcon } from 'lucide-react';
 import { useState } from 'react';
-import { SiftStatus, UsageDetail } from '@/components/status.tsx';
+import { MildStatus, UsageDetail } from '@/components/status.tsx';
 import {
   BarSlot,
   Heads,
@@ -90,7 +90,7 @@ export function Pages({ search, setSearch }: { search: string; setSearch: (searc
             <Rail
               current="system"
               items={NAV}
-              aside={<SiftStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} stacked />}
+              aside={<MildStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} stacked />}
               mailbox={mailboxes}
               account={account}
               compose={() => {}}
@@ -110,7 +110,7 @@ export function Pages({ search, setSearch }: { search: string; setSearch: (searc
             <Masthead
               current="system"
               items={NAV}
-              aside={<SiftStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} />}
+              aside={<MildStatus accounts={SPECIMEN_ACCOUNTS} usage={USAGE} plan={null} />}
               detail={<UsageDetail usage={USAGE} plan={null} />}
               mailbox={mailboxes}
               account={account}

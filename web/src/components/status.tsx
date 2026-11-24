@@ -1,10 +1,9 @@
 'use client';
 import { RefreshCwIcon } from 'lucide-react';
 import { type ManageState, type Usage } from '@/lib/api/endpoints.ts';
-import { approx, atApiPrices, usePlan } from '@/lib/prices.ts';
+import { approx, atApiPrices } from '@/lib/prices.ts';
 import { dateTime, duration, money } from '@/lib/format.ts';
 import { Ago, Figure, Figures, HoverCard, Spark, Tooltip, useNow } from '@/system';
-import { useManage, useUsage } from '@/lib/api/reads.ts';
 
 type Accounts = ManageState['accounts'];
 /** The way in to the model when it is a subscription, whose plan pays for the calls: the sums are API prices. */
@@ -51,7 +50,7 @@ export function UsageDetail({ usage, plan }: { usage: Usage; plan: Plan }) {
  * what the model cost over 30 days, which previews the rest and links to Activity. `stacked` for the rail, too narrow
  * for a line.
  */
-export function SiftStatus({ accounts, usage, plan, stacked = false }: { accounts: Accounts; usage: Usage | null; plan: Plan; stacked?: boolean }) {
+export function MildStatus({ accounts, usage, plan, stacked = false }: { accounts: Accounts; usage: Usage | null; plan: Plan; stacked?: boolean }) {
   // `ago` reads the clock itself.
   useNow(30_000);
   const synced = accounts.flatMap((a) => (a.lastSyncedAt === null ? [] : [{ email: a.email, at: a.lastSyncedAt }]));
@@ -79,17 +78,5 @@ export function SiftStatus({ accounts, usage, plan, stacked = false }: { account
         </>
       ) : null}
     </span>
-  );
-}
-
-/** Mild's line on Activity, where what it counts is, on a phone, whose bar has no room for it. Its room is held while it loads. */
-export function PhoneSiftStatus() {
-  const manage = useManage();
-  const usage = useUsage();
-  const plan = usePlan();
-  return (
-    <p className="mb-4 flex h-5 items-center text-sm text-muted-foreground md:hidden">
-      {manage.data ? <SiftStatus accounts={manage.data.accounts} usage={usage.data} plan={plan} /> : null}
-    </p>
   );
 }
