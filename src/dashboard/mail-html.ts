@@ -54,8 +54,10 @@ const NEVER = new Set(['formaction', 'action', 'ping', 'srcdoc', 'target', 'rel'
 
 /**
  * A frame's `prefers-color-scheme` is the reader's system's, whatever the frame or the page around it declares, so mail
- * with dark styles of its own (Google Calendar's invitations) would draw them on the white paper. Gmail shows mail as
- * written for light, and so does Mild: `grid` is 0 on every screen, so `(grid:1)` never matches and `(grid:0)` always does.
+ * with dark styles of its own (Google Calendar's invitations) would draw them on the white paper. Mail is cleaned as
+ * written for light, which is how it shows if the frame's script never runs or the reader asks for its original colours;
+ * the script swaps the two as it darkens (`FRAME_SCRIPT`). `grid` is 0 on every screen, so `(grid:1)` never matches and
+ * `(grid:0)` always does.
  */
 const COLOR_SCHEME = /prefers-color-scheme\s*:\s*(dark|light)\b/gi;
 const asLight = (css: string) => css.replace(COLOR_SCHEME, (_, scheme: string) => (scheme.toLowerCase() === 'dark' ? 'grid:1' : 'grid:0'));
@@ -229,12 +231,13 @@ const quotePill = (ink: string, rest: string, fill: string) =>
 const LETTER = `<style>:root{color-scheme:dark;background:transparent;color:${INK.foreground};font:17px/1.625 ui-sans-serif,system-ui,sans-serif;overflow-wrap:break-word}${OWN_HEIGHT}body{margin:0}body *{color:inherit!important;background-color:transparent!important;font-family:inherit!important;border-color:${INK.border}!important}body :is(pre,code,tt,kbd,samp){font-family:ui-monospace,monospace!important}a{text-decoration:underline;text-decoration-color:rgb(240 238 232/.35);text-underline-offset:.2em}a:hover{text-decoration-color:currentColor}body blockquote{margin:0 0 0 .25em!important;padding:0 0 0 1em!important;border-left:2px solid ${INK.border}!important;color:${INK.muted}!important}${quotePill(INK.foreground, 'rgb(240 238 232/.75)', 'rgb(240 238 232/.1)')}</style>`;
 
 /**
- * Mail with a design of its own, on the white paper it is written for. On a frame narrower than mail is written for, a
+ * Mail with a design of its own, on the white paper it is written for, which the frame's script darkens unless the reader
+ * asked for its original colours (`data-sift-paper` is how it knows this is paper, not a letter). On a frame narrower than mail is written for, a
  * full-width table is laid out to the frame's width rather than its content's, so a 600px card inside it marked
  * `max-width: 100%` shrinks as its sender meant: in a table sized by its content, a percentage resolves against nothing
  * and the card keeps its 600px. Mail that still does not fit is scaled down by `FRAME_SCRIPT`.
  */
-const PAPER = `<style>:root{color-scheme:light;background:#fff;color:#000;overflow-wrap:break-word;scrollbar-width:thin}${OWN_HEIGHT}@media (max-width:640px){table[width="100%"]{table-layout:fixed}}${quotePill('#000', 'rgb(0 0 0/.6)', 'rgb(0 0 0/.07)')}</style>`;
+const PAPER = `<style data-sift-paper>:root{color-scheme:light;background:#fff;color:#000;overflow-wrap:break-word;scrollbar-width:thin}${OWN_HEIGHT}@media (max-width:640px){table[width="100%"]{table-layout:fixed}}${quotePill('#000', 'rgb(0 0 0/.6)', 'rgb(0 0 0/.07)')}</style>`;
 
 const SCRIPT = `<script>${FRAME_SCRIPT}</script>`;
 

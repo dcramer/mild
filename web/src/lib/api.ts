@@ -283,7 +283,7 @@ export const api = {
     ),
   /** A message by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
   message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
-  /** Where a frame loads a message as the HTML Mild holds for it; `images` once the reader asked for its images. */
+  /** Where a frame loads a message as the HTML Mild holds for it; `images` once the reader asked for its images, `original` for a design in its own colours. */
   /** One of a message's files, fetched from Gmail through Mild, to save. */
   file: async (accountId: string, messageId: string, part: string): Promise<Blob> => {
     const query = new URLSearchParams({ id: messageId, part, mailbox: accountId });
@@ -291,8 +291,8 @@ export const api = {
     if (!response.ok) throw new Refused(response.status, await reason(response));
     return await response.blob();
   },
-  messageHtml: (id: string, mailbox: string, images: boolean) =>
-    `/api/message/html?${new URLSearchParams(images ? { id, mailbox, images: '1' } : { id, mailbox })}`,
+  messageHtml: (id: string, mailbox: string, images: boolean, original: boolean) =>
+    `/api/message/html?${new URLSearchParams(images ? { id, mailbox, images: '1' } : { id, mailbox })}${original ? '#original' : ''}`,
   /** Everyone the person has mail from, newest first, a page at a time. */
   contacts: (q: ContactQuery, signal: AbortSignal) => get<ContactPage>('/api/contacts', { ...q }, signal),
   /** `name` lists only their mail under that name. */

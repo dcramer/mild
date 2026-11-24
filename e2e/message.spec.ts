@@ -197,11 +197,11 @@ test.describe('A message read as part of the page', () => {
     await expect(open.getByRole('button', { name: 'Hide the quoted text' })).toHaveAttribute('aria-expanded', 'true');
   });
 
-  test('designed mail is on its paper, as tall as it is, so the page scrolls as one', async ({ page }) => {
+  test('designed mail is darkened to the dashboard’s ground, as tall as it is, so the page scrolls as one', async ({ page }) => {
     await page.goto(DEALS);
     const frame = mailFrame(page, '48 hours only: 30% off');
     await expect(frame.getByRole('heading', { name: '30% off everything' })).toBeVisible();
-    await expect(frame.locator('html')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(frame.locator('html')).toHaveCSS('background-color', DARK_GROUND);
     await frameMisfit(page, '48 hours only: 30% off').toBeLessThanOrEqual(1);
   });
 });
@@ -220,18 +220,53 @@ const replyAs = (page: Page, html: string) =>
 const ASKED = 'Shall we meet at the lake?';
 const REPLIED = 'Works for me.';
 
-test.describe('Designed mail on a system set to dark', () => {
-  test.use({ colorScheme: 'dark' });
+/** White, darkened by the frame's script: the dashboard's ground. */
+const DARK_GROUND = 'rgb(17, 17, 17)';
 
-  test('is drawn as written for light, not with its own dark styles on the paper', async ({ page }) => {
-    await replyAs(
-      page,
-      '<style>p{color:#3c4043}@media (prefers-color-scheme: dark){p{color:#e8eaed}}</style><table width="600"><tr><td><p>When</p></td></tr></table>',
-    );
+/** The invitation's grey "organizer" (#70757a), which its dark styles miss, lightened over their dark card. */
+const LIGHTENED = 'rgb(185, 190, 195)';
+
+/** Google Calendar's invitation, as it is written: dark styles of its own that miss some of its text. */
+const INVITATION =
+  '<style>.card{background:#fff;color:#3c4043}@media (prefers-color-scheme: dark){.card{background:#202124!important;color:#e8eaed!important}}</style>' +
+  '<table width="600" class="card"><tr><td><p>When</p><p style="color:#70757a">organizer</p>' +
+  '<a href="https://meet.example.com/abc" style="background:#1a73e8;color:#fff">Join with Meet</a></td></tr></table>';
+
+test.describe('Designed mail', () => {
+  test('is darkened with its own dark styles, and what they miss is lightened; its pictures and colours stay', async ({ page }) => {
+    await replyAs(page, INVITATION);
     await page.goto(RELEASE);
     const frame = mailFrame(page, RELEASE_SUBJECT);
+    await expect(frame.locator('html')).toHaveCSS('background-color', DARK_GROUND);
+    await expect(frame.locator('table')).toHaveCSS('background-color', 'rgb(32, 33, 36)');
+    await expect(frame.getByText('When')).toHaveCSS('color', 'rgb(232, 234, 237)');
+    await expect(frame.getByText('organizer')).toHaveCSS('color', LIGHTENED);
+    await expect(frame.getByRole('link', { name: 'Join with Meet' })).toHaveCSS('background-color', 'rgb(26, 115, 232)');
+    await expect(frame.getByRole('link', { name: 'Join with Meet' })).toHaveCSS('color', 'rgb(255, 255, 255)');
+  });
+
+  test('is shown in its original colours, on white, from its ⋮ menu, and darkened again', async ({ page }) => {
+    await replyAs(page, INVITATION);
+    await page.goto(RELEASE);
+    const frame = mailFrame(page, RELEASE_SUBJECT);
+    await expect(frame.locator('html')).toHaveCSS('background-color', DARK_GROUND);
+    await reader(page).getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Show original colours' }).click();
     await expect(frame.locator('html')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await expect(frame.getByText('When')).toHaveCSS('color', 'rgb(60, 64, 67)');
+    await expect(frame.getByText('organizer')).toHaveCSS('color', 'rgb(112, 117, 122)');
+    await reader(page).getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Show darkened' }).click();
+    await expect(frame.getByText('When')).toHaveCSS('color', 'rgb(232, 234, 237)');
+    await expect(frame.getByText('organizer')).toHaveCSS('color', LIGHTENED);
+  });
+
+  test('that is a letter has no colours of its own to show', async ({ page }) => {
+    await page.goto(RELEASE);
+    await expect(mailFrame(page, RELEASE_SUBJECT).locator('body')).toBeVisible();
+    await reader(page).getByRole('button', { name: 'More' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Show as text' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Show original colours' })).toHaveCount(0);
   });
 });
 
