@@ -7,7 +7,7 @@ import { openEnvelope, traceIds } from '../store/content.ts';
 import { finishAction, insertPendingAction, lastUnsubscribeFailure, unsubscribedAt } from '../store/actions.ts';
 import { bulkSignals, passedDmarc } from '../triage/features.ts';
 import { traced } from '../telemetry.ts';
-import { isPublicAddress } from '../public-address.ts';
+import { isPublicAddress } from './public-address.ts';
 import { plain } from '../plain.ts';
 
 export type UnsubscribeOutcome =

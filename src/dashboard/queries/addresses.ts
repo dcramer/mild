@@ -1,7 +1,6 @@
-import { wordsOf } from '../../search.ts';
 import { ADDRESS_PREFIX, openAddress } from '../../store/addresses.ts';
 import { addresses, and, desc, sql } from '../../store/query.ts';
-import { mayHold } from '../../store/search.ts';
+import { mayHold, wordsOf } from '../../store/search.ts';
 import type { Sql } from '../../store/sql.ts';
 import { plain, seal } from '../../plain.ts';
 import { type Scope, within } from '../scope.ts';

@@ -3,7 +3,6 @@ import { listThreads } from '../src/dashboard/queries/mail.ts';
 import { scopeFor } from '../src/dashboard/scope.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import { plain } from '../src/plain.ts';
-import { indexTerms, matches, searchOf, wordsOf } from '../src/search.ts';
 import { loadKeyring } from '../src/secrets.ts';
 import { rekeyContent, sealPart } from '../src/store/content.ts';
 import { dropTextBefore } from '../src/store/copies.ts';
@@ -11,7 +10,7 @@ import { indexKept, keepText, recordKept, searchDue } from '../src/store/kept.ts
 import { recordLabels, recordSync } from '../src/store/messages.ts';
 import { setMail } from '../src/store/preferences.ts';
 import { mailBodies } from '../src/store/query.ts';
-import { searchedWords } from '../src/store/search.ts';
+import { searchedWords, indexTerms, matches, searchOf, wordsOf } from '../src/store/search.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { runOnce } from '../src/work/run.ts';
 import { connectGmail, fakeGoogle, freshStore, personWith, raw } from './fixtures.ts';
