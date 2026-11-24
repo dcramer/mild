@@ -13,9 +13,13 @@ test.describe('Inbox by touch, on a phone', () => {
     const id = await idOf(page, 'Your order has shipped');
     await swipe(row(page, 'Your order has shipped'), -380);
     await expect(row(page, 'Your order has shipped')).toHaveCount(0);
-    // Above Compose, which floats at the foot of the list.
-    const [note, compose] = [await boxOf(toast(page, 'Your order has shipped')), await boxOf(page.getByRole('button', { name: 'Compose' }))];
-    expect(note.y + note.height).toBeLessThanOrEqual(compose.y);
+    // Just above the tab bar, as a mail app's, and Compose rises over it rather than lifting it up the screen.
+    const note = await boxOf(toast(page, 'Your order has shipped'));
+    const tabs = await boxOf(page.getByRole('navigation', { name: 'Sections' }));
+    expect(tabs.y - (note.y + note.height)).toBeGreaterThan(0);
+    expect(tabs.y - (note.y + note.height)).toBeLessThanOrEqual(17);
+    const compose = await boxOf(page.getByRole('button', { name: 'Compose' }));
+    expect(compose.y + compose.height).toBeLessThanOrEqual(note.y);
     await toast(page, 'Your order has shipped').getByRole('button', { name: /^Undo/ }).tap();
     await expect(row(page, 'Your order has shipped')).toBeVisible();
     expect(sift.google().mailbox('me@example.org').message(id)!.labelIds).toContain('INBOX');
@@ -24,6 +28,22 @@ test.describe('Inbox by touch, on a phone', () => {
     await dismiss(page, 'Your order has shipped');
     await expect.poll(() => sift.google().mailbox('me@example.org').message(id)!.labelIds).not.toContain('INBOX');
     await expect(row(page, 'Your order has shipped')).toHaveCount(0);
+  });
+
+  test('the top edge is the page’s own colour, solid and fixed, so iOS extends it rather than blurring the search bar', async ({ page }) => {
+    await page.goto('/inbox');
+    await expect(page.getByRole('row').first()).toBeVisible();
+    const cover = page.locator('.status-cover');
+    const box = await boxOf(cover);
+    expect(box).toMatchObject({ x: 0, y: 0, width: 390 });
+    expect(box.height).toBeGreaterThan(10);
+    await expect(cover).toHaveCSS('position', 'fixed');
+    await expect(cover).toHaveCSS('background-color', 'rgb(17, 17, 16)');
+    // What a touch at the edge hits, as iOS asks, at rest and scrolled.
+    expect(await page.evaluate('document.elementFromPoint(195, 4).className')).toBe('status-cover');
+    await page.mouse.wheel(0, 600);
+    await expect.poll(() => page.evaluate('scrollY')).toBeGreaterThan(0);
+    expect(await page.evaluate('document.elementFromPoint(195, 4).className')).toBe('status-cover');
   });
 
   test('a finger drawn in from the left edge opens the menu, as the menu button does', async ({ page }) => {

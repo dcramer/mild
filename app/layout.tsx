@@ -9,7 +9,7 @@ import { Providers } from '@/providers.tsx';
 export const metadata: Metadata = {
   title: { default: 'Mild', template: '%s · Mild' },
   icons: { icon: { url: '/icons/icon.svg', type: 'image/svg+xml' }, apple: '/icons/apple-touch-icon.png' },
-  // Installed on an iPhone: the page is drawn under the status bar, in its own colour (`--safe-top`, web/src/index.css).
+  // Installed on an iPhone: the page is drawn under the status bar, in its own colour (`.status-cover`, web/src/index.css).
   appleWebApp: {
     capable: true,
     title: 'Mild',
@@ -28,6 +28,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <script>{BEFORE_PAINT}</script>
       </head>
       <body>
+        <div aria-hidden className="status-cover" />
         <Providers>{children}</Providers>
       </body>
     </html>

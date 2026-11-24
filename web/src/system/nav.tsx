@@ -329,8 +329,8 @@ export function FloatingPress({
   const reason = useId();
   const explained = disabled && why !== undefined;
   return (
-    // From the foot of the screen, so toasts rise above it as above the tab bar.
-    <AboveToasts className="pointer-events-none fixed right-[max(1rem,var(--safe-right))] bottom-0 z-20 pb-[calc(5rem+var(--safe-bottom))] md:hidden [html:has([data-searching])_&]:hidden">
+    // A toast sits just above the tab bar, across the screen, so this rises over it while one shows, as a mail app's does.
+    <div className="pointer-events-none fixed right-[max(1rem,var(--safe-right))] bottom-[calc(5rem+var(--safe-bottom))] z-20 translate-y-[calc(-1*(var(--toasts-tall,0px)+min(var(--toasts-tall,0px),1rem)))] transition-transform duration-200 ease-out motion-reduce:transition-none md:hidden [html:has([data-searching])_&]:hidden">
       <button
         type="button"
         aria-label={label}
@@ -346,6 +346,6 @@ export function FloatingPress({
           {why}
         </span>
       ) : null}
-    </AboveToasts>
+    </div>
   );
 }

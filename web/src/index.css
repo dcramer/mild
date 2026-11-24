@@ -381,15 +381,24 @@
     line-height: var(--text-base--line-height);
     -webkit-font-smoothing: antialiased;
   }
-  /* The status bar is drawn over the page in the installed app: what scrolls under it is covered by the page's own
-     colour, as if it stopped at the bar. */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0 0 auto;
-    z-index: 40;
-    height: var(--safe-top);
-    background: var(--background);
+  /* The top edge of a touch screen, solid in the page's own colour. Installed on an iPhone, the page is drawn under the
+     status bar, and what scrolls under it is covered as if it stopped at the bar. And iOS 26 blurs about 40pt down from
+     the top of an installed web app over whatever is there (the search bar at rest) unless a fixed, full-width box with
+     one solid colour, more than about 10px tall and hit by a touch there, is at the edge: then it extends that colour
+     instead. A real element, since a touch on a pseudo-element hits its parent, which is not fixed. iOS 26.1 and later
+     start the page below the status bar, so the inset is 0 and the box is its least height. */
+  .status-cover {
+    display: none;
+  }
+  @media (pointer: coarse) {
+    .status-cover {
+      display: block;
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 40;
+      height: max(var(--safe-top), 12px);
+      background: var(--background);
+    }
   }
   /* Focus is a highlighter outline, the same yellow that marks what needs you. In this layer so that a part's
      `outline-none` wins: a menu, a select's list and their items show focus by their fill instead. */

@@ -69,16 +69,27 @@ function Done({ did: [first, ...also] }: { did: readonly [Did, ...Did[]] }) {
  * the other however long the words. A new one replaces the last, so Undo (and Z, Gmail's key for it) always
  * takes back the latest. It floats as a menu does, framed with the one shadow, and Undo is in the
  * highlighter: it is the one thing on it waiting on the reader. On a wide screen it sits in the bottom right,
- * and on a phone across the bottom, at the edge; while a panel or dialog is open it rises above its footer
- * (`AboveToasts`), so Previous, Next and Save stay pressable. Each has a close button. A failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in
+ * and on a phone across the bottom, just above the tab bar, with Compose rising above it; while a panel or dialog is open
+ * it rises above its footer (`AboveToasts`), so Previous, Next and Save stay pressable. Each has a close button. A failure is set on red, with dark words as on the highlighter, and stays until dismissed. Wrap the app in
  * `Toaster` once; call `useToast()` where something is done.
  */
 export function Toaster({ children }: { children: ReactNode }) {
+  // How tall the toasts showing are, for what floats over the same corner to rise above them (`FloatingPress`, nav.tsx).
+  // A ref of its own, since the portal mounts the viewport after the Toaster.
+  const shown = (viewport: HTMLDivElement | null) => {
+    if (!viewport) return;
+    const observer = new ResizeObserver(() => document.documentElement.style.setProperty('--toasts-tall', `${viewport.offsetHeight}px`));
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  };
   return (
     <Base.Provider limit={3} timeout={0}>
       {children}
       <Base.Portal>
-        <Base.Viewport className="pointer-events-none fixed inset-x-4 bottom-[calc(var(--toasts-above,0px)+1rem)] z-[60] mb-(--safe-bottom) flex flex-col-reverse items-center gap-2 outline-none md:inset-x-auto md:right-6 md:bottom-[calc(var(--toasts-above,0px)+1.5rem)] md:items-end">
+        <Base.Viewport
+          ref={shown}
+          className="pointer-events-none fixed inset-x-4 bottom-[calc(max(var(--toasts-above,0px),var(--safe-bottom))+1rem)] z-[60] flex flex-col-reverse items-center gap-2 outline-none md:inset-x-auto md:right-6 md:bottom-[calc(max(var(--toasts-above,0px),var(--safe-bottom))+1.5rem)] md:items-end"
+        >
           <Receipts />
         </Base.Viewport>
       </Base.Portal>
