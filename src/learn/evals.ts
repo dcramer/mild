@@ -13,7 +13,7 @@ import { score } from '../triage/score.ts';
 import { type Evidence, type Judge, type JudgeFailure, describeFailure } from '../triage/stages/model.ts';
 import type { MessageFacts } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
-import { plain, seal } from '../plain.ts';
+import { plain, held } from '../plain.ts';
 import type { EvalDetail } from '../dashboard/types.ts';
 
 /** Every example judged is a model call the user pays for, so one run is bounded. */
@@ -226,7 +226,7 @@ async function results(db: Sql, runId: number): Promise<EvalResult[]> {
     .orderBy(evalResults.messageId);
   return rows.map(({ accountId, ...r }) => {
     const opened = openEnvelope(db, accountId, r.messageId, r);
-    return { ...opened, fromAddress: opened.fromAddress ?? seal<string>(''), subject: opened.subject ?? seal<string>('') };
+    return { ...opened, fromAddress: opened.fromAddress ?? held<string>(''), subject: opened.subject ?? held<string>('') };
   });
 }
 

@@ -10,7 +10,7 @@ import { listDecisions } from './decisions.ts';
 import { listRuleSummaries } from './rules.ts';
 import { keptOut, saved } from './saved.ts';
 import { forExactly, givenBy } from './contacts.ts';
-import { plain, seal } from '../../plain.ts';
+import { plain, held } from '../../plain.ts';
 import { isCurrent, ofMessage } from '../../store/decisions.ts';
 
 /** How much of an address's mail the names are read from. Each name is in its message's encrypted headers, so each is opened in Mild. */
@@ -67,7 +67,7 @@ async function namesOf(
       .toSorted((a, b) => b.messages - a.messages || b.lastSeenAt - a.lastSeenAt)
       .map(({ labels, actions, name, ...n }) => ({
         ...n,
-        name: seal(name),
+        name: held(name),
         labels: [...labels].toSorted(([, a], [, b]) => b - a).map(([id, messages]) => ({ id, name: labelNames.get(id) ?? id, messages })),
         actions: [...actions].toSorted(([, a], [, b]) => b - a).map(([action, messages]) => ({ action, messages })),
       })),
@@ -100,7 +100,7 @@ async function profileOf(db: Sql, scope: Scope, who: { address: string } | { dom
       when: r.when,
     }));
   return {
-    address: seal('address' in who ? who.address : who.domain),
+    address: held('address' in who ? who.address : who.domain),
     contact: known.contact,
     given: givenBy(rules.find((r) => forExactly(r, who)) ?? null),
     messages: known.messages,
@@ -118,7 +118,7 @@ async function profileOf(db: Sql, scope: Scope, who: { address: string } | { dom
     answers: known.answers,
     userHasWritten: known.userHasWritten,
     labels: known.labels.map((l) => ({ id: l.id, name: names.get(l.id) ?? l.id, messages: l.messages })),
-    domain: ofDomain ? { name: seal(domainName), contact: ofDomain.contact } : null,
+    domain: ofDomain ? { name: held(domainName), contact: ofDomain.contact } : null,
     rules,
   };
 }
@@ -174,7 +174,7 @@ export async function senderPage(
   const senders = writing.map((s) => ({ ...s, lastSeenAt: s.lastSeenAt!, contact: known.get(plain(s.address)) ?? null }));
   return {
     kind: 'address' in who ? 'sender' : 'domain',
-    name: seal(named?.newest ?? null),
+    name: held(named?.newest ?? null),
     profile,
     names: named?.names ?? [],
     senders,

@@ -2,7 +2,7 @@ import type { Sql } from '../src/store/sql.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type RunOptions, runOnce } from '../src/work/run.ts';
 import { FILTER_CHECK_MINUTES } from '../src/work/filters.ts';
-import { startInboxRuns } from '../src/store/inbox.ts';
+import { startInboxRuns } from '../src/store/inbox-runs.ts';
 import type { Store } from '../src/store/store.ts';
 import type { Mailbox } from '../src/actions/mailbox.ts';
 import { undo } from '../src/actions/executor.ts';

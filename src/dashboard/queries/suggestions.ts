@@ -1,6 +1,6 @@
 import { and, count, decisions, eq, inArray, isNotNull, mailBodies, messages as messageRows, not, readBodies } from '../../store/query.ts';
 import { noDecision } from '../../store/messages.ts';
-import { goingInboxRuns } from '../../store/inbox.ts';
+import { goingInboxRuns } from '../../store/inbox-runs.ts';
 import { outOfTries } from '../../store/runs.ts';
 import type { Sql } from '../../store/sql.ts';
 import { accuracy, pendingSuggestions } from '../../learn/feedback.ts';
@@ -13,7 +13,7 @@ import { contacts } from '../../store/senders.ts';
 import { type Scope, sees, within } from '../scope.ts';
 import { FACT_FILTERS, type FactFilter, type SuggestionDetail, type SuggestionItem, type Suggestions } from '../types.ts';
 import { outcomeOf } from './labels.ts';
-import { plain, seal } from '../../plain.ts';
+import { plain, held } from '../../plain.ts';
 import type { Confidential } from '../../confidential.ts';
 import { isCurrent, ofMessage } from '../../store/decisions.ts';
 
@@ -109,7 +109,7 @@ export async function listSuggestions(db: Sql, scope: Scope, options: { includeK
       .where(and(within(scope, table.accountId), inArray(table.messageId, ids))))
       previews.set(
         `${r.accountId}\n${r.messageId}`,
-        seal(
+        held(
           plain(openPart(db, r.accountId, r.messageId, 'text', r.text))!
             .slice(0, 400)
             .replace(/\s+/g, ' ')

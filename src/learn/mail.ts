@@ -1,5 +1,5 @@
 import { listLabels } from '../store/labels.ts';
-import { finishAsk, startAsk } from '../store/mail-calls.ts';
+import { finishAsk, startAsk } from '../store/asks.ts';
 import type { Sql } from '../store/sql.ts';
 import type { MailAnswer, MailAsker } from '../prompts/mail-ask.ts';
 import { recordedAsk } from './recorded.ts';

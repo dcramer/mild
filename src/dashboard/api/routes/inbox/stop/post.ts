@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { stopInboxRuns } from '../../../../../store/inbox.ts';
+import { stopInboxRuns } from '../../../../../store/inbox-runs.ts';
 import { done, self, write } from '../../../route.ts';
 import { ruleId } from '../../../shared/rules.ts';
 

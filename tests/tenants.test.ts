@@ -15,9 +15,9 @@ import { conditionsHash, sealPart } from '../src/store/content.ts';
 import { mailBodies } from '../src/store/query.ts';
 import { searchIndex } from '../src/store/search.ts';
 import { startEval } from '../src/learn/evals.ts';
-import { startInboxRuns } from '../src/store/inbox.ts';
+import { startInboxRuns } from '../src/store/inbox-runs.ts';
 import * as api from '../src/dashboard/api/index.ts';
-import { seal } from '../src/plain.ts';
+import { held } from '../src/plain.ts';
 
 // Two people. Alpha set Mild up and has two mailboxes; Bravo arrived later with one.
 const ALPHA = 'alpha@example.org';
@@ -160,7 +160,7 @@ beforeEach(async () => {
       calls.push(`inbox ${id}`);
       const owner = Object.keys(ids).find((account) => ids[account]!.rule === id)!;
       return {
-        examples: [{ accountId: owner, messageId: 'g', subject: seal(`Inbox ${MARK[owner]}`), receivedAt: 1 }],
+        examples: [{ accountId: owner, messageId: 'g', subject: held(`Inbox ${MARK[owner]}`), receivedAt: 1 }],
         messages: 1,
         reading: 0,
         exact: true,
@@ -176,9 +176,9 @@ beforeEach(async () => {
       return { year: each, three_years: each, all: each };
     },
     startEval: async (_db, { accountId }) => (calls.push(`eval ${accountId}`), 1),
-    proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal: seal(goal), drafts: [], at: 0 }),
-    draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), seal({ match: { from: ['x@example.com'] }, disposition: 'archive' as const })),
-    askMail: async (_db, { accountId }) => (calls.push(`ask ${accountId}`), seal({ cannot: 'No.' })),
+    proposeLabels: async (_db, { accountId, goal }) => (calls.push(`propose ${accountId}`), { id: 1, goal: held(goal), drafts: [], at: 0 }),
+    draftRule: async (_db, { accountId }) => (calls.push(`draft ${accountId}`), held({ match: { from: ['x@example.com'] }, disposition: 'archive' as const })),
+    askMail: async (_db, { accountId }) => (calls.push(`ask ${accountId}`), held({ cannot: 'No.' })),
     revokeGmail: async (_db, email) => (calls.push(`revoke ${email}`), !unreachable.includes(email)),
     // Whatever is asked for, it would answer with that person's mail: only the route's own check keeps it from the wrong person.
     send: async (_db, { accountId, threadId }) => (calls.push(`send ${accountId} ${threadId}`), { id: 's', threadId: threadId ?? 's' }),

@@ -9,7 +9,7 @@ import type { Config } from '../config.ts';
 import { type Ephemeral, holding } from '../ephemeral/ephemeral.ts';
 import type { Controls } from '../dashboard/controls.ts';
 import { forgetPassStatus, passStatus } from '../work/status.ts';
-import { REACH, modelShare } from '../store/inbox.ts';
+import { REACH, modelShare } from '../store/inbox-runs.ts';
 import { averageCall } from '../store/runs.ts';
 import { hasOwnLabels } from '../store/labels.ts';
 import { EXAMPLES as RULE_EXAMPLES, ruleInbox } from '../work/apply.ts';
@@ -42,7 +42,7 @@ import { preferences } from '../store/preferences.ts';
 import type { Sql } from '../store/sql.ts';
 import { Refusal } from '../refusal.ts';
 import type { StandIns } from './sift.ts';
-import { seal } from '../plain.ts';
+import { held } from '../plain.ts';
 
 const DAY_MS = 86_400_000;
 /** How far back an estimate looks for how much mail went to the model: recent enough to reflect the rules as they are. */
@@ -242,17 +242,17 @@ export async function buildControls(
     proposeLabels: async (db, request) => {
       const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
-      return seal(await proposeLabels({ db, propose: createProposer(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
+      return held(await proposeLabels({ db, propose: createProposer(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
     },
     draftRule: async (db, request) => {
       const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
-      return seal(await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
+      return held(await draftRule({ db, draft: createRuleDrafter(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
     },
     askMail: async (db, request) => {
       const opened = await chosen(db);
       if (!opened) throw new Refusal('Choose a model first.');
-      return seal(await askMail({ db, ask: createMailAsker(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
+      return held(await askMail({ db, ask: createMailAsker(opened.models, opened.model, opened.reasoning), model: opened.spec }, request));
     },
     ruleFilter: async (db, ruleId, on) => {
       // Every mailbox is tried, so one Gmail refusing does not leave the others as they were.
@@ -273,7 +273,7 @@ export async function buildControls(
         const searchInbox: typeof api.searchInbox = async (query) =>
           await counted(`count:rule:${account.number}:${hashOf(db, query)}`, () => api.searchInbox(query));
         const sample = await ruleInbox(db, { ...api, searchInbox }, account.id, ruleId);
-        samples.push({ ...sample, examples: sample.examples.map((m) => ({ accountId: account.id, ...m, subject: seal(m.subject) })) });
+        samples.push({ ...sample, examples: sample.examples.map((m) => ({ accountId: account.id, ...m, subject: held(m.subject) })) });
       }
       const capped = samples.some((s) => s.most !== null);
       return {
@@ -309,7 +309,7 @@ export async function buildControls(
       (await attachmentsOf(db, (await gmail(db, accountId)).api, accountId, messageId)).map(({ part, name, type, size }) => ({
         part,
         size,
-        ...seal({ name, type }),
+        ...held({ name, type }),
       })),
     file: async (db, { accountId, messageId, part }) => await fileOf(db, (await gmail(db, accountId)).api, accountId, messageId, part),
     checkNow: passNow,

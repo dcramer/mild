@@ -29,7 +29,7 @@ import { previewOf } from '../../store/kept.ts';
 import { type Scope, within } from '../scope.ts';
 import { Refusal } from '../../refusal.ts';
 import type { MailConversation, MailThread, MailThreads, MailView } from '../types.ts';
-import { plain, seal } from '../../plain.ts';
+import { plain, held } from '../../plain.ts';
 import type { Confidential } from '../../confidential.ts';
 import { isCurrent } from '../../store/decisions.ts';
 
@@ -207,7 +207,7 @@ export async function listThreads(db: Sql, scope: Scope, query: ThreadQuery): Pr
         threadId: r.threadId,
         subject: newest.subject,
         from: newest.fromAddress,
-        who: seal([...who.values()]),
+        who: held([...who.values()]),
         messageIds: all.map((m) => m.messageId),
         unread: r.unread,
         newestAt: r.newestAt,
@@ -326,7 +326,7 @@ export async function previewsOf(db: Sql, scope: Scope, wanted: readonly (readon
     previews.set(
       key,
       r.preview === null
-        ? seal(previewOf(plain(openPart(db, r.accountId, r.messageId, 'text', r.text) ?? '')))
+        ? held(previewOf(plain(openPart(db, r.accountId, r.messageId, 'text', r.text) ?? '')))
         : openPart(db, r.accountId, r.messageId, 'preview', r.preview)!,
     );
   }

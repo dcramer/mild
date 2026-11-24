@@ -12,7 +12,7 @@ import { type Scope, sees, within } from '../scope.ts';
 import type { MessageDetail } from '../types.ts';
 import { decisionsJoined, toDecisionRow } from './decisions.ts';
 import { senderProfile } from './senders.ts';
-import { plain, seal } from '../../plain.ts';
+import { plain, held } from '../../plain.ts';
 import type { Confidential } from '../../confidential.ts';
 
 /**
@@ -100,15 +100,15 @@ export async function messageDetail(db: Sql, scope: Scope, messageId: string): P
     headers: m.headers,
     body: body?.text ?? null,
     hasHtml: body?.html != null,
-    attachments: files === null ? null : (files ?? []).map(({ part, name, type, size }) => ({ part, size, ...seal({ name, type }) })),
-    facts: { ...facts, listId: seal(facts.listId) },
+    attachments: files === null ? null : (files ?? []).map(({ part, name, type, size }) => ({ part, size, ...held({ name, type }) })),
+    facts: { ...facts, listId: held(facts.listId) },
     unsubscribe: await canUnsubscribe(db, accountId, plain(m.fromAddress), plain(m.headers)),
     sender: (await senderProfile(db, scope, plain(m.fromAddress)))!,
     digest: await digestIn(db, scope, accountId, messageId),
     decisions: shown.map((r) => ({ ...toDecisionRow(db, r), ...costs.get(r.id)! })),
     actions: changes.map(({ payload: stored, ...a }) => {
       const payload = openPayload(db, accountId, stored);
-      const named = (ids: string[]) => seal(ids.map((id) => names[id] ?? gmailWords(id)));
+      const named = (ids: string[]) => held(ids.map((id) => names[id] ?? gmailWords(id)));
       return { ...a, added: named(payload.add), removed: named(payload.remove) };
     }),
   };

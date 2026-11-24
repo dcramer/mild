@@ -5,7 +5,7 @@ import { loadConfig } from '../src/config.ts';
 import { fromHere } from '../src/cli/network.ts';
 import { type Ephemeral, memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
 import type { RunOptions } from '../src/work/run.ts';
-import { startInboxRuns } from '../src/store/inbox.ts';
+import { startInboxRuns } from '../src/store/inbox-runs.ts';
 import { listAccounts } from '../src/store/accounts.ts';
 import { recordSync } from '../src/store/messages.ts';
 import { people } from '../src/store/people.ts';

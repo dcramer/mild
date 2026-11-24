@@ -1,8 +1,8 @@
 import type { Sql } from '../src/store/sql.ts';
 import { setRuleFilter } from '../src/store/filters.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { continueInboxRun } from '../src/work/inbox.ts';
-import { REACH, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox.ts';
+import { continueInboxRun } from '../src/work/inbox-runs.ts';
+import { REACH, goingInboxRuns, inboxProgress, modelShare, startInboxRuns, stopInboxRuns } from '../src/store/inbox-runs.ts';
 import { averageCall } from '../src/store/runs.ts';
 import { finishAction, insertPendingAction } from '../src/store/actions.ts';
 import { memoryEphemeral } from '../src/ephemeral/ephemeral.ts';
@@ -22,7 +22,7 @@ import { addRule, listRules } from '../src/store/rules.ts';
 import { ACCOUNT, DAY, UNSURE, facts, storeExample, testModel, workDue } from './helpers.ts';
 import { type Reply, connectGmail, fakeGoogle, firstAccount, modelRun, raw, startDashboard, onePerson, withReason } from './fixtures.ts';
 import type { Store } from '../src/store/store.ts';
-import { seal } from '../src/plain.ts';
+import { held } from '../src/plain.ts';
 
 const fake = fakeGoogle();
 let db: Sql;
@@ -56,7 +56,7 @@ const controls: Controls = {
   },
   proposeLabels: async (_db, { accountId, goal }) => {
     calls.push(`propose ${accountId}`);
-    return seal({
+    return held({
       id: 3,
       goal,
       drafts: [
@@ -67,11 +67,11 @@ const controls: Controls = {
   },
   draftRule: async (_db, { accountId, goal }) => (
     calls.push(`draft ${accountId} ${goal}`),
-    seal({ match: { fromDomain: ['example.org'] }, disposition: 'archive' as const, note: 'And another.' })
+    held({ match: { fromDomain: ['example.org'] }, disposition: 'archive' as const, note: 'And another.' })
   ),
   askMail: async (_db, { accountId, words, today }) => (
     calls.push(`ask ${accountId} ${words} ${today}`),
-    seal({ filter: { domain: ['example.org'], since: '2026-11-01' }, note: 'Mild does not know what you answered.' })
+    held({ filter: { domain: ['example.org'], since: '2026-11-01' }, note: 'Mild does not know what you answered.' })
   ),
   ruleFilter: async (target, ruleId, on) => {
     calls.push(`filter ${ruleId} ${on ? 'on' : 'off'}`);
@@ -80,7 +80,7 @@ const controls: Controls = {
   ruleInbox: async (_db, ruleId) => (
     calls.push(`inbox ${ruleId}`),
     {
-      examples: [{ accountId: ACCOUNT, messageId: 'g1', subject: seal<string>('Found'), receivedAt: 1 }],
+      examples: [{ accountId: ACCOUNT, messageId: 'g1', subject: held<string>('Found'), receivedAt: 1 }],
       messages: 40,
       reading: 40,
       exact: false,

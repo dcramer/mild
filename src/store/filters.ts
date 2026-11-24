@@ -7,7 +7,7 @@ import { type FilterPlan, type FilterVerdict, filterFor } from '../triage/filter
 import { type RuleMatch } from '../triage/rule.ts';
 import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
-import { plain, seal } from '../plain.ts';
+import { plain, held } from '../plain.ts';
 import type { Sealed } from '../confidential.ts';
 
 /** What became of the Gmail filter Mild wrote for a rule. */
@@ -151,7 +151,7 @@ export async function ruleFilterStatus(db: Sql): Promise<Map<string, RuleFilterS
       filterId: mine.find((r) => r.filterId !== null)?.filterId ?? null,
       possible: verdict.possible,
       reason: verdict.possible ? null : verdict.reason,
-      plan: verdict.possible ? { ...verdict.plan, criteria: seal(verdict.plan.criteria) } : null,
+      plan: verdict.possible ? { ...verdict.plan, criteria: held(verdict.plan.criteria) } : null,
       differs: verdict.possible ? verdict.differs : [],
       checkedAt: mine.reduce<number | null>((at, r) => (at === null || r.checkedAt > at ? r.checkedAt : at), null),
       history: history.get(ruleId) ?? [],

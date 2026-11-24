@@ -6,7 +6,7 @@ import { lastStandingChange } from '../store/actions.ts';
 import { isOwnDigest } from '../store/digests.ts';
 import { currentDecision, recordDecision } from '../store/decisions.ts';
 import { listLabels } from '../store/labels.ts';
-import { REACH } from '../store/inbox.ts';
+import { REACH } from '../store/inbox-runs.ts';
 import { getFacts, markApplying, recordFound } from '../store/messages.ts';
 import { countRuleHit, listRules } from '../store/rules.ts';
 import { cachedCorrespondent } from '../store/senders.ts';
