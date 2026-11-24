@@ -442,7 +442,16 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const threads = listed.filter((t) => !hidden.has(threadKey(t)) && !pressed.has(copiedKey(t.accountId, t.threadId)));
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const chosen = threads.filter((t) => selected.has(threadKey(t)));
-  const { press, block, ruling, stopRuling } = useMailPress();
+  const mail = useMailPress();
+  // The label each row shows, with its own action: Archive and Spam give it, however sure Mild was.
+  const labelled = (rows: readonly Listed[]) =>
+    rows.map((t) => {
+      const label = labels.find((l) => l.id === t.thinks?.labelId);
+      return { ...t, label: label ? { name: label.name, does: label.disposition } : null };
+    });
+  const press = (rows: readonly Listed[], what: 'archive' | 'spam' | 'read' | 'unread', then?: () => void) => mail.press(labelled(rows), what, then);
+  const block = (rows: readonly Listed[], then?: () => void) => mail.block(labelled(rows), then);
+  const { ruling, stopRuling } = mail;
   const act = (what: 'archive' | 'spam' | 'read' | 'unread') => press(chosen, what, () => setSelected(new Set()));
   const proposals = (suggestions.data?.proposals ?? []).filter((p) => !hidden.has(proposalKey(p)));
   const now = useNow();
