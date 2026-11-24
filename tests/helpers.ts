@@ -13,7 +13,8 @@ import { recordDecision } from '../src/store/decisions.ts';
 import { exampleKeysOf, sealPart } from '../src/store/content.ts';
 import type { Judge, Verdict } from '../src/triage/stages/model.ts';
 import type { Address, Label, MessageFacts } from '../src/triage/types.ts';
-import { type PassResult, type RunOptions, dueWork, runWork } from '../src/work/run.ts';
+import { type RunOptions, dueWork, runWork } from '../src/work/run.ts';
+import { type PassResult } from '../src/work/pass.ts';
 import type { Store } from '../src/store/store.ts';
 
 /** The mailbox a test's person signs in with, unless it needs another. */

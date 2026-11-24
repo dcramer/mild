@@ -212,10 +212,10 @@ export async function exampleText(db: Sql, accountId: string, messageId: string)
 /** Read at once, a pass at a time: each is its text decrypted and a few thousand keyed hashes, about 3 ms. */
 const INDEX_BATCH = 100;
 
-/** Text kept before there was a search index or a preview: what the pass fills in. */
+/** Kept text with no search index or preview: what the pass fills in. */
 const unfinished = () => or(isNull(mailBodies.search), isNull(mailBodies.preview));
 
-/** Whether text kept before there was a search index or a preview waits for one. */
+/** Whether kept text waits for a search index or a preview. */
 export async function searchDue(db: Sql, accountId: string): Promise<boolean> {
   const [row] = await db
     .select({ one: sql`1` })
@@ -226,8 +226,7 @@ export async function searchDue(db: Sql, accountId: string): Promise<boolean> {
 }
 
 /**
- * Index, and give a preview to, up to `most` messages whose text was kept before there was a search index or a preview,
- * stopping once `over`. Safe to repeat: each is written only while it has none. Returns how many it went through.
+ * Index, and give a preview to, up to `most` kept messages that have none, stopping once `over`. Safe to repeat: each is written only while it has none. Returns how many it went through.
  */
 export async function indexKept(db: Sql, accountId: string, most: number, over: () => boolean): Promise<number> {
   let done = 0;

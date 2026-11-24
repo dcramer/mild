@@ -27,7 +27,7 @@ What is due:
 
 | Work | Found from | Its run's key |
 | --- | --- | --- |
-| A pass per mailbox | every mailbox with a label of its own: at the timed tick only when a look finds something for it (`passWanted`, `src/work/run.ts`), and whenever its person asks | `pass:<mailbox's number>` |
+| A pass per mailbox | every mailbox with a label of its own: at the timed tick only when a look finds something for it (`passWanted`, `src/work/due.ts`), and whenever its person asks | `pass:<mailbox's number>` |
 | Upkeep per person | `upkeep:<person>:<day>` in `Ephemeral`, claimed when it starts and let go if it fails | `upkeep:<person>` |
 | Going through an inbox, or applying a rule to it, its next slice | `inbox_runs` not finished: at the timed tick only while the mailbox's sign-in has not expired, and, going through the inbox, while the person has a model | `inbox:<mailbox's number>:<run>` |
 | Copying a mailbox for Inbox, its next pages | `mail_copies` not finished, while Inbox is on: at the timed tick only while the mailbox's sign-in has not expired | `copy:<mailbox's number>` |
