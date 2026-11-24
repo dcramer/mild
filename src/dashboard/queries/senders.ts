@@ -3,7 +3,7 @@ import { hashOf, newestOfGroup, openEnvelope, openNewest } from '../../store/con
 import type { Sql } from '../../store/sql.ts';
 import { contacts, domainFacts, senderFacts } from '../../store/senders.ts';
 import { labelNames } from '../../store/labels.ts';
-import { plainName } from '../../triage/stages/rules.ts';
+import { plainName } from '../../triage/rule.ts';
 import { type Scope, within } from '../scope.ts';
 import type { SenderPage, SenderProfile } from '../types.ts';
 import { listDecisions } from './decisions.ts';

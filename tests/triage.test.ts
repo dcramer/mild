@@ -3,7 +3,8 @@ import { bulkSignals, parseAddress } from '../src/triage/features.ts';
 import { triage } from '../src/triage/pipeline.ts';
 import { classifierStage } from '../src/triage/stages/classifier.ts';
 import { deriveFacts } from '../src/triage/facts.ts';
-import { type Rule, describeMatch, readsMessage, rulesStage, settle, specificity } from '../src/triage/stages/rules.ts';
+import { rulesStage, settle } from '../src/triage/stages/rules.ts';
+import { type Rule, describeMatch, readsMessage, specificity } from '../src/triage/rule.ts';
 import { labelled } from '../src/triage/types.ts';
 import { facts, SAMPLE_LABELS } from './helpers.ts';
 

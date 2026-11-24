@@ -1,5 +1,4 @@
-import type { Usage } from './stages/model.ts';
-import { type Label, LEAVE_IN_INBOX_NAME } from './types.ts';
+import { type Label, LEAVE_IN_INBOX_NAME, type Usage } from './types.ts';
 
 export const PROPOSAL_TOOL = 'propose_labels';
 

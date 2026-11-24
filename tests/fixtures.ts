@@ -21,7 +21,7 @@ import { addLabels } from '../src/store/labels.ts';
 import { rememberCorrespondent } from '../src/store/senders.ts';
 import { conditionsHash } from '../src/store/content.ts';
 import { finishRun, startRun } from '../src/store/runs.ts';
-import type { Usage } from '../src/triage/stages/model.ts';
+import { type Usage } from '../src/triage/types.ts';
 import type { Decision } from '../src/triage/types.ts';
 import { ACCOUNT, tempDir, withSampleLabels } from './helpers.ts';
 import { FakeGoogle, SECRETS, serveGoogle } from './google.ts';

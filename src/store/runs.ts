@@ -1,6 +1,6 @@
 import { type AnyColumn, and, avg, count, decisions, desc, eq, gt, inArray, isNotNull, isNull, modelRuns, notExists, sql } from './query.ts';
 import type { Sql } from './sql.ts';
-import type { Usage } from '../triage/stages/model.ts';
+import { type Usage } from '../triage/types.ts';
 
 /** A message the model has failed on this many times is not asked about again: it is the user's to say what it is. */
 export const MAX_ATTEMPTS = 3;

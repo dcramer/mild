@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { eq, rules } from '../../../store/query.ts';
 import { ruleFilterStatus } from '../../../store/filters.ts';
 import { type RuleSays, removeRule } from '../../../store/rules.ts';
-import { nameAlone, tidyMatch } from '../../../triage/stages/rules.ts';
+import { nameAlone, tidyMatch } from '../../../triage/rule.ts';
 import { RuleFacts, type RuleMatch } from '../../types.ts';
 import { type Context, decided, labelId, redecide, text } from '../route.ts';
 import { Refusal } from '../../../refusal.ts';

@@ -1,6 +1,6 @@
 import { Refusal } from '../refusal.ts';
 import { type Attributes, invokeAgent, reportError } from '../telemetry.ts';
-import type { Usage } from '../triage/stages/model.ts';
+import { type Usage } from '../triage/types.ts';
 
 type Spent = { usage?: Usage; lookups: number; now: number };
 

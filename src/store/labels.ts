@@ -2,9 +2,8 @@ import { and, asc, desc, eq, examples, inArray, isNotNull, isNull, labelProposal
 import { costOf } from './runs.ts';
 import { labelProposalName, openJson, sealJson } from './content.ts';
 import type { LabelDraft } from '../triage/proposal.ts';
-import type { Usage } from '../triage/stages/model.ts';
 import type { Sql } from './sql.ts';
-import { type Disposition, LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME, type Label } from '../triage/types.ts';
+import { type Disposition, LEAVE_IN_INBOX, LEAVE_IN_INBOX_NAME, type Label, type Usage } from '../triage/types.ts';
 import { Refusal } from '../refusal.ts';
 import type { Confidential, Sealed } from '../confidential.ts';
 

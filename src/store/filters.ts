@@ -4,7 +4,7 @@ import type { Sql } from './sql.ts';
 import { openJson, ruleName, sealJson } from './content.ts';
 import { openPayload } from './actions.ts';
 import { type FilterPlan, type FilterVerdict, filterFor } from '../triage/filter.ts';
-import type { RuleMatch } from '../triage/stages/rules.ts';
+import { type RuleMatch } from '../triage/rule.ts';
 import { listLabels } from './labels.ts';
 import { listRules } from './rules.ts';
 import { plain, seal } from '../plain.ts';

@@ -2,7 +2,7 @@ import type { Facts } from '../facts.ts';
 import type { Standing } from '../standing.ts';
 import { type RuleHit, describeRule, ruleOutcome } from './rules.ts';
 import type { Shot } from '../fewshot.ts';
-import { type Decision, type Label, type MessageFacts, type Stage, type Unfinished, labelled } from '../types.ts';
+import { type Decision, type Label, type MessageFacts, type Stage, type Unfinished, type Usage, labelled } from '../types.ts';
 
 /** Everything the model is shown about one message. Gathered by deterministic code, never by the model. */
 export interface Evidence {
@@ -36,14 +36,6 @@ export const UNSURE = 'unsure';
  * the label as the answer to agree with. The dashboard's meter is full from here (`sureness`, web/src/lib/format.ts).
  */
 export const SURE = 0.9;
-
-/** What a call cost, as the provider reported it. */
-export interface Usage {
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-}
 
 export interface Verdict {
   /** A label's id, or `unsure`. */

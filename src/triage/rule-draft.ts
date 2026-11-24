@@ -1,8 +1,7 @@
 import { RULE_FACTS, type RuleFacts } from './facts.ts';
 import { isSharedDomain } from './standing.ts';
-import type { Usage } from './stages/model.ts';
-import { type Named, type RuleMatch, nameAlone, tidyMatch } from './stages/rules.ts';
-import { DECIDED, type DecidedDisposition, type Label, LEAVE_IN_INBOX } from './types.ts';
+import { type Named, type RuleMatch, nameAlone, tidyMatch } from './rule.ts';
+import { DECIDED, type DecidedDisposition, type Label, LEAVE_IN_INBOX, type Usage } from './types.ts';
 
 export const FIND_TOOL = 'find_senders';
 export const FILL_TOOL = 'fill_rule';

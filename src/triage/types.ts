@@ -120,3 +120,11 @@ export interface Stage<R extends Decision | Unfinished = Decision> {
   name: StageName;
   decide(facts: MessageFacts): R | null | Promise<R | null>;
 }
+
+/** What a call cost, as the provider reported it. */
+export interface Usage {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
