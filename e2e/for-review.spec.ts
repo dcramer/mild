@@ -53,7 +53,9 @@ test.describe('For review', () => {
       return { ...waiting, items, waiting: items.length };
     });
     await page.goto('/');
-    await expect(reviewRows(page)).toHaveCount(100);
+    // What this checks is how many rows come, not how soon: on CI's runner, beside three other workers, the reply has
+    // taken 1.8 s and drawing its hundred rows 2 s more, past the 5 s a check waits.
+    await expect(reviewRows(page)).toHaveCount(100, { timeout: 15_000 });
     await reviewRows(page).last().scrollIntoViewIfNeeded();
     await expect(reviewRows(page)).toHaveCount(150);
   });
