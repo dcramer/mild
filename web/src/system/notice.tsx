@@ -13,7 +13,7 @@ export function Notice({ tone = 'plain', href, action, children }: { tone?: 'pla
         <span className="hl mx-0">{children}</span>
       ) : (
         <>
-          <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full border border-foreground motion-reduce:animate-none" />
+          <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full border border-foreground" />
           {children}
         </>
       )}

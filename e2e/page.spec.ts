@@ -1,7 +1,8 @@
+import { AxeBuilder } from '@axe-core/playwright';
 import { PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import type { Session } from '../src/dashboard/types.ts';
 import { HELD, expect, test, PHONE } from './fixture.ts';
-import { boxOf, sideScroll } from './wait.ts';
+import { boxOf, shifts, sideScroll, watchShifts } from './wait.ts';
 import { domainPage, senderPage } from './navigation.ts';
 
 test("the page cannot be framed by another site, sends no referrer, and holds nothing of anyone's", async ({ page }) => {
@@ -40,6 +41,59 @@ test('every screen calls it Mild, and only its wordmark mild', async ({ page }) 
     ).toHaveCount(0);
     await expect(page.locator('[aria-label="mild"]'), path).toHaveCount(0);
   }
+});
+
+const SCREENS = [
+  ['/', 'For review'],
+  ['/inbox', 'Inbox'],
+  ['/contacts', 'Contacts'],
+  ['/activity', 'Activity'],
+  ['/labels', 'Labels'],
+  ['/rules', 'Rules'],
+] as const;
+const COMPUTER = { width: 1280, height: 800 };
+
+for (const [where, viewport] of [
+  ['on a computer', COMPUTER],
+  ['on a phone', PHONE],
+] as const) {
+  test(`every screen passes axe's accessibility checks, ${where}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    for (const [path, heading] of SCREENS) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      const { violations } = await new AxeBuilder({ page }).analyze();
+      expect(
+        violations.flatMap((v) => v.nodes.map((n) => `${path} ${v.id}: ${n.failureSummary ?? ''} ${n.html}`)),
+        path,
+      ).toEqual([]);
+    }
+  });
+
+  // Contacts and Activity are left out until their first draw is as tall as what replaces it (TODO.md).
+  test(`opened again, nothing on a screen moves once it is drawn, ${where}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await watchShifts(page);
+    for (const [path, heading] of SCREENS.filter(([path]) => path !== '/contacts' && path !== '/activity')) {
+      await page.goto(path);
+      await page.waitForLoadState('networkidle');
+      await page.reload();
+      await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+      await page.waitForLoadState('networkidle');
+      expect(await shifts(page), path).toEqual([]);
+    }
+  });
+}
+
+test('under reduced motion nothing moves: a layer is in place at once', async ({ page }) => {
+  await page.setViewportSize(PHONE);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  const moving = 'document.getAnimations().filter((a) => a.effect.getComputedTiming().duration > 0).length';
+  expect(await page.evaluate<number>(moving)).toBe(0);
 });
 
 test('each screen is an address of its own, and anything else is missing', async ({ page }) => {

@@ -99,7 +99,8 @@ export function AnswerPicker({
                 <span className="truncate">{current.label}</span>
               </>
             ) : (
-              <span className="truncate text-muted-foreground group-hover/row:text-supporting group-focus-within/row:text-supporting">{empty}</span>
+              // Supporting, not a row's faint ink, which is too faint on the button's fill to read (axe, `e2e/page.spec.ts`).
+              <span className="truncate text-supporting">{empty}</span>
             )}
           </span>
           <ChevronDownIcon aria-hidden className={cn('size-3.5 shrink-0 text-muted-foreground', !toolbar && 'ml-auto')} />

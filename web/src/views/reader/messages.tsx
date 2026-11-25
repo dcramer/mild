@@ -11,6 +11,7 @@ import { useConversationMessage } from './conversation.ts';
 import { Files } from './files.tsx';
 import { SenderHead, useAddressed, useAddressedTo } from './head.tsx';
 import type { Answer } from './reply.tsx';
+import { afterPaint } from '@/lib/utils.ts';
 
 /** One message of the conversation, open: who wrote it, to whom and when, with `onAnswer` its own presses for answering it, over its text. */
 function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what: Answer) => void) | undefined }) {
@@ -128,9 +129,8 @@ export function Messages({
   useEffect(() => {
     if (marked.current || !conversation || unread.length === 0) return;
     marked.current = true;
-    // Once the conversation is on the screen: opened by a press, React runs this before it paints, and the write draws
-    // every list of the copy again.
-    setTimeout(() => {
+    // Opened by a press, React runs this before it paints, and the write draws every list of the copy again.
+    afterPaint(() => {
       press([{ accountId: conversation.accountId, threadId: conversation.threadId, messageIds: unread, subject: newest.subject }], 'read');
       onRead();
     });

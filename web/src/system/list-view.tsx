@@ -259,7 +259,7 @@ export function ListView({
               {/* One bar: the search and the filters share an outline, and nothing is filled until it is used. On a phone they are the top bar. */}
               <div
                 className={cn(
-                  'flex min-w-0 flex-1 flex-wrap items-stretch rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 md:flex-nowrap',
+                  'flex min-w-0 flex-1 flex-wrap items-stretch rounded-(--corner) border border-(--frame) transition-colors duration-(--motion-color) focus-within:border-foreground/45 md:flex-nowrap',
                   search && bar !== undefined && 'phone:hidden',
                 )}
               >

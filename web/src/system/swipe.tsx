@@ -1,6 +1,7 @@
 'use client';
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from 'react';
 import { cn } from '@/lib/utils.ts';
+import { motionMs } from '@/lib/motion.ts';
 
 /** What a swipe does, said where it shows. */
 export interface SwipePress {
@@ -27,8 +28,6 @@ const PRESS_PX = 96;
 const AT_END = 8;
 /** Where `scrollend` is not sent, a swipe has ended once it has not moved for this long. */
 const STILL_MS = 150;
-/** How long a row swiped away takes to close up. */
-const CLOSE_MS = 180;
 /** A row closed up that its list has not taken away by then (the press failed) opens again. */
 const GIVE_BACK_MS = 1000;
 
@@ -38,7 +37,7 @@ const GIVE_BACK_MS = 1000;
  */
 function closeRow(track: HTMLElement, done: () => void) {
   // Quickest at first, so what is left when the list takes the row away, and React's draw holds the frame, is too little to see.
-  const timing = { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : CLOSE_MS, easing: 'ease-out', fill: 'forwards' } as const;
+  const timing = { duration: motionMs('close'), easing: 'ease-out', fill: 'forwards' } as const;
   const own = getComputedStyle(track);
   const runs = [
     track.animate(

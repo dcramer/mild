@@ -293,3 +293,70 @@ test('keys are for working through a list, and screens bind none of their own', 
   });
   expect(failures, failures.join('\n')).toEqual([]);
 });
+
+describe('motion', () => {
+  const CSS = readFileSync(join(WEB, 'index.css'), 'utf8');
+  const MOTION = join(WEB, 'lib/motion.ts');
+  const lines = (path: string, pattern: RegExp) =>
+    readFileSync(path, 'utf8')
+      .split('\n')
+      .flatMap((text, at) => (pattern.test(text) ? [`web/src/${relative(WEB, path)}:${at + 1}`] : []));
+
+  test('only a part moves; a screen uses the part', () => {
+    const failures = [
+      ...check(SCREENS, [[/^(transition|duration|ease|delay|animate)(-|$)/, 'motion belongs to parts in web/src/system.']]),
+      ...ALL.filter((path) => !SYSTEM.has(path) && path !== MOTION).flatMap((path) =>
+        lines(path, /\.animate\(|startViewTransition/).map((at) => `${at}: what a script moves is a part's, or \`moveReader\` (web/src/lib/motion.ts).`),
+      ),
+    ];
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+
+  test('every duration and curve is one named in web/src/index.css', () => {
+    const failures = [
+      ...check(ALL, [
+        [/^duration-(?!\(--motion-[a-z-]+\)$)/, 'a duration is `duration-(--motion-…)`, named in web/src/index.css.'],
+        [/^(ease|delay|animate)-\[/, 'curves, delays and loops are named in web/src/index.css.'],
+      ]),
+      // A declaration of a name is where a value is set; everything else uses one.
+      ...CSS.split('\n').flatMap((text, at) =>
+        /\b\d+m?s\b|cubic-bezier/.test(text) && !/^\s*--(motion|ease|wait)-[a-z-]+:/.test(text) && !/\b0s\b/.test(text)
+          ? [`web/src/index.css:${at + 1}: ${text.trim()}`]
+          : [],
+      ),
+      ...ALL.filter((path) => path !== MOTION).flatMap((path) =>
+        lines(path, /\b(duration|easing):\s*\d|cubic-bezier/).map((at) => `${at}: a script's motion takes its duration from \`motionMs\`.`),
+      ),
+    ];
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+
+  test('only what the compositor can move moves: transforms, opacity and colours, never the layout', () => {
+    const LAYOUT = /\b(height|width|margin|padding|top|left|right|bottom|inset|grid-template|flex-basis)\b/;
+    const failures = [
+      ...check(ALL, [[/^transition-all$/, 'name what moves: `transition-transform`, `transition-opacity`, `transition-colors`.']]),
+      ...ALL.flatMap((path) => words(path))
+        .filter(({ word }) => utility(word).startsWith('transition-[') && LAYOUT.test(word))
+        .map(({ file, line, word }) => `web/src/${file}:${line} \`${word}\` moves the layout.`),
+      ...[...CSS.matchAll(/transition(?:-property)?:([^;]+);/g)]
+        .filter((m) => LAYOUT.test(m[1] ?? ''))
+        .map((m) => `web/src/index.css: \`${m[0]}\` moves the layout.`),
+    ];
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+
+  test('reduced motion stops everything in one rule, so no part has to remember it', () => {
+    const failures = [
+      ...ALL.flatMap((path) => words(path))
+        .filter(({ word }) => /(^|:)motion-(reduce|safe):/.test(word))
+        .map(({ file, line, word }) => `web/src/${file}:${line} \`${word}\`: reduced motion is one rule in web/src/index.css.`),
+      ...ALL.filter((path) => path !== MOTION).flatMap((path) =>
+        lines(path, /prefers-reduced-motion/).map((at) => `${at}: a script asks \`motionMs\` (web/src/lib/motion.ts).`),
+      ),
+    ];
+    expect(failures, failures.join('\n')).toEqual([]);
+    expect(CSS).toMatch(
+      /@media \(prefers-reduced-motion: reduce\) \{\s*\*,\s*::before,\s*::after \{\s*transition-duration: 0s !important;\s*animation: none !important;/,
+    );
+  });
+});

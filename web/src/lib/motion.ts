@@ -1,5 +1,16 @@
 import { flushSync } from 'react-dom';
 
+/** Whether the reader asked for no motion. CSS stops all it draws (`web/src/index.css`); a script that moves something asks here. */
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** A `--motion-…` duration of `web/src/index.css`, in milliseconds, for a script that moves something: 0 under reduced motion. */
+export function motionMs(name: 'close') {
+  if (reducedMotion()) return 0;
+  // In seconds or milliseconds: the build writes `180ms` as `.18s`.
+  const value = getComputedStyle(document.documentElement).getPropertyValue(`--motion-${name}`).trim();
+  return Number.parseFloat(value) * (value.endsWith('ms') ? 1 : 1000);
+}
+
 /** The phone's layout: the `phone` variant in `web/src/index.css`. */
 export const PHONE_LAYOUT = 'not ((width >= 48rem) and (height >= 30rem))';
 
@@ -10,7 +21,7 @@ export const PHONE_LAYOUT = 'not ((width >= 48rem) and (height >= 30rem))';
  * here and does not move, so it never moves twice where Safari slides it itself.
  */
 export function moveReader(way: 'open' | 'back', update: () => void | Promise<void>) {
-  if (!('startViewTransition' in document) || !window.matchMedia(PHONE_LAYOUT).matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  if (!('startViewTransition' in document) || !window.matchMedia(PHONE_LAYOUT).matches || reducedMotion()) {
     void update();
     return;
   }

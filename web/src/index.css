@@ -52,6 +52,22 @@
 
 :root {
   color-scheme: dark;
+  /* How long things move, by what moves: the only durations and curves a part names (`duration-(--motion-…)`, or
+     `motionMs` for what a script moves). Nothing moves under reduced motion (below), whatever these say. */
+  --motion-tap: 80ms; /* A press's travel and shadow. */
+  --motion-hint: 100ms; /* What pointing shows: a tooltip, a hover card, a disclosure's chevron. */
+  --motion-color: 120ms; /* A colour or border changing: a press, a tile pointed at, a field focused. */
+  --motion-layer: 150ms; /* A dialog, panel, scrim or toast coming and going. */
+  --motion-close: 180ms; /* A row swiped away closing up. */
+  --motion-sheet: 200ms; /* What crosses most of a phone's screen: a sheet from the bottom, the menu, the top bar. */
+  --motion-reader-in: 240ms; /* The reader on a phone, which crosses the whole screen as a phone's own apps do. */
+  --motion-reader-out: 220ms;
+  --ease-reader-in: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-reader-out: cubic-bezier(0.4, 0, 0.6, 1);
+  --motion-busy: 900ms; /* Loops while something is waited on. */
+  --motion-loading: 1100ms;
+  /* Not motion: a wait shorter than this shows nothing, under reduced motion too. */
+  --wait-shown: 200ms;
   /* How tall the phone's top bar is while it shows (the bar measures itself), so what sticks under it (a day's heading) sits below it. */
   --bar: 0px;
   @media (width < 48rem), (height < 30rem) {
@@ -276,10 +292,10 @@
   .press {
     border-radius: var(--corner);
     transition:
-      background-color 120ms ease-out,
-      color 120ms ease-out,
-      transform 80ms ease-out,
-      box-shadow 80ms ease-out;
+      background-color var(--motion-color) ease-out,
+      color var(--motion-color) ease-out,
+      transform var(--motion-tap) ease-out,
+      box-shadow var(--motion-tap) ease-out;
   }
   .press:active {
     transform: translate(1px, 1px);
@@ -292,7 +308,7 @@
       radial-gradient(circle, currentColor 60%, transparent 62%) 0 50% / 0.25em 0.25em no-repeat,
       radial-gradient(circle, currentColor 60%, transparent 62%) 50% 50% / 0.25em 0.25em no-repeat,
       radial-gradient(circle, currentColor 60%, transparent 62%) 100% 50% / 0.25em 0.25em no-repeat;
-    animation: busy-dots 900ms steps(4, jump-none) infinite;
+    animation: busy-dots var(--motion-busy) steps(4, jump-none) infinite;
   }
   @keyframes busy-dots {
     0% {
@@ -311,7 +327,7 @@
     height: 2px;
     overflow: hidden;
     pointer-events: none;
-    animation: loading-bar-in 150ms 200ms both;
+    animation: loading-bar-in var(--motion-layer) var(--wait-shown) both;
   }
   .loading-bar::after {
     content: '';
@@ -319,7 +335,7 @@
     inset: 0 auto 0 0;
     width: 30%;
     background: color-mix(in oklab, var(--foreground) 70%, transparent);
-    animation: loading-bar-run 1100ms ease-in-out infinite;
+    animation: loading-bar-run var(--motion-loading) ease-in-out infinite;
   }
   @keyframes loading-bar-in {
     from {
@@ -354,12 +370,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .press,
-    .busy-dots,
-    .loading-bar::after {
-      transition: none;
-      animation: none;
-    }
     /* Still, the whole width, fainter. */
     .loading-bar::after {
       width: 100%;
@@ -465,17 +475,17 @@ thead .row:last-child {
   pointer-events: none;
 }
 html[data-motion='reader-open']::view-transition-old(root) {
-  animation: 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both reader-under;
+  animation: var(--motion-reader-in) var(--ease-reader-in) both reader-under;
 }
 html[data-motion='reader-open']::view-transition-new(root) {
-  animation: 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both reader-in;
+  animation: var(--motion-reader-in) var(--ease-reader-in) both reader-in;
 }
 html[data-motion='reader-back']::view-transition-old(root) {
   z-index: 1;
-  animation: 220ms cubic-bezier(0.4, 0, 0.6, 1) both reader-in reverse;
+  animation: var(--motion-reader-out) var(--ease-reader-out) both reader-in reverse;
 }
 html[data-motion='reader-back']::view-transition-new(root) {
-  animation: 220ms cubic-bezier(0.4, 0, 0.6, 1) both reader-under reverse;
+  animation: var(--motion-reader-out) var(--ease-reader-out) both reader-under reverse;
 }
 @keyframes reader-in {
   from {
@@ -486,5 +496,25 @@ html[data-motion='reader-back']::view-transition-new(root) {
   to {
     translate: -25% 0;
     opacity: 0.5;
+  }
+}
+
+/* Nothing moves under reduced motion: one rule here, so no part has to remember it. A part that loops (a skeleton, the
+   loading bar) is drawn still, and Base UI takes a layer away at once when it has no transition to wait for. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0s !important;
+    animation: none !important;
+  }
+  /* Still shown only once the wait is long enough to notice. */
+  .loading-bar {
+    animation: loading-bar-in 0s var(--wait-shown) both !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
