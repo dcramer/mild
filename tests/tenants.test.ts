@@ -54,7 +54,7 @@ async function seed(account: string): Promise<void> {
   );
   const rule = await addRule(db, { match: { from: [sender.address] }, disposition: 'archive' }, 'user', 1000);
   const { id: action } = (await raw(db).get<{ id: number }>(
-    `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at, decision_id) VALUES (?, ?, 'archive', '{}', '[]', 'done', 1000, ?) RETURNING id`,
+    `INSERT INTO actions (account_id, message_id, type, payload, original_labels, status, created_at, decision_id) VALUES (?, ?, 'archive', '{"add":[],"remove":["INBOX"]}', '["INBOX"]', 'done', 1000, ?) RETURNING id`,
     account,
     `m-${mark}`,
     decision,
@@ -215,6 +215,7 @@ const READS = (account: string, mark: string) => [
   '/api/models',
   '/api/labels/proposal',
   `/api/message?id=m-${mark}`,
+  `/api/message?id=m-${mark}&account=${encodeURIComponent(account)}`,
   `/api/messages?ids=m-${mark}`,
   `/api/suggestion?sender=sender@${mark}.example.com`,
   '/api/contacts',
@@ -223,7 +224,9 @@ const READS = (account: string, mark: string) => [
   `/api/domain?domain=${mark}.example.com`,
   `/api/examples?mailbox=${encodeURIComponent(account)}`,
   `/api/message/html?id=m-${mark}`,
+  `/api/message/html?id=m-${mark}&account=${encodeURIComponent(account)}`,
   `/api/message/file?id=m-${mark}&part=1`,
+  `/api/message/file?id=m-${mark}&part=1&account=${encodeURIComponent(account)}`,
   `/api/rules/waiting?id=${ids[account]!.rule}`,
   `/api/rules/usage?id=${ids[account]!.rule}`,
   `/api/rules/inbox?id=${ids[account]!.rule}`,
@@ -234,7 +237,7 @@ const READS = (account: string, mark: string) => [
   '/api/mail/addresses?q=sender',
   `/api/mail/threads?q=${mark}&view=needs&unread=1`,
   `/api/mail/threads?from=sender@${mark}.example.com&domain=${mark}.example.com&since=0`,
-  `/api/mail/thread?thread=t1&mailbox=${encodeURIComponent(account)}`,
+  `/api/mail/thread?thread=t1&account=${encodeURIComponent(account)}`,
   '/api/sync',
 ];
 
@@ -554,6 +557,45 @@ describe("nobody sees or changes another person's mail", () => {
         .map((match) => `${name}: ${match[1]}`),
     );
     expect(unscoped, 'every exported query under src/dashboard/queries/ takes `scope: Scope`').toEqual([]);
+  });
+});
+
+describe("a person's, not a mailbox's", () => {
+  const ALPHAS = [ALPHA, ALPHA_WORK] as const;
+  const marksIn = (text: string) => ALPHAS.map((a) => MARK[a]!).filter((mark) => text.includes(mark));
+  const narrowed = (path: string, mailbox: string) => `${path}${path.includes('?') ? '&' : '?'}mailbox=${encodeURIComponent(mailbox)}`;
+
+  it('answers every read of their own, whichever of their mailboxes it is in', async () => {
+    for (const account of ALPHAS) for (const path of READS(account, MARK[account]!)) expect((await call('GET', path, ALPHA)).status, `GET ${path}`).toBe(200);
+  });
+
+  it('narrows a read to one mailbox only by leaving the others out: the read of them all shows whatever one narrowed shows', async () => {
+    // The newest of something is one thing: narrowed, it is that mailbox's newest, which the newest of all need not be.
+    const newest = '/api/labels/proposal';
+    for (const path of new Set(ALPHAS.flatMap((account) => READS(account, MARK[account]!)))) {
+      if (path.includes('mailbox=') || path.includes('account=') || path === newest) continue;
+      const all = marksIn((await call('GET', path, ALPHA)).text);
+      for (const mailbox of ALPHAS)
+        expect(all, `GET ${narrowed(path, mailbox)}`).toEqual(expect.arrayContaining(marksIn((await call('GET', narrowed(path, mailbox), ALPHA)).text)));
+    }
+  });
+
+  it('gives one message, its HTML or its file the same however it is found: by id alone, named in its mailbox, or read ahead', async () => {
+    for (const account of ALPHAS) {
+      const mark = MARK[account]!;
+      const other = ALPHAS.find((a) => a !== account)!;
+      for (const path of [`/api/message?id=m-${mark}`, `/api/message/html?id=m-${mark}`, `/api/message/file?id=m-${mark}&part=1`]) {
+        const named = (who: string) => `${path}&account=${encodeURIComponent(who)}`;
+        expect((await call('GET', named(account), ALPHA)).text, `GET ${named(account)}`).toBe((await call('GET', path, ALPHA)).text);
+        for (const who of [other, BRAVO]) expect((await call('GET', named(who), ALPHA)).status, `GET ${named(who)}`).toBe(404);
+      }
+      const ahead = JSON.parse((await call('GET', `/api/messages?ids=m-${mark}`, ALPHA)).text) as { messages: unknown[] };
+      expect(ahead.messages).toEqual([JSON.parse((await call('GET', `/api/message?id=m-${mark}&account=${encodeURIComponent(account)}`, ALPHA)).text)]);
+    }
+    // Both of their mailboxes have a conversation `t1`: by id alone it is theirs to say which, and named, it is that one.
+    expect(await call('GET', '/api/mail/thread?thread=t1', ALPHA)).toMatchObject({ status: 409, text: expect.stringContaining('say which') });
+    for (const account of ALPHAS)
+      expect((await call('GET', `/api/mail/thread?thread=t1&account=${encodeURIComponent(account)}`, ALPHA)).text).toContain(MARK[account]);
   });
 });
 

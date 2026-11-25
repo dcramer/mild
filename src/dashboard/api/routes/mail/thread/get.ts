@@ -5,10 +5,11 @@ import { missing, ok, read } from '../../../route.ts';
 
 export default read({
   path: '/api/mail/thread',
-  query: z.object({ thread: z.string().default('') }),
+  /** `account`: the mailbox the conversation is in, where the page knows (`/api/message`). */
+  query: z.object({ thread: z.string().default(''), account: z.string().default('') }),
   reply: MailConversation,
-  run: async ({ db }, scope, { thread }) => {
-    const found = await conversation(db, scope, thread);
+  run: async ({ db }, scope, { thread, account }) => {
+    const found = await conversation(db, scope, thread, account);
     return found ? ok(found) : missing('No such conversation');
   },
 });

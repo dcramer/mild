@@ -1,4 +1,4 @@
-import { globSync } from 'node:fs';
+import { globSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -23,5 +23,18 @@ describe('the API routes', () => {
         file,
       ).toHaveLength(1);
     }
+  });
+
+  it('are asked for by the page only through endpoints.ts, which finds a thing by `account` and leaves `?mailbox=` to the switcher', () => {
+    const code = (file: string) =>
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line));
+    expect(globSync('web/src/**/*.{ts,tsx}').filter((file) => code(file).some((line) => /['"`]\/api\//.test(line)))).toEqual([
+      'web/src/lib/api/client.ts',
+      'web/src/lib/api/endpoints.ts',
+    ]);
+    // Narrowing a read of one message to its mailbox narrowed what came beside it: a digest's list lost the other mailboxes' mail.
+    expect(code('web/src/lib/api/endpoints.ts').filter((line) => /[{(,]\s*mailbox\s*[,:})]|['"]mailbox['"]|mailbox=/.test(line))).toEqual([]);
   });
 });

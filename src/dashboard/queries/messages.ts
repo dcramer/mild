@@ -149,15 +149,15 @@ async function storedBody(db: Sql, accountId: string, messageId: string): Promis
 }
 
 /** The HTML of one of the scope's messages, as Mild holds it; null when it holds none. */
-export async function storedHtml(db: Sql, scope: Scope, messageId: string): Promise<string | null> {
-  const accountId = await mailboxOf(db, scope, messageId);
+export async function storedHtml(db: Sql, scope: Scope, messageId: string, account = ''): Promise<string | null> {
+  const accountId = await mailboxOf(db, scope, messageId, account);
   if (accountId === null) return null;
   return plain((await storedBody(db, accountId, messageId))?.html ?? null);
 }
 
 /** The mailbox of a message of the scope's whose kept files include `part`, or null. */
-export async function fileIn(db: Sql, scope: Scope, messageId: string, part: string): Promise<string | null> {
-  const accountId = await mailboxOf(db, scope, messageId);
+export async function fileIn(db: Sql, scope: Scope, messageId: string, part: string, account = ''): Promise<string | null> {
+  const accountId = await mailboxOf(db, scope, messageId, account);
   if (accountId === null) return null;
   const files = await keptAttachments(db, accountId, messageId);
   return files?.some((f) => f.part === part) ? accountId : null;
