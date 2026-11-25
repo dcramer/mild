@@ -47,6 +47,8 @@ test("a sender's card on the list still drawn from before the switch says who th
   const row = reviewRows(page).filter({ hasText: 'Lunch on Thursday?' });
   await expect(row).toBeVisible();
   await switchMailbox(page, WORK);
+  // Named over the list, which moves it down: pointed at before then, the pointer lands on the row that comes up under it.
+  await expect(named(page)).toBeVisible();
   await pointAt(row.getByRole('link', { name: 'Ada Lovelace', exact: true }));
   await expect(senderCard(page, 'Ada Lovelace')).toContainText('ada@example.org');
 });
