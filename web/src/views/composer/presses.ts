@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { reloadAll } from '@/components/action.ts';
 import { type Recipient, typed } from '@/lib/addresses.ts';
 import { api } from '@/lib/api/endpoints.ts';
-import { type From, QUOTE, ofWhat } from '@/lib/answering.ts';
+import { type From, ofWhat, ownOf, withQuote } from '@/lib/answering.ts';
 import { type useAutosave, reloadDrafts } from '@/lib/autosave.ts';
 import { type Draft, type Writing, draftId, keepDraft, newMessageId, useCompose } from '@/lib/compose.ts';
 import { blank, doubtsAbout } from '@/lib/draft-checks.ts';
@@ -36,6 +36,7 @@ export function usePresses({
   typing,
   setTyping,
   from,
+  quote,
   carried,
   uploading,
   onClose,
@@ -50,6 +51,8 @@ export function usePresses({
   typing: Typing;
   setTyping: (typing: Typing) => void;
   from: From;
+  /** A reply's quote of the message it answers, which goes under what is written. */
+  quote: string | null;
   carried: readonly MessageAttachment[];
   uploading: ReturnType<typeof useDraftFiles>['uploading'];
   onClose: () => void;
@@ -87,7 +90,15 @@ export function usePresses({
     const going = ready();
     if (!going) return;
     finished();
-    const writing = { ...draft, ...going.lines, id: going.id, at: Date.now(), of: ofWhat(what) };
+    const writing = {
+      ...draft,
+      ...going.lines,
+      text: withQuote(draft, quote),
+      ...(quote ? { quoted: true } : {}),
+      id: going.id,
+      at: Date.now(),
+      of: ofWhat(what),
+    };
     keepDraft(who, what, null);
     onClose();
     void api.saveDraft({ id: draftId(what), accountId: from.accountId, writing, sendAt: at }).then(
@@ -135,7 +146,7 @@ export function usePresses({
       to: parties(lines.to),
       cc: parties(lines.cc),
       bcc: parties(lines.bcc),
-      text: draft.text,
+      text: withQuote(draft, quote),
       uploads: draft.files.map((f) => f.id),
       draft: draftId(what),
     };
@@ -153,7 +164,7 @@ export function usePresses({
     onClose();
     const named = draftId(what);
     if (what.kind === 'reply')
-      startSending({ draft: named, answers: what.messageId, from: from.address, to: mail.to, cc: mail.cc, text: draft.text, sent: null });
+      startSending({ draft: named, answers: what.messageId, from: from.address, to: mail.to, cc: mail.cc, text: mail.text, sent: null });
     toast(said, {
       kind: 'Sending',
       // Saved again, since it is a draft once more.
@@ -201,7 +212,7 @@ export function usePresses({
   const switchTo = (other: Exclude<Writing, { kind: 'new' }>) => {
     if (!startFor) return;
     const started = startFor(other);
-    const own = draft.text.includes(QUOTE) ? draft.text.slice(0, draft.text.indexOf(QUOTE)).trimEnd() : draft.text;
+    const own = ownOf(draft.text).trimEnd();
     finished();
     keepDraft(who, what, null);
     if (held()) forget();

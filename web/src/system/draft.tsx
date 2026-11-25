@@ -70,6 +70,22 @@ export function DraftText(props: Omit<ComponentProps<typeof TextArea>, 'bare'>) 
 }
 
 /**
+ * Under a reply's text, the message it answers, quoted as it will go, folded behind ••• as Gmail trims it; a press puts
+ * the quote in the text, to edit.
+ */
+export function Trimmed({ onShow }: { onShow: () => void }) {
+  return (
+    <div className="px-(--gutter) pb-1">
+      <Tooltip says="Show trimmed content">
+        <Button variant="quiet" className="-ml-2 h-auto px-2 tracking-widest" aria-label="Show trimmed content" onClick={onShow}>
+          •••
+        </Button>
+      </Tooltip>
+    </div>
+  );
+}
+
+/**
  * Drops what is being written: a quiet trash can at the end of a draft's presses. Not a `DeleteButton`: the toast it
  * leaves has Undo, which brings the draft back.
  */
