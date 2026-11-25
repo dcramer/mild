@@ -23,7 +23,7 @@ function storedView(): Shown {
 const TEXT = 'text-reading leading-relaxed break-words whitespace-pre-wrap';
 
 /** A message's text, with the history it quotes folded. */
-function Letter({ text }: { text: string }) {
+export function Letter({ text }: { text: string }) {
   const { own, quoted } = splitQuoted(text);
   return (
     <div className="flex flex-col gap-2">

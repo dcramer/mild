@@ -558,6 +558,44 @@ test.describe('with Inbox on', () => {
     await expect(reader(page).getByRole('button', { name: /^Ada/, expanded: false })).toHaveCount(1);
   });
 
+  test('a reply is in its conversation as Send is pressed, sending until Gmail has it, to whom it went, and Undo takes it out', async ({ page, sift }) => {
+    await page.clock.install();
+    await page.goto('/inbox');
+    await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    await open.getByRole('button', { name: /^Reply(?! all| to)/ }).click();
+    const writing = composer(page, 'Reply');
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    await page.keyboard.type('Thursday works.');
+    await writing.getByRole('button', { name: /^Send/ }).click();
+
+    const mine = open.getByRole('article').last();
+    await expect(open.getByRole('article')).toHaveCount(2);
+    await expect(mine).toContainText('Thursday works.');
+    await expect(mine).toContainText('Sending…');
+    // The person has two mailboxes, and their own mail names only whom it went to.
+    await expect(mine.getByText('ada@example.org')).toBeVisible();
+    await expect(mine).not.toContainText(ME);
+    expect(sift.sent()).toEqual([]);
+
+    await toast(page, 'Re: Lunch on Thursday?').getByRole('button', { name: /^Undo/ }).click();
+    await expect(open.getByRole('article')).toHaveCount(1);
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Thursday works.');
+
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await expect(mine).toContainText('Sending…');
+    // The toast is low on the screen, and one pointed at waits.
+    await page.mouse.move(0, 0);
+    await page.clock.runFor(8000);
+    await page.clock.resume();
+    await expect(toast(page, 'Re: Lunch on Thursday?')).toContainText('Sent');
+    await expect(mine).not.toContainText('Sending…');
+    await expect(mine).toContainText('Thursday works.');
+    await expect(mine).not.toContainText(ME);
+    await expect(open.getByRole('article')).toHaveCount(2);
+    expect(sift.sent()).toHaveLength(1);
+  });
+
   test('the Reply under the conversation answers its newest, in the box at its foot', async ({ page, sift }) => {
     await page.goto('/inbox');
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();
