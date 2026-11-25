@@ -53,13 +53,15 @@ const PLAIN = /^[\w.@+-]+$/;
 export function inboxQuery(match: RuleMatch): string {
   const terms: string[] = [];
   // Several values are alternatives; one that cannot be searched for leaves the whole condition out.
-  const add = (operator: string, values: readonly string[]) => {
+  const add = (operators: readonly string[], values: readonly string[]) => {
     if (values.length === 0 || !values.every((v) => PLAIN.test(v))) return;
-    terms.push(`${operator}:${values.length === 1 ? values[0] : `(${values.join(' OR ')})`}`);
+    const term = values.length === 1 ? values[0] : `(${values.join(' OR ')})`;
+    terms.push(operators.length === 1 ? `${operators[0]}:${term}` : `{${operators.map((operator) => `${operator}:${term}`).join(' ')}}`);
   };
-  add('from', [...(match.from ?? []), ...(match.fromDomain ?? [])]);
-  add('to', match.to ?? []);
-  add('list', match.listId ?? []);
+  add(['from'], [...(match.from ?? []), ...(match.fromDomain ?? [])]);
+  // Gmail's `list:` takes a list's address as well as its id, which is how a rule's `to` reaches mail the group was in Bcc on.
+  add(['to', 'list'], match.to ?? []);
+  add(['list'], match.listId ?? []);
   // Not the subject: Gmail matches whole words, and the rule part of one ("order conf" in "Order confirmation").
   return terms.join(' ');
 }

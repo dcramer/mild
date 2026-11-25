@@ -69,8 +69,9 @@ beforeEach(async () => {
 describe('searching the inbox for a rule', () => {
   it('asks Gmail only for what the rule names, and leaves out what could change the search', () => {
     expect(inboxQuery({ from: ['a@example.com'], to: ['me+x@example.org'], listId: ['list.example.com'] })).toBe(
-      'from:a@example.com to:me+x@example.org list:list.example.com',
+      'from:a@example.com {to:me+x@example.org list:me+x@example.org} list:list.example.com',
     );
+    expect(inboxQuery({ to: ['a@example.org', 'b@example.org'] })).toBe('{to:(a@example.org OR b@example.org) list:(a@example.org OR b@example.org)}');
     expect(inboxQuery({ from: ['a@example.com OR in:sent'] })).toBe('');
     expect(inboxQuery({ from: ['a@example.com'], fromDomain: ['example.org'] })).toBe('from:(a@example.com OR example.org)');
     // Gmail finds whole words only, so a search for part of one would miss mail the rule matches.

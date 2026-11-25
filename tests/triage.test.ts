@@ -159,14 +159,26 @@ describe('rules stage', () => {
     });
   });
 
-  it('matches To but not Cc', async () => {
-    const rule: Rule = { id: 'r', match: { to: ['jobs@example.org'] }, labelId: 'cold_outreach' };
-    expect(await decide([rule], facts({ cc: [email('jobs@example.org')] }))).toBeNull();
+  it('matches mail sent to an address in To, or through the group at that address, but not mail written to the owner that copies it', async () => {
+    const rule: Rule = { id: 'r', match: { to: ['Press@example.org'] }, labelId: 'cold_outreach' };
+    const viaGroup = { 'list-id': '<press.example.org>' };
+    expect(await decide([rule], facts({ to: [email('press@example.org')] }))).toMatchObject({ ruleId: 'r' });
+    // The group in Cc or Bcc: only its own List-Id says the copy came through press@.
+    expect(await decide([rule], facts({ to: [email('editor@example.net')], cc: [email('press@example.org')], headers: viaGroup }))).toMatchObject({
+      ruleId: 'r',
+    });
+    expect(await decide([rule], facts({ to: [email('editor@example.net')], headers: viaGroup }))).toMatchObject({ ruleId: 'r' });
+    // Written to the owner, copying the group: neither the Cc nor the group's copy, if that is the one Gmail kept.
+    expect(await decide([rule], facts({ cc: [email('press@example.org')] }))).toBeNull();
+    expect(await decide([rule], facts({ cc: [email('press@example.org')], headers: viaGroup }))).toBeNull();
+    expect(await decide([rule], facts({ to: [email('editor@example.net')], headers: { 'list-id': '<press.lists.example.org>' } }))).toBeNull();
   });
 
-  it('matches on List-Id', async () => {
-    const rule: Rule = { id: 'r', match: { listId: ['dev.lists.example.com'] }, labelId: 'newsletter' };
-    expect(await decide([rule], facts({ headers: { 'list-id': 'Dev List <dev.lists.example.com>' } }))).toMatchObject({ ruleId: 'r' });
+  it('matches on List-Id, by the id or the address of the list', async () => {
+    const listed = facts({ headers: { 'list-id': 'Dev List <dev.lists.example.com>' } });
+    for (const id of ['dev.lists.example.com', 'dev@lists.example.com', '<Dev.Lists.example.com>'])
+      expect(await decide([{ id: 'r', match: { listId: [id] }, labelId: 'newsletter' }], listed)).toMatchObject({ ruleId: 'r' });
+    expect(await decide([{ id: 'r', match: { listId: ['dev@example.com'] }, labelId: 'newsletter' }], listed)).toBeNull();
   });
 
   it('never hides mail from someone the owner has written to on a rule Mild learned, but does on one the user made', async () => {
