@@ -7,7 +7,7 @@ import type { AnswerLabel } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
 import { useAsk } from '@/components/ask.tsx';
 import { TurnInboxOn } from '@/components/inbox-switch.tsx';
-import { DraftList } from '@/components/drafts.tsx';
+import { DraftList, useAnswersBegun } from '@/components/drafts.tsx';
 import { useMailPress } from '@/components/mail.tsx';
 import type { MailView } from '@/lib/api/endpoints.ts';
 import { useShown } from '@/lib/telemetry.ts';
@@ -73,6 +73,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
   const hidden = useHidden();
   const labels = manage.data?.labels ?? NO_LABELS;
   const { names, rowOf } = useRows(manage.data);
+  const begun = useAnswersBegun();
   const list = useConversations({ on, drafting, view, label, unread, q, ask, mailbox, hidden, rowOf });
   const { local, threads } = list;
   const mail = useMailPress();
@@ -183,7 +184,14 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
               <tbody key={title ?? ''}>
                 {title ? <TrGroup title={title} span={4} /> : null}
                 {rows.map((thread) => (
-                  <ThreadRow key={threadKey(thread)} thread={thread} labels={labels} selected={selected.has(threadKey(thread))} hands={hands} />
+                  <ThreadRow
+                    key={threadKey(thread)}
+                    thread={thread}
+                    labels={labels}
+                    selected={selected.has(threadKey(thread))}
+                    begun={thread.messageIds.some((id) => begun?.has(id))}
+                    hands={hands}
+                  />
                 ))}
               </tbody>
             ))}

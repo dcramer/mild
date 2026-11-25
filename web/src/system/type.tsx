@@ -9,6 +9,11 @@ export function Highlight({ children, className }: { children: ReactNode; classN
   return <span className={cn('hl', className)}>{children}</span>;
 }
 
+/** "Draft", after who wrote a conversation the reader has begun an answer to, as Gmail marks one: yellow, since it waits on them. */
+export function DraftWord() {
+  return <span className="text-highlight">Draft</span>;
+}
+
 /** The name, always highlighted. */
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   return (

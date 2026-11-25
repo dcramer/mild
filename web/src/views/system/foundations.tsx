@@ -11,6 +11,7 @@ import {
   LabelName,
   Button,
   Code,
+  DraftWord,
   Highlight,
   Kbd,
   Hint,
@@ -206,6 +207,11 @@ export function Foundations() {
           <Row label="hint, said" note="The icon with its words, where they are the point: under a sender's name on their own page.">
             <span className="text-muted-foreground">
               <Hint icon={SparkleIcon} says="The first time Mild has seen them" tone="look" said />
+            </span>
+          </Row>
+          <Row label="draft" note="After who wrote a conversation the reader has begun a reply to, as Gmail marks one.">
+            <span className="font-medium">
+              Ada Lovelace, me, <DraftWord />
             </span>
           </Row>
         </Sheet>

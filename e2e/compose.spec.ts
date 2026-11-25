@@ -284,6 +284,40 @@ test.describe('with Inbox on', () => {
     await expect(page.getByText('No drafts.')).toBeVisible();
   });
 
+  test('a reply begun is open in its conversation when it opens again, on another device too, and its row says Draft', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    await open.getByRole('button', { name: /^Reply(?! all| to)/ }).click();
+    const writing = composer(page, 'Reply');
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    await page.keyboard.type('Thursday might work.');
+    await open.getByRole('button', { name: 'Back to Inbox' }).click();
+    const row = inboxRow(page, 'Lunch on Thursday?');
+    await expect(row).toContainText('Ada Lovelace, Draft');
+    await expect(inboxRow(page, 'Notes from the review')).not.toContainText('Draft');
+
+    // Another device has none of this browser's copy.
+    await page.evaluate('localStorage.clear()');
+    await page.reload();
+    await expect(row).toContainText('Ada Lovelace, Draft');
+    await row.getByRole('cell').nth(2).click();
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toHaveValue('Thursday might work.');
+    await param(page, 'compose').toBe('reply');
+
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await sendNow(page, 'Re: Lunch on Thursday?');
+    expect(sift.sent()).toHaveLength(1);
+    // Sent, the box stays closed.
+    await expect(open.getByRole('article').last()).toContainText('Thursday might work.');
+    await expect(writing).toHaveCount(0);
+    await open.getByRole('button', { name: 'Back to Inbox' }).click();
+    await expect(inboxRow(page, 'Re: Lunch on Thursday?')).not.toContainText('Draft');
+    await inboxRow(page, 'Re: Lunch on Thursday?').getByRole('cell').nth(2).click();
+    await expect(open.getByRole('article').last()).toContainText('Thursday might work.');
+    await expect(writing).toHaveCount(0);
+  });
+
   test('Schedule send saves it to go later, said in Drafts, and Undo makes it a draft again', async ({ page, sift }) => {
     await page.goto('/inbox?view=drafts');
     await compose(page).click();
@@ -660,6 +694,8 @@ test.describe('with Inbox on', () => {
   test('••• under a reply puts the message it answers in the text, quoted, to edit, and it goes once', async ({ page, sift }) => {
     await page.goto('/inbox');
     await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    // Its key is bound once the press is drawn.
+    await expect(reader(page).getByRole('button', { name: /^Reply all(?!,)/ })).toBeVisible();
     await page.keyboard.press('r');
     const writing = composer(page, 'Reply');
     const text = writing.getByRole('textbox', { name: 'Message' });
