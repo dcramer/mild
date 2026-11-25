@@ -4,6 +4,8 @@ import { phoneMenu } from './navigation.ts';
 import { reviewRows } from './review.ts';
 import { mailboxesAsked } from './network.ts';
 import { WORK, mailboxChoice, switchMailbox } from './mailboxes.ts';
+import { senderCard } from './parts.ts';
+import { pointAt } from './wait.ts';
 
 // A desktop and a phone each name it in a place of their own.
 const named = (page: Page) => page.getByRole('main').getByText(WORK, { exact: true }).filter({ visible: true });
@@ -37,6 +39,16 @@ test('one mailbox chosen in the account menu narrows For review to it, names it 
   await expect(reviewRows(page).first()).toBeVisible();
   await expect(named(page)).toHaveCount(0);
   expect(asked.at(-1)).toBeNull();
+});
+
+test("a sender's card on the list still drawn from before the switch says who they are, though the mailbox chosen has none of their mail", async ({ page }) => {
+  await page.route('**/api/suggestions*', (route) => (new URL(route.request().url()).searchParams.get('mailbox') === WORK ? undefined : route.continue()));
+  await page.goto('/');
+  const row = reviewRows(page).filter({ hasText: 'Lunch on Thursday?' });
+  await expect(row).toBeVisible();
+  await switchMailbox(page, WORK);
+  await pointAt(row.getByRole('link', { name: 'Ada Lovelace', exact: true }));
+  await expect(senderCard(page, 'Ada Lovelace')).toContainText('ada@example.org');
 });
 
 test('a mailbox kept in the browser that is no longer theirs shows all of them, and is never asked for', async ({ page }) => {
