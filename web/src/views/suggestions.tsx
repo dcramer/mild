@@ -1,6 +1,6 @@
 'use client';
 import { WorkflowIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { cn } from '@/lib/utils.ts';
 import { type AnswerLabel, type Answerable, useAnswer } from '@/components/answer.tsx';
 import { ErrorNote } from '@/components/bits.tsx';
@@ -46,7 +46,7 @@ import { messageStart, proposalStart } from '@/lib/rule-start.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { useShown } from '@/lib/telemetry.ts';
-import { readMessageAhead, readTopAhead, useManage, useUsage, useSuggestions } from '@/lib/api/reads.ts';
+import { readMessageAhead, useManage, useUsage, useSuggestions } from '@/lib/api/reads.ts';
 
 /** Rows drawn at first, and added as the end of the list comes near: all of them at once took seconds to draw. */
 const ROWS = 100;
@@ -263,8 +263,6 @@ export function SuggestionsView({ loading: loadingRows }: { loading: ReactNode }
   // The panel steps through the messages as the list draws them: a folded row's together.
   const order = rows.flatMap(({ item, rest }) => [item, ...rest]);
   const refs = order.map((i) => ({ accountId: i.accountId, messageId: i.messageId, subject: i.subject }));
-  // What a row opens is its first message.
-  useEffect(() => readTopAhead(rows.map(({ item }) => item)));
 
   return (
     <ListView
