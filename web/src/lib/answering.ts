@@ -21,7 +21,29 @@ export const answering = (subject: string) => (/^re:/i.test(subject.trim()) ? su
 /** "Fwd: " once. */
 const forwarding = (subject: string) => (/^fwd?:/i.test(subject.trim()) ? subject.trim() : `Fwd: ${subject.trim()}`);
 
-export const QUOTE = '---------- Forwarded message ---------';
+const QUOTE = '---------- Forwarded message ---------';
+/** Where Gmail's quote under a reply starts: its "On …, … wrote:" line, then the message, each line after "> ". */
+const REPLY_QUOTE = /^On .+ wrote:\n\n>/m;
+
+/** What the person wrote of `text`, without the message a forward or a reply quotes under it. */
+export function ownOf(text: string): string {
+  const forwarded = text.indexOf(QUOTE);
+  const replied = text.search(REPLY_QUOTE);
+  const at = Math.min(...[forwarded, replied].filter((i) => i !== -1), text.length);
+  return text.slice(0, at);
+}
+
+/** The message a reply answers, quoted as Gmail quotes it under what is written; null when Mild holds no text of it. */
+export function quoteOf(message: MessageDetail): string | null {
+  const body = reveal(message.body)?.trimEnd();
+  if (!body) return null;
+  return [`On ${dateTime(message.receivedAt)}, ${typed(senderOf(message))} wrote:`, '', ...body.split('\n').map((line) => (line ? `> ${line}` : '>'))].join(
+    '\n',
+  );
+}
+
+/** The text a reply goes with: what was written, and under it the quote, unless ••• put it there already. */
+export const withQuote = (draft: Draft, quote: string | null) => (quote && !draft.quoted ? `${draft.text.trimEnd()}\n\n${quote}` : draft.text);
 
 const shown = (list: MessageDetail['to']): Party[] => list.map((p) => ({ address: reveal(p.address), ...(p.name ? { name: reveal(p.name) } : {}) }));
 const senderOf = (message: MessageDetail): Party => ({ address: reveal(message.fromAddress), ...(message.fromName ? { name: reveal(message.fromName) } : {}) });

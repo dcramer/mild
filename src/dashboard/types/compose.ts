@@ -72,6 +72,8 @@ export const DraftWriting = z.strictObject({
   withFiles: z.boolean().optional(),
   /** A reply whose subject was opened to edit. */
   editSubject: z.boolean().optional(),
+  /** A reply whose quote of the message it answers is in its text. */
+  quoted: z.boolean().optional(),
   /** The Message-ID of a press of Send that may not have gone. */
   id: text().nullable(),
   /** When it was last changed, by the page's clock: of two copies of it, the newer is kept. */

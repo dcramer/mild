@@ -31,6 +31,7 @@ import {
   Reader,
   ReaderBar,
   ReplyBox,
+  Trimmed,
   Section,
   SomeOf,
   TextLink,
@@ -274,7 +275,10 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             }
           >
             {sending === 'allowed' ? (
-              <SpecimenDraft to={replying.title === 'Forward' ? [] : [{ address: replying.to.address, name: replying.to.from }]} />
+              <SpecimenDraft
+                to={replying.title === 'Forward' ? [] : [{ address: replying.to.address, name: replying.to.from }]}
+                quote={replying.title !== 'Forward'}
+              />
             ) : (
               <DraftBlocked title="Mild can’t send from ada@example.org yet">Google asks you once before Mild can send as you.</DraftBlocked>
             )}
@@ -316,7 +320,7 @@ const suggestPeople = async (typed: string) => {
 };
 
 /** A draft's lines as the composer draws them: To with a chip and a wrong one, Cc and Bcc behind their presses, and files in each state. */
-function SpecimenDraft({ to: start }: { to: Recipient[] }) {
+function SpecimenDraft({ to: start, quote }: { to: Recipient[]; quote: boolean }) {
   const [to, setTo] = useState<Recipient[]>([...start, { address: 'not an address', wrong: true }]);
   const [cc, setCc] = useState<Recipient[] | null>(null);
   const [bcc, setBcc] = useState<Recipient[] | null>(null);
@@ -327,6 +331,8 @@ function SpecimenDraft({ to: start }: { to: Recipient[] }) {
     { key: 'photo', name: 'IMG_2041.jpg', size: 6_100_000, sent: 2_440_000 },
     { key: 'scan', name: 'Scan.tiff', size: 31_000_000, failed: 'Scan.tiff is larger than the 25 MB Gmail sends.' },
   ]);
+  const [text, setText] = useState('');
+  const [quoted, setQuoted] = useState(false);
   const wrong = (list: Recipient[]) => wrongAddresses(list.filter((r) => r.wrong).map((r) => r.address));
   return (
     <>
@@ -353,7 +359,15 @@ function SpecimenDraft({ to: start }: { to: Recipient[] }) {
           <Recipients label="Bcc" value={bcc} onChange={setBcc} {...typed('bcc')} suggest={suggestPeople} />
         </DraftLine>
       ) : null}
-      <DraftText aria-label="Message" className="min-h-48" />
+      <DraftText aria-label="Message" className="min-h-48" value={text} onChange={(event) => setText(event.target.value)} />
+      {quote && !quoted ? (
+        <Trimmed
+          onShow={() => {
+            setText(`${text.trimEnd()}\n\nOn Nov 12, 2026, 7:32 PM, Ada Lovelace <ada@example.org> wrote:\n\n> Are you both free for lunch on Thursday?`);
+            setQuoted(true);
+          }}
+        />
+      ) : null}
       <DraftFiles files={files} onRemove={(key) => setFiles((all) => all.filter((f) => f.key !== key))} />
     </>
   );

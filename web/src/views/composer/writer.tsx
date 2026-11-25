@@ -3,13 +3,28 @@ import { type ReactNode, useState } from 'react';
 import { type Party, type Recipient, wrongAddresses } from '@/lib/addresses.ts';
 import { api } from '@/lib/api/endpoints.ts';
 import { useSession } from '@/lib/api/reads.ts';
-import type { From } from '@/lib/answering.ts';
+import { type From, quoteOf } from '@/lib/answering.ts';
 import { useAutosave } from '@/lib/autosave.ts';
 import type { Draft, Writing } from '@/lib/compose.ts';
 import { blank } from '@/lib/draft-checks.ts';
 import { dateTime } from '@/lib/format.ts';
 import { reveal } from '@/lib/reveal.ts';
-import { Ask, AttachButton, Button, DiscardButton, DraftFiles, DraftLine, DraftText, Finish, Input, Panel, Recipients, ReplyBox, Select } from '@/system';
+import {
+  Ask,
+  AttachButton,
+  Button,
+  DiscardButton,
+  DraftFiles,
+  DraftLine,
+  DraftText,
+  Finish,
+  Input,
+  Panel,
+  Recipients,
+  ReplyBox,
+  Select,
+  Trimmed,
+} from '@/system';
 import type { MessageDetail } from '../../../../src/dashboard/types.ts';
 import { AnswerKind } from './answer-kind.tsx';
 import { useDraftFiles } from './files.ts';
@@ -68,6 +83,7 @@ export function Writer({
   const { toInput, entered, textField, first, askFor } = useFocus(what, draft, inline);
 
   const from = choices.find((c) => c.address === draft.from) ?? choices[0];
+  const quote = what.kind === 'reply' && answered ? quoteOf(answered) : null;
   const { send, schedule, discard, switchTo, asking, dismiss, nobody, wrong, waiting } = usePresses({
     who,
     what,
@@ -79,6 +95,7 @@ export function Writer({
     typing,
     setTyping,
     from,
+    quote,
     carried,
     uploading,
     onClose,
@@ -193,6 +210,14 @@ export function Writer({
         value={draft.text}
         onChange={(event) => change({ text: event.target.value })}
       />
+      {quote && !draft.quoted ? (
+        <Trimmed
+          onShow={() => {
+            change({ text: `${draft.text.trimEnd()}\n\n${quote}`, quoted: true });
+            textField.current?.focus();
+          }}
+        />
+      ) : null}
       <DraftFiles files={shown} onRemove={detach} />
     </div>
   );

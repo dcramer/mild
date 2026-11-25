@@ -32,7 +32,7 @@ export { Popover } from './popover.tsx';
 export { Rail } from './rail.tsx';
 export { MessageHead, MessageStack, Presses, Reader, ReaderBar } from './reader.tsx';
 export type { Thumb } from './thumbs.tsx';
-export { DiscardButton, DraftBlocked, DraftLine, DraftText, ReplyBox } from './draft.tsx';
+export { DiscardButton, DraftBlocked, DraftLine, DraftText, ReplyBox, Trimmed } from './draft.tsx';
 export { AttachButton, type DraftFile, DraftFiles, MessageFiles } from './attachments.tsx';
 export { Recipients, withTyped } from './recipients.tsx';
 export { Reserve } from './reserve.tsx';

@@ -510,6 +510,10 @@ test.describe('with Inbox on', () => {
     await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
     const [sent] = sift.sent();
     expect(sent).toMatchObject({ mailbox: ME, threadId: 't6' });
+    // Under it, the message it answers, quoted as Gmail quotes it, though ••• was never pressed.
+    expect(readSent(sent!.raw).text).toMatch(
+      /^Thursday works\.\r\n\r\nOn .+, Ada Lovelace <ada@example\.org> wrote:\r\n\r\n> Are you free for lunch on Thursday\?$/,
+    );
     expect(readSent(sent!.raw).headers).toMatchObject({
       From: ME,
       To: '"Ada Lovelace" <ada@example.org>',
@@ -651,6 +655,31 @@ test.describe('with Inbox on', () => {
       'In-Reply-To': '<may@utility.example.net>',
       References: '<may@utility.example.net>',
     });
+  });
+
+  test('••• under a reply puts the message it answers in the text, quoted, to edit, and it goes once', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    await page.keyboard.press('r');
+    const writing = composer(page, 'Reply');
+    const text = writing.getByRole('textbox', { name: 'Message' });
+    await expect(text).toBeFocused();
+    await page.keyboard.type('Thursday works.');
+    await writing.getByRole('button', { name: 'Show trimmed content' }).click();
+    await expect(text).toHaveValue(/^Thursday works\.\n\nOn .+, Ada Lovelace <ada@example\.org> wrote:\n\n> Are you free for lunch on Thursday\?$/);
+    await expect(writing.getByRole('button', { name: 'Show trimmed content' })).toHaveCount(0);
+    await text.fill(`${await text.inputValue()}\n> Noon?`);
+    await writing.getByRole('button', { name: /^Send/ }).click();
+
+    // Drawn in the conversation as it goes, its quote folded as a message's is.
+    const mine = reader(page).getByRole('article').last();
+    await expect(mine).toContainText('Thursday works.');
+    await expect(mine.getByRole('button', { name: 'Show the quoted text' })).toBeVisible();
+    await expect(mine).not.toContainText('Are you free');
+    await sendNow(page, 'Re: Lunch on Thursday?');
+    const { text: sent } = readSent(sift.sent()[0]!.raw);
+    expect(sent).toMatch(/wrote:\r\n\r\n> Are you free for lunch on Thursday\?\r\n> Noon\?$/);
+    expect(sent.match(/wrote:/g)).toHaveLength(1);
   });
 
   test('Reply all and Forward of an earlier message are behind one press on its head', async ({ page }) => {
