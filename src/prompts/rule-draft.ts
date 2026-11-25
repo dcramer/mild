@@ -79,7 +79,8 @@ export const RULE_DRAFT_PROMPT = `You fill in one email rule for the owner of a 
 
 What a rule can say, all of which must hold for it to apply:
 - Which mail, by any of: who sent it, as an address or a domain for everyone at it (no subdomains); the
-  mailing list it came through; an address it was sent to; or words in its subject. Beside an address or
+  mailing list it came through, by its id or its address; an address it was sent to, in To or through the
+  group at that address (not Cc, which mail written to the owner often copies); or words in its subject. Beside an address or
   domain, it may also ask for the sender's name, exactly or containing some words. Several conditions of one
   kind are alternatives: mail from either of two domains, or with either of two words in its subject.
   Conditions of different kinds must all hold. It may name none of these and ask only about what Mild saw in

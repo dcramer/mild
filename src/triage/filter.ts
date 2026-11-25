@@ -1,4 +1,4 @@
-import { type Rule, type RuleMatch, asksFacts, describeMatch, specificity } from './rule.ts';
+import { type Rule, type RuleMatch, asksFacts, describeMatch, listKey, specificity } from './rule.ts';
 import { type Label, labelled } from './types.ts';
 
 /** A rule as Gmail could run it by itself. The label is named, not given by id: the id is Gmail's to assign. */
@@ -44,8 +44,7 @@ function mayOverlap(a: RuleMatch, b: RuleMatch): boolean {
   const senders = (m: RuleMatch) => [...(m.from ?? []), ...(m.fromDomain ?? [])];
   const meet = (x: readonly string[], y: readonly string[], same: (v: string, w: string) => boolean) =>
     x.length === 0 || y.length === 0 || x.some((v) => y.some((w) => same(v, w)));
-  const equal = (v: string, w: string) => v.toLowerCase() === w.toLowerCase();
-  return meet(senders(a), senders(b), sameSender) && meet(a.listId ?? [], b.listId ?? [], equal);
+  return meet(senders(a), senders(b), sameSender) && meet(a.listId ?? [], b.listId ?? [], (v, w) => listKey(v) === listKey(w));
 }
 
 /** Values for one Gmail search field: one as it is, several as alternatives. */

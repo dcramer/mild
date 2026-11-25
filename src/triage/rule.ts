@@ -19,8 +19,14 @@ export interface RuleMatch {
   fromName?: string[];
   /** Case-insensitive substring of the sender's display name. Held only beside `from` or `fromDomain`, as `fromName` is. */
   fromNameContains?: string[];
-  /** Exact address in To. Cc does not count. */
+  /**
+   * An address in To, or the list at that address the mail came through: a group's members get its mail
+   * with the group in Cc or Bcc as often as in To, and only its List-Id says so. Not the list when the owner
+   * is in To or Cc too, since that mail was written to them, whichever copy Gmail kept. Cc alone does not
+   * count: mail written to the owner often copies a group.
+   */
   to?: string[];
+  /** A mailing list, by its id or its address (`listKey`). */
   listId?: string[];
   /** Case-insensitive substring of the subject. */
   subjectContains?: string[];
@@ -87,6 +93,12 @@ export interface Rule {
   name?: string;
 }
 
+/**
+ * A list as rules compare it. A list's id is its address with the @ made a dot (Google Groups, Mailman:
+ * media@example.com is `<media.example.com>`), and people name a list by its address.
+ */
+export const listKey = (id: string) => (parseListId(id) ?? '').replace('@', '.');
+
 /** A display name as rules compare it. */
 export const plainName = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -105,13 +117,15 @@ function matches(match: RuleMatch, facts: MessageFacts): boolean {
     (match.fromName ?? []).map((n) => name === plainName(n)),
     (match.fromNameContains ?? []).map((n) => name.includes(plainName(n))),
   );
-  any((match.to ?? []).map((to) => facts.to.some((a) => a.address === to.toLowerCase())));
+  const known = facts.known ?? deriveFacts(facts);
   const list = parseListId(facts.headers['list-id']);
-  any((match.listId ?? []).map((id) => list === id.toLowerCase()));
+  const throughList = (to: string) => known.addressed === 'neither' && list === listKey(to);
+  any((match.to ?? []).map((to) => facts.to.some((a) => a.address.toLowerCase() === to.toLowerCase()) || throughList(to)));
+  any((match.listId ?? []).map((id) => list === listKey(id)));
   const subject = facts.subject.toLowerCase();
   any((match.subjectContains ?? []).map((words) => subject.includes(words.toLowerCase())));
   const asked = factsOf(match);
-  if (asked) checks.push(matchesFacts(asked, facts.known ?? deriveFacts(facts)));
+  if (asked) checks.push(matchesFacts(asked, known));
   return checks.length > 0 && checks.every(Boolean);
 }
 
