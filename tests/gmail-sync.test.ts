@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { syncAccount, syncWants } from '../src/work/sync.ts';
 import { pullChanges, toFacts } from '../src/gmail/sync.ts';
-import { addMailbox, setMailboxAliases } from '../src/store/accounts.ts';
+import { addMailbox, mailboxSignatures, setSendAs } from '../src/store/accounts.ts';
 import { connectGmail, fakeGoogle, firstAccount, openUserDb, raw } from './fixtures.ts';
 import { ACCOUNT, DAY, HOUR } from './helpers.ts';
 import { parseAddressList } from '../src/triage/features.ts';
@@ -440,7 +440,7 @@ describe('syncAccount', () => {
     expect(await raw(db).get('SELECT read_at FROM messages')).toEqual({ read_at: null });
   });
 
-  it("records the owner's send-as addresses on the first sync of a day, and counts mail to them as the owner's", async () => {
+  it("records the owner's send-as addresses and their signatures on the first sync of a day, and counts mail to them as the owner's", async () => {
     const { api, gmail: box, arrive } = gmail();
     const db = await synced(box);
     const toAlias = (id: string) => arrive(id, { from: 'ada@example.com', to: 'Me <me@example.com>' });
@@ -452,13 +452,14 @@ describe('syncAccount', () => {
     expect(await addressed()).toEqual([{ id: 'a', addressed: 'neither' }]);
 
     // Added the same day: not looked up again until the next.
-    box.sendAs = [{ email: 'me@example.com' }];
+    box.sendAs = [{ email: 'me@example.com', signature: 'Me, on the side' }];
     toAlias('b');
     await syncAccount(db, api, await firstAccount(db), () => DAY + 1000);
     expect(await aliases()).toEqual([]);
     toAlias('c');
     await syncAccount(db, api, await firstAccount(db), () => 2 * DAY);
     expect(await aliases()).toEqual(['me@example.com']);
+    expect(await mailboxSignatures(db, ACCOUNT)).toEqual({ 'me@example.com': 'Me, on the side' });
     expect(await addressed()).toEqual([
       { id: 'a', addressed: 'neither' },
       { id: 'b', addressed: 'neither' },
@@ -469,7 +470,7 @@ describe('syncAccount', () => {
   it('keeps the last send-as addresses and goes on syncing when they cannot be read', async () => {
     const { api, gmail: box, arrive } = gmail();
     const db = await synced(box);
-    await setMailboxAliases(db, ACCOUNT, ['me@example.com']);
+    await setSendAs(db, ACCOUNT, [{ address: 'me@example.com', signature: 'Me' }]);
     arrive('a', { from: 'ada@example.com', cc: 'me@example.com' });
     box.fail('users.settings.sendAs.list', RATE_LIMITED);
     const report = await syncAccount(db, api, await firstAccount(db));
@@ -479,6 +480,7 @@ describe('syncAccount', () => {
       aliases: ['me@example.com'],
       addressed: 'cc',
     });
+    expect(await mailboxSignatures(db, ACCOUNT)).toEqual({ 'me@example.com': 'Me' });
   });
 
   it('leaves the cursor alone when a fetch fails', async () => {

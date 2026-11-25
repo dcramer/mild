@@ -47,6 +47,7 @@ export const labelProposalName = (db: Sql, accountId: string, field: 'goal' | 'l
 export const ruleDraftName = (db: Sql, accountId: string, field: 'goal' | 'rule') => `person ${db.person} rule draft ${field} of ${accountId}`;
 export const askName = (db: Sql, accountId: string, field: 'words' | 'answer') => `person ${db.person} ask ${field} of ${accountId}`;
 export const digestName = (db: Sql, id: number) => `person ${db.person} digest ${id} highlights`;
+export const signaturesName = (db: Sql, accountId: string) => `person ${db.person} signatures of ${accountId}`;
 export const draftName = (db: Sql, id: string) => `person ${db.person} draft ${id}`;
 export const uploadName = (db: Sql, id: string, piece: number | 'about') => `person ${db.person} upload ${id} ${piece}`;
 export const addressName = (db: Sql, accountId: string, hash: string) => `person ${db.person} address ${hash} of ${accountId}`;
@@ -260,7 +261,7 @@ export async function rekeyContent(db: Sql, write = true): Promise<number> {
 const UNSET = 'unset:';
 
 /**
- * Rules, proposals, label proposals, rule drafts, asks and digests: few, so read whole. Their conditions are hashed again with the key, and those a
+ * Rules, proposals, label proposals, rule drafts, asks, digests and signatures: few, so read whole. Their conditions are hashed again with the key, and those a
  * migration could not hash (`unset:`) are hashed here even without one.
  */
 async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): Promise<void> {
@@ -328,8 +329,12 @@ async function rekeyConditions(db: Sql, prefix: string | null, write: boolean): 
   const digestUpdates = (await db.select({ id: digests.id, highlights: digests.highlights }).from(digests))
     .filter((r) => behind(r.highlights))
     .map((r) => ({ id: r.id, highlights: seal(db, digestName(db, r.id), reopen(db, digestName(db, r.id), r.highlights!)) }));
+  const signatureUpdates = (await db.select({ id: mailboxes.id, signatures: mailboxes.signatures }).from(mailboxes))
+    .filter((r) => behind(r.signatures))
+    .map((r) => ({ id: r.id, signatures: seal(db, signaturesName(db, r.id), reopen(db, signaturesName(db, r.id), r.signatures!)) }));
   if (write)
     await db.transaction(async (tx) => {
+      for (const { id, signatures } of signatureUpdates) await tx.update(mailboxes).set({ signatures }).where(eq(mailboxes.id, id));
       for (const { id, highlights } of digestUpdates) await tx.update(digests).set({ highlights }).where(eq(digests.id, id));
       for (const { id, set } of draftUpdates) await tx.update(ruleDrafts).set(set).where(eq(ruleDrafts.id, id));
       for (const { id, set } of askUpdates) await tx.update(mailAsks).set(set).where(eq(mailAsks.id, id));

@@ -9,11 +9,17 @@ import { WORK, switchMailbox, ME } from './mailboxes.ts';
 import { inboxRow, inboxRows } from './inbox.ts';
 
 const compose = (page: Page) => page.getByRole('button', { name: /Compose/ });
+/** The page's ink, and its faint ink (`--foreground`, `--supporting`). */
+const INK = 'rgb(240, 238, 232)';
+const FAINT = 'rgb(163, 161, 152)';
 
 test.describe('with Inbox on', () => {
   test.use({ variant: 'inbox' });
 
-  test('C writes a new message, each address a chip once it is typed, and Ctrl+Enter sends it from the chosen address', async ({ page, sift }) => {
+  test('C writes a new message, each address a chip once it is typed, and Ctrl+Enter sends it from the chosen address, signed as Gmail signs it', async ({
+    page,
+    sift,
+  }) => {
     await page.goto('/inbox');
     // Its key is bound once the page has loaded.
     await expect(inboxRows(page).first()).toBeVisible();
@@ -78,7 +84,8 @@ test.describe('with Inbox on', () => {
       Bcc: 'bo@example.com',
       Subject: 'Lunch',
     });
-    expect(text).toBe('See you at noon.\r\nBring the plans.');
+    // Under it, the signature of the address it is from, which Gmail keeps for it.
+    expect(text).toBe('See you at noon.\r\nBring the plans.\r\n\r\n-- \r\nMe\r\nLists, example.org');
 
     // Sent, it is not kept as a draft.
     await compose(page).click();
@@ -738,6 +745,70 @@ test.describe('with Inbox on', () => {
     const { text: sent } = readSent(sift.sent()[0]!.raw);
     expect(sent).toMatch(/wrote:\r\n\r\n> Are you free for lunch on Thursday\?\r\n> Noon\?$/);
     expect(sent.match(/wrote:/g)).toHaveLength(1);
+  });
+
+  test('the signature Gmail has for the address it is from is under new mail, faint, a press puts it in the text, and From changes it', async ({
+    page,
+    sift,
+  }) => {
+    await page.goto('/inbox');
+    await compose(page).click();
+    const writing = composer(page, 'New message');
+    const text = writing.getByRole('textbox', { name: 'Message' });
+    const signature = writing.getByRole('button', { name: /Lists, example\.org/ });
+    // The mailbox's own address has none.
+    await expect(writing.getByRole('combobox', { name: 'From' })).toContainText(ME);
+    await expect(signature).toHaveCount(0);
+    await writing.getByRole('combobox', { name: 'From' }).click();
+    await page.getByRole('option', { name: 'me+lists@example.org' }).click();
+    await expect(signature).toHaveText('-- \nMe\nLists, example.org');
+    await expect(signature).toHaveCSS('color', FAINT);
+    await expect(text).toHaveValue('');
+
+    await signature.click();
+    await expect(signature).toHaveCount(0);
+    await expect(text).toHaveValue('\n\n-- \nMe\nLists, example.org');
+    await expect(text).toBeFocused();
+    await writing.getByRole('combobox', { name: 'From' }).click();
+    await page.getByRole('option', { name: ME, exact: true }).click();
+    await expect(text).toHaveValue('\n\n');
+    await writing.getByRole('combobox', { name: 'From' }).click();
+    await page.getByRole('option', { name: 'me+lists@example.org' }).click();
+    await expect(text).toHaveValue('\n\n-- \nMe\nLists, example.org');
+
+    await text.fill('Hello.\n\n-- \nMe, on lists');
+    await recipients(writing, 'To').input.fill('ada@example.org');
+    await page.keyboard.press('Tab');
+    await writing.getByRole('textbox', { name: 'Subject' }).fill('Hello');
+    await writing.getByRole('button', { name: /^Send/ }).click();
+    await sendNow(page, 'Hello');
+    // Edited, it goes as it was edited, once.
+    expect(readSent(sift.sent()[0]!.raw).text).toBe('Hello.\r\n\r\n-- \r\nMe, on lists');
+  });
+
+  test('a reply carries the signature behind ••• with its quote, and in its conversation the signature is faint', async ({ page, sift }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    await open.getByRole('button', { name: /^Reply(?! all| to)/ }).click();
+    const writing = composer(page, 'Reply');
+    await page.keyboard.type('Thursday works.');
+    await writing.getByRole('button', { name: 'To Ada Lovelace: show who it goes to' }).click();
+    await writing.getByRole('combobox', { name: 'From' }).click();
+    await page.getByRole('option', { name: 'me+lists@example.org' }).click();
+    await expect(writing.getByRole('button', { name: /Lists, example\.org/ })).toHaveCount(0);
+    await writing.getByRole('button', { name: /^Send/ }).click();
+
+    const mine = open.getByRole('article').last();
+    await expect(mine.getByText('Thursday works.')).toHaveCSS('color', INK);
+    await expect(mine.getByText(/Lists, example\.org/)).toHaveCSS('color', FAINT);
+    await sendNow(page, 'Re: Lunch on Thursday?');
+    expect(readSent(sift.sent()[0]!.raw).text).toMatch(
+      /^Thursday works\.\r\n\r\n-- \r\nMe\r\nLists, example\.org\r\n\r\nOn .+, Ada Lovelace <ada@example\.org> wrote:\r\n\r\n> Are you free for lunch on Thursday\?$/,
+    );
+    // Gmail's copy, in its place, draws it the same.
+    await expect(mine).not.toContainText('Sending…');
+    await expect(mine.getByText(/Lists, example\.org/)).toHaveCSS('color', FAINT);
   });
 
   test('Reply all and Forward of an earlier message are behind one press on its head', async ({ page }) => {

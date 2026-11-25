@@ -13,7 +13,7 @@ import { exampleKeys, openJson, openPart, rekeyContent, ruleDraftName, askName, 
 import { getRuleFilter, setRuleFilter } from '../src/store/filters.ts';
 import { finishLabelProposal, latestLabelProposal, startLabelProposal } from '../src/store/labels.ts';
 import { rekeyStore } from '../src/store/rekey.ts';
-import { connectAccount } from '../src/store/accounts.ts';
+import { connectAccount, mailboxSignatures, setSendAs } from '../src/store/accounts.ts';
 import { mailBodies, readBodies } from '../src/store/query.ts';
 import type { Sql } from '../src/store/sql.ts';
 import { messageDetail } from '../src/dashboard/queries/messages.ts';
@@ -284,6 +284,17 @@ describe('mail', () => {
     const underB = await stored();
     expect(underB!.subject_hash).not.toBe(underA!.subject_hash);
     expect(underB).toEqual({ name_hash: like(await as(B)).nameHash, subject_hash: like(await as(B)).subjectHash });
+  });
+
+  it('keeps Gmail signatures sealed, and brings them under a new key', async () => {
+    const { as } = await alpha(A);
+    await setSendAs(await as(A), 'alpha@example.org', [{ address: 'alpha@example.org', signature: 'Alpha Example\nexample.com' }]);
+    const stored = async () => (await raw(await as(A)).get<{ signatures: string }>('SELECT signatures FROM mailboxes'))!.signatures;
+    const underA = await stored();
+    expect(underA).not.toContain('Alpha');
+    await rekeyContent(await as(B_AFTER_A));
+    expect(await stored()).not.toBe(underA);
+    expect(await mailboxSignatures(await as(B), 'alpha@example.org')).toEqual({ 'alpha@example.org': 'Alpha Example\nexample.com' });
   });
 
   it('brings mail recorded before there was a key under it, for every person in the store', async () => {

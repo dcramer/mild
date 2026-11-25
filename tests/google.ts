@@ -327,8 +327,10 @@ const refused = (status: number, message: string, reason = 'failedPrecondition')
 /** One Gmail mailbox. */
 export class FakeGmail {
   readonly address: string;
-  /** Addresses it may send as besides its own, and whether each has been confirmed. */
-  sendAs: { email: string; pending?: boolean }[] = [];
+  /** Addresses it may send as besides its own, whether each has been confirmed, and its signature, as Gmail keeps one: HTML. */
+  sendAs: { email: string; pending?: boolean; signature?: string }[] = [];
+  /** Its own address's signature. */
+  signature = '';
   readonly labels = new Map<string, { id: string; name: string; type: 'system' | 'user' }>();
   filters: { id: string; criteria: gmail_v1.Schema$FilterCriteria; action: gmail_v1.Schema$FilterAction }[] = [];
   /** Every request made of it, in order. */
@@ -779,8 +781,13 @@ export class FakeGmail {
       case 'users.settings.sendAs.list':
         return HttpResponse.json({
           sendAs: [
-            { sendAsEmail: this.address, isPrimary: true, isDefault: true },
-            ...this.sendAs.map((a) => ({ sendAsEmail: a.email, isPrimary: false, verificationStatus: a.pending ? 'pending' : 'accepted' })),
+            { sendAsEmail: this.address, isPrimary: true, isDefault: true, signature: this.signature },
+            ...this.sendAs.map((a) => ({
+              sendAsEmail: a.email,
+              isPrimary: false,
+              verificationStatus: a.pending ? 'pending' : 'accepted',
+              signature: a.signature ?? '',
+            })),
           ],
         });
       case 'users.settings.filters.list':

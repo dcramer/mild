@@ -37,3 +37,14 @@ export function splitQuoted(text: string): { own: string; quoted: string | null 
   if (own.trim() === '' || /^-+ ?Forwarded message ?-+$|^Begin forwarded message:/im.test(text)) return { own: text, quoted: null };
   return { own, quoted };
 }
+
+/** The most lines a signature runs to: more under a "--" line are the message itself, as a mail program reads them. */
+const SIGNATURE_LINES = 12;
+
+/** A message's own text, split where its signature starts: at its last "-- " line (or "--"), with no more than a signature's lines under it. */
+export function splitSignature(text: string): { own: string; signature: string | null } {
+  const lines = text.split('\n');
+  const at = lines.findLastIndex((line) => line.trimEnd() === '--');
+  if (at === -1 || lines.length - at - 1 > SIGNATURE_LINES || lines.slice(at + 1).every((line) => line.trim() === '')) return { own: text, signature: null };
+  return { own: lines.slice(0, at).join('\n').trimEnd(), signature: lines.slice(at).join('\n').trimEnd() };
+}

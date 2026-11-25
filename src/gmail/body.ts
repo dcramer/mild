@@ -53,6 +53,37 @@ function htmlToText(html: string): string {
     .replace(/&#39;/gi, "'");
 }
 
+const BLOCK = /^(?:div|p|tr|li|ul|ol|table|blockquote|h[1-6])$/i;
+const ENTITY: Record<string, string> = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+
+/**
+ * A Gmail signature, which Gmail keeps as HTML, as the lines it reads as: a block starts a line, an empty one (`<div><br></div>`)
+ * is a blank line, and images, a logo most often, are left out.
+ */
+export function signatureText(html: string): string {
+  const lines: string[] = [];
+  let line = '';
+  const end = (always: boolean) => {
+    if (always || line.trim() !== '') lines.push(line.replace(/\s+/g, ' ').trim());
+    line = '';
+  };
+  for (const [, tag, name = '', text = ''] of html.replace(/<(style|script|head)\b[\s\S]*?<\/\1>/gi, '').matchAll(/(<\/?([a-z][a-z0-9]*)\b[^>]*>)|([^<]+)/gi)) {
+    if (tag === undefined) line += text.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (whole, code: string) => entity(code) ?? whole);
+    else if (name.toLowerCase() === 'br') end(true);
+    else if (BLOCK.test(name)) end(false);
+  }
+  end(false);
+  const first = lines.findIndex((l) => l !== '');
+  const last = lines.findLastIndex((l) => l !== '');
+  return first === -1 ? '' : lines.slice(first, last + 1).join('\n');
+}
+
+function entity(code: string): string | undefined {
+  if (!code.startsWith('#')) return ENTITY[code.toLowerCase()];
+  const point = code[1]?.toLowerCase() === 'x' ? Number.parseInt(code.slice(2), 16) : Number(code.slice(1));
+  return Number.isInteger(point) && point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : undefined;
+}
+
 /** The readable text of a message: the plain part if there is one, otherwise the HTML with markup removed. Truncated. */
 export function extractText(payload: BodyPart | null | undefined): string {
   return shortened(readable(payload));

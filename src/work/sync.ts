@@ -6,7 +6,7 @@ import { type Text, keepText, recordKept } from '../store/kept.ts';
 import { textOf } from './bodies.ts';
 import { preferences } from '../store/preferences.ts';
 import { learnFromGmail, userChanges } from '../learn/gmail.ts';
-import { type Account, lastSyncedAt, setMailboxAliases } from '../store/accounts.ts';
+import { type Account, lastSyncedAt, setSendAs } from '../store/accounts.ts';
 import { isOwnDigest, knownDigests } from '../store/digests.ts';
 import { followLabels, recordGone, recordSync, recordSynced } from '../store/messages.ts';
 import type { MessageFacts } from '../triage/types.ts';
@@ -48,7 +48,7 @@ export async function syncAccount(db: Sql, api: GmailApi, account: Account, now:
   // On the first sync of a day, before this sync's mail is recorded with them.
   if (syncedAt === null || Math.floor(syncedAt / DAY_MS) !== Math.floor(startedAt / DAY_MS)) {
     try {
-      await setMailboxAliases(db, account.id, await api.listSendAs());
+      await setSendAs(db, account.id, await api.listSendAs());
     } catch {
       // The last list stands until tomorrow's.
     }

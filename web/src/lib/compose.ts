@@ -75,7 +75,7 @@ export interface Draft {
   withFiles?: boolean;
   /** A reply whose subject is shown to edit, as Gmail's Edit subject shows it. */
   editSubject?: boolean;
-  /** A reply whose quote of the message it answers was put in its text by •••, so it is not added again as it goes. */
+  /** What goes under what is written (the signature, a reply's quote) was put in its text by a press, so it is not added again as it goes. */
   quoted?: boolean;
   /** Its Message-ID, made at the first press of Send and kept until it has gone, so trying again cannot send it twice. */
   id: string | null;
