@@ -1,4 +1,5 @@
 import { api } from './api/endpoints.ts';
+import { clearBadge } from './badge.ts';
 import { forgetDevice } from './device.ts';
 import { forgetDrafts } from './compose.ts';
 import { chooseMailbox } from './mailbox.ts';
@@ -20,12 +21,13 @@ export async function signOut(): Promise<void> {
 
 /**
  * Everything this browser kept of the person: what the device kept (the copy of their mail, the frame and the key; the
- * browser is told to clear it too, but not over plain HTTP), unsent drafts, the mailbox chosen, where the app opens.
+ * browser is told to clear it too, but not over plain HTTP), unsent drafts, the mailbox chosen, where the app opens, the count on its icon.
  * Also for a session the server ended (their mailbox or account removed), before the page leaves: the page opens on
  * the frame the device kept, which would still say they are signed in.
  */
 export async function forgetHere(): Promise<void> {
   await forgetDevice();
+  await clearBadge();
   forgetDrafts();
   chooseMailbox('');
   try {
