@@ -49,6 +49,19 @@ test.describe('Activity, after a pass with Mild on', () => {
       await held;
       await route.continue();
     });
+    // Opened again it draws what the device kept; the room is for when that cannot be used, as after an update.
+    const dropped = `new Promise((done) => {
+      const opening = indexedDB.open('sift-device');
+      opening.onsuccess = () => {
+        const reads = opening.result.transaction('reads', 'readwrite').objectStore('reads');
+        const counted = reads.count();
+        counted.onsuccess = () => {
+          reads.clear();
+          reads.transaction.oncomplete = () => (opening.result.close(), done(counted.result > 0));
+        };
+      };
+    })`;
+    await expect.poll(() => page.evaluate<boolean>(dropped)).toBe(true);
     await page.reload();
     const first = row(page, 'Last day of the sale');
     const before = await boxOf(first);
