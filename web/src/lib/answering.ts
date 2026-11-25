@@ -6,15 +6,24 @@ import { reveal } from './reveal.ts';
 
 /** How a reply or a forward starts, from the message it answers, and the addresses it can be sent from. */
 
-/** An address mail can be from: a mailbox's own, or one of its aliases, and whether Google lets Mild send from that mailbox. */
+/**
+ * An address mail can be from: a mailbox's own, or one of its aliases, whether Google lets Mild send from that mailbox,
+ * and its Gmail signature ('' for none).
+ */
 export interface From {
   address: string;
   accountId: string;
   canSend: boolean;
+  signature: string;
 }
 
 export const addressesOf = (account: ManageState['accounts'][number]): From[] =>
-  [account.email, ...account.aliases].map((address) => ({ address, accountId: account.id, canSend: account.canSend }));
+  [account.email, ...account.aliases].map((address) => ({
+    address,
+    accountId: account.id,
+    canSend: account.canSend,
+    signature: reveal(account.signatures[address]) ?? '',
+  }));
 
 /** "Re: " once, as Gmail and the server put it. */
 export const answering = (subject: string) => (/^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}`);
@@ -24,13 +33,39 @@ const forwarding = (subject: string) => (/^fwd?:/i.test(subject.trim()) ? subjec
 const QUOTE = '---------- Forwarded message ---------';
 /** Where Gmail's quote under a reply starts: its "On …, … wrote:" line, then the message, each line after "> ". */
 const REPLY_QUOTE = /^On .+ wrote:\n\n>/m;
+/** The line a signature starts under, "-- ", as Gmail and every mail program writes it. */
+const SIGNED = /^-- $/m;
 
-/** What the person wrote of `text`, without the message a forward or a reply quotes under it. */
+/** What the person wrote of `text`, without the signature or the message a forward or a reply quotes under it. */
 export function ownOf(text: string): string {
-  const forwarded = text.indexOf(QUOTE);
-  const replied = text.search(REPLY_QUOTE);
-  const at = Math.min(...[forwarded, replied].filter((i) => i !== -1), text.length);
+  const at = Math.min(...[text.indexOf(QUOTE), text.search(REPLY_QUOTE), text.search(SIGNED)].filter((i) => i !== -1), text.length);
   return text.slice(0, at);
+}
+
+/**
+ * What goes under what is written, as Gmail adds it: the signature of the address it is from, then a reply's quote of the
+ * message it answers. Null when there is neither.
+ */
+export const trimmedOf = (from: From, quote: string | null) =>
+  [...(from.signature ? [`-- \n${from.signature}`] : []), ...(quote ? [quote] : [])].join('\n\n') || null;
+
+/**
+ * The text as it goes: what was written, then what goes under it (`trimmedOf`), unless a press put that in the text
+ * already, then a forward's message, which Gmail puts under the signature.
+ */
+export function withTrimmed(draft: Pick<Draft, 'text' | 'quoted'>, trimmed: string | null): string {
+  if (!trimmed || draft.quoted) return draft.text;
+  const own = ownOf(draft.text);
+  const forwarded = draft.text.slice(own.length).trim();
+  return `${own.trimEnd()}\n\n${trimmed}${forwarded ? `\n\n${forwarded}` : ''}`;
+}
+
+/** The signature in a text that has it, changed to the one of the address it is now from, as Gmail changes it. */
+export function resigned(text: string, was: string, now: string): string {
+  const signed = (signature: string) => (signature ? `-- \n${signature}` : '');
+  if (!was) return withTrimmed({ text, quoted: false }, signed(now) || null);
+  const at = text.indexOf(signed(was));
+  return at === -1 ? text : text.slice(0, at) + signed(now) + text.slice(at + signed(was).length);
 }
 
 /** The message a reply answers, quoted as Gmail quotes it under what is written; null when Mild holds no text of it. */
@@ -41,9 +76,6 @@ export function quoteOf(message: MessageDetail): string | null {
     '\n',
   );
 }
-
-/** The text a reply goes with: what was written, and under it the quote, unless ••• put it there already. */
-export const withQuote = (draft: Draft, quote: string | null) => (quote && !draft.quoted ? `${draft.text.trimEnd()}\n\n${quote}` : draft.text);
 
 const shown = (list: MessageDetail['to']): Party[] => list.map((p) => ({ address: reveal(p.address), ...(p.name ? { name: reveal(p.name) } : {}) }));
 const senderOf = (message: MessageDetail): Party => ({ address: reveal(message.fromAddress), ...(message.fromName ? { name: reveal(message.fromName) } : {}) });

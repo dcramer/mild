@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { canSend, lastSyncedAt, listAccounts, mailboxAliases, signInEnds } from '../../../../store/accounts.ts';
+import { canSend, lastSyncedAt, listAccounts, mailboxAliases, mailboxSignatures, signInEnds } from '../../../../store/accounts.ts';
 import { inboxProgress } from '../../../../store/inbox-runs.ts';
 import { copyProgress } from '../../../../store/copies.ts';
 import { MAX_LABELS } from '../../../../store/labels.ts';
@@ -44,6 +44,7 @@ async function manageState({ db, controls, person, now }: Context, scope: Scope)
         primary: a.id === person?.primary,
         canSend: await canSend(db, a.id),
         aliases: await mailboxAliases(db, a.id),
+        signatures: await mailboxSignatures(db, a.id),
         signInEnds: ends.get(a.id) ?? null,
       })),
     ),

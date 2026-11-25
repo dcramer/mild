@@ -87,8 +87,8 @@ export function DraftText(props: Omit<ComponentProps<typeof TextArea>, 'bare'>) 
 }
 
 /**
- * Under a reply's text, the message it answers, quoted as it will go, folded behind ••• as Gmail trims it; a press puts
- * the quote in the text, to edit.
+ * Under a reply's text, the signature and the message it answers, quoted, as they will go, folded behind ••• as Gmail
+ * trims them; a press puts them in the text, to edit.
  */
 export function Trimmed({ onShow }: { onShow: () => void }) {
   return (
@@ -97,6 +97,26 @@ export function Trimmed({ onShow }: { onShow: () => void }) {
         <Button variant="quiet" className="-ml-2 h-auto px-2 tracking-widest" aria-label="Show trimmed content" onClick={onShow}>
           •••
         </Button>
+      </Tooltip>
+    </div>
+  );
+}
+
+/**
+ * Under new mail's text, the signature as it will go, faint, as Gmail draws one in its draft; a press puts it in the text,
+ * to edit.
+ */
+export function DraftSignature({ text, onEdit }: { text: string; onEdit: () => void }) {
+  return (
+    <div className="px-(--gutter) pb-3">
+      <Tooltip says="Edit signature">
+        <button
+          type="button"
+          className="cursor-text text-left text-reading leading-relaxed whitespace-pre-wrap text-muted-foreground hover:text-foreground"
+          onClick={onEdit}
+        >
+          {`-- \n${text}`}
+        </button>
       </Tooltip>
     </div>
   );

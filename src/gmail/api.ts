@@ -1,6 +1,6 @@
 import { gmail, type gmail_v1 } from '@googleapis/gmail';
 import type { OAuth2Client } from 'google-auth-library';
-import { type MessageContent, readContent } from './body.ts';
+import { type MessageContent, readContent, signatureText } from './body.ts';
 import { calls, isInvalid, isNotFound } from './call.ts';
 import type { Pace } from './quota.ts';
 
@@ -113,8 +113,13 @@ export interface GmailApi {
   getMessage(messageId: string): Promise<{ raw: RawMessage; content: MessageContent } | null>;
   /** A thread's messages, oldest first, with their labels and nothing else. Null when the thread no longer exists. */
   getThread(threadId: string): Promise<{ id: string; labelIds: string[] }[] | null>;
-  /** The addresses the owner can send as, the account's own among them, lowercased. */
-  listSendAs(): Promise<string[]>;
+  /** The addresses the owner can send as, the account's own among them, lowercased, each with its Gmail signature as text ('' for none). */
+  listSendAs(): Promise<SendAs[]>;
+}
+
+interface SendAs {
+  address: string;
+  signature: string;
 }
 
 const ASKED = new Set(METADATA_HEADERS.map((name) => name.toLowerCase()));
@@ -254,7 +259,9 @@ export function createGmailApi(auth: OAuth2Client, pace: Pace): GmailApi {
     async listSendAs() {
       const data = await call('users.settings.sendAs.list', 1, () => client.users.settings.sendAs.list({ userId }));
       // An address added but never confirmed from its own inbox is not shown to be the owner's.
-      return (data.sendAs ?? []).flatMap((a) => (a.sendAsEmail && a.verificationStatus !== 'pending' ? [a.sendAsEmail.toLowerCase()] : []));
+      return (data.sendAs ?? []).flatMap((a) =>
+        a.sendAsEmail && a.verificationStatus !== 'pending' ? [{ address: a.sendAsEmail.toLowerCase(), signature: signatureText(a.signature ?? '') }] : [],
+      );
     },
 
     async getContent(messageId) {

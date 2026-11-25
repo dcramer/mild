@@ -3,6 +3,7 @@ import { REASONING } from '../../model/reasoning.ts';
 import { REACHES } from '../../store/states.ts';
 import { LabelSummary } from './labels.ts';
 import { MailWindow } from './mail.ts';
+import { held } from './parts.ts';
 
 /**
  * A ChatGPT sign-in waiting on the person: where to go, and by device code the code to enter there.
@@ -52,7 +53,10 @@ export const ManageState = z.object({
     pending: z.union([SignInCode, z.object({ error: z.string() })]).nullable(),
   }),
   activity: z.object({ running: z.boolean(), lastPassAt: z.number().nullable(), problems: z.array(z.string()), expired: z.array(z.string()) }),
-  /** `canSend`: Google let Mild send from it (`/auth/login?grant=send&mailbox=…` asks). `aliases`: its other addresses in Gmail, which it may send as. */
+  /**
+   * `canSend`: Google let Mild send from it (`/auth/login?grant=send&mailbox=…` asks). `aliases`: its other addresses in Gmail,
+   * which it may send as. `signatures`: the Gmail signature of each of its addresses that has one, as text.
+   */
   accounts: z.array(
     z.object({
       id: z.string(),
@@ -61,6 +65,7 @@ export const ManageState = z.object({
       primary: z.boolean(),
       canSend: z.boolean(),
       aliases: z.array(z.string()),
+      signatures: z.record(z.string(), held),
       /** When Google will end its sign-in, known only once one has ended a week after it was given (a client in Testing). */
       signInEnds: z.number().nullable(),
     }),

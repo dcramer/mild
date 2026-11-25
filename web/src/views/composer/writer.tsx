@@ -3,7 +3,7 @@ import { type ReactNode, useState } from 'react';
 import { type Party, type Recipient, wrongAddresses } from '@/lib/addresses.ts';
 import { api } from '@/lib/api/endpoints.ts';
 import { useSession } from '@/lib/api/reads.ts';
-import { type From, quoteOf } from '@/lib/answering.ts';
+import { type From, quoteOf, resigned, trimmedOf, withTrimmed } from '@/lib/answering.ts';
 import { useAutosave } from '@/lib/autosave.ts';
 import type { Draft, Writing } from '@/lib/compose.ts';
 import { blank } from '@/lib/draft-checks.ts';
@@ -16,6 +16,7 @@ import {
   DiscardButton,
   DraftFiles,
   DraftLine,
+  DraftSignature,
   DraftText,
   Finish,
   Input,
@@ -84,6 +85,12 @@ export function Writer({
 
   const from = choices.find((c) => c.address === draft.from) ?? choices[0];
   const quote = what.kind === 'reply' && answered ? quoteOf(answered) : null;
+  const trimmed = trimmedOf(from, quote);
+  // What goes under the text put in it to edit, as Gmail puts it, where the cursor is then.
+  const unfold = () => {
+    change({ text: withTrimmed(draft, trimmed), quoted: true });
+    textField.current?.focus();
+  };
   const { send, schedule, discard, switchTo, asking, dismiss, nobody, wrong, waiting } = usePresses({
     who,
     what,
@@ -95,7 +102,7 @@ export function Writer({
     typing,
     setTyping,
     from,
-    quote,
+    trimmed,
     carried,
     uploading,
     onClose,
@@ -113,7 +120,12 @@ export function Writer({
           label="From"
           value={from.address}
           options={choices.map((c) => [c.address, c.address] as const)}
-          onChange={(address) => change({ from: address })}
+          onChange={(address) =>
+            change({
+              from: address,
+              ...(draft.quoted ? { text: resigned(draft.text, from.signature, choices.find((c) => c.address === address)?.signature ?? '') } : {}),
+            })
+          }
         />
       </DraftLine>
     ) : null;
@@ -217,14 +229,7 @@ export function Writer({
         value={draft.text}
         onChange={(event) => change({ text: event.target.value })}
       />
-      {quote && !draft.quoted ? (
-        <Trimmed
-          onShow={() => {
-            change({ text: `${draft.text.trimEnd()}\n\n${quote}`, quoted: true });
-            textField.current?.focus();
-          }}
-        />
-      ) : null}
+      {!trimmed || draft.quoted ? null : what.kind === 'reply' ? <Trimmed onShow={unfold} /> : <DraftSignature text={from.signature} onEdit={unfold} />}
       <DraftFiles files={shown} onRemove={detach} />
     </div>
   );

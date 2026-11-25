@@ -1,4 +1,6 @@
 import { and, asc, eq, gt, lte, not, sql, accounts, credentials, labels, mailboxes, preferences, users } from './query.ts';
+import type { Sealed } from '../confidential.ts';
+import { openJson, sealJson, signaturesName } from './content.ts';
 import { startCopies } from './copies.ts';
 import { windowStart } from '../mail-window.ts';
 import { inboxRow } from './labels.ts';
@@ -232,11 +234,19 @@ export async function mailboxAliases(db: Sql, accountId: string): Promise<string
   return row?.aliases ?? [];
 }
 
-export async function setMailboxAliases(db: Sql, accountId: string, aliases: readonly string[]): Promise<void> {
+/** Records the addresses Gmail says the mailbox can send as, and each one's signature. */
+export async function setSendAs(db: Sql, accountId: string, sendAs: readonly { address: string; signature: string }[]): Promise<void> {
+  const signatures = Object.fromEntries(sendAs.filter((a) => a.signature !== '').map((a) => [a.address, a.signature]));
   await db
     .update(mailboxes)
-    .set({ aliases: aliases.filter((a) => a !== accountId) })
+    .set({ aliases: sendAs.map((a) => a.address).filter((a) => a !== accountId), signatures: sealJson(db, signaturesName(db, accountId), signatures) })
     .where(eq(mailboxes.id, accountId));
+}
+
+/** Each of the mailbox's addresses' Gmail signature, by the address, as its last sync found them: none for one without. */
+export async function mailboxSignatures(db: Sql, accountId: string): Promise<Sealed<Record<string, string>>> {
+  const [row] = await db.select({ signatures: mailboxes.signatures }).from(mailboxes).where(eq(mailboxes.id, accountId));
+  return row?.signatures ? openJson<Record<string, string>>(db, signaturesName(db, accountId), row.signatures) : {};
 }
 
 /** Records Gmail's name for a label Mild put on mail, so what it changed reads by name. Writes only when it is new or was renamed. */

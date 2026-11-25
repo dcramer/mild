@@ -208,7 +208,7 @@ gmail.deliver(
   },
   { quietly: true },
 );
-if (variant === '--inbox') gmail.sendAs = [{ email: 'me+lists@example.org' }];
+if (variant === '--inbox') gmail.sendAs = [{ email: 'me+lists@example.org', signature: '<div dir="ltr">Me<div>Lists, example.org</div></div>' }];
 for (const m of inbox) gmail.deliver(m);
 
 /** Mail at scale, the same every run: oldest first, as Gmail's history has it. */

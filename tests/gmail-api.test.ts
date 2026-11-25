@@ -75,16 +75,23 @@ describe('reading', () => {
     ]);
   });
 
-  it('counts the inbox and the mailbox, lists labels, and the send-as addresses confirmed', async () => {
+  it('counts the inbox and the mailbox, lists labels, and the send-as addresses confirmed with their signatures as text', async () => {
     const { api, gmail: box } = gmail();
     box.deliver({ from: 'ada@example.com' });
     box.deliver({ from: 'bo@example.com', labelIds: [] });
     box.label('Receipts');
-    box.sendAs = [{ email: 'Me@Work.example.com' }, { email: 'later@example.net', pending: true }];
+    box.signature = '<div dir="ltr">Me Example<div>Analyst &amp; editor</div><div><br></div><div><a href="https://example.com">example.com</a></div></div>';
+    box.sendAs = [
+      { email: 'Me@Work.example.com', signature: '<img src="https://example.com/logo.png">' },
+      { email: 'later@example.net', pending: true },
+    ];
     expect(await api.inboxSize()).toBe(1);
     expect(await api.mailboxSize()).toBe(2);
     expect(await api.listLabels()).toContainEqual({ id: 'Label_15', name: 'Receipts' });
-    expect(await api.listSendAs()).toEqual([ME, 'me@work.example.com']);
+    expect(await api.listSendAs()).toEqual([
+      { address: ME, signature: 'Me Example\nAnalyst & editor\n\nexample.com' },
+      { address: 'me@work.example.com', signature: '' },
+    ]);
   });
 });
 
