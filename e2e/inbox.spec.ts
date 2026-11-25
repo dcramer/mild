@@ -612,6 +612,47 @@ test.describe('Inbox', () => {
     await other.close();
   });
 
+  test('a tab handed the whole copy while it reads its disk draws it, without waiting on its own ask', async ({ page, context }) => {
+    // The first tab keeps nothing, so the second finds no copy on the disk; what the second asks the feed itself is never answered.
+    await page.addInitScript(`{
+      const transaction = IDBDatabase.prototype.transaction;
+      IDBDatabase.prototype.transaction = function (stores, mode, ...rest) {
+        if (mode === 'readwrite' && [].concat(stores).includes('standing')) throw new DOMException('Kept nothing.', 'InvalidStateError');
+        return transaction.call(this, stores, mode, ...rest);
+      };
+    }`);
+    const other = await context.newPage();
+    await other.route('**/api/sync*', () => {});
+    // The second tab reads its disk only once the first tab's whole copy has reached it: its key is left to the server,
+    // which answers once the copy is handed over.
+    let handOver = () => {};
+    const handed = new Promise<void>((done) => (handOver = done));
+    await other.exposeFunction('handed', () => handOver());
+    await other.addInitScript(`{
+      const get = IDBObjectStore.prototype.get;
+      IDBObjectStore.prototype.get = function (query) {
+        return get.call(this, this.name === 'key' && query === 'key' ? 'none' : query);
+      };
+      new BroadcastChannel('sift-copy').addEventListener('message', ({ data }) => data !== 'ask' && window.handed());
+    }`);
+    let listen = () => {};
+    const listening = new Promise<void>((done) => (listen = done));
+    await other.route('**/api/device*', async (route) => {
+      listen();
+      await handed;
+      await route.continue();
+    });
+    await page.route('**/api/sync*', async (route) => {
+      await listening;
+      await route.continue();
+    });
+    await page.goto('/inbox');
+    await other.goto('/inbox');
+    await expect(inboxRow(page, 'This week in widgets')).toBeVisible();
+    await expect(inboxRow(other, 'This week in widgets')).toBeVisible();
+    await other.close();
+  });
+
   test('a digest Mild put in the inbox opens as what it lists, the picks first with why, each opening in the reader', async ({ page }) => {
     await page.goto('/inbox');
     const idOf = async (subject: string) => (await inboxRow(page, subject).getAttribute('data-holds'))!.split('/')[1]!;

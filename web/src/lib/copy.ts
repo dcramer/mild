@@ -358,6 +358,8 @@ export function conversations(): Collection<Copied, string> {
           else lead();
           const first = () => (whole ? markReady() : undefined);
           listeners.add(first);
+          // Another tab may have handed over the whole copy while this one read its disk.
+          first();
         };
         void load(() => {
           markReady();
