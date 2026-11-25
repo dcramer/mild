@@ -641,6 +641,18 @@ test.describe('with Inbox on', () => {
     expect(sift.sent()).toHaveLength(1);
   });
 
+  test('a reply box stays with its conversation: the next one opens without it', async ({ page }) => {
+    await page.goto('/inbox');
+    await inboxRow(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    const open = reader(page);
+    await open.getByRole('button', { name: /^Reply(?! all| to)/ }).click();
+    await expect(composer(page, 'Reply').getByRole('textbox', { name: 'Message' })).toBeFocused();
+    await open.getByRole('button', { name: 'Next' }).click();
+    await expect(readerHeading(page, 'Notes from the review')).toBeVisible();
+    await expect(composer(page, 'Reply')).toHaveCount(0);
+    await param(page, 'compose').toBeNull();
+  });
+
   test('the Reply under the conversation answers its newest, in the box at its foot', async ({ page, sift }) => {
     await page.goto('/inbox');
     await inboxRow(page, 'Your March bill').getByRole('cell').nth(2).click();

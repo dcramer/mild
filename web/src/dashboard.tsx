@@ -15,7 +15,7 @@ import { ComposeContext, closeComposer, openComposer } from '@/lib/compose.ts';
 import { Mailbox } from '@/lib/narrowed.ts';
 import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
-import { goBack, panelEntry, setParams, useHere, useParam } from '@/lib/params.ts';
+import { goBack, panelEntry, paramNow, setParams, useHere, useParam } from '@/lib/params.ts';
 import { isMessageKey } from '@/lib/rows.ts';
 import { useStarted } from '@/lib/started.ts';
 import { useHidden } from '@/components/action.ts';
@@ -236,8 +236,9 @@ function useReader() {
       : listed === -1
         ? { items: [{ accountId: '', messageId, subject: null, ...(threadId ? { threadId } : {}) }], index: 0 }
         : { items: list, index: listed };
+  // A reply box is its conversation's, and stays behind with it; a new message's panel stays open.
   const show = (item: MessageRef | undefined, push?: { state: { panel: boolean } }) =>
-    setParams({ message: item?.messageId ?? '', thread: item?.threadId ?? '' }, push);
+    setParams({ message: item?.messageId ?? '', thread: item?.threadId ?? '', ...(paramNow('compose') === 'new' ? {} : { compose: '', answering: '' }) }, push);
   // Each opening is a reader of its own, with a history entry of its own, so Back returns to the list.
   const [opened, setOpened] = useState(0);
   // Where the list was, and the row of the message last shown, for Back to return to.
