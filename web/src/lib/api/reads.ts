@@ -49,14 +49,29 @@ export const readMessageAhead = (accountId: string, messageId: string, onRest = 
 /** How many messages at the top of a list are read ahead: about 40 ms of the server's time each, so not all a list draws. */
 const READ_AHEAD = 10;
 
+type Ref = { accountId: string; messageId: string };
+
 /**
  * The top of a list (Inbox, For review) read ahead in one call, so opening any of it waits on nothing: each message is
- * kept as `useMessage` reads it. One asked for in the last minute is not asked for again, whatever came of it.
+ * kept as `useMessage` reads it. One asked for in the last minute is not asked for again, whatever came of it. Sent once
+ * nothing the page asked for itself is on its way: a local Mild's database answers one query at a time, so the batch
+ * would hold up what the page is waiting on as it opens.
  */
-export function readTopAhead(list: readonly { accountId: string; messageId: string }[]): void {
+export function readTopAhead(list: readonly Ref[]): void {
+  const client = queryClientFor();
+  const busy = () => client.isFetching({ predicate: (query) => query.meta?.['ahead'] !== true }) > 0;
+  latest = list;
+  if (busy()) {
+    stopWaiting ??= client.getQueryCache().subscribe(() => {
+      if (busy()) return;
+      stopWaiting?.();
+      stopWaiting = null;
+      readTopAhead(latest);
+    });
+    return;
+  }
   const refs = list.slice(0, READ_AHEAD);
   const now = Date.now();
-  const client = queryClientFor();
   const due = refs.filter(({ accountId, messageId }) => {
     const key = keys.message(accountId, messageId);
     return client.getQueryData([key]) === undefined && now - (askedAt.get(key) ?? -Infinity) > 60_000;
@@ -74,6 +89,9 @@ export function readTopAhead(list: readonly { accountId: string; messageId: stri
     .catch(() => {});
 }
 const askedAt = new Map<string, number>();
+/** The list last given, sent once the page is quiet. */
+let latest: readonly Ref[] = [];
+let stopWaiting: (() => void) | null = null;
 
 /** What Mild waits on the reader for from `sender`. */
 export const useSuggestion = (sender: string) => useLoaded(keys.suggestion(sender), (signal) => api.suggestion(sender, signal), 120_000);

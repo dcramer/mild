@@ -38,21 +38,20 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: () => readonl
   const toast = useToast();
 
   /** Takes `targets` off the page, holds them while their toast shows, and then sends them. */
-  const send = (targets: readonly Answerable[], labelId: string, offer?: () => Promise<{ label: string; onPress: () => void } | undefined>) =>
+  const send = (targets: readonly Answerable[], labelId: string, offer?: Offer | Promise<Offer | undefined>) =>
     hide(targets.map(messageKey), 'Could not save your answer', async () => {
-      if (!(await held(toast, titleOf(targets), didOf(labels, labelId), await offer?.()))) return;
+      if (!(await held(toast, titleOf(targets), didOf(labels, labelId), offer))) return;
       const replies = await Promise.all(targets.map((t) => api.feedback(feedbackOf(t, labelId))));
       // The answer is saved; what Mild itself did to the message could not be taken back in Gmail.
       const notFixed = replies.find((r) => r.notFixed !== null)?.notFixed;
       if (notFixed) toast('Could not put the message back in Gmail', { tone: 'failure', description: notFixed });
     });
 
-  // An answer given before the sender's other mail has loaded (a reader opened a moment ago) waits for it to say so.
+  // An answer given before the sender's other mail has loaded (a reader opened a moment ago) offers it once it has.
   const answer = (target: Answerable, labelId: string) => {
-    send([target], labelId, async () => {
-      const alike = (await Promise.resolve(waiting()).catch(() => [])).filter(
-        (w) => w.messageId !== target.messageId && w.sender === target.sender && w.labelId === target.labelId,
-      );
+    const sent = waiting();
+    const offerOf = (all: readonly Answerable[]) => {
+      const alike = all.filter((w) => w.messageId !== target.messageId && w.sender === target.sender && w.labelId === target.labelId);
       if (alike.length === 0) return undefined;
       return {
         label: `Same for ${alike.length} more`,
@@ -60,7 +59,8 @@ export function useAnswer(labels: readonly AnswerLabel[], waiting: () => readonl
         // would move or close a panel the reader has since moved on in.
         onPress: () => send(alike, labelId),
       };
-    });
+    };
+    send([target], labelId, sent instanceof Promise ? sent.then(offerOf, () => undefined) : offerOf(sent));
     onDone?.();
   };
 
@@ -93,7 +93,9 @@ function didOf(labels: readonly AnswerLabel[], labelId: string): [Did, ...Did[]]
 }
 
 /** Says it with Undo, and resolves with whether to send it: false when Undo was pressed. */
-const held = (toast: ReturnType<typeof useToast>, title: string, did: readonly [Did, ...Did[]], action?: { label: string; onPress: () => void }) =>
+type Offer = { label: string; onPress: () => void };
+
+const held = (toast: ReturnType<typeof useToast>, title: string, did: readonly [Did, ...Did[]], action?: Offer | Promise<Offer | undefined>) =>
   new Promise<boolean>((done) => toast(title, { did, ...(action ? { action } : {}), undo: () => done(false), onGone: () => done(true) }));
 
 /** A label the sender's other mail has had, and what share of it. */

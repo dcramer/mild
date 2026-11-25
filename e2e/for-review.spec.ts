@@ -1,5 +1,5 @@
 import { expect, test, PHONE } from './fixture.ts';
-import { boxOf, query, sideScroll } from './wait.ts';
+import { boxOf, pointAt, query, sideScroll } from './wait.ts';
 import { choose, row } from './parts.ts';
 import { openMessage, reader } from './reader.ts';
 import { reviewRows, reviewSearch } from './review.ts';
@@ -29,20 +29,22 @@ test.describe('For review', () => {
     await expect(ruleDialog(page)).toContainText('grace@example.net');
   });
 
-  test('a message at the top opens whole on its first draw, its text read ahead in one call', async ({ page }) => {
-    const ahead = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/messages');
+  test('a message the pointer rested on opens whole on its first draw, its text read ahead', async ({ page }) => {
     await page.goto('/');
     await expect(reviewRows(page).first()).toBeVisible();
-    expect((await ahead).status()).toBe(200);
     // One opened and closed first, so the reader's code is here however busy the machine: it is loaded as the page starts.
     // Not beside the one opened next, which the reader reads ahead.
     await openMessage(page, 'Disk 91% full on db-2');
     await page.keyboard.press('Escape');
     await expect(reader(page)).toHaveCount(0);
+    const lunch = row(page, 'Lunch on Thursday?');
+    const ahead = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/message');
+    await pointAt(lunch);
+    expect((await ahead).status()).toBe(200);
     await page.evaluate(
       `window.drewLoading = false; new MutationObserver(() => { if (document.querySelector('[aria-label="Loading"]')) window.drewLoading = true; }).observe(document.body, { subtree: true, childList: true })`,
     );
-    await row(page, 'Lunch on Thursday?').getByRole('cell').nth(2).click();
+    await lunch.getByRole('cell').nth(2).click();
     await expect(reader(page).getByText('Are you free for lunch on Thursday?')).toBeVisible();
     expect(await page.evaluate('window.drewLoading')).toBe(false);
   });

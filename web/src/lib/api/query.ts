@@ -1,9 +1,9 @@
 import {
+  CancelledError,
   type InfiniteData,
   QueryCache,
   QueryClient,
   environmentManager,
-  isCancelledError,
   keepPreviousData,
   onlineManager,
   useInfiniteQuery,
@@ -104,10 +104,10 @@ export function useLoaded<T>(key: string, fetcher: (signal: AbortSignal) => Prom
     at: query.dataUpdatedAt,
     reload: () => void query.refetch({ cancelRefetch: false }),
     ready: () => {
-      // What the device kept (`kept`, read at 0) may be out of date: wait for Mild's.
-      const read = () => client.fetchQuery({ queryKey, queryFn, staleTime: (q) => (q.state.dataUpdatedAt === 0 ? 0 : Infinity) });
+      // What the device kept (`kept`, dated 0) may be out of date: wait for Mild's.
+      const read = () => client.query({ queryKey, queryFn, staleTime: (q) => (q.state.dataUpdatedAt === 0 ? 0 : Infinity) });
       // The read on its way is stopped if what drew it goes (a panel closed by the press that asked): read it again.
-      return read().catch((error: unknown) => (isCancelledError(error) ? read() : Promise.reject(error)));
+      return read().catch((error: unknown) => (error instanceof CancelledError ? read() : Promise.reject(error)));
     },
   };
 }

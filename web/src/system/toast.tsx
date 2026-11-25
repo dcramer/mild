@@ -267,8 +267,11 @@ interface ToastOptions {
   /** What kind of thing the title is ("Rule added" over the rule), said above it, in place of a description. */
   kind?: string;
   tone?: 'failure';
-  /** One press that follows from what was done, such as answering the rest the same way. */
-  action?: { label: string; onPress: () => void };
+  /**
+   * One press that follows from what was done, such as answering the rest the same way. One still being worked out is
+   * added once it is, while this is still what is said, and the toast's time starts over for it.
+   */
+  action?: Action | Promise<Action | undefined>;
   /** Takes back what was done: shown as Undo, and Z presses it. Only where the app can really take it back. */
   undo?: () => void;
   /**
@@ -280,8 +283,12 @@ interface ToastOptions {
   did?: readonly [Did, ...Did[]];
 }
 
+type Action = { label: string; onPress: () => void };
+
 const SAID = 'said';
 let failures = 0;
+/** Each saying, counted, so an action worked out late is added only to the one it was for. */
+let sayings = 0;
 /** The `onGone` of what is said now, until it goes. */
 let held: (() => void) | null = null;
 
@@ -292,6 +299,7 @@ export function useToast(): (title: string, options?: ToastOptions) => void {
     const failed = tone === 'failure';
     // What is said replaces what was said last; each failure keeps its own place until dismissed.
     const id = failed ? `failure-${++failures}` : SAID;
+    const saying = failed ? 0 : ++sayings;
     if (!failed) {
       const replaced = held;
       held = onGone ?? null;
@@ -324,8 +332,16 @@ export function useToast(): (title: string, options?: ToastOptions) => void {
               },
             }
           : {}),
-        ...(action ? { action: { label: action.label, onPress: closing(action.onPress) } } : {}),
+        ...(action && !(action instanceof Promise) ? { action: { label: action.label, onPress: closing(action.onPress) } } : {}),
       },
     });
+    if (action instanceof Promise)
+      void action.then((late) => {
+        // Gone (put away, timed out, said over) is gone: nothing is put back up.
+        if (!late || (!failed && (saying !== sayings || (onGone !== undefined && held !== onGone)))) return;
+        manager.update<Own>(id, (was) => ({
+          data: { ...was.data, lasts: TIMEOUT[1], action: { label: late.label, onPress: closing(late.onPress) } },
+        }));
+      });
   };
 }
