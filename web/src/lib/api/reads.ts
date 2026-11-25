@@ -92,8 +92,11 @@ const kindOf = (who: Who) => ('address' in who ? 'sender' : 'domain');
 const named = (who: Who) => ('address' in who ? who.address : who.domain);
 const read = (who: Who, signal: AbortSignal) => ('address' in who ? api.sender(who.address, signal) : api.domain(who.domain, signal));
 
-/** A sender's or a domain's card, which changes little while it is open. */
-export const useWhoCard = (who: Who) => useLoaded(keys.card(kindOf(who), named(who)), (signal) => read(who, signal), 300_000);
+/**
+ * A sender's or a domain's card, which changes little while it is open. Not narrowed: a list still drawn from before
+ * the mailbox was switched names senders the mailbox chosen may have no mail from.
+ */
+export const useWhoCard = (who: Who) => useLoaded(keys.card(kindOf(who), named(who)), (signal) => read(who, signal), 300_000, '');
 
 export const useWhoPage = (who: Who) => useLoaded(keys.page(kindOf(who), named(who)), (signal) => read(who, signal));
 
