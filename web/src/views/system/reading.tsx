@@ -100,7 +100,13 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
     if (!next.delete(id)) next.add(id);
     setOpen(next);
   };
-  const answer = (title: string, to: (typeof THREAD)[number] = NEWEST) => setReplying({ title, to });
+  // A reply's lines start folded into whom it goes to.
+  const [unfolded, setUnfolded] = useState(false);
+  const answer = (title: string, to: (typeof THREAD)[number] = NEWEST) => {
+    setReplying({ title, to });
+    setUnfolded(false);
+  };
+  const folded = replying !== null && replying.title !== 'Forward' && !unfolded;
   return (
     <div className="flex flex-col gap-6">
       <ChoiceGroup
@@ -247,6 +253,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
                 }))}
               />
             }
+            {...(folded ? { to: { names: replying.to.from, onOpen: () => setUnfolded(true) } } : {})}
             {...(replying.to === NEWEST
               ? {}
               : {
@@ -278,6 +285,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
               <SpecimenDraft
                 to={replying.title === 'Forward' ? [] : [{ address: replying.to.address, name: replying.to.from }]}
                 quote={replying.title !== 'Forward'}
+                folded={folded}
               />
             ) : (
               <DraftBlocked title="Mild can’t send from ada@example.org yet">Google asks you once before Mild can send as you.</DraftBlocked>
@@ -320,7 +328,7 @@ const suggestPeople = async (typed: string) => {
 };
 
 /** A draft's lines as the composer draws them: To with a chip and a wrong one, Cc and Bcc behind their presses, and files in each state. */
-function SpecimenDraft({ to: start, quote }: { to: Recipient[]; quote: boolean }) {
+function SpecimenDraft({ to: start, quote, folded }: { to: Recipient[]; quote: boolean; folded: boolean }) {
   const [to, setTo] = useState<Recipient[]>([...start, { address: 'not an address', wrong: true }]);
   const [cc, setCc] = useState<Recipient[] | null>(null);
   const [bcc, setBcc] = useState<Recipient[] | null>(null);
@@ -336,25 +344,27 @@ function SpecimenDraft({ to: start, quote }: { to: Recipient[]; quote: boolean }
   const wrong = (list: Recipient[]) => wrongAddresses(list.filter((r) => r.wrong).map((r) => r.address));
   return (
     <>
-      <DraftLine label="To" error={wrong(to)}>
-        <Recipients label="To" value={to} onChange={setTo} {...typed('to')} suggest={suggestPeople} />
-        {cc ? null : (
-          <Button variant="quiet" onClick={() => setCc([])}>
-            Cc
-          </Button>
-        )}
-        {bcc ? null : (
-          <Button variant="quiet" onClick={() => setBcc([])}>
-            Bcc
-          </Button>
-        )}
-      </DraftLine>
-      {cc ? (
+      {folded ? null : (
+        <DraftLine label="To" error={wrong(to)}>
+          <Recipients label="To" value={to} onChange={setTo} {...typed('to')} suggest={suggestPeople} />
+          {cc ? null : (
+            <Button variant="quiet" onClick={() => setCc([])}>
+              Cc
+            </Button>
+          )}
+          {bcc ? null : (
+            <Button variant="quiet" onClick={() => setBcc([])}>
+              Bcc
+            </Button>
+          )}
+        </DraftLine>
+      )}
+      {cc && !folded ? (
         <DraftLine label="Cc">
           <Recipients label="Cc" value={cc} onChange={setCc} {...typed('cc')} suggest={suggestPeople} />
         </DraftLine>
       ) : null}
-      {bcc ? (
+      {bcc && !folded ? (
         <DraftLine label="Bcc">
           <Recipients label="Bcc" value={bcc} onChange={setBcc} {...typed('bcc')} suggest={suggestPeople} />
         </DraftLine>

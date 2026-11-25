@@ -531,10 +531,17 @@ test.describe('with Inbox on', () => {
     // Written in the reader, under the message it answers.
     await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
     await expect(reader(page).getByText('Are you free for lunch on Thursday?', { exact: true })).toBeVisible();
+    await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    // Its lines folded into whom it goes to, as Gmail folds a reply's, until that is pressed.
+    await expect(writing.getByRole('combobox', { name: 'From' })).toHaveCount(0);
+    await expect(writing.getByRole('group', { name: 'To', exact: true })).toHaveCount(0);
+    await writing.getByRole('button', { name: 'To Ada Lovelace: show who it goes to' }).click();
+    await expect(recipients(writing, 'To').input).toBeFocused();
     await expect(writing.getByRole('combobox', { name: 'From' })).toContainText(ME);
     await expect(recipients(writing, 'To').chip('Ada Lovelace <ada@example.org>')).toBeVisible();
+    await expect(writing.getByRole('button', { name: 'Cc', exact: true })).toBeVisible();
     await expect(writing.getByRole('textbox', { name: 'Subject' })).toHaveCount(0);
-    await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
+    await writing.getByRole('textbox', { name: 'Message' }).focus();
     await page.keyboard.type('Thursday works.');
     await writing.getByRole('button', { name: /^Send/ }).click();
 
@@ -565,7 +572,7 @@ test.describe('with Inbox on', () => {
     await expect(open.getByRole('button', { name: /^Reply all(?!,)/ })).toBeVisible();
     await page.keyboard.press('r');
     const writing = composer(page, 'Reply');
-    await expect(recipients(writing, 'To').chip('Ada Lovelace <ada@example.org>')).toBeVisible();
+    await expect(writing.getByRole('button', { name: /^To Ada Lovelace/ })).toBeVisible();
     await expect(writing.getByRole('textbox', { name: 'Message' })).toBeFocused();
     // Written in place under the conversation, which stays on the page above it.
     const asked = open.getByText('Are you free for lunch on Thursday?', { exact: true });

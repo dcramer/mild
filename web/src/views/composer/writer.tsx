@@ -101,8 +101,13 @@ export function Writer({
     onClose,
   });
 
+  // A reply's lines are folded into the names it goes to, as Gmail folds them, until those are pressed, or something in them needs the reader.
+  const [unfolded, setUnfolded] = useState(false);
+  const folded = inline && what.kind === 'reply' && !unfolded && !nobody && !wrong && Object.values(typing).every((t) => t === '');
+  const names = [...draft.to, ...draft.cc, ...draft.bcc].map((r) => r.name ?? r.address).join(', ');
+
   const fromLine =
-    choices.length > 1 ? (
+    choices.length > 1 && !folded ? (
       <DraftLine label="From">
         <Select
           label="From"
@@ -183,21 +188,23 @@ export function Writer({
         <p className="px-(--gutter) pt-3 text-sm text-muted-foreground">Not sent as scheduled: {scheduled.sendError}</p>
       ) : null}
       {fromLine}
-      <DraftLine label="To" error={wrongOf(draft.to)}>
-        <Recipients
-          label="To"
-          value={draft.to}
-          onChange={(to) => change({ to })}
-          text={typing.to}
-          onText={(to) => setTyping((was) => ({ ...was, to }))}
-          suggest={suggest}
-          inputRef={toInput}
-        />
-        {draft.showCc ? null : ask('cc')}
-        {draft.showBcc ? null : ask('bcc')}
-      </DraftLine>
-      {draft.showCc ? lineFor('cc') : null}
-      {draft.showBcc ? lineFor('bcc') : null}
+      {folded ? null : (
+        <DraftLine label="To" error={wrongOf(draft.to)}>
+          <Recipients
+            label="To"
+            value={draft.to}
+            onChange={(to) => change({ to })}
+            text={typing.to}
+            onText={(to) => setTyping((was) => ({ ...was, to }))}
+            suggest={suggest}
+            inputRef={toInput}
+          />
+          {draft.showCc ? null : ask('cc')}
+          {draft.showBcc ? null : ask('bcc')}
+        </DraftLine>
+      )}
+      {draft.showCc && !folded ? lineFor('cc') : null}
+      {draft.showBcc && !folded ? lineFor('bcc') : null}
       {what.kind === 'reply' && !draft.editSubject ? null : (
         <DraftLine label="Subject">
           <Input bare aria-label="Subject" className="flex-1" value={draft.subject} onChange={(event) => change({ subject: event.target.value })} />
@@ -226,6 +233,17 @@ export function Writer({
       <ReplyBox
         label={title}
         about={about}
+        {...(folded
+          ? {
+              to: {
+                names,
+                onOpen: () => {
+                  askFor('to');
+                  setUnfolded(true);
+                },
+              },
+            }
+          : {})}
         menu={what.kind === 'new' ? null : <AnswerKind what={what} draft={draft} subject={subject ?? ''} onSwitch={switchTo} onChange={change} />}
         actions={actions}
       >

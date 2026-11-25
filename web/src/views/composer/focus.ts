@@ -3,16 +3,20 @@ import { useEffect, useRef, useState } from 'react';
 import type { Draft, Writing } from '@/lib/compose.ts';
 
 /**
- * Where the focus goes in the composer: the field it starts on (`first`), To or the text; the Cc or Bcc line once it
- * is asked for (`askFor`) and drawn; and a forward's text at its start, above the quote.
+ * Where the focus goes in the composer: the field it starts on (`first`), To or the text; a line once it is asked for
+ * (`askFor`) and drawn; and a forward's text at its start, above the quote.
  */
 export function useFocus(what: Writing, draft: Draft, inline: boolean) {
   const toField = useRef<HTMLInputElement>(null);
+  // A line asked for (To, opened from a reply's names; Cc or Bcc): entered once it is drawn.
+  const asked = useRef<'to' | 'cc' | 'bcc' | null>(null);
   const [toInput] = useState(() => (input: HTMLInputElement | null) => {
     toField.current = input;
+    if (input && asked.current === 'to') {
+      input.focus();
+      asked.current = null;
+    }
   });
-  // Cc or Bcc asked for: entered once it is drawn.
-  const asked = useRef<'cc' | 'bcc' | null>(null);
   // One for each line, made once: a ref that changed each render would be attached again each render.
   const [entered] = useState(() => {
     const enter = (line: 'cc' | 'bcc') => (field: HTMLInputElement | null) => {
@@ -32,7 +36,7 @@ export function useFocus(what: Writing, draft: Draft, inline: boolean) {
   const first = what.kind !== 'reply' && draft.to.length === 0 ? toField : textField;
   const [opening] = useState(() => (inline ? first : null));
   useEffect(() => opening?.current?.focus(), [opening]);
-  const askFor = (line: 'cc' | 'bcc') => {
+  const askFor = (line: 'to' | 'cc' | 'bcc') => {
     asked.current = line;
   };
   return { toInput, entered, textField, first, askFor };
