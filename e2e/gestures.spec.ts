@@ -1,5 +1,5 @@
 import { expect, test } from './fixture.ts';
-import { boxOf, path } from './wait.ts';
+import { boxOf, holdMotion, path } from './wait.ts';
 import { TOUCH, edgeSwipe, fingerOver, hold, swipe } from './touch.ts';
 import { reader } from './reader.ts';
 import { phoneMenu, sections } from './navigation.ts';
@@ -65,12 +65,16 @@ test.describe('Inbox by touch, on a phone', () => {
         window.showing.push(track.scrollWidth - track.clientWidth - track.scrollLeft);
       }).observe(tr);
     })()`);
+    const motion = await holdMotion(page);
     await swipe(rowAbout(page, 'Your order has shipped'), -380);
+    // Halfway, it has eased past half of its height.
+    await motion.at(0.5);
+    const heights = () => page.evaluate<number[]>('window.heights');
+    const full = (await heights())[0]!;
+    await expect.poll(async () => (await heights()).some((h) => h > 1 && h < full / 2)).toBe(true);
+    await motion.release();
     await expect(rowAbout(page, 'Your order has shipped')).toHaveCount(0);
-    const heights = await page.evaluate<number[]>('window.heights');
-    const full = heights[0]!;
-    expect(heights.some((h) => h > 1 && h < full / 2)).toBe(true);
-    expect(Math.min(...heights)).toBeLessThan(2);
+    await expect.poll(async () => Math.min(...(await heights()))).toBeLessThan(2);
     // It never slid back over the rows under it: past the first report, at rest, only the few pixels a swipe acts short of the edge.
     expect((await page.evaluate<number[]>('window.showing')).slice(1).every((px) => px <= 8)).toBe(true);
     await dismiss(page, 'Your order has shipped');

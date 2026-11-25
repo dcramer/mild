@@ -19,6 +19,31 @@ export const settled = (page: Page) =>
     'new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))).then(() => Promise.allSettled(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished)))',
   );
 
+/**
+ * Holds every animation the page starts from now on with `Element.animate` at its start, to be looked at part way
+ * through: a busy machine draws a short one's first and last frames and none between. `at` moves each to that fraction
+ * of its duration once one has started, and fails if none does; `release` plays them on.
+ */
+export async function holdMotion(page: Page) {
+  await page.evaluate(`(() => {
+    const animate = Element.prototype.animate;
+    window.held = [];
+    Element.prototype.animate = function (...args) {
+      const run = animate.apply(this, args);
+      run.pause();
+      window.held.push(run);
+      return run;
+    };
+  })()`);
+  return {
+    at: async (fraction: number) => {
+      await expect.poll(() => page.evaluate<number>('window.held.length')).toBeGreaterThan(0);
+      await page.evaluate(`window.held.forEach((run) => { run.currentTime = run.effect.getTiming().duration * ${fraction}; })`);
+    },
+    release: () => page.evaluate('window.held.forEach((run) => run.play())'),
+  };
+}
+
 /** Points at `target` once the page has stopped moving, so what opens on hover is for it, not for whatever slid under the pointer. */
 export async function pointAt(target: Locator) {
   await settled(target.page());
