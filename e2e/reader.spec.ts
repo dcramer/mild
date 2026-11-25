@@ -44,15 +44,12 @@ test.describe('The reader, from For review', () => {
     expect(column.x).toBeGreaterThan(message.x + message.width);
   });
 
-  test('agreeing is one press, and moves on to the next message', async ({ page }) => {
+  test('agreeing is one press, and goes back to the list, on the row that took its place', async ({ page }) => {
     await page.goto('/');
     const open = await openMessage(page, 'Winter sale starts now');
     await open.getByRole('button', { name: 'Agree: Marketing' }).click();
     await expect(toast(page, 'Winter sale starts now')).toBeVisible();
-    await expect(readerHeading(page, 'Disk 91% full on db-2')).toBeVisible();
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
-
-    await page.keyboard.press('Escape');
     await expect(reader(page)).toHaveCount(0);
     await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
     await expect(row(page, 'Disk 91% full on db-2')).toBeFocused();
@@ -105,7 +102,7 @@ test.describe('The reader, from Inbox', () => {
     await expect(tooltip(page)).toHaveText('Back to Inboxesc');
   });
 
-  test('Spam and Block sender in the bar take the conversation out with Undo, and go on to the next', async ({ page, sift }) => {
+  test('Spam and Block sender in the bar take the conversation out with Undo, and go back to the list', async ({ page, sift }) => {
     await page.goto('/inbox');
     const sale = inboxRow(page, 'Winter sale starts now');
     const id = (await sale.getAttribute('data-holds'))!.split('/')[1]!;
@@ -113,14 +110,14 @@ test.describe('The reader, from Inbox', () => {
     await expect(readerHeading(page, '48 hours only: 30% off')).toBeVisible();
     await reader(page).getByRole('button', { name: 'Spam', exact: true }).click();
     await expect(toast(page, '48 hours only: 30% off')).toContainText('Marked spam');
-    await expect(readerHeading(page, '48 hours only: 30% off')).toHaveCount(0);
+    await expect(reader(page)).toHaveCount(0);
 
     await page.goto('/inbox');
     await inboxRow(page, 'Winter sale starts now').getByRole('cell').nth(2).click();
     await expect(readerHeading(page, 'Winter sale starts now')).toBeVisible();
     await reader(page).getByRole('button', { name: 'Block sender' }).click();
     await dismiss(page, 'Winter sale starts now');
-    await expect(readerHeading(page, 'Winter sale starts now')).toHaveCount(0);
+    await expect(reader(page)).toHaveCount(0);
     await expect.poll(() => sift.google().mailbox(ME).labelsOf(id)).toContain('SPAM');
   });
 

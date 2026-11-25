@@ -174,19 +174,21 @@ test.describe('On a phone', () => {
     expect(box.y + box.height).toBeLessThan(PHONE.height / 2);
   });
 
-  test('archiving from the reader says so in one line, what was done and Undo, flush on the presses at the bottom', async ({ page }) => {
+  test('archiving from the reader goes back to the list, and says so in one line, what was done and Undo, flush on the sections at the bottom', async ({
+    page,
+  }) => {
     await page.goto('/inbox');
     await conversations(page).filter({ hasText: 'Your March bill' }).click();
-    const archive = reader(page).getByRole('button', { name: 'Archive', exact: true });
-    await archive.click();
+    await reader(page).getByRole('button', { name: 'Archive', exact: true }).click();
+    await expect(reader(page)).toHaveCount(0);
     const said = toast(page, 'Your March bill');
     await expect(said).toBeVisible();
     await expect(said).toContainText('Archived');
     const box = await boxOf(said);
-    // One line, the width of the screen, lying on the presses rather than floating over the list.
+    // One line, the width of the screen, lying on the sections rather than floating over the list.
     expect(box.height).toBeLessThan(56);
     expect(box.width).toBe(PHONE.width);
-    expect(Math.abs((await boxOf(archive)).y - (box.y + box.height))).toBeLessThanOrEqual(2);
+    expect(Math.abs((await boxOf(sections(page).filter({ visible: true }))).y - (box.y + box.height))).toBeLessThanOrEqual(2);
     // What was done leads it: the subject is for a screen reader, the conversation that just left being the context.
     expect((await boxOf(said.getByText('Archived'))).x - box.x).toBeLessThan(48);
   });
