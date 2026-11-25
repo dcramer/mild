@@ -40,19 +40,27 @@ export function SenderHead({
 }
 
 /** Each address, the account's own as "me", as a mail app says it. */
-const people = (list: MessageDetail['to'], account: string) => list.map((p) => (reveal(p.address) === account ? 'me' : reveal(p.address)));
+const people = (list: readonly string[], account: string) => list.map((address) => (address === account ? 'me' : address));
 
 /**
  * Who a message went to, as To and Cc rows, a long list folded. To the account alone says nothing, unless the person
- * has more than one mailbox: then To always names the one it came to, in full, first where it was not addressed.
+ * has more than one mailbox: then To always names the one it came to, in full, first where it was not addressed. The
+ * account's own mail (`mine`) came to no mailbox, and says only whom it went to.
  */
 export function useAddressedTo(detail: MessageDetail): { label: 'To' | 'Cc'; who: ReactNode }[] {
-  const manage = useManage();
   const own = detail.accountId;
-  const to = detail.to.map((p) => reveal(p.address));
-  const cc = detail.cc.map((p) => reveal(p.address));
+  return useAddressed(
+    own,
+    detail.to.map((p) => reveal(p.address)),
+    detail.cc.map((p) => reveal(p.address)),
+    reveal(detail.fromAddress) === own,
+  );
+}
+
+export function useAddressed(own: string, to: readonly string[], cc: readonly string[], mine: boolean): { label: 'To' | 'Cc'; who: ReactNode }[] {
+  const manage = useManage();
   if ((manage.data?.accounts.length ?? 0) > 1) {
-    const named = to.includes(own) || cc.includes(own);
+    const named = mine || to.includes(own) || cc.includes(own);
     return [
       { label: 'To' as const, who: <SomeOf items={named ? to : [own, ...to]} /> },
       ...(cc.length > 0 ? [{ label: 'Cc' as const, who: <SomeOf items={cc} /> }] : []),
@@ -60,7 +68,7 @@ export function useAddressedTo(detail: MessageDetail): { label: 'To' | 'Cc'; who
   }
   if (cc.length === 0 && to.every((address) => address === own)) return [];
   return [
-    ...(to.length > 0 ? [{ label: 'To' as const, who: <SomeOf items={people(detail.to, own)} /> }] : []),
-    ...(cc.length > 0 ? [{ label: 'Cc' as const, who: <SomeOf items={people(detail.cc, own)} /> }] : []),
+    ...(to.length > 0 ? [{ label: 'To' as const, who: <SomeOf items={people(to, own)} /> }] : []),
+    ...(cc.length > 0 ? [{ label: 'Cc' as const, who: <SomeOf items={people(cc, own)} /> }] : []),
   ];
 }

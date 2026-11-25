@@ -2,13 +2,14 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { DigestBody } from '@/components/digest.tsx';
 import { useMailPress } from '@/components/mail.tsx';
-import { MessageBody, useMessageView } from '@/components/message-parts.tsx';
+import { Letter, MessageBody, useMessageView } from '@/components/message-parts.tsx';
 import type { Confidential, MailConversation, MessageDetail } from '@/lib/api/endpoints.ts';
 import { reveal } from '@/lib/reveal.ts';
+import { type Sending, stopSending, useSending } from '@/lib/sending.ts';
 import { Arrived, Failure, Heard, Loading, MessageStack, Reader, type Thumb } from '@/system';
 import { useConversationMessage } from './conversation.ts';
 import { Files } from './files.tsx';
-import { SenderHead, useAddressedTo } from './head.tsx';
+import { SenderHead, useAddressed, useAddressedTo } from './head.tsx';
 import type { Answer } from './reply.tsx';
 
 /** One message of the conversation, open: who wrote it, to whom and when, with `onAnswer` its own presses for answering it, over its text. */
@@ -49,11 +50,45 @@ function Opened({ detail, onAnswer }: { detail: MessageDetail; onAnswer?: ((what
   );
 }
 
-function OpenOne({ id, newest, onAnswer }: { id: string; newest: MessageDetail; onAnswer?: ((what: Answer) => void) | undefined }) {
+/** A reply on its way, drawn as it will be once Gmail has it, but "Sending…" for when. */
+function OnItsWay({ sending, account }: { sending: Sending; account: string }) {
+  const to = useAddressed(
+    account,
+    sending.to.map((p) => p.address),
+    sending.cc.map((p) => p.address),
+    true,
+  );
+  return (
+    <>
+      <SenderHead address={sending.from} name={null} mine at={<span>Sending…</span>} to={to} />
+      <Letter text={sending.text} />
+    </>
+  );
+}
+
+function OpenOne({
+  id,
+  newest,
+  sending,
+  onAnswer,
+}: {
+  id: string;
+  newest: MessageDetail;
+  /** The reply this is Gmail's copy of, drawn until that has loaded. */
+  sending: Sending | undefined;
+  onAnswer?: ((what: Answer) => void) | undefined;
+}) {
   const { detail, error } = useConversationMessage(id, newest);
+  const draft = sending?.draft;
+  useEffect(() => {
+    if (detail && draft) stopSending(draft);
+  }, [detail, draft]);
   if (detail) return <Opened detail={detail} onAnswer={onAnswer} />;
+  if (sending) return <OnItsWay sending={sending} account={newest.accountId} />;
   return error ? <Failure>{error}</Failure> : <Loading rows={4} />;
 }
+
+const SENDING = 'sending/';
 
 /**
  * The messages of what is open: a conversation (Inbox), oldest first, the reader's own reply included; or one message.
@@ -74,7 +109,11 @@ export function Messages({
   onAnswer?: ((what: Answer) => void) | undefined;
   onRead: () => void;
 }) {
-  const ids = conversation?.messages.map((m) => m.messageId) ?? [newest.messageId];
+  const listed = conversation?.messages.map((m) => m.messageId) ?? [newest.messageId];
+  // Replies on their way to this conversation that it does not have yet.
+  const all = useSending();
+  const sending = all.filter((s) => listed.includes(s.answers) && !(s.sent && listed.includes(s.sent)));
+  const ids = [...listed, ...sending.map((s) => SENDING + s.draft)];
   const unread = conversation?.messages.filter((m) => m.unread).map((m) => m.messageId) ?? [];
   const [open, setOpen] = useState(() => new Set([ids.at(-1) ?? newest.messageId, ...unread, ...(answered ? [answered] : [])]));
   const [known, setKnown] = useState(ids);
@@ -92,9 +131,12 @@ export function Messages({
     press([{ accountId: conversation.accountId, threadId: conversation.threadId, messageIds: unread, subject: newest.subject }], 'read');
     onRead();
   });
-  const messages = conversation
-    ? stacked(conversation)
-    : [{ id: newest.messageId, from: reveal(newest.fromName) ?? reveal(newest.fromAddress), preview: null, at: <Arrived at={newest.receivedAt} /> }];
+  const messages = [
+    ...(conversation
+      ? stacked(conversation)
+      : [{ id: newest.messageId, from: reveal(newest.fromName) ?? reveal(newest.fromAddress), preview: null, at: <Arrived at={newest.receivedAt} /> }]),
+    ...sending.map((s) => ({ id: SENDING + s.draft, from: 'me', preview: s.text, at: 'Sending…' })),
+  ];
   const toggle = (id: string) => {
     const next = new Set(open);
     if (!next.delete(id)) next.add(id);
@@ -102,7 +144,11 @@ export function Messages({
   };
   return (
     <MessageStack messages={messages} open={open} onToggle={toggle}>
-      {(id) => <OpenOne id={id} newest={newest} onAnswer={onAnswer} />}
+      {(id) => {
+        const on = sending.find((s) => SENDING + s.draft === id);
+        if (on) return <OnItsWay sending={on} account={newest.accountId} />;
+        return <OpenOne id={id} newest={newest} sending={all.find((s) => s.sent === id)} onAnswer={onAnswer} />;
+      }}
     </MessageStack>
   );
 }

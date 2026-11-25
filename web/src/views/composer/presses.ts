@@ -9,6 +9,7 @@ import { type useAutosave, reloadDrafts } from '@/lib/autosave.ts';
 import { type Draft, type Writing, draftId, keepDraft, newMessageId, useCompose } from '@/lib/compose.ts';
 import { blank, doubtsAbout } from '@/lib/draft-checks.ts';
 import { dateTime } from '@/lib/format.ts';
+import { sentAs, startSending, stopSending } from '@/lib/sending.ts';
 import { withTyped, useToast } from '@/system';
 import type { MessageAttachment } from '../../../../src/dashboard/types.ts';
 import type { useDraftFiles } from './files.ts';
@@ -148,24 +149,34 @@ export function usePresses({
             ...carrying,
           };
     // Held while its toast is up, as Gmail's Undo send holds it: Undo opens the draft again, which is kept until it has gone.
+    // A reply is in its conversation meanwhile, as Gmail draws it.
     onClose();
+    const named = draftId(what);
+    if (what.kind === 'reply')
+      startSending({ draft: named, answers: what.messageId, from: from.address, to: mail.to, cc: mail.cc, text: draft.text, sent: null });
     toast(said, {
       kind: 'Sending',
       // Saved again, since it is a draft once more.
-      undo: () => compose?.(what),
+      undo: () => {
+        stopSending(named);
+        compose?.(what);
+      },
       onGone: () =>
         void api.send(request).then(
-          () => {
+          ({ id: sent }) => {
+            sentAs(named, sent);
             keepDraft(who, what, null);
             toast(said, { kind: 'Sent' });
             void reloadAll(client);
           },
-          (failure: unknown) =>
+          (failure: unknown) => {
+            stopSending(named);
             toast(`Not sent: ${said}`, {
               description: failure instanceof Error ? failure.message : String(failure),
               tone: 'failure',
               action: { label: 'Open draft', onPress: () => compose?.(what) },
-            }),
+            });
+          },
         ),
     });
   };
