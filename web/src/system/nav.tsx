@@ -167,19 +167,19 @@ export function Masthead({
     <header
       ref={measure}
       className={cn(
-        'sticky top-0 z-20 -mx-4 bg-background px-4 pt-[calc(1rem+var(--safe-top))] pb-2 transition-[translate] duration-200 motion-reduce:transition-none md:hidden',
+        'sticky top-0 z-20 -mx-4 bg-background px-4 pt-[calc(1rem+var(--safe-top))] pb-2 transition-[translate] duration-(--motion-sheet) md:hidden',
         away && '-translate-y-full',
       )}
     >
       <Dialog.Root open={open} onOpenChange={setOpen}>
         {/* Outlined only around a search: elsewhere it is the page's name. */}
-        <div className="flex h-12 items-center rounded-(--corner) border border-(--frame) transition-colors focus-within:border-foreground/45 has-[[data-bar-slot]:empty]:border-transparent">
+        <div className="flex h-12 items-center rounded-(--corner) border border-(--frame) transition-colors duration-(--motion-color) focus-within:border-foreground/45 has-[[data-bar-slot]:empty]:border-transparent">
           <Dialog.Trigger aria-label="Menu" className={`${ICON_PRESS} [html:has([data-searching])_&]:hidden`}>
             <MenuIcon className="size-5" />
           </Dialog.Trigger>
           <Dialog.Portal>
             {/* From the left, as the edge swipe that opens it. */}
-            <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background pt-[calc(1rem+var(--safe-top))] pr-[max(1rem,var(--safe-right))] pb-[calc(2rem+var(--safe-bottom))] pl-[max(1rem,var(--safe-left))] outline-none transition-transform duration-200 ease-out data-ending-style:pointer-events-none data-ending-style:-translate-x-full data-starting-style:-translate-x-full motion-reduce:transition-none md:hidden">
+            <Dialog.Popup className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background pt-[calc(1rem+var(--safe-top))] pr-[max(1rem,var(--safe-right))] pb-[calc(2rem+var(--safe-bottom))] pl-[max(1rem,var(--safe-left))] outline-none transition-transform duration-(--motion-sheet) ease-out data-ending-style:pointer-events-none data-ending-style:-translate-x-full data-starting-style:-translate-x-full md:hidden">
               <div className="flex items-center justify-between">
                 <Wordmark />
                 <Dialog.Title className="sr-only">Menu</Dialog.Title>

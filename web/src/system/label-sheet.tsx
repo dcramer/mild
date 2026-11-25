@@ -50,7 +50,7 @@ export function LabelSheet({
           tabIndex={-1}
           initialFocus={popup}
           data-still={layer.still || undefined}
-          className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85svh] flex-col rounded-t-[10px] border-t border-(--frame) bg-card pb-(--safe-bottom) [--surface:var(--card)] text-sm outline-none transition-transform duration-200 ease-out data-ending-style:pointer-events-none data-ending-style:translate-y-full data-starting-style:translate-y-full data-still:transition-none motion-reduce:transition-none"
+          className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85svh] flex-col rounded-t-[10px] border-t border-(--frame) bg-card pb-(--safe-bottom) [--surface:var(--card)] text-sm outline-none transition-transform duration-(--motion-sheet) ease-out data-ending-style:pointer-events-none data-ending-style:translate-y-full data-starting-style:translate-y-full data-still:transition-none"
         >
           <header className="px-4 pt-4 pb-2">
             <Base.Title className="name truncate">{who}</Base.Title>

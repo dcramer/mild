@@ -31,7 +31,7 @@ export function HoverCard({ href, children, card, className }: { href?: string; 
       </Base.Trigger>
       <Base.Portal>
         <Base.Positioner sideOffset={6} align="start" className="z-50">
-          <Base.Popup className="sheet w-80 max-w-[calc(100vw-2rem)] bg-popover p-4 text-sm outline-none transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none">
+          <Base.Popup className="sheet w-80 max-w-[calc(100vw-2rem)] bg-popover p-4 text-sm outline-none transition-opacity duration-(--motion-hint) data-ending-style:opacity-0 data-starting-style:opacity-0">
             {card}
           </Base.Popup>
         </Base.Positioner>

@@ -67,3 +67,21 @@ export async function boxOf(target: Locator) {
   if (!box) throw new Error(`${target.toString()} is not on the page`);
   return box;
 }
+
+/**
+ * Starts recording what moved on the page that no press moved (the layout shifts Chromium reports), from the next page
+ * loaded on: read with `shifts`, an empty list when nothing did.
+ */
+export const watchShifts = (page: Page) =>
+  page.addInitScript(`window.shifts = [];
+new PerformanceObserver((list) => {
+  for (const shift of list.getEntries())
+    if (!shift.hadRecentInput)
+      window.shifts.push(...shift.sources.map((source) => (source.node?.textContent ?? source.node?.nodeName ?? '?').trim().slice(0, 60) + ' ' + JSON.stringify(source.previousRect) + ' → ' + JSON.stringify(source.currentRect)));
+}).observe({ type: 'layout-shift', buffered: true });`);
+
+/** What `watchShifts` recorded, once the page has stopped moving. */
+export async function shifts(page: Page) {
+  await settled(page);
+  return page.evaluate<string[]>('window.shifts');
+}

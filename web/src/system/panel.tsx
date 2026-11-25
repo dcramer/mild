@@ -77,7 +77,7 @@ export function Panel({
           data-still={layer.still || undefined}
           initialFocus={focus ?? popup}
           finalFocus={returnFocus}
-          className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card pr-(--safe-right) pb-(--safe-bottom) [--layer-top:var(--safe-top)] [--surface:var(--card)] text-sm outline-none transition-transform duration-150 ease-out data-ending-style:pointer-events-none data-ending-style:translate-x-full data-starting-style:translate-x-full data-still:transition-none motion-reduce:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(max(75vw,66rem),80rem,100vw)]'}`}
+          className={`focus-within-shown fixed inset-y-0 right-0 z-50 flex w-full flex-col border-(--frame) bg-card pr-(--safe-right) pb-(--safe-bottom) [--layer-top:var(--safe-top)] [--surface:var(--card)] text-sm outline-none transition-transform duration-(--motion-layer) ease-out data-ending-style:pointer-events-none data-ending-style:translate-x-full data-starting-style:translate-x-full data-still:transition-none md:border-l ${narrow ? 'md:w-[min(44rem,100vw)]' : 'md:w-[min(max(75vw,66rem),80rem,100vw)]'}`}
         >
           <KeyLayer moves>
             <LayerContent title={title} subtitle={subtitle}>

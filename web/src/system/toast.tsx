@@ -252,7 +252,7 @@ function Receipt({ toast, front, close }: { toast: Base.Root.ToastObject<Own>; f
 }
 
 const MOTION =
-  'transition-[opacity,translate] duration-150 ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0 motion-reduce:transition-none';
+  'transition-[opacity,translate] duration-(--motion-layer) ease-out data-ending-style:opacity-0 data-limited:hidden data-starting-style:translate-y-2 data-starting-style:opacity-0';
 /**
  * One line. On a phone a strip flush on whatever is at the foot of the screen (the tab bar, a reader's presses, a
  * dialog's footer), part of it rather than floating over the list; wider, a sheet in the bottom right.

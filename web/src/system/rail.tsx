@@ -10,7 +10,7 @@ import { Tooltip } from './tooltip.tsx';
 import { Emblem } from './type.tsx';
 
 /** A section, or Compose: its icon in a rounded square, which the current section fills. */
-const TILE = 'relative flex size-10 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-100 motion-reduce:transition-none';
+const TILE = 'relative flex size-10 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-(--motion-color)';
 
 export interface NavItem {
   /** The path, without the leading `/`. */
@@ -83,7 +83,9 @@ export function Rail({
         </nav>
       ) : null}
       {aside || account ? (
-        <div className="mt-auto flex flex-col items-center gap-4 text-label text-muted-foreground [--muted-foreground:var(--faint)]">
+        // Room for Mild's status over the account from the first draw, its lines set at the bottom: the status comes with the
+        // frame's data, which can arrive after the page is drawn, and would grow the foot up the rail.
+        <div className="mt-auto flex min-h-33 flex-col items-center justify-end gap-4 text-label text-muted-foreground [--muted-foreground:var(--faint)]">
           {aside}
           {account ? (
             <Menu

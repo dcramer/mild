@@ -39,7 +39,7 @@ export function Blank({ word, className }: { word?: boolean; className?: string 
       aria-hidden
       className={cn(
         // A line tall wherever it sits, inline or in a flex row, with the bar drawn across its middle.
-        'inline-block h-[1lh] max-w-full animate-pulse bg-(--fill-strong) bg-clip-content py-[calc((1lh-0.75em)/2)] align-top motion-reduce:animate-none',
+        'inline-block h-[1lh] max-w-full animate-pulse bg-(--fill-strong) bg-clip-content py-[calc((1lh-0.75em)/2)] align-top',
         lengths[at % lengths.length],
         className,
       )}

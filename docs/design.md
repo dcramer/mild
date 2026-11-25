@@ -163,7 +163,7 @@ A control asks for its key and draws the keycap itself (`shortcut` on a `Button`
 
 ## Nothing moves after it is drawn
 
-A page is drawn before its data arrives, and what arrives must not push what is already there. Measured as layout shift on a cold load, at desktop and phone widths; keep every page under 0.05.
+A page is drawn before its data arrives, and what arrives must not push what is already there. `e2e/page.spec.ts` records the layout shifts Chromium reports (`watchShifts`) as each screen is opened again, on a computer and a phone, and fails on any; Contacts and Activity, and a first visit, still shift (TODO.md).
 
 - A page header that will have a status line passes `meta={null}` until it knows it: the line's room is held.
 - A page's action button is shown from the start and disabled until it can work. It does not appear late.
@@ -185,5 +185,9 @@ A page is drawn before its data arrives, and what arrives must not push what is 
 - No inline styles, no fills, frames, corners, shadows or colours written outside `web/src/system/`; red is `Failure` and yellow comes only from a part's tone. If a value is missing, it is a missing token. `tests/conventions/design-system.test.ts` fails on any of these and names the file and line.
 - Behaviour that is hard to get right (a list that opens, a focus trap) comes from an unstyled primitive, today Base UI. Only files in `web/src/system/` import it (a lint error elsewhere), so the library can change without a screen changing.
 - A part's inline `style` is only for a value computed from data (a bar's height, a series colour).
-- Motion is short (80 to 150ms): a press, a dialog opening, rows pulsing while they load. The one longer is the reader on a phone, which crosses the whole screen as a phone's own apps do: it slides in over the list in 240ms and out on Back in 220ms (`moveReader`, `web/src/lib/motion.ts`), and only on a press in the page, since Safari slides its own Back. All off under `prefers-reduced-motion`.
+- Motion is short (80 to 150ms): a press, a dialog opening, rows pulsing while they load. What crosses most of a phone's screen takes longer: a sheet 200ms, and the reader, which slides in over the list in 240ms and out on Back in 220ms (`moveReader`, `web/src/lib/motion.ts`), only on a press in the page, since Safari slides its own Back.
+- Every duration and curve is a `--motion-…` (or `--ease-…`) named in `web/src/index.css`, by what moves; a part names one (`duration-(--motion-layer)`), and a script reads it with `motionMs`. Only transforms, opacity and colours move, which the browser moves without laying the page out again; the one exception is a row swiped away, which gives its height back to the list. Only parts move: a screen uses the part. `tests/conventions/design-system.test.ts` holds all of it.
+- Under `prefers-reduced-motion` nothing moves, by one rule at the end of `web/src/index.css`, so no part has to remember it; a script asks `motionMs`. A loop is drawn still.
+- A page moves as a whole only by `moveReader`, the browser's view transition. Not React's `<ViewTransition>`: it animates only a React transition, and the page follows the address through `useSyncExternalStore`, which React always draws at once.
+- A press draws what it changes first and does the rest after the paint (`afterPaint`, `web/src/lib/utils.ts`): marking a message read, a write that draws every list again. A plain timeout can run before the paint.
 - Motion follows a press. A layer the address opens as the page loads is in place at once, with the page (`still`, `useLayerOpen`); one a press opens slides in once. What a layer waits for loads inside it: never draw a placeholder layer and swap it for the real one, which takes the first off the screen and slides the second in. A layer that needs data from Mild opens on what the page already holds (the device's copy, this browser's draft) and takes Mild's when it comes (the composer).

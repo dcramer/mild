@@ -23,7 +23,7 @@ export function Tooltip({ says, children, className, side }: { says: ReactNode; 
             role="tooltip"
             className={cn(
               'sheet max-w-xs bg-popover px-3 py-2 text-sm whitespace-pre-line tabular-nums text-foreground',
-              'transition-opacity duration-100 data-ending-style:opacity-0 data-starting-style:opacity-0 motion-reduce:transition-none',
+              'transition-opacity duration-(--motion-hint) data-ending-style:opacity-0 data-starting-style:opacity-0',
             )}
           >
             {says}
