@@ -9,8 +9,13 @@ import { closeSettings, settingsActive } from './settings.ts';
 import { addALabelDialog, addLabelsDialog, suggestLabels, writeLabel, askForLabels } from './labels.ts';
 import { ME } from './mailboxes.ts';
 
-/** The label's panel on the Labels screen. Not the toast saying it was removed, a dialog named by the label too, which is never modal. */
-const labelPanel = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true }).and(page.locator(':not([aria-modal="false"])'));
+/**
+ * The label's panel on the Labels screen, also while a question it asked hides it from the accessibility tree: else it
+ * would count as closed under the question to remove it. Not the toast saying it was removed, a dialog named by the
+ * label too, which is never modal.
+ */
+const labelPanel = (page: Page, name: string) =>
+  page.getByRole('dialog', { name, exact: true, includeHidden: true }).and(page.locator(':not([aria-modal="false"])'));
 
 /** "12 of 30" beside `Add labels`: how many labels there are, of how many there may be. */
 // A desktop and a phone each draw the page's action in a place of their own.
