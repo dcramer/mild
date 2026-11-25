@@ -7,7 +7,8 @@ import { Tooltip } from './tooltip.tsx';
 
 /**
  * Mail being written in place at the foot of a conversation (Reply, Reply all, Forward), framed as one thing: `menu`
- * says what it is and changes it, `about` says which message it answers when that is not the newest, then its `DraftLine`s, its `DraftText`, and Send and
+ * says what it is and changes it, `to` sums up whom it goes to while its lines are folded, `about` says which message it
+ * answers when that is not the newest, then its `DraftLine`s, its `DraftText`, and Send and
  * `DiscardButton` (`actions`) along its foot. It brings itself into view as it opens, under however much conversation
  * is above it.
  */
@@ -15,6 +16,7 @@ export function ReplyBox({
   label,
   about,
   menu,
+  to,
   actions,
   children,
 }: {
@@ -22,6 +24,11 @@ export function ReplyBox({
   about?: ReactNode;
   /** What it is (Reply, Forward) as a menu that changes it, before `about`. */
   menu?: ReactNode;
+  /**
+   * Whom it goes to, in a line of their names after `menu`, as Gmail sums a reply's recipients up while its From, To,
+   * Cc and Bcc lines are folded away: a press opens them.
+   */
+  to?: { names: string; onOpen: () => void };
   actions: ReactNode;
   children: ReactNode;
 }) {
@@ -32,10 +39,20 @@ export function ReplyBox({
   }, []);
   return (
     <section ref={own} aria-label={label} className="sheet mt-2 flex scroll-mb-6 flex-col">
-      {menu || about ? (
-        <div className="flex items-center gap-2 px-(--gutter) pt-2 text-sm text-muted-foreground">
-          {menu}
-          {about ? <p className="py-1">{about}</p> : null}
+      {menu || about || to ? (
+        <div className="flex min-w-0 items-center gap-x-2 px-(--gutter) pt-2 text-sm text-muted-foreground">
+          {menu ? <div className="shrink-0">{menu}</div> : null}
+          {to ? (
+            <Button
+              variant="quiet"
+              className="min-w-0 shrink justify-start font-normal text-foreground"
+              aria-label={`To ${to.names}: show who it goes to`}
+              onClick={to.onOpen}
+            >
+              <span className="truncate">{to.names}</span>
+            </Button>
+          ) : null}
+          {about ? <p className="min-w-0 truncate py-1">{about}</p> : null}
         </div>
       ) : null}
       {children}
