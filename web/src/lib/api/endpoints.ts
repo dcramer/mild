@@ -146,20 +146,23 @@ export const api = {
       { days: q.days, status: q.status, q: q.search, fact: q.fact, label: q.label, limit: q.limit, offset: q.offset },
       signal,
     ),
-  /** A message by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
-  message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
+  /**
+   * A message by Gmail's id, in whichever mailbox holds it; `account` when the list it came from said. A thing is found
+   * by `account`, never `?mailbox=`, which narrows what is read beside it: a digest lists mail of every mailbox.
+   */
+  message: (id: string, signal: AbortSignal, account = '') => get<MessageDetail>('/api/message', account ? { id, account } : { id }, signal),
   /** Messages by Gmail's id, read ahead of a press that opens one; one the person cannot read is left out. */
   messagesAhead: (ids: readonly string[], signal: AbortSignal) => get<MessagesAhead>('/api/messages', { ids: ids.join(',') }, signal),
   /** One of a message's files, fetched from Gmail through Mild, to save. */
   file: async (accountId: string, messageId: string, part: string): Promise<Blob> => {
-    const query = new URLSearchParams({ id: messageId, part, mailbox: accountId });
+    const query = new URLSearchParams({ id: messageId, part, account: accountId });
     const response = await send(`/api/message/file?${query}`, { headers: traceHeaders() }, 'Mild cannot be reached.');
     if (!response.ok) throw new Refused(response.status, await reason(response));
     return await response.blob();
   },
   /** Where a frame loads a message as the HTML Mild holds for it; `images` once the reader asked for its images, `original` for a design in its own colours. */
-  messageHtml: (id: string, mailbox: string, images: boolean, original: boolean) =>
-    `/api/message/html?${new URLSearchParams(images ? { id, mailbox, images: '1' } : { id, mailbox })}${original ? '#original' : ''}`,
+  messageHtml: (id: string, account: string, images: boolean, original: boolean) =>
+    `/api/message/html?${new URLSearchParams(images ? { id, account, images: '1' } : { id, account })}${original ? '#original' : ''}`,
   /** Everyone the person has mail from, newest first, a page at a time. */
   contacts: (q: ContactQuery, signal: AbortSignal) => get<ContactPage>('/api/contacts', { ...q }, signal),
   /** `name` lists only their mail under that name. */
@@ -265,9 +268,9 @@ export const api = {
     ),
   /** The model turns words into a filter on Inbox's list. `today` is the reader's, `YYYY-MM-DD`. */
   askMail: (words: string, today: string) => post<MailAsk>('/api/mail/ask', { words, today }),
-  /** A conversation by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
-  mailThread: (thread: string, signal: AbortSignal, mailbox = '') =>
-    get<MailConversation>('/api/mail/thread', mailbox ? { thread, mailbox } : { thread }, signal),
+  /** A conversation by Gmail's id, in whichever mailbox holds it; `account` when the list it came from said. */
+  mailThread: (thread: string, signal: AbortSignal, account = '') =>
+    get<MailConversation>('/api/mail/thread', account ? { thread, account } : { thread }, signal),
   /** The reader's own press on mail in their inbox. `actions`: what landed, for Undo. */
   changeMail: (change: MailChange) => post<{ actions: number[]; missed: number }>('/api/mail/change', change, true),
   /** Whether Mild keeps a copy of the person's mail, for Inbox, and how far back. */

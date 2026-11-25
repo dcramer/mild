@@ -18,26 +18,29 @@ import type { Confidential } from '../../confidential.ts';
 /**
  * Which of the scope's mailboxes holds the message with Gmail's id `messageId`, or null when none does. Gmail's ids
  * are each one mailbox's own, so two of a person's could in principle hold the same one: then the request must name
- * the mailbox (`?mailbox=`).
+ * the mailbox, as `account`.
  */
-export async function mailboxOf(db: Sql, scope: Scope, messageId: string): Promise<string | null> {
+export async function mailboxOf(db: Sql, scope: Scope, messageId: string, account = ''): Promise<string | null> {
   const found = await db
     .select({ accountId: messages.accountId })
     .from(messages)
-    .where(and(within(scope, messages.accountId), eq(messages.id, messageId)));
+    .where(and(within(scope, messages.accountId), eq(messages.id, messageId), account ? eq(messages.accountId, account) : undefined));
   if (found.length > 1) throw new Refusal('More than one of your mailboxes has a message with that id; say which.');
   return found[0]?.accountId ?? null;
 }
 
-/** One message with its full history, in whichever of the scope's mailboxes holds it, or null if Mild has not seen it. */
 /** The digest this message is, with only the mail of mailboxes the request may see. */
 async function digestIn(db: Sql, scope: Scope, accountId: string, messageId: string) {
   const digest = await digestShown(db, accountId, messageId);
   return digest && { ...digest, mail: digest.mail.filter((m) => sees(scope, m.accountId)) };
 }
 
-export async function messageDetail(db: Sql, scope: Scope, messageId: string): Promise<MessageDetail | null> {
-  const accountId = await mailboxOf(db, scope, messageId);
+/**
+ * One message with its full history, in whichever of the scope's mailboxes holds it (`account`, where the caller knows),
+ * or null if Mild has not seen it. What it says beside the message (a digest's list, the sender) reads the whole scope.
+ */
+export async function messageDetail(db: Sql, scope: Scope, messageId: string, account = ''): Promise<MessageDetail | null> {
+  const accountId = await mailboxOf(db, scope, messageId, account);
   if (accountId === null) return null;
   const [stored] = await db
     .select({
@@ -146,15 +149,15 @@ async function storedBody(db: Sql, accountId: string, messageId: string): Promis
 }
 
 /** The HTML of one of the scope's messages, as Mild holds it; null when it holds none. */
-export async function storedHtml(db: Sql, scope: Scope, messageId: string): Promise<string | null> {
-  const accountId = await mailboxOf(db, scope, messageId);
+export async function storedHtml(db: Sql, scope: Scope, messageId: string, account = ''): Promise<string | null> {
+  const accountId = await mailboxOf(db, scope, messageId, account);
   if (accountId === null) return null;
   return plain((await storedBody(db, accountId, messageId))?.html ?? null);
 }
 
 /** The mailbox of a message of the scope's whose kept files include `part`, or null. */
-export async function fileIn(db: Sql, scope: Scope, messageId: string, part: string): Promise<string | null> {
-  const accountId = await mailboxOf(db, scope, messageId);
+export async function fileIn(db: Sql, scope: Scope, messageId: string, part: string, account = ''): Promise<string | null> {
+  const accountId = await mailboxOf(db, scope, messageId, account);
   if (accountId === null) return null;
   const files = await keptAttachments(db, accountId, messageId);
   return files?.some((f) => f.part === part) ? accountId : null;

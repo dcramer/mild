@@ -345,18 +345,21 @@ export async function previewsOf(db: Sql, scope: Scope, wanted: readonly (readon
  * Which of the scope's mailboxes holds the conversation with Gmail's id `threadId`, or null when none does. Like a
  * message's (`mailboxOf`, queries/messages.ts), two mailboxes could hold the same id: then the request must name one.
  */
-async function threadMailbox(db: Sql, scope: Scope, threadId: string): Promise<string | null> {
+async function threadMailbox(db: Sql, scope: Scope, threadId: string, account: string): Promise<string | null> {
   const found = await db
     .selectDistinct({ accountId: messages.accountId })
     .from(messages)
-    .where(and(within(scope, messages.accountId), eq(messages.threadId, threadId)));
+    .where(and(within(scope, messages.accountId), eq(messages.threadId, threadId), account ? eq(messages.accountId, account) : undefined));
   if (found.length > 1) throw new Refusal('More than one of your mailboxes has a conversation with that id; say which.');
   return found[0]?.accountId ?? null;
 }
 
-/** One conversation's recorded messages, oldest first, in whichever of the scope's mailboxes holds it, or null when none does. */
-export async function conversation(db: Sql, scope: Scope, threadId: string): Promise<MailConversation | null> {
-  const accountId = await threadMailbox(db, scope, threadId);
+/**
+ * One conversation's recorded messages, oldest first, in whichever of the scope's mailboxes holds it (`account`, where the
+ * caller knows), or null when none does.
+ */
+export async function conversation(db: Sql, scope: Scope, threadId: string, account = ''): Promise<MailConversation | null> {
+  const accountId = await threadMailbox(db, scope, threadId, account);
   if (accountId === null) return null;
   const listed = (await threadMessages(db, scope, [[accountId, threadId]])).get(`${accountId}\n${threadId}`) ?? [];
   if (listed.length === 0) return null;

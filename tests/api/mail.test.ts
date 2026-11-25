@@ -4,12 +4,16 @@ import { SETTLE_MS } from '../../src/actions/send.ts';
 import { ASK_TOOL } from '../../src/prompts/mail-ask.ts';
 import { FIND_TOOL } from '../../src/prompts/rule-draft.ts';
 import { recordDecision } from '../../src/store/decisions.ts';
+import { addRule } from '../../src/store/rules.ts';
 import { type Browser, fauxModel, modelRun } from '../fixtures.ts';
 import { DAY, toolReply } from '../helpers.ts';
 import { AT, ME, OTHER, theApp } from './app.ts';
 import { everyRouteAnswered } from './areas.ts';
 
 const { fake, start, settled, withInbox } = theApp();
+const SHOP = 'shop@example.com';
+/** A second mailbox of `ME`'s. */
+const WORK = 'work@example.org';
 
 type Thread = { threadId: string; subject: string; messageIds: string[]; unread: boolean; place: string; preview: string | null };
 const threadsOf = (reply: { body: Record<string, unknown> }) => reply.body['threads'] as Thread[];
@@ -183,6 +187,31 @@ describe('reading mail', () => {
     });
     const many = Array.from({ length: 31 }, (_, i) => `m${i}`).join(',');
     expect((await me.call('GET', `/api/messages?ids=${many}`)).status).toBe(400);
+  });
+
+  it('gives a digest named by its mailbox with the mail of every mailbox it lists, as read ahead and as sent', async () => {
+    const { sift, box, me, arrives } = await withInbox();
+    await me.signIn(WORK, { add: true });
+    await sift.work();
+    await addRule(await sift.db(ME), { match: { from: [SHOP] }, labelId: 'receipts' }, 'user');
+    expect((await me.call('POST', '/api/labels', { id: 'receipts', disposition: 'digest' })).status).toBe(200);
+    expect((await me.call('POST', '/api/active', { active: true })).status).toBe(200);
+    box.deliver({ from: SHOP, subject: 'Your receipt' });
+    // Each fake mailbox numbers its mail from the same start; this one must not share an id with ME's.
+    fake.google.mailbox(WORK).deliver({ id: 'b0000000000001', from: SHOP, subject: 'Your other receipt' });
+    await sift.tick();
+
+    vi.setSystemTime(AT + DAY);
+    await sift.tick();
+    const digest = box.all().find((m) => m.header('From') === `Mild <${ME}>`)!;
+    await arrives();
+    const subjects = (reply: { body: Record<string, unknown> }) =>
+      (reply.body['digest'] as { mail: { subject: string }[] }).mail.map((m) => m.subject).toSorted();
+    expect(subjects(await me.call('GET', `/api/message?id=${digest.id}&account=${ME}`))).toEqual(['Your other receipt', 'Your receipt']);
+    expect((await me.call('GET', `/api/messages?ids=${digest.id}`)).body['messages']).toEqual([
+      (await me.call('GET', `/api/message?id=${digest.id}&account=${ME}`)).body,
+    ]);
+    expect((await me.call('GET', `/api/message?id=${digest.id}&account=${WORK}`)).status).toBe(404);
   });
 
   it('shows someone else none of it', async () => {
