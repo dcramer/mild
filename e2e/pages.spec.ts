@@ -49,19 +49,16 @@ test.describe('Activity, after a pass with Mild on', () => {
       await held;
       await route.continue();
     });
-    // Opened again it draws what the device kept; the room is for when that cannot be used, as after an update.
-    const dropped = `new Promise((done) => {
+    // Opened again it draws what the device kept; the room is for when that cannot be used, as after an update. Emptied as
+    // it opens, before the page: emptied while the page runs, a read it was still keeping lands after.
+    await page.addInitScript(`{
       const opening = indexedDB.open('sift-device');
       opening.onsuccess = () => {
-        const reads = opening.result.transaction('reads', 'readwrite').objectStore('reads');
-        const counted = reads.count();
-        counted.onsuccess = () => {
-          reads.clear();
-          reads.transaction.oncomplete = () => (opening.result.close(), done(counted.result > 0));
-        };
+        const reads = opening.result.transaction('reads', 'readwrite');
+        reads.objectStore('reads').clear();
+        reads.oncomplete = () => opening.result.close();
       };
-    })`;
-    await expect.poll(() => page.evaluate<boolean>(dropped)).toBe(true);
+    }`);
     await page.reload();
     const first = row(page, 'Last day of the sale');
     const before = await boxOf(first);
