@@ -461,8 +461,11 @@ test.describe('with Inbox on', () => {
       await page.getByRole('radio', { name: 'Drafts' }).click();
       await expect(page.getByRole('row').filter({ hasText: 'Roof' })).toBeVisible();
 
-      // Another device has none of this browser's copy.
-      await page.evaluate('localStorage.clear()');
+      // Another device has none of this browser's copy, nor the list of drafts it kept.
+      await page.evaluate(`localStorage.clear(), Promise.all(['sift-device', 'sift-copy'].map((name) => new Promise((done) => {
+        const deleting = indexedDB.deleteDatabase(name);
+        deleting.onsuccess = deleting.onerror = done;
+      })))`);
       await watchComposer(page);
       const answer = await holdDrafts(page);
       await page.goto('/inbox?compose=new&draft=roof');
