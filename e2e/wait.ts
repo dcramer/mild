@@ -103,6 +103,16 @@ export const frameKept = (page: Page) =>
     )
     .toEqual({ key: 1, frame: ['manage', 'session', 'suggestions-false', 'usage'] });
 
+/** Drop what the device kept of the frame under `name`. */
+export const forget = (name: string) => `new Promise((done) => {
+  indexedDB.open('sift-device').onsuccess = (event) => {
+    const db = event.target.result;
+    const removing = db.transaction('frame', 'readwrite');
+    removing.objectStore('frame').delete('${name}');
+    removing.oncomplete = () => (db.close(), done());
+  };
+})`;
+
 /** What `watchShifts` recorded, once the page has stopped moving. */
 export async function shifts(page: Page) {
   await settled(page);

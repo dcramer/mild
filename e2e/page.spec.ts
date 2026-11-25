@@ -2,7 +2,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import type { Session } from '../src/dashboard/types.ts';
 import { HELD, expect, test, PHONE } from './fixture.ts';
-import { boxOf, frameKept, shifts, sideScroll, watchShifts } from './wait.ts';
+import { boxOf, forget, frameKept, settled, shifts, sideScroll, watchShifts } from './wait.ts';
 import { domainPage, senderPage } from './navigation.ts';
 
 test("the page cannot be framed by another site, sends no referrer, and holds nothing of anyone's", async ({ page }) => {
@@ -89,6 +89,27 @@ for (const [where, viewport] of [
     }
   });
 }
+
+test("Mild's line comes into the room the rail's foot held for it, when the device had not kept it", async ({ page }) => {
+  await page.setViewportSize(COMPUTER);
+  await watchShifts(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
+  await frameKept(page);
+  await page.evaluate(forget('manage'));
+  let release = () => {};
+  const held = new Promise<void>((done) => (release = done));
+  await page.route('**/api/manage*', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.reload();
+  await expect(page.getByRole('button', { name: /^Account, / })).toBeVisible();
+  await settled(page);
+  release();
+  await expect(page.getByText('30D')).toBeVisible();
+  expect(await shifts(page)).toEqual([]);
+});
 
 test('under reduced motion nothing moves: a layer is in place at once', async ({ page }) => {
   await page.setViewportSize(PHONE);

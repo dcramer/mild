@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { STARTUP_SCREENS, startupImage } from '../web/src/lib/startup-images.ts';
 import { expect, test, PHONE } from './fixture.ts';
-import { boxOf, frameKept, path, query } from './wait.ts';
+import { boxOf, forget, frameKept, path, query } from './wait.ts';
 import { back } from './reader.ts';
 import { messageQuery, SENDER, phoneMenu, sections } from './navigation.ts';
 import { putAway } from './toast.ts';
@@ -18,16 +18,6 @@ const reads = `new Promise((done) => {
     const reading = db.transaction('reads');
     const ids = reading.objectStore('reads').getAllKeys();
     reading.oncomplete = () => (db.close(), done(ids.result));
-  };
-})`;
-
-/** Drop what the device kept of the frame under `name`. */
-const forget = (name: string) => `new Promise((done) => {
-  indexedDB.open('sift-device').onsuccess = (event) => {
-    const db = event.target.result;
-    const removing = db.transaction('frame', 'readwrite');
-    removing.objectStore('frame').delete('${name}');
-    removing.oncomplete = () => (db.close(), done());
   };
 })`;
 
