@@ -3,7 +3,7 @@ import { expect, refused, test, PHONE } from './fixture.ts';
 import { param, path, query, settled } from './wait.ts';
 import { choose, row, section } from './parts.ts';
 import { openMessage, back, reader } from './reader.ts';
-import { messageQuery } from './navigation.ts';
+import { messageQuery, sections } from './navigation.ts';
 import { toast } from './toast.ts';
 import { closeSettings, settingsActive } from './settings.ts';
 import { addALabelDialog, addLabelsDialog, suggestLabels, writeLabel, askForLabels } from './labels.ts';
@@ -403,7 +403,8 @@ refused.describe('A mailbox with one label', () => {
     await suggestLabels(page, 'No more sales pitches');
     await page.getByRole('button', { name: 'Use this label' }).click();
     await page.getByRole('button', { name: 'New mail only' }).click();
-    await page.goto('/labels');
+    // Not a load of its own: one started before Mild has answered with the label just made draws setup from the device.
+    await sections(page).getByRole('link', { name: 'Labels' }).click();
     await page.getByText('Sales pitches', { exact: true }).click();
     const opened = page.getByRole('dialog', { name: 'Sales pitches', exact: true });
     await opened.getByRole('button', { name: 'Remove…' }).click();
