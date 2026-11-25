@@ -146,8 +146,11 @@ export const api = {
       { days: q.days, status: q.status, q: q.search, fact: q.fact, label: q.label, limit: q.limit, offset: q.offset },
       signal,
     ),
-  /** A message by Gmail's id, in whichever mailbox holds it; `mailbox` when the list it came from said. */
-  message: (id: string, signal: AbortSignal, mailbox = '') => get<MessageDetail>('/api/message', mailbox ? { id, mailbox } : { id }, signal),
+  /**
+   * A message by Gmail's id, in whichever mailbox holds it; `account` when the list it came from said. Not `?mailbox=`,
+   * which would narrow what is read beside it: a digest lists mail of every mailbox.
+   */
+  message: (id: string, signal: AbortSignal, account = '') => get<MessageDetail>('/api/message', account ? { id, account } : { id }, signal),
   /** Messages by Gmail's id, read ahead of a press that opens one; one the person cannot read is left out. */
   messagesAhead: (ids: readonly string[], signal: AbortSignal) => get<MessagesAhead>('/api/messages', { ids: ids.join(',') }, signal),
   /** One of a message's files, fetched from Gmail through Mild, to save. */
