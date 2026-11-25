@@ -2,7 +2,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import type { Session } from '../src/dashboard/types.ts';
 import { HELD, expect, test, PHONE } from './fixture.ts';
-import { boxOf, shifts, sideScroll, watchShifts } from './wait.ts';
+import { boxOf, frameKept, shifts, sideScroll, watchShifts } from './wait.ts';
 import { domainPage, senderPage } from './navigation.ts';
 
 test("the page cannot be framed by another site, sends no referrer, and holds nothing of anyone's", async ({ page }) => {
@@ -77,6 +77,10 @@ for (const [where, viewport] of [
     await watchShifts(page);
     for (const [path, heading] of SCREENS.filter(([path]) => path !== '/contacts' && path !== '/activity')) {
       await page.goto(path);
+      await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+      // The first screen keeps the frame, with no request after it: on a busy machine the network can be quiet before
+      // the page has asked for anything.
+      await frameKept(page);
       await page.waitForLoadState('networkidle');
       await page.reload();
       await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();

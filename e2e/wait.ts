@@ -80,6 +80,29 @@ new PerformanceObserver((list) => {
       window.shifts.push(...shift.sources.map((source) => (source.node?.textContent ?? source.node?.nodeName ?? '?').trim().slice(0, 60) + ' ' + JSON.stringify(source.previousRect) + ' → ' + JSON.stringify(source.currentRect)));
 }).observe({ type: 'layout-shift', buffered: true });`);
 
+/**
+ * Waits for this device to hold its key and the whole frame, as it does once a page has drawn: the page keeps them after
+ * Mild answers, with no request to wait on.
+ */
+export const frameKept = (page: Page) =>
+  expect
+    .poll(() =>
+      page.evaluate(`new Promise((done) => {
+        const opening = indexedDB.open('sift-device');
+        // Not made here: the page would find it made without its stores.
+        opening.onupgradeneeded = () => opening.transaction.abort();
+        opening.onerror = () => done({ key: 0, frame: [] });
+        opening.onsuccess = () => {
+          const db = opening.result;
+          const reading = db.transaction(['key', 'frame']);
+          const key = reading.objectStore('key').count();
+          const frame = reading.objectStore('frame').getAllKeys();
+          reading.oncomplete = () => (db.close(), done({ key: key.result, frame: frame.result }));
+        };
+      })`),
+    )
+    .toEqual({ key: 1, frame: ['manage', 'session', 'suggestions-false', 'usage'] });
+
 /** What `watchShifts` recorded, once the page has stopped moving. */
 export async function shifts(page: Page) {
   await settled(page);
