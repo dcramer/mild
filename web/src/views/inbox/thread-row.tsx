@@ -8,7 +8,7 @@ import { messageStart } from '@/lib/rule-start.ts';
 import { messageKey } from '@/lib/rows.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { readMessageAhead } from '@/lib/api/reads.ts';
-import { Arrived, Button, Hint, RowCheck, RowPresses, Swipe, type SwipePress, Td, Tooltip, Tr } from '@/system';
+import { Arrived, Button, DraftWord, Hint, RowCheck, RowPresses, Swipe, type SwipePress, Td, Tooltip, Tr } from '@/system';
 import type { Hands } from './hands.ts';
 import { Label, LabelSheetFor } from './label.tsx';
 import { type Listed, newest } from './listed.ts';
@@ -35,17 +35,25 @@ export const ThreadRow = memo(function ThreadRow({
   thread,
   labels,
   selected,
+  begun,
   hands,
 }: {
   thread: Listed;
   labels: readonly AnswerLabel[];
   selected: boolean;
+  /** A reply or forward of one of its messages is begun. */
+  begun: boolean;
   hands: Hands;
 }) {
   const { press, block } = hands;
   const subject = reveal(thread.subject) || '(no subject)';
   const { who } = thread;
   const many = thread.messageIds.length > 1 ? <span className="font-normal text-muted-foreground tabular-nums">{thread.messageIds.length}</span> : null;
+  const drafted = begun ? (
+    <>
+      , <DraftWord />
+    </>
+  ) : null;
   const ink = thread.unread ? 'font-semibold text-foreground' : 'text-foreground/70';
   // Swiped right it is labelled, from a sheet of every label; swiped left, archived. Neither acts on its sender.
   const [labelling, setLabelling] = useState(false);
@@ -69,6 +77,7 @@ export const ThreadRow = memo(function ThreadRow({
         <span className={`flex min-w-0 items-baseline gap-1.5 phone:hidden ${ink}`}>
           <span className="truncate">
             <WhoWrote writers={who} />
+            {drafted}
           </span>
           {many}
         </span>
@@ -80,6 +89,7 @@ export const ThreadRow = memo(function ThreadRow({
                 <span className={`flex min-w-0 flex-1 items-baseline gap-1.5 ${thread.unread ? 'name leading-snug' : 'text-foreground/85'}`}>
                   <span className="truncate">
                     <WhoWrote writers={who} />
+                    {drafted}
                   </span>
                   {many}
                 </span>

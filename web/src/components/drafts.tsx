@@ -1,4 +1,5 @@
 'use client';
+import { useMemo } from 'react';
 import { type Writing, useCompose } from '@/lib/compose.ts';
 import { reveal } from '@/lib/reveal.ts';
 import { dateTime } from '@/lib/format.ts';
@@ -10,6 +11,23 @@ import { useDrafts } from '@/lib/api/reads.ts';
 function writingOf(draft: SavedDraft): Writing {
   const of = reveal(draft.writing.of);
   return of.kind === 'new' ? { kind: 'new', draft: draft.id } : of;
+}
+
+/**
+ * Replies and forwards begun and neither sent nor scheduled, by the message each answers: as Gmail does, a conversation
+ * opens on its draft, and its row says Draft. Null until Mild has said which there are.
+ */
+export function useAnswersBegun(): ReadonlyMap<string, Exclude<Writing, { kind: 'new' }>> | null {
+  const saved = useDrafts();
+  return useMemo(() => {
+    if (!saved.data) return null;
+    const begun = new Map<string, Exclude<Writing, { kind: 'new' }>>();
+    for (const draft of saved.data.drafts) {
+      const of = reveal(draft.writing.of);
+      if (of.kind !== 'new' && draft.sendAt === null) begun.set(of.messageId, of);
+    }
+    return begun;
+  }, [saved.data]);
 }
 
 /**

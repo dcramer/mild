@@ -1,6 +1,7 @@
 'use client';
-import { type ReactNode, useRef } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { withDoes } from '@/components/answer.tsx';
+import { useAnswersBegun } from '@/components/drafts.tsx';
 import { StatusWord } from '@/components/bits.tsx';
 import { History, historyCount } from '@/components/message-history.tsx';
 import type { MailConversation, MessageDetail } from '@/lib/api/endpoints.ts';
@@ -92,6 +93,16 @@ export function OpenedMessage({
   const written = compose ? writing(composeAs, answered) : null;
   // A digest is Mild's own: nothing to answer, and no label of its own to say.
   const reply = inInbox && compose && !detail.digest ? compose : undefined;
+  // Opened on an answer begun to any of its messages, as Gmail opens a conversation on its draft: once, as it opens.
+  const begun = useAnswersBegun();
+  const looked = useRef(false);
+  const ids = conversation?.messages.map((m) => m.messageId);
+  useEffect(() => {
+    if (looked.current || !reply || !ids || !begun) return;
+    looked.current = true;
+    const draft = composeAs ? undefined : ids.toReversed().find((id) => begun.has(id));
+    if (draft) reply(begun.get(draft));
+  }, [begun, reply, ids, composeAs]);
 
   return (
     <Reader
