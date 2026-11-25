@@ -30,6 +30,7 @@ import { SignInScreen } from '@/views/sign-in.tsx';
 import { useSession, useManage, useUsage } from '@/lib/api/reads.ts';
 import { usePlan } from '@/lib/prices.ts';
 import { useDeviceFrame, useFrameRead } from '@/lib/frame.ts';
+import { useBadge } from '@/lib/badge.ts';
 
 // What opens over a screen, or in its place, is fetched when first needed and, once the page is idle, ahead of need;
 // the reader, as the page starts.
@@ -340,6 +341,8 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const plan = usePlan();
   // An answer on its way has left the list, so it leaves the count with it until the count is read again.
   const waiting = Math.max(0, (inMailbox.data?.waiting ?? 0) - [...useHidden(inMailbox.at)].filter(isMessageKey).length);
+  const answering = [...useHidden(manage.at)].filter(isMessageKey).length;
+  useBadge(manage.data ? Math.max(0, manage.data.waiting - answering) : undefined);
 
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const going = useGoing();
