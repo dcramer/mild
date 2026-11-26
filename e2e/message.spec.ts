@@ -230,7 +230,7 @@ const REPLIED = 'Works for me.';
 const DARK_GROUND = 'rgb(24, 24, 24)';
 
 /** The invitation's grey "organizer" (#70757a), which its dark styles miss, lightened over their dark card. */
-const LIGHTENED = 'rgb(185, 190, 195)';
+const LIGHTENED = 'rgb(184, 189, 194)';
 
 /** Google Calendar's invitation, as it is written: dark styles of its own that miss some of its text. */
 const INVITATION =
