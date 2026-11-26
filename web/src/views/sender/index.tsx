@@ -1,6 +1,6 @@
 'use client';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useContext, useState } from 'react';
 import { ErrorNote } from '@/components/bits.tsx';
 import { SenderFacts } from '@/components/sender.tsx';
 import type { ListedDecision } from '@/lib/api/endpoints.ts';
@@ -9,6 +9,7 @@ import type { RuleStart } from '@/lib/rule-start.ts';
 import { useParam } from '@/lib/params.ts';
 import { RuleDialog } from '@/components/rule-dialog.tsx';
 import { Empty, Loading, PageHeader, Section, Select, Blank } from '@/system';
+import { Mailbox } from '@/lib/narrowed.ts';
 import { useOpenMessages } from '@/lib/open-messages.ts';
 import { useStarted } from '@/lib/started.ts';
 import { reveal } from '@/lib/reveal.ts';
@@ -61,6 +62,7 @@ function SenderView({ who }: { who: Who }) {
   const [named, setUnder] = useParam('name');
   const under = data && data.names.length > 1 ? named : '';
   const narrowed = useSenderUnder(who, under);
+  const mailbox = useContext(Mailbox);
   if (error && !data) return 'domain' in who ? <Empty>{error}</Empty> : <ErrorNote message={error} />;
   if (loading || !data)
     return (
@@ -77,7 +79,7 @@ function SenderView({ who }: { who: Who }) {
   const title = several ? null : reveal(data.name);
   const mail = byMessage(data.decisions);
   const listed = under !== '' && narrowed.data ? byMessage(narrowed.data.decisions) : mail;
-  const charted = profile.messages >= CHARTED;
+  const charted = mail.length >= CHARTED;
 
   return (
     <div className="flex flex-col gap-10">
@@ -112,7 +114,7 @@ function SenderView({ who }: { who: Who }) {
             }
           >
             {listed.length === 0 ? (
-              <Empty>No mail recorded from them.</Empty>
+              <Empty>{mailbox ? 'None of their mail is in this mailbox.' : 'No mail recorded from them.'}</Empty>
             ) : (
               <Mail rows={listed} onOpen={onOpen} from={data.kind === 'domain' ? 'sender' : several && under === '' ? 'name' : null} />
             )}
