@@ -3,6 +3,7 @@ import { expect, test } from './fixture.ts';
 import { forReviewLink } from './navigation.ts';
 import { row } from './parts.ts';
 import { toast } from './toast.ts';
+import { inboxRows } from './inbox.ts';
 
 /**
  * What the page last put on the app's icon, as `window.badge` (a count, or null once cleared), and how often it asked to
@@ -54,5 +55,16 @@ test.describe('The count on the app icon', () => {
     await forReviewLink(page).click();
     await asked(page).toBe(1);
     await badge(page).toBeUndefined();
+  });
+});
+
+test.describe('The count on the app icon, with Inbox on', () => {
+  test.use({ variant: 'inbox' });
+
+  test('is the unread conversations in the inbox, as Inbox counts them', async ({ page }) => {
+    await page.addInitScript(device({ answer: 'granted', iPhone: false }));
+    await page.goto('/inbox?unread=1');
+    await expect(inboxRows(page).first()).toBeVisible();
+    await badge(page).toBe(await inboxRows(page).count());
   });
 });

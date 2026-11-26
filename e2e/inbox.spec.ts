@@ -455,11 +455,27 @@ test.describe('Inbox', () => {
     await expect(readerHeading(page, 'Lunch on Thursday?')).toBeVisible();
   });
 
-  test('is the section For review was: / opens it, and its icon carries what waits on the reader', async ({ page }) => {
+  test('is the section For review was: / opens it, and its icon carries how many conversations are unread, changed as a press is made', async ({ page }) => {
     await page.goto('/');
     await path(page).toBe('/inbox');
     await expect(forReviewLink(page)).toHaveCount(0);
-    await expect(inboxLink(page)).toContainText('12');
+    await page.goto('/inbox?unread=1');
+    await expect(inboxRows(page).first()).toBeVisible();
+    const unread = await inboxRows(page).count();
+    await expect(inboxLink(page)).toHaveAccessibleName(`Inbox ${unread}`);
+
+    // Never answered, so the count can only be following the press.
+    const read = page.waitForRequest('**/api/mail/change');
+    await page.route('**/api/mail/change', () => {});
+    await page.goto('/inbox');
+    await inboxRow(page, 'This week in widgets').getByRole('checkbox').check();
+    await page.getByRole('toolbar', { name: 'Selected rows' }).getByRole('button', { name: 'Mark read' }).click();
+    await read;
+    await expect(inboxLink(page)).toHaveAccessibleName(`Inbox ${unread - 1}`);
+    const widgets = inboxRow(page, 'Widgets, part two');
+    await pointAt(widgets);
+    await widgets.getByRole('button', { name: 'Archive' }).click();
+    await expect(inboxLink(page)).toHaveAccessibleName(`Inbox ${unread - 2}`);
   });
 
   test('a rule Mild proposes is a row from Mild at the top, which opens on why and the mail it is about, and is dismissed there', async ({ page }) => {

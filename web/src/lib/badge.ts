@@ -10,7 +10,8 @@ const onHomeScreen = () => (navigator as Navigator & { standalone?: boolean }).s
 const permission = (): NotificationPermission | null => (onHomeScreen() && 'Notification' in window ? Notification.permission : null);
 
 /**
- * The count on the installed app's icon: For review's, across every mailbox, as the rail counts it. It is set only while
+ * The count on the installed app's icon, across every mailbox: Inbox's unread conversations while it is on, and For
+ * review's while it is off, when Mild keeps no inbox to count. It is set only while
  * the page runs, so between visits the icon shows what waited when the app was last open. A computer's Chrome or Edge
  * draws it with nothing allowed, and Android not at all. An iPhone draws it only once notifications are allowed, which it
  * asks only from a press: the first press in the app asks, once.

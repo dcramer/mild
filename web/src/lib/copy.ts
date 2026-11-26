@@ -7,6 +7,7 @@ import { onWrite } from './api/client.ts';
 import { type Sealed, device, seal, unseal } from './device.ts';
 import { timed } from './trace.ts';
 import { idle } from './utils.ts';
+import { tellUnread } from './unread.ts';
 
 /**
  * The page's copy of the person's inbox (docs/sync.md): every conversation with a message in it, kept in this browser
@@ -308,9 +309,16 @@ let loaded: () => void = () => {};
 /** Settles once the copy has read what the device kept, and so holds every conversation a press there could be on. */
 export const opened = new Promise<void>((done) => (loaded = done));
 
+/** Told on every change to the copy, a press shown in it too, once the copy is whole. */
+function countUnread() {
+  if (!whole || !collection) return tellUnread(null);
+  tellUnread([...collection.state.values()].filter((row) => row.inbox && row.unread).map(({ accountId, threadId }) => ({ accountId, threadId })));
+}
+
 /** The copy's conversations. Made, and started, the first time it is asked for, in the browser. */
 export function conversations(): Collection<Copied, string> {
-  return (collection ??= createCollection<Copied, string>({
+  if (collection) return collection;
+  collection = createCollection<Copied, string>({
     id: 'conversations',
     getKey: (row) => row.key,
     startSync: true,
@@ -388,7 +396,10 @@ export function conversations(): Collection<Copied, string> {
         };
       },
     },
-  }));
+  });
+  collection.subscribeChanges(countUnread);
+  listeners.add(countUnread);
+  return collection;
 }
 
 /** The copy's row for a conversation, where the copy has been started and holds it. */
