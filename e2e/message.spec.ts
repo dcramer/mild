@@ -227,7 +227,7 @@ const ASKED = 'Shall we meet at the lake?';
 const REPLIED = 'Works for me.';
 
 /** White, darkened by the frame's script: the dashboard's ground. */
-const DARK_GROUND = 'rgb(17, 17, 17)';
+const DARK_GROUND = 'rgb(24, 24, 24)';
 
 /** The invitation's grey "organizer" (#70757a), which its dark styles miss, lightened over their dark card. */
 const LIGHTENED = 'rgb(185, 190, 195)';

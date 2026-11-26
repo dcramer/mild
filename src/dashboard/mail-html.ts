@@ -1,4 +1,4 @@
-import { FRAME_SCRIPT } from './frame-script.ts';
+import { FRAME_SCRIPT, INK } from './frame-script.ts';
 
 /**
  * A message's HTML made fit to show in the dashboard's frame. The frame's own policy is what keeps it
@@ -212,9 +212,6 @@ export function cleanHtml(html: string, images: boolean): string {
   }
   return out;
 }
-
-/** The dashboard's colours (`--foreground`, `--supporting`, `--border` in web/src/index.css), which the frame cannot read from the page. */
-export const INK = { foreground: '#f0eee8', muted: '#a3a198', border: '#32322d' };
 
 /** Laid out as tall as what it holds, so the frame can be as tall as that: a template's `height: 100%` would be the frame's. */
 const OWN_HEIGHT = 'html,body{height:auto!important;min-height:0!important}';

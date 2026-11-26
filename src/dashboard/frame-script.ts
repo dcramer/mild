@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
 
+/** The dashboard's colours (`--background`, `--foreground`, `--supporting`, `--border` in web/src/index.css), which the frame cannot read from the page. */
+export const INK = { background: '#181817', foreground: '#f0eee8', muted: '#a3a198', border: '#32322d' };
+
+const lightness = (hex: string) => {
+  const channels = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255);
+  return (Math.max(...channels) + Math.min(...channels)) / 2;
+};
+
 /**
  * The one script a message's frame runs, Mild's own: the frame's policy allows it by its hash and nothing else, and the
  * cleaner strips every script the mail brings. It runs in the sandbox, with no origin of its own and no network, so even
@@ -29,8 +37,8 @@ export const FRAME_SCRIPT = `(() => {
   const computed = window.getComputedStyle.bind(window);
   const up = window.parent;
   // The dashboard's ground (--background) and ink (--foreground), as HSL lightness.
-  const GROUND = 0.065;
-  const INK = 0.93;
+  const GROUND = ${lightness(INK.background)};
+  const INK = ${lightness(INK.foreground)};
   const rgb = (value) => {
     const m = /^rgba?\\(([^)]*)\\)$/.exec(value);
     if (!m) return null;

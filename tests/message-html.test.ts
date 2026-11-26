@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { FRAME_SCRIPT } from '../src/dashboard/frame-script.ts';
-import { INK, cleanHtml, isLetter, mailDocument } from '../src/dashboard/mail-html.ts';
+import { FRAME_SCRIPT, INK } from '../src/dashboard/frame-script.ts';
+import { cleanHtml, isLetter, mailDocument } from '../src/dashboard/mail-html.ts';
 import { FRAME_POLICY, IMAGES_FRAME_POLICY } from '../src/dashboard/policy.ts';
 import { readContent } from '../src/gmail/body.ts';
 import { recordSync } from '../src/store/messages.ts';
@@ -124,7 +124,7 @@ describe('cleaning a message for the frame', () => {
   it('draws a letter in the colours the dashboard has', () => {
     const css = readFileSync(new URL('../web/src/index.css', import.meta.url), 'utf8');
     const token = (name: string) => new RegExp(`\\s--${name}:\\s*([^;]+);`).exec(css)?.[1];
-    expect({ foreground: token('foreground'), muted: token('supporting'), border: token('border') }).toEqual(INK);
+    expect({ background: token('background'), foreground: token('foreground'), muted: token('supporting'), border: token('border') }).toEqual(INK);
   });
 
   it("reads a message's text and its HTML part, each as it is", () => {
