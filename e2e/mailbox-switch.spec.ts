@@ -1,10 +1,10 @@
 import type { Page } from '@playwright/test';
 import { expect, test, PHONE } from './fixture.ts';
-import { phoneMenu } from './navigation.ts';
+import { domainPage, phoneMenu, senderPage } from './navigation.ts';
 import { reviewRows } from './review.ts';
 import { mailboxesAsked } from './network.ts';
 import { WORK, mailboxChoice, switchMailbox } from './mailboxes.ts';
-import { senderCard } from './parts.ts';
+import { section, senderCard } from './parts.ts';
 import { pointAt } from './wait.ts';
 
 // A desktop and a phone each name it in a place of their own.
@@ -52,6 +52,23 @@ test("a sender's card on the list still drawn from before the switch says who th
   await pointAt(row.getByRole('link', { name: 'Ada Lovelace', exact: true }));
   await expect(senderCard(page, 'Ada Lovelace')).toContainText('ada@example.org');
 });
+
+for (const [whose, path, title] of [
+  ['sender', senderPage('ada@example.org'), 'Ada Lovelace'],
+  ['domain', domainPage('code.example.com'), 'code.example.com'],
+] as const) {
+  test(`a ${whose}'s page narrowed to a mailbox with none of their mail is still theirs, with only their mail list empty`, async ({ page }) => {
+    await page.goto(path);
+    const mail = section(page, 'Their mail');
+    await expect(page.getByRole('heading', { name: title, level: 1 })).toBeVisible();
+    await expect(mail.getByRole('row').nth(1)).toBeVisible();
+    await switchMailbox(page, WORK);
+    await expect(named(page)).toBeVisible();
+    await expect(page.getByText('None of their mail is in this mailbox.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: title, level: 1 })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Trust' })).toBeVisible();
+  });
+}
 
 test('a mailbox kept in the browser that is no longer theirs shows all of them, and is never asked for', async ({ page }) => {
   await page.addInitScript("localStorage.setItem('sift:mailbox', 'gone@example.org')");

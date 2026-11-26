@@ -133,20 +133,23 @@ const LISTED = 50;
 
 /**
  * A sender's page, or a domain's. Null for a domain anyone can get an address at, and for one the person has
- * neither mail from nor a rule about, which would only say back what was asked. `under` narrows the mail
- * listed to what came under that name, read from as far back as the names are.
+ * neither mail from nor a rule about, which would only say back what was asked. Who they are is read from all
+ * of the person's mailboxes (`whole`), and only their mail listed from `scope`: a page narrowed to a mailbox
+ * with none of it is still theirs. `under` narrows the mail listed to what came under that name, read from as
+ * far back as the names are.
  */
 export async function senderPage(
   db: Sql,
   scope: Scope,
+  whole: Scope,
   who: { address: string } | { domain: string },
   now: number = Date.now(),
   under?: string,
 ): Promise<SenderPage | null> {
-  const profile = await profileOf(db, scope, who, now);
+  const profile = await profileOf(db, whole, who, now);
   if (!profile || (profile.messages === 0 && profile.rules.length === 0)) return null;
   const filter = 'address' in who ? { sender: who.address } : { domain: who.domain };
-  const named = 'address' in who ? await namesOf(db, scope, who.address, await labelNames(db)) : null;
+  const named = 'address' in who ? await namesOf(db, whole, who.address, await labelNames(db)) : null;
   const writing =
     'domain' in who
       ? (
@@ -157,7 +160,7 @@ export async function senderPage(
               lastSeenAt: max(messages.receivedAt),
             })
             .from(messages)
-            .where(and(within(scope, messages.accountId), eq(messages.domainHash, hashOf(db, who.domain))))
+            .where(and(within(whole, messages.accountId), eq(messages.domainHash, hashOf(db, who.domain))))
             .groupBy(messages.senderHash)
             .orderBy(desc(count()), asc(messages.senderHash))
             .limit(100)
@@ -168,7 +171,7 @@ export async function senderPage(
       : [];
   const known = await contacts(
     db,
-    scope.accounts,
+    whole.accounts,
     writing.map((s) => plain(s.address)),
   );
   const senders = writing.map((s) => ({ ...s, lastSeenAt: s.lastSeenAt!, contact: known.get(plain(s.address)) ?? null }));

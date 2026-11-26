@@ -117,6 +117,24 @@ describe('a sender’s page', () => {
     expect((await pageOf(me, '/api/sender?address=nobody@example.org')).profile).toMatchObject({ messages: 0, rules: [{ disposition: 'archive' }] });
   });
 
+  it('narrowed to one mailbox, lists only the mail in it, and is still theirs in a mailbox with none', async () => {
+    const { sift, me, box, arrives } = await settled();
+    const WORK = 'me@work.example.com';
+    await me.signIn(WORK, { add: true });
+    await sift.work();
+    const lunch = box.deliver({ from: `Ada <${ADA}>`, subject: 'Lunch?', at: AT - 2000 });
+    await arrives();
+    await recordDecision(await sift.db(ME), ME, lunch, { disposition: 'review', subscription: 'preserve', stage: 'model', reason: 'Unsure.' });
+
+    const home = await pageOf(me, `/api/sender?address=${ADA}&mailbox=${ME}`);
+    expect(home.decisions.map((d) => d.messageId)).toEqual([lunch]);
+    for (const query of [`/api/sender?address=${ADA}&mailbox=${WORK}`, `/api/domain?domain=example.com&mailbox=${WORK}`]) {
+      const work = await me.call('GET', query);
+      expect(work).toMatchObject({ status: 200, body: { profile: { messages: 1 }, decisions: [] } });
+    }
+    expect((await me.call('GET', `/api/sender?address=bo@example.com&mailbox=${WORK}`)).status).toBe(404);
+  });
+
   it('shows nobody else anything of them', async () => {
     const { sift } = await withMail();
     const other = await sift.settled(OTHER);
