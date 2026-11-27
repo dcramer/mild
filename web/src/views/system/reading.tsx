@@ -136,7 +136,7 @@ function SpecimenReader({ onBack }: { onBack: () => void }) {
             presses={
               inbox
                 ? [
-                    { label: 'Archive', key: 'e', icon: <ArchiveIcon aria-hidden />, onPress: () => toast('Archived') },
+                    { label: 'Archive', key: 'Shift+e', icon: <ArchiveIcon aria-hidden />, onPress: () => toast('Archived') },
                     { label: 'Mark unread', key: 'Shift+u', icon: <MailIcon aria-hidden />, onPress: () => toast('Marked unread') },
                   ]
                 : []

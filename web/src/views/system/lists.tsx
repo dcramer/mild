@@ -222,7 +222,7 @@ export function Lists({
                 clear: () => setPicked(new Set()),
                 all: { total: ROWS.length, select: () => setPicked(new Set(ROWS.map((row) => row.address))) },
                 actions: [
-                  { label: 'Archive', key: 'e', onPress: () => toast(`Archived ${picked.size}`) },
+                  { label: 'Archive', key: 'Shift+e', onPress: () => toast(`Archived ${picked.size}`) },
                   { label: 'Mark read', key: 'Shift+i', onPress: () => toast(`Marked ${picked.size} read`) },
                   { label: 'Mark unread', key: 'Shift+u', onPress: () => toast(`Marked ${picked.size} unread`), tucked: true },
                 ],
