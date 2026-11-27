@@ -17,11 +17,12 @@ import { chooseMailbox, useChosenMailbox } from '@/lib/mailbox.ts';
 import { type MessageRef, OpenMessagesContext } from '@/lib/open-messages.ts';
 import { goBack, panelEntry, paramNow, setParams, useHere, useParam, whenSettled } from '@/lib/params.ts';
 import { moveReader } from '@/lib/motion.ts';
-import { isMessageKey } from '@/lib/rows.ts';
+import { isMessageKey, threadKey } from '@/lib/rows.ts';
 import { useStarted } from '@/lib/started.ts';
 import { useHidden } from '@/components/action.ts';
 import { ahead, plural } from '@/lib/format.ts';
 import { onOutboxFailed, useOutbox } from '@/lib/waiting.ts';
+import { useUnread } from '@/lib/unread.ts';
 import { panelOpened, startTelemetry } from '@/lib/telemetry.ts';
 import { BarSlot, Cloud, Loading, LoadingBar, Masthead, Notice, PageFoot, Rail, TabBar, rowHolding, useGoing, useNow, useToast } from '@/system';
 import { Boot } from '@/views/boot.tsx';
@@ -211,6 +212,19 @@ function useCopy(on: boolean) {
   }, [on]);
 }
 
+/**
+ * Inbox's count, unread conversations in the inbox, in the mailbox shown (`shown`) and in all of them (`all`, the app
+ * icon's): from the copy, so a press counts as it is made, and an answer taking a row off Inbox takes it off the count.
+ * Undefined until the copy is whole.
+ */
+function useUnreadCount(on: boolean, mailbox: string) {
+  const unread = useUnread();
+  const hidden = useHidden();
+  if (!on || !unread) return { shown: undefined, all: undefined };
+  const left = unread.filter((c) => !hidden.has(threadKey(c)));
+  return { shown: left.filter((c) => !mailbox || c.accountId === mailbox).length, all: left.length };
+}
+
 /** How long before Google ends a sign-in the page says so: two days, so someone who looks in once a day sees it. */
 const SIGN_IN_WARNING_MS = 2 * 86_400_000;
 
@@ -339,20 +353,21 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const name = accounts.find((a) => a.primary)?.email ?? signedInAs;
   const usage = useUsage();
   const plan = usePlan();
+  const inbox = manage.data?.mail === true;
   // An answer on its way has left the list, so it leaves the count with it until the count is read again.
   const waiting = Math.max(0, (inMailbox.data?.waiting ?? 0) - [...useHidden(inMailbox.at)].filter(isMessageKey).length);
   const answering = [...useHidden(manage.at)].filter(isMessageKey).length;
-  useBadge(manage.data ? Math.max(0, manage.data.waiting - answering) : undefined);
+  const unread = useUnreadCount(inbox, mailbox);
+  useBadge(inbox ? unread.all : manage.data ? Math.max(0, manage.data.waiting - answering) : undefined);
 
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const going = useGoing();
   const fetching = useIsFetching(firstLoad);
-  // Inbox is a section only while it is on.
-  // For review while Inbox is off, Inbox while it is on: there, what waits on the reader is answered as they handle their mail.
-  const inbox = manage.data?.mail === true;
+  // Inbox is a section only while it is on, and For review only while it is off.
+  const count = inbox ? unread.shown : waiting;
   const items = SECTIONS.filter((s) => (s.to === 'inbox' ? inbox : s.to === '' ? !inbox : true)).map((s) => ({
     ...s,
-    ...(s.to === (inbox ? 'inbox' : '') && waiting ? { count: waiting } : {}),
+    ...(s.to === (inbox ? 'inbox' : '') && count ? { count } : {}),
   }));
   const notice = useNotice(accounts, manage.data?.activity.expired ?? [], name);
   const status = (stacked: boolean) => (manage.data ? <MildStatus accounts={accounts} usage={usage.data} plan={plan} stacked={stacked} /> : null);
