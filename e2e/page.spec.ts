@@ -58,6 +58,8 @@ for (const [where, viewport] of [
   ['on a phone', PHONE],
 ] as const) {
   test(`every screen passes axe's accessibility checks, ${where}`, async ({ page }) => {
+    // Six screens, each analysed whole: 24 to 32s on CI, against the default 30.
+    test.slow();
     await page.setViewportSize(viewport);
     for (const [path, heading] of SCREENS) {
       await page.goto(path);
