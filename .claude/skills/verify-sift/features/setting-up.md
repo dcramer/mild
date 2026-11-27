@@ -30,5 +30,5 @@ Preconditions:
 ## Gotchas
 
 - `Suggest labels` is `serve.ts`'s stand-in (SKILL.md): words naming pitches get `Sales pitches`, builds `Build results` (Digest), receipts the note, none of these an error.
-- `Go through 21` starts the run, but nothing goes on with it: `serve.ts` runs no tick. Settings shows it `Reading your inbox · 0 found`.
+- `Go through 21` starts the run, but nothing goes on with it: `serve.ts` runs no tick. Settings shows it `Reading your inbox`.
 - Labels are the person's, for every mailbox: `--bare` removes all but Leave in inbox, which shows the steps. Each removed label keeps its row, with `removed_at` set.
