@@ -222,6 +222,8 @@ export function Writer({
           <Input bare aria-label="Subject" className="flex-1" value={draft.subject} onChange={(event) => change({ subject: event.target.value })} />
         </DraftLine>
       )}
+      {/* With the envelope, over the text, so they are in view however long the text is and never float under an empty one. */}
+      <DraftFiles files={shown} onRemove={detach} />
       <DraftText
         ref={textField}
         aria-label="Message"
@@ -230,7 +232,6 @@ export function Writer({
         onChange={(event) => change({ text: event.target.value })}
       />
       {!trimmed || draft.quoted ? null : what.kind === 'reply' ? <Trimmed onShow={unfold} /> : <DraftSignature text={from.signature} onEdit={unfold} />}
-      <DraftFiles files={shown} onRemove={detach} />
     </div>
   );
   if (inline)
