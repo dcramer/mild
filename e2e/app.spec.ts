@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { STARTUP_SCREENS, startupImage } from '../web/src/lib/startup-images.ts';
 import { expect, test, PHONE } from './fixture.ts';
-import { boxOf, path, query } from './wait.ts';
+import { boxOf, forget, frameKept, path, query } from './wait.ts';
 import { back } from './reader.ts';
 import { messageQuery, SENDER, phoneMenu, sections } from './navigation.ts';
 import { putAway } from './toast.ts';
@@ -11,22 +11,6 @@ import { closeSettings, settings, settingsFromMenu } from './settings.ts';
 
 // The installed app: what the phone's own edges, its Back and its network do to the page.
 
-/** What this device keeps of the frame, by name, and whether it holds a key. */
-const kept = `new Promise((done) => {
-  const opening = indexedDB.open('sift-device');
-  // Not made here: the page would find it made without its stores.
-  opening.onupgradeneeded = () => opening.transaction.abort();
-  opening.onerror = () => done({ key: 0, frame: [] });
-  opening.onsuccess = () => {
-    const db = opening.result;
-    const reading = db.transaction(['key', 'frame']);
-    const key = reading.objectStore('key').count();
-    const frame = reading.objectStore('frame').getAllKeys();
-    reading.oncomplete = () => (db.close(), done({ key: key.result, frame: frame.result }));
-  };
-})`;
-const keptAll = { key: 1, frame: ['manage', 'session', 'suggestions-false', 'usage'] };
-
 /** The ids of the other reads this device keeps. */
 const reads = `new Promise((done) => {
   indexedDB.open('sift-device').onsuccess = (event) => {
@@ -34,16 +18,6 @@ const reads = `new Promise((done) => {
     const reading = db.transaction('reads');
     const ids = reading.objectStore('reads').getAllKeys();
     reading.oncomplete = () => (db.close(), done(ids.result));
-  };
-})`;
-
-/** Drop what the device kept of the frame under `name`. */
-const forget = (name: string) => `new Promise((done) => {
-  indexedDB.open('sift-device').onsuccess = (event) => {
-    const db = event.target.result;
-    const removing = db.transaction('frame', 'readwrite');
-    removing.objectStore('frame').delete('${name}');
-    removing.oncomplete = () => (db.close(), done());
   };
 })`;
 
@@ -311,7 +285,7 @@ test.describe('The installed app', () => {
   test('opens on the frame this device kept before Mild answers, and asks Mild all the same', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
-    await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+    await frameKept(page);
     const waiting: (() => Promise<void>)[] = [];
     await page.route('**/api/session*', (route) => void waiting.push(() => route.continue()));
     await page.reload();
@@ -342,13 +316,14 @@ test.describe('The installed app', () => {
 
   test('a device Mild no longer knows is wiped, and made again', async ({ page }) => {
     await page.goto('/');
-    await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+    await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
+    await frameKept(page);
     const made: string[] = [];
     page.on('request', (request) => void (request.method() === 'POST' && new URL(request.url()).pathname === '/api/device' && made.push(request.url())));
     await page.context().clearCookies({ name: 'sift_device' });
     await page.reload();
     await expect.poll(() => made.length).toBe(1);
-    await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+    await frameKept(page);
   });
 
   test.describe('signed out elsewhere', () => {
@@ -357,7 +332,8 @@ test.describe('The installed app', () => {
 
     test('the sign-in screen replaces the frame kept, and nothing of theirs is left', async ({ page }) => {
       await page.goto('/');
-      await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+      await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
+      await frameKept(page);
       await page.context().clearCookies({ name: 'sift_session' });
       await page.reload();
       await expect(page.getByRole('link', { name: 'Sign in with Google' })).toBeVisible();
@@ -386,7 +362,7 @@ test.describe('A reload', () => {
     await page.evaluate('scrollTo(0, 600)');
     // What Mild would have saved, which "Mild is off" says above the list, is not on the device yet, as when the page was
     // left before it was kept or a deploy since dropped it, and Mild answers it only once the place is given back.
-    await expect.poll(() => page.evaluate(kept)).toEqual(keptAll);
+    await frameKept(page);
     await page.evaluate(forget('usage'));
     const { promise: answered, resolve: answer } = Promise.withResolvers<void>();
     await page.route('**/api/usage*', async (route) => {

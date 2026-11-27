@@ -29,7 +29,8 @@ import type * as ReaderModule from '@/views/reader/index.tsx';
 import { SignInScreen } from '@/views/sign-in.tsx';
 import { useSession, useManage, useUsage } from '@/lib/api/reads.ts';
 import { usePlan } from '@/lib/prices.ts';
-import { useDeviceFrame } from '@/lib/frame.ts';
+import { useDeviceFrame, useFrameRead } from '@/lib/frame.ts';
+import { useBadge } from '@/lib/badge.ts';
 
 // What opens over a screen, or in its place, is fetched when first needed and, once the page is idle, ahead of need;
 // the reader, as the page starts.
@@ -123,7 +124,7 @@ function Signed({ addressed, children }: { addressed: boolean; children: ReactNo
   const [signin] = useParam('signin');
   const session = useSession();
   const online = useOnline();
-  const known = session.data;
+  const known = useFrameRead() ? session.data : null;
   // The router's path, not the address bar's, which Next.js moves only once the page it goes to is drawn.
   const path = usePathname();
   const standIn = useStarted() && addressed && !ADDRESSED.test(path);
@@ -136,7 +137,7 @@ function Signed({ addressed, children }: { addressed: boolean; children: ReactNo
     if (standIn && answered) window.location.reload();
   }, [standIn, answered]);
   const nobody = known?.required === true && known.email === null;
-  // Until the device's kept frame or Mild has said who is signed in: only the opening, so a sign-in screen is not drawn
+  // Until the device's kept frame is read and it or Mild has said who is signed in: only the opening, so a sign-in screen is not drawn
   // over a dashboard, nor one over the other. Not set up, or not answering, it says so.
   if (!known || standIn)
     return session.missing || session.error || !online ? <Boot missing={session.missing} error={session.error} online={online} /> : <Opening />;
@@ -340,6 +341,8 @@ function Frame({ signedInAs, children }: { signedInAs: string | null; children: 
   const plan = usePlan();
   // An answer on its way has left the list, so it leaves the count with it until the count is read again.
   const waiting = Math.max(0, (inMailbox.data?.waiting ?? 0) - [...useHidden(inMailbox.at)].filter(isMessageKey).length);
+  const answering = [...useHidden(manage.at)].filter(isMessageKey).length;
+  useBadge(manage.data ? Math.max(0, manage.data.waiting - answering) : undefined);
 
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const going = useGoing();

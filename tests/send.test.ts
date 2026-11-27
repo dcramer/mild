@@ -4,7 +4,7 @@ import { undo } from '../src/actions/executor.ts';
 import { type Outgoing, SETTLE_MS, buildMessage, sendMail } from '../src/actions/send.ts';
 import type { Controls } from '../src/dashboard/controls.ts';
 import { replyTo } from '../src/dashboard/queries/reply.ts';
-import { setCanSend, setMailboxAliases } from '../src/store/accounts.ts';
+import { setCanSend, setSendAs } from '../src/store/accounts.ts';
 import { getAction } from '../src/store/actions.ts';
 import { listUndecided, queuedMessage, recordSync } from '../src/store/messages.ts';
 import { setMail } from '../src/store/preferences.ts';
@@ -133,7 +133,7 @@ describe('sending', () => {
     expect(gmail.asked('users.messages.send')).toEqual([]);
     expect(await tries()).toEqual([]);
 
-    await setMailboxAliases(db, ACCOUNT, ['me@work.example.com']);
+    await setSendAs(db, ACCOUNT, [{ address: 'me@work.example.com', signature: '' }]);
     const sent = await send(ID, { from: { address: 'me@work.example.com' } });
     expect(gmail.sent()).toMatchObject([{ id: sent.id, threadId: 't1' }]);
     expect(sent).toEqual({ id: gmail.sent()[0]!.id, threadId: 't1' });

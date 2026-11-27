@@ -805,13 +805,19 @@ test.describe('Inbox', () => {
     await expect(inboxRow(page, 'Your March bill')).toHaveCount(0);
   });
 
-  test('in the reader E archives the conversation and goes on to the next, and Shift+U marks it unread and closes it', async ({ page }) => {
+  test('in the reader E archives the conversation and goes back to the list, on the row that took its place, and Shift+U marks it unread and closes it', async ({
+    page,
+  }) => {
     await page.goto('/inbox');
     await inboxRow(page, 'This week in widgets').getByRole('cell').nth(2).click();
     const open = reader(page);
     await expect(open.getByRole('button', { name: /^Archive/ })).toBeEnabled();
     await page.keyboard.press('e');
     await expect(toast(page, 'This week in widgets')).toBeVisible();
+    await expect(open).toHaveCount(0);
+    await expect(inboxRow(page, 'This week in widgets')).toHaveCount(0);
+    await expect(inboxRow(page, 'Widgets, part two')).toBeFocused();
+    await inboxRow(page, 'Widgets, part two').getByRole('cell').nth(2).click();
     await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 1 })).toBeVisible();
     await page.keyboard.press('Shift+U');
     // Closed once Gmail has it.
@@ -972,7 +978,7 @@ test.describe('Inbox', () => {
   test.describe('on a phone', () => {
     test.use({ viewport: PHONE });
 
-    test('reads as a mail app, with no label on the row, and archiving from the reader goes on to the next conversation', async ({ page }) => {
+    test('reads as a mail app, with no label on the row, and archiving from the reader goes back to the list', async ({ page }) => {
       await page.goto('/inbox');
       const widgets = page.getByRole('row').filter({ hasText: 'Widgets, part two' });
       await expect(widgets).toContainText('Weekly Digest');
@@ -981,9 +987,8 @@ test.describe('Inbox', () => {
       const open = reader(page);
       await expect(open.getByRole('heading', { name: 'Widgets, part two', level: 1 })).toBeVisible();
       await open.getByRole('button', { name: 'Archive', exact: true }).click();
-      await expect(open.getByRole('heading', { name: 'Your order has shipped', level: 1 })).toBeVisible();
       await expect(toast(page, 'Widgets, part two')).toBeVisible();
-      await back(page).click();
+      await expect(open).toHaveCount(0);
       await expect(page.getByRole('row').filter({ hasText: 'Widgets, part two' })).toHaveCount(0);
     });
   });

@@ -1,4 +1,4 @@
-import { FRAME_SCRIPT } from './frame-script.ts';
+import { FRAME_SCRIPT, INK } from './frame-script.ts';
 
 /**
  * A message's HTML made fit to show in the dashboard's frame. The frame's own policy is what keeps it
@@ -213,9 +213,6 @@ export function cleanHtml(html: string, images: boolean): string {
   return out;
 }
 
-/** The dashboard's colours (`--foreground`, `--supporting`, `--border` in web/src/index.css), which the frame cannot read from the page. */
-export const INK = { foreground: '#f0eee8', muted: '#a3a198', border: '#32322d' };
-
 /** Laid out as tall as what it holds, so the frame can be as tall as that: a template's `height: 100%` would be the frame's. */
 const OWN_HEIGHT = 'html,body{height:auto!important;min-height:0!important}';
 
@@ -223,13 +220,16 @@ const OWN_HEIGHT = 'html,body{height:auto!important;min-height:0!important}';
 const quotePill = (ink: string, rest: string, fill: string) =>
   `details[data-sift-quote]{margin-top:.5em}details[data-sift-quote]>summary{display:inline-block;list-style:none;cursor:pointer;padding:0 .5em;border-radius:3px;font:600 14px/1.6 ui-sans-serif,system-ui,sans-serif;letter-spacing:.1em;background:transparent!important;color:${rest}!important}details[data-sift-quote]>summary::-webkit-details-marker{display:none}details[data-sift-quote]>summary:hover{background:${fill}!important;color:${ink}!important}details[data-sift-quote]>summary:focus-visible{outline:2px solid ${ink};outline-offset:2px}details[data-sift-quote][open]>summary{margin-bottom:.5em}`;
 
+/** Where Gmail, Outlook and Thunderbird mark a signature they wrote, drawn faint as Gmail draws one. */
+const SIGNATURES = 'body :is(.gmail_signature,[data-smartmail=gmail_signature],#Signature,.moz-signature)';
+
 /**
  * Mail written as a letter, read as the dashboard's own text: its ink, its size, its line height, no box around it.
  * Colours, faces and line heights the letter names are its program's defaults far more often than anyone's choice
  * (Outlook's black Aptos at Word's 107%), and black on the dashboard would not read, nor lines that tight. The frame
  * loads no font, so the face is the system's, not the dashboard's.
  */
-const LETTER = `<style>:root{color-scheme:dark;background:transparent;color:${INK.foreground};font:17px/1.625 ui-sans-serif,system-ui,sans-serif;overflow-wrap:break-word}${OWN_HEIGHT}body{margin:0}body,body *{line-height:inherit!important}body *{color:inherit!important;background-color:transparent!important;font-family:inherit!important;border-color:${INK.border}!important}body :is(pre,code,tt,kbd,samp){font-family:ui-monospace,monospace!important}a{text-decoration:underline;text-decoration-color:rgb(240 238 232/.35);text-underline-offset:.2em}a:hover{text-decoration-color:currentColor}body blockquote{margin:0 0 0 .25em!important;padding:0 0 0 1em!important;border-left:2px solid ${INK.border}!important;color:${INK.muted}!important}${quotePill(INK.foreground, 'rgb(240 238 232/.75)', 'rgb(240 238 232/.1)')}</style>`;
+const LETTER = `<style>:root{color-scheme:dark;background:transparent;color:${INK.foreground};font:17px/1.625 ui-sans-serif,system-ui,sans-serif;overflow-wrap:break-word}${OWN_HEIGHT}body{margin:0}body,body *{line-height:inherit!important}body *{color:inherit!important;background-color:transparent!important;font-family:inherit!important;border-color:${INK.border}!important}body :is(pre,code,tt,kbd,samp){font-family:ui-monospace,monospace!important}a{text-decoration:underline;text-decoration-color:rgb(240 238 232/.35);text-underline-offset:.2em}a:hover{text-decoration-color:currentColor}body blockquote{margin:0 0 0 .25em!important;padding:0 0 0 1em!important;border-left:2px solid ${INK.border}!important;color:${INK.muted}!important}${SIGNATURES}{color:${INK.muted}!important}${quotePill(INK.foreground, 'rgb(240 238 232/.75)', 'rgb(240 238 232/.1)')}</style>`;
 
 /**
  * Mail with a design of its own, on the white paper it is written for, which the frame's script darkens unless the reader

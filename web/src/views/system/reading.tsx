@@ -16,6 +16,7 @@ import {
   Recipients,
   DraftBlocked,
   DraftLine,
+  DraftSignature,
   DraftText,
   Fact,
   Facts,
@@ -327,6 +328,8 @@ const suggestPeople = async (typed: string) => {
   );
 };
 
+const SIGNATURE = 'Me Example\nexample.org';
+
 /** A draft's lines as the composer draws them: To with a chip and a wrong one, Cc and Bcc behind their presses, and files in each state. */
 function SpecimenDraft({ to: start, quote, folded }: { to: Recipient[]; quote: boolean; folded: boolean }) {
   const [to, setTo] = useState<Recipient[]>([...start, { address: 'not an address', wrong: true }]);
@@ -370,14 +373,24 @@ function SpecimenDraft({ to: start, quote, folded }: { to: Recipient[]; quote: b
         </DraftLine>
       ) : null}
       <DraftText aria-label="Message" className="min-h-48" value={text} onChange={(event) => setText(event.target.value)} />
-      {quote && !quoted ? (
+      {quoted ? null : quote ? (
         <Trimmed
           onShow={() => {
-            setText(`${text.trimEnd()}\n\nOn Nov 12, 2026, 7:32 PM, Ada Lovelace <ada@example.org> wrote:\n\n> Are you both free for lunch on Thursday?`);
+            setText(
+              `${text.trimEnd()}\n\n-- \n${SIGNATURE}\n\nOn Nov 12, 2026, 7:32 PM, Ada Lovelace <ada@example.org> wrote:\n\n> Are you both free for lunch on Thursday?`,
+            );
             setQuoted(true);
           }}
         />
-      ) : null}
+      ) : (
+        <DraftSignature
+          text={SIGNATURE}
+          onEdit={() => {
+            setText(`${text.trimEnd()}\n\n-- \n${SIGNATURE}`);
+            setQuoted(true);
+          }}
+        />
+      )}
       <DraftFiles files={files} onRemove={(key) => setFiles((all) => all.filter((f) => f.key !== key))} />
     </>
   );

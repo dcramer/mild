@@ -15,9 +15,9 @@ import { Arriving } from './messages.tsx';
 import { OpenedMessage } from './opened-message.tsx';
 
 /**
- * Every list opens a message here, in the list's place: `items` is the list and `index` the one showing, so previous,
- * next and "answer, then the next one" follow it. `back` names the list, which `onBack` returns to. `onShown` is told
- * which row the message is, for the list to come back to.
+ * Every list opens a message here, in the list's place: `items` is the list and `index` the one showing, which previous
+ * and next follow. `back` names the list, which `onBack` returns to, as does any press that takes the message out of
+ * it (an answer, Archive). `onShown` is told which row the message is, for the list to come back to.
  */
 export function MessageReader({
   items,
@@ -61,7 +61,12 @@ export function MessageReader({
     setPicked(message);
     window.scrollTo(0, 0);
   };
-  const next = () => (index < items.length - 1 ? go(index + 1) : onBack());
+  // The message leaves the list, so the list comes back on the row that takes its place.
+  const done = () => {
+    const near = items[index + 1] ?? items[index - 1];
+    if (near?.accountId) onShown(messageKey(near));
+    onBack();
+  };
   // The copy has all a press needs before the message has loaded.
   const subject = data?.subject ?? fromCopy?.conversation.messages.at(-1)?.subject;
   const manage = useManage();
@@ -83,9 +88,9 @@ export function MessageReader({
     if (listed) onShown(listed);
   }, [listed, onShown]);
 
-  const archive = () => pressed && press([pressed], 'archive', next);
-  const spam = () => pressed && press([pressed], 'spam', next);
-  const blockSender = () => pressed && data && block([{ ...pressed, from: data.fromAddress }], next);
+  const archive = () => pressed && press([pressed], 'archive', done);
+  const spam = () => pressed && press([pressed], 'spam', done);
+  const blockSender = () => pressed && data && block([{ ...pressed, from: data.fromAddress }], done);
   const unread = () => pressed && press([pressed], 'unread', onBack);
   const [labelling, setLabelling] = useState(false);
   // In Inbox, as the bar and the foot of the conversation have them, but Label in Mark unread's place: the answer's
@@ -158,7 +163,7 @@ export function MessageReader({
         thumbs={thumbs}
         onPick={pick}
         onUndone={reload}
-        onAnswered={next}
+        onAnswered={done}
         onRead={() => markRead()}
         labelling={labelling}
         onLabelled={() => setLabelling(false)}

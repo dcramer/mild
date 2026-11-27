@@ -181,6 +181,17 @@ test.describe('A message read as part of the page', () => {
     await expect(frame.getByText(ASKED)).toHaveCSS('line-height', '26px');
   });
 
+  test('a signature Gmail or Outlook marked is faint, as Gmail draws one', async ({ page }) => {
+    await replyAs(
+      page,
+      `<div dir="ltr">${REPLIED}<br clear="all"><div><br></div><span class="gmail_signature_prefix">-- </span><br><div dir="ltr" class="gmail_signature" data-smartmail="gmail_signature">Ada Lovelace<div>Analyst</div></div></div>`,
+    );
+    await page.goto(RELEASE);
+    const frame = mailFrame(page, RELEASE_SUBJECT);
+    await expect(frame.getByText(REPLIED)).toHaveCSS('color', 'rgb(240, 238, 232)');
+    await expect(frame.getByText('Analyst')).toHaveCSS('color', 'rgb(163, 161, 152)');
+  });
+
   test('its text folds the same history', async ({ page }) => {
     await page.goto(RELEASE);
     const open = reader(page);
@@ -216,10 +227,10 @@ const ASKED = 'Shall we meet at the lake?';
 const REPLIED = 'Works for me.';
 
 /** White, darkened by the frame's script: the dashboard's ground. */
-const DARK_GROUND = 'rgb(17, 17, 17)';
+const DARK_GROUND = 'rgb(24, 24, 24)';
 
 /** The invitation's grey "organizer" (#70757a), which its dark styles miss, lightened over their dark card. */
-const LIGHTENED = 'rgb(185, 190, 195)';
+const LIGHTENED = 'rgb(184, 189, 194)';
 
 /** Google Calendar's invitation, as it is written: dark styles of its own that miss some of its text. */
 const INVITATION =

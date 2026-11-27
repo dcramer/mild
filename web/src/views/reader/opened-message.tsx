@@ -21,7 +21,7 @@ import { useWhatItIs } from './what-it-is.ts';
 /**
  * Everything about one message once it has loaded. What the message is, which starts on the reader's own answer where
  * they gave one, Why (Mild's reason, and in Inbox the history) and Rule…: in Inbox in the bar, as a mail app's toolbar
- * holds a label, with Why a `Popover`; elsewhere on Mild's row under the title, where answering moves on to the next item.
+ * holds a label, with Why a `Popover`; elsewhere on Mild's row under the title, where answering returns to the list.
  * Then the conversation, and what answers it. Opened from anywhere but Inbox, a side column has what Mild saw, the
  * sender, what else of theirs waits, and the history.
  */

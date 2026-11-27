@@ -5,7 +5,7 @@ import { FACTS, type FactAnswer, factWords } from '@/lib/words.ts';
 import { capitalised } from '@/lib/format.ts';
 import { type RuleStart, factStart, listStart } from '@/lib/rule-start.ts';
 import { Button, Heads, MailFrame, Quoted, RowActions, Section, Sub, Table, Td, TextPress, Th, Tr } from '@/system';
-import { splitQuoted } from '@/lib/quoted.ts';
+import { splitQuoted, splitSignature } from '@/lib/quoted.ts';
 import { reveal } from '@/lib/reveal.ts';
 
 type Shown = 'text' | 'html';
@@ -22,12 +22,14 @@ function storedView(): Shown {
 
 const TEXT = 'text-reading leading-relaxed break-words whitespace-pre-wrap';
 
-/** A message's text, with the history it quotes folded. */
+/** A message's text, its signature faint as Gmail draws one, and the history it quotes folded. */
 export function Letter({ text }: { text: string }) {
-  const { own, quoted } = splitQuoted(text);
+  const { own: written, quoted } = splitQuoted(text);
+  const { own, signature } = splitSignature(written);
   return (
     <div className="flex flex-col gap-2">
-      <div className={TEXT}>{own}</div>
+      {own.trim() === '' ? null : <div className={TEXT}>{own}</div>}
+      {signature ? <div className={`${TEXT} text-muted-foreground`}>{signature}</div> : null}
       {quoted ? (
         <Quoted>
           <div className={TEXT}>{quoted}</div>

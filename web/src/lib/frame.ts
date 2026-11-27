@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import type { Session } from './api/endpoints.ts';
 import { keys } from './api/keys.ts';
 import { queryClientFor } from './api/query.ts';
@@ -13,6 +13,8 @@ import { idle } from './utils.ts';
  */
 const FRAME: ReadonlySet<string> = new Set([keys.session, keys.manage, keys.usage, keys.suggestions(false, '')]);
 let keeping = false;
+let read = false;
+const reading = new Set<() => void>();
 
 const inFrame = (queryKey: readonly unknown[]) => queryKey.length === 1 && typeof queryKey[0] === 'string' && FRAME.has(queryKey[0]);
 
@@ -29,6 +31,8 @@ function follow() {
   const client = queryClientFor();
   void keptFrame().then(async (kept) => {
     for (const [name, value] of Object.entries(kept)) if (client.getQueryData([name]) === undefined) client.setQueryData([name], value, { updatedAt: 0 });
+    read = true;
+    for (const listener of reading) listener();
     // After the screen's first rows, which this would otherwise hold up.
     await idle();
     await readReads();
@@ -66,3 +70,17 @@ function follow() {
 }
 
 export const useDeviceFrame = () => useEffect(follow, []);
+
+/**
+ * Whether the device's frame has been read, so that Mild's answer to who is signed in, which on a fast network comes
+ * first, is not drawn without the rest of the frame: Settings' data a moment later would change what the screen shows.
+ */
+export const useFrameRead = () =>
+  useSyncExternalStore(
+    (listener) => {
+      reading.add(listener);
+      return () => void reading.delete(listener);
+    },
+    () => read,
+    () => false,
+  );

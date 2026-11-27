@@ -130,6 +130,8 @@ export const mailboxes = pgTable(
     lastSyncedAt: time('last_synced_at'),
     filtersCheckedAt: time('filters_checked_at'),
     aliases: jsonb('aliases').$type<string[]>().notNull().default([]), // Gmail send-as addresses besides the id, as of the last sync that could read them
+    // Each send-as address's Gmail signature as text, by the address, sealed (`signaturesName`); null until a sync has read them.
+    signatures: text('signatures'),
     // Gmail's name for each label Mild has put on its mail, by the label's id, as Mild named it: what a change in Gmail is read back as.
     labelNames: jsonb('label_names').$type<Record<string, string>>().notNull().default({}),
     canSend: boolean('can_send').notNull().default(false), // Google granted `gmail.send` to the sign-in Mild holds for it

@@ -68,20 +68,18 @@ test.describe('Answering mail', () => {
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 11');
   });
 
-  test('an answer is for one message: the panel moves on to the sender’s other one, still unanswered', async ({ page }) => {
+  test('an answer is for one message: the panel goes back to the list, where the sender’s other one is still unanswered', async ({ page }) => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
 
     const said = toast(page, 'Disk 91% full on db-2');
     await expect(said.getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
-    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
-    await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
-
-    await back(page).click();
     await expect(open).toHaveCount(0);
-    await expect(row(page, 'Replica lag on db-3')).toBeVisible();
     await expect(row(page, 'Disk 91% full on db-2')).toHaveCount(0);
+    await expect(row(page, 'Replica lag on db-3')).toBeFocused();
+    await openMessage(page, 'Replica lag on db-3');
+    await expect(open.getByRole('combobox', { name: 'What this message is' })).toHaveText('Unlabelled');
     await seededRulesOnly(page);
   });
 
@@ -93,14 +91,6 @@ test.describe('Answering mail', () => {
         await held;
         await route.continue();
       });
-    });
-
-    test('an answer still offers it the same, once it has', async ({ page }) => {
-      await page.goto('/');
-      await choose(await openMessage(page, 'Disk 91% full on db-2'), 'Notifications');
-      await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
-      release();
-      await expect(toast(page, 'Disk 91% full on db-2').getByRole('button', { name: 'Same for 1 more' })).toBeVisible();
     });
 
     test('an answer that closes the panel, and the read with it, still offers it', async ({ page }) => {
@@ -116,7 +106,7 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await openMessage(page, 'Replica lag on db-3');
 
     await toast(page, 'Disk 91% full on db-2').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Replica lag on db-3')).toBeVisible();
@@ -129,7 +119,7 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await openMessage(page, 'Replica lag on db-3');
     await open.getByRole('button', { name: 'Next' }).click();
     await expect(readerHeading(page, 'Bump lodash from 4.17.20 to 4.17.21')).toBeVisible();
 
@@ -156,7 +146,7 @@ test.describe('Answering mail', () => {
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await openMessage(page, 'Replica lag on db-3');
     await toast(page, 'Disk 91% full on db-2').getByRole('button', { name: 'Same for 1 more' }).click();
     await expect(toast(page, 'Replica lag on db-3')).toBeVisible();
 
@@ -348,16 +338,15 @@ test.describe('An answer on its way', () => {
     ['', undefined],
     [', across the bottom of a phone', PHONE],
   ] as const) {
-    test(`in the reader, its toast leaves Next pressable${where}`, async ({ page }) => {
+    test(`in the reader, an answer goes back to the list, on the row that took its place${where}`, async ({ page }) => {
       if (viewport) await page.setViewportSize(viewport);
       await page.goto('/');
       await (viewport ? page.getByRole('row').filter({ hasText: 'Winter sale starts now' }).click() : openMessage(page, 'Winter sale starts now'));
       await reader(page).getByRole('button', { name: 'Agree: Marketing' }).click();
-      const said = toast(page, 'Winter sale starts now');
-      await expect(said).toBeVisible();
-      const next = await boxOf(reader(page).getByRole('button', { name: 'Next' }));
-      const box = await boxOf(said);
-      expect(box.y >= next.y + next.height || box.y + box.height <= next.y).toBe(true);
+      await expect(toast(page, 'Winter sale starts now')).toBeVisible();
+      await expect(reader(page)).toHaveCount(0);
+      await expect(row(page, 'Winter sale starts now')).toHaveCount(0);
+      await expect(row(page, 'Disk 91% full on db-2')).toBeFocused();
     });
   }
 
@@ -415,18 +404,17 @@ test.describe('An answer on its way', () => {
     await expect(forReviewLink(page)).toHaveAccessibleName('For review 12');
   });
 
-  refused('from the panel moves on at once, and a failure puts it back in the list', async ({ page }) => {
+  refused('from the panel goes back to the list at once, and a failure puts it back in it', async ({ page }) => {
     const release = await holdAnswers(page);
     await page.goto('/');
     const open = await openMessage(page, 'Disk 91% full on db-2');
     await choose(open, 'Notifications');
-    await expect(readerHeading(page, 'Replica lag on db-3')).toBeVisible();
+    await expect(open).toHaveCount(0);
+    await expect(row(page, 'Disk 91% full on db-2')).toHaveCount(0);
     await putAway(page);
 
     release({ status: 409, json: { error: 'That message has changed.' } });
     await expect(failureToast(page, 'Could not save your answer')).toBeVisible();
-    await back(page).click();
-    await expect(open).toHaveCount(0);
     await expect(row(page, 'Disk 91% full on db-2')).toBeVisible();
   });
 });

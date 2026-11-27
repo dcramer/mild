@@ -25,7 +25,7 @@ export const USAGE = {
 };
 export const SYNCED = Date.now() - 20_000;
 export const SPECIMEN_ACCOUNTS = [
-  { id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true, canSend: false, aliases: [], signInEnds: null },
+  { id: 'ada@example.org', email: 'ada@example.org', lastSyncedAt: SYNCED, primary: true, canSend: false, aliases: [], signatures: {}, signInEnds: null },
 ];
 export const NAV = [
   { to: 'system', label: 'For review', icon: ListChecksIcon, count: 12 },

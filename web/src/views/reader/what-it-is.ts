@@ -12,7 +12,7 @@ import { useToast } from '@/system';
 
 /**
  * What the message is and the presses that answer it: `record` saves the answer and the conversation stays, as Inbox's
- * list does; `answer` moves on to the next item. `waiting` is the sender's other mail waiting on an answer, answered
+ * list does; `answer` returns to the list. `waiting` is the sender's other mail waiting on an answer, answered
  * with it, and `keepable` the label a rule could keep their mail of anyway.
  */
 export function useWhatItIs(detail: MessageDetail, onAnswered: () => void) {

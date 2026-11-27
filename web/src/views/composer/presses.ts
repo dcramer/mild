@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { reloadAll } from '@/components/action.ts';
 import { type Recipient, typed } from '@/lib/addresses.ts';
 import { api } from '@/lib/api/endpoints.ts';
-import { type From, ofWhat, ownOf, withQuote } from '@/lib/answering.ts';
+import { type From, ofWhat, ownOf, withTrimmed } from '@/lib/answering.ts';
 import { type useAutosave, reloadDrafts } from '@/lib/autosave.ts';
 import { type Draft, type Writing, draftId, keepDraft, newMessageId, useCompose } from '@/lib/compose.ts';
 import { blank, doubtsAbout } from '@/lib/draft-checks.ts';
@@ -36,7 +36,7 @@ export function usePresses({
   typing,
   setTyping,
   from,
-  quote,
+  trimmed,
   carried,
   uploading,
   onClose,
@@ -51,8 +51,8 @@ export function usePresses({
   typing: Typing;
   setTyping: (typing: Typing) => void;
   from: From;
-  /** A reply's quote of the message it answers, which goes under what is written. */
-  quote: string | null;
+  /** What goes under what is written (`trimmedOf`). */
+  trimmed: string | null;
   carried: readonly MessageAttachment[];
   uploading: ReturnType<typeof useDraftFiles>['uploading'];
   onClose: () => void;
@@ -93,8 +93,8 @@ export function usePresses({
     const writing = {
       ...draft,
       ...going.lines,
-      text: withQuote(draft, quote),
-      ...(quote ? { quoted: true } : {}),
+      text: withTrimmed(draft, trimmed),
+      ...(trimmed ? { quoted: true } : {}),
       id: going.id,
       at: Date.now(),
       of: ofWhat(what),
@@ -146,7 +146,7 @@ export function usePresses({
       to: parties(lines.to),
       cc: parties(lines.cc),
       bcc: parties(lines.bcc),
-      text: withQuote(draft, quote),
+      text: withTrimmed(draft, trimmed),
       uploads: draft.files.map((f) => f.id),
       draft: draftId(what),
     };

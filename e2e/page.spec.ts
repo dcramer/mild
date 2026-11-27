@@ -2,7 +2,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { PAGE_HEADERS } from '../src/dashboard/policy.ts';
 import type { Session } from '../src/dashboard/types.ts';
 import { HELD, expect, test, PHONE } from './fixture.ts';
-import { boxOf, shifts, sideScroll, watchShifts } from './wait.ts';
+import { boxOf, forget, frameKept, settled, shifts, sideScroll, watchShifts } from './wait.ts';
 import { domainPage, senderPage } from './navigation.ts';
 
 test("the page cannot be framed by another site, sends no referrer, and holds nothing of anyone's", async ({ page }) => {
@@ -77,6 +77,10 @@ for (const [where, viewport] of [
     await watchShifts(page);
     for (const [path, heading] of SCREENS.filter(([path]) => path !== '/contacts' && path !== '/activity')) {
       await page.goto(path);
+      await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
+      // The first screen keeps the frame, with no request after it: on a busy machine the network can be quiet before
+      // the page has asked for anything.
+      await frameKept(page);
       await page.waitForLoadState('networkidle');
       await page.reload();
       await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
@@ -85,6 +89,56 @@ for (const [where, viewport] of [
     }
   });
 }
+
+test("Mild's line comes into the room the rail's foot held for it, when the device had not kept it", async ({ page }) => {
+  await page.setViewportSize(COMPUTER);
+  await watchShifts(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'For review', level: 1 })).toBeVisible();
+  await frameKept(page);
+  await page.evaluate(forget('manage'));
+  let release = () => {};
+  const held = new Promise<void>((done) => (release = done));
+  await page.route('**/api/manage*', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.reload();
+  await expect(page.getByRole('button', { name: /^Account, / })).toBeVisible();
+  await settled(page);
+  release();
+  await expect(page.getByText('30D')).toBeVisible();
+  expect(await shifts(page)).toEqual([]);
+});
+
+test('Mild saying who is signed in before the device is read draws nothing until it is, so nothing moves', async ({ page }) => {
+  await page.setViewportSize(PHONE);
+  await watchShifts(page);
+  await page.goto('/inbox');
+  await expect(page.getByRole('heading', { name: 'Inbox', level: 1 })).toBeVisible();
+  await frameKept(page);
+  // From the reload on: the device's frame is unsealed only once `window.readDevice()`, and Settings' data comes after it.
+  await page.addInitScript(`{
+    const decrypt = crypto.subtle.decrypt.bind(crypto.subtle);
+    const held = new Promise((done) => (window.readDevice = done));
+    crypto.subtle.decrypt = (...args) => held.then(() => decrypt(...args));
+  }`);
+  let release = () => {};
+  const held = new Promise<void>((done) => (release = done));
+  await page.route('**/api/manage*', async (route) => {
+    await held;
+    await route.continue();
+  });
+  const session = page.waitForResponse('**/api/session*');
+  await page.reload();
+  await session;
+  await settled(page);
+  await page.evaluate('window.readDevice()');
+  await expect(page.getByRole('heading', { name: 'Inbox is off' })).toBeVisible();
+  release();
+  await page.waitForLoadState('networkidle');
+  expect(await shifts(page)).toEqual([]);
+});
 
 test('under reduced motion nothing moves: a layer is in place at once', async ({ page }) => {
   await page.setViewportSize(PHONE);
