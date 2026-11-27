@@ -119,7 +119,7 @@ export function MessageReader({
       presses={
         threadId
           ? [
-              { label: 'Archive', key: 'e', disabled: !pressed, onPress: archive, icon: <ArchiveIcon aria-hidden /> },
+              { label: 'Archive', key: 'Shift+e', disabled: !pressed, onPress: archive, icon: <ArchiveIcon aria-hidden /> },
               { label: 'Spam', key: '!', disabled: !pressed, onPress: spam, icon: <ShieldAlertIcon aria-hidden /> },
               {
                 label: 'Block sender',

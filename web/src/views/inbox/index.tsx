@@ -130,7 +130,7 @@ export function InboxView({ loading: loadingRows }: { loading: ReactNode }) {
         clear: () => setSelected(new Set()),
         all: { total: threads.length, select: () => setSelected(new Set(threads.map(threadKey))) },
         actions: [
-          { label: 'Archive', key: 'e', onPress: () => act('archive') },
+          { label: 'Archive', key: 'Shift+e', onPress: () => act('archive') },
           { label: 'Spam', key: '!', onPress: () => act('spam') },
           { label: chosen.length === 1 ? 'Block sender' : 'Block senders', key: 'Shift+b', onPress: () => block(chosen, () => setSelected(new Set())) },
           { label: 'Mark read', key: 'Shift+i', onPress: () => act('read') },

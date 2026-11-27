@@ -42,7 +42,7 @@ export function ProposalReader({ id, onBack }: { id: string; onBack: () => void 
         proposal
           ? [
               { label: 'Make the rule…', key: 'm', onPress: make },
-              { label: 'Dismiss', key: 'd', quiet: true, onPress: drop },
+              { label: 'Dismiss', key: 'Shift+d', quiet: true, onPress: drop },
             ]
           : []
       }
