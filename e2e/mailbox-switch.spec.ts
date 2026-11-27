@@ -47,8 +47,9 @@ test("a sender's card on the list still drawn from before the switch says who th
   const row = reviewRows(page).filter({ hasText: 'Lunch on Thursday?' });
   await expect(row).toBeVisible();
   await switchMailbox(page, WORK);
-  // Named over the list, which moves it down: pointed at before then, the pointer lands on the row that comes up under it.
-  await expect(named(page)).toBeVisible();
+  // Until the chosen mailbox's usage answers, Mild is off still says what it would have saved across all of them; that
+  // answer has none, so the line goes and the list moves up. Pointed at before then, the pointer lands on the row under Ada.
+  await expect(page.getByText(/it would have kept/)).toHaveCount(0);
   await pointAt(row.getByRole('link', { name: 'Ada Lovelace', exact: true }));
   await expect(senderCard(page, 'Ada Lovelace')).toContainText('ada@example.org');
 });
